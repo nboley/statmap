@@ -1,0 +1,1291 @@
+/* Copyright (c) 2009-2010, Nathan Boley */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include <limits.h>
+#include <assert.h>
+#include <time.h>
+#include <float.h>
+
+#include "sequences_node.h"
+#include "quality.h"
+
+/**** Locations Node **********************************************************/
+/* 
+ * Use this instead of a sequences node if level == 0.
+ *
+ */
+
+void
+init_locations_node( locations_node** node )
+{
+    *node = malloc( sizeof(unsigned short) );
+    **((unsigned short**) node) = 0;
+    return;
+}
+
+size_t
+size_of_locations_node( locations_node* node )
+{
+    return sizeof( unsigned short ) 
+        + *((unsigned short*) node)*sizeof( GENOME_LOC_TYPE );
+}
+
+locations_node*
+add_location_to_locations_node( locations_node* node,
+                                GENOME_LOC_TYPE loc )
+{
+    /* allocate memory for the new location */
+    int num_locations = *( (unsigned short*) node );
+    node = realloc( node, sizeof(unsigned short)
+                    + (num_locations+1)*sizeof(GENOME_LOC_TYPE) );
+    assert( node != NULL );
+
+    /* add the new location */
+    GENOME_LOC_TYPE* locs = 
+        (GENOME_LOC_TYPE*) (((unsigned short*) node) + 1 );
+    locs[ num_locations ] = loc;
+
+    /* increment the number of locations */
+    *( (unsigned short*) node ) += 1;
+
+    return node;
+}
+
+inline void
+get_locations_from_locations_node( const locations_node* const node, 
+                                   mapped_locations* results,
+                                   const float penalty,
+                                   const enum STRAND strnd )
+{
+    int num_locations = *( (unsigned short*) node );
+    GENOME_LOC_TYPE* locs = 
+        (GENOME_LOC_TYPE*) (((unsigned short*) node) + 1 );
+
+    int i;
+    for( i = 0; i < num_locations; i++ )
+    {
+        
+        add_mapped_location(
+            results, 
+            locs[i],
+            strnd,
+            penalty
+        );
+    }
+    
+    return;
+
+}
+
+
+/**** BITMAP functions ********************************************************/
+
+int 
+check_bit( byte* bitmap, int index )
+{
+    return ((bitmap[index/CHAR_BIT])&( 1 << (CHAR_BIT-1-(index%CHAR_BIT))));
+}
+
+void
+set_bit( byte* bitmap, int index )
+{
+    assert( !((bitmap[index/CHAR_BIT]) & ( 1 << (CHAR_BIT-1-index%CHAR_BIT) )) );
+    bitmap[index/CHAR_BIT] |= ( 1 << (CHAR_BIT-1-index%CHAR_BIT));
+}
+
+void 
+print_bitmap( byte* bitmap, int size )
+{
+    int i;
+    for( i = 0; i < size; i++ )
+    {
+        if( check_bit(bitmap, i) ) {
+            printf("1");
+        } else {
+            printf("0");
+        }
+    }
+    printf("\n");
+}
+
+/* determine the size of the bitmap in bytes */
+size_t
+bitmap_size( int num_seqs )
+{
+    if( num_seqs % CHAR_BIT == 0 )
+        return num_seqs/CHAR_BIT;
+
+    return num_seqs/CHAR_BIT + 1;
+}
+
+/**** END bitmap functions ************************************************/
+
+NUM_SEQ_IN_SEQ_NODE_TYPE
+get_num_sequence_types( const sequences_node* const seqs )
+{
+    return *((NUM_SEQ_IN_SEQ_NODE_TYPE*) seqs);
+}
+
+void
+set_num_sequence_types( sequences_node* seqs, 
+                        NUM_SEQ_IN_SEQ_NODE_TYPE value )
+{
+    assert( value <= MAX_SEQ_NODE_ENTRIES );
+    *((NUM_SEQ_IN_SEQ_NODE_TYPE*) seqs) = value;
+    return;
+}
+
+MEMORY_SEGMENT_SIZE
+get_num_used_bytes( sequences_node* seqs )
+{
+    return *( (MEMORY_SEGMENT_SIZE*) ( seqs 
+        + sizeof( NUM_SEQ_IN_SEQ_NODE_TYPE )
+    ));
+}
+
+void
+set_num_used_bytes( sequences_node* seqs,
+                    MEMORY_SEGMENT_SIZE value  )
+{
+    assert( value < MAX_SEQUENCES_NODE_SIZE );
+    *( (MEMORY_SEGMENT_SIZE*) ( seqs 
+        + sizeof( NUM_SEQ_IN_SEQ_NODE_TYPE )
+    )) = value;
+
+    return;
+}
+
+MEMORY_SEGMENT_SIZE
+get_num_allocated_bytes( sequences_node* seqs )
+{
+    return *( (MEMORY_SEGMENT_SIZE*) ( seqs 
+        + sizeof( NUM_SEQ_IN_SEQ_NODE_TYPE )
+        + sizeof( MEMORY_SEGMENT_SIZE )
+    ));
+}
+
+void
+set_num_allocated_bytes( sequences_node* seqs,
+                         MEMORY_SEGMENT_SIZE value  )
+{
+    assert( value < MAX_SEQUENCES_NODE_SIZE );
+    *( (MEMORY_SEGMENT_SIZE*) ( seqs 
+        + sizeof( NUM_SEQ_IN_SEQ_NODE_TYPE )
+        + sizeof( MEMORY_SEGMENT_SIZE )
+    )) = value;
+
+    return;
+}
+
+byte* 
+get_bitmap_start( const sequences_node* const seqs )
+{
+    return (byte*) ( seqs 
+        + sizeof( NUM_SEQ_IN_SEQ_NODE_TYPE )
+        + 2*sizeof( MEMORY_SEGMENT_SIZE )
+    );
+}
+
+sequences_node* 
+insert_bit_into_bitmap( sequences_node* seqs, int insert_position )
+// OLD PARAMS ( byte* bitmap, int old_size, int insert_position )
+{
+   /* 
+    * shift the bits down in the bytes below the bit of interest. 
+    * ie, if the bitmap is |00100110|10100000| and low is 4, then we have
+    * |0010I0110|10100000| -> |0010I011|01010000|. So, the algorithm is 
+    * 0) add a new byte to the array if necessary
+    * 1) allocate memory to store a copy of all bytes below the byte to be
+    *    changed of course this is just all bytes low/8 through max_bytes
+    * 2) copy shifted values into the new array
+    * 3) test for the 1 bit in the old and, if it's set, set the high
+    *    bit in the copy
+    * 4) DEAL WITH THE BYTE THAT IS BEING INSERTED
+    * 5) check to see if the one bit is set - if so, set the high bit in
+    *    the copied array
+    * 6) build the bit mask for all of the bits <= the bit we want to set 
+    * 7) set the shifted, bitmasked bits
+    * 8) set the correct bit ( actually, we calloc so it is pre-set )
+    */
+
+    /* get the number of used bits in the bitmap */
+    NUM_SEQ_IN_SEQ_NODE_TYPE old_size
+        = get_num_sequence_types( seqs );
+
+    /* store the size of the array in bytes */    
+    size_t num_bytes = bitmap_size( old_size );
+
+    /* get a pointer to the bitmap */
+    byte* bitmap = get_bitmap_start( seqs );
+
+    /* 0 - add a new byte to the bitmap if necessary */
+    int size = old_size + 1;
+    /* if the extra bit pushed us intoa  new byte */
+    if( size % CHAR_BIT == 1 ) {
+        /* realloc new memory if necessary */
+        size_t num_allcd_bytes = get_num_allocated_bytes( seqs );
+        seqs = realloc( seqs, num_allcd_bytes + 1 );
+        assert( seqs != NULL );
+        /* increment the number of allcd, and used bytes */
+        set_num_allocated_bytes( seqs, num_allcd_bytes + 1 );
+
+        /* if seqs was moved during the realloc, we need to deal with that */
+        bitmap = get_bitmap_start( seqs );
+
+        /* insert memory into the sequences node at the correct location */
+        insert_memory( seqs, bitmap + num_bytes, 1, true );
+
+        /* initialize the new byte to 0 */
+        /* this is done automatically by insert memory */
+        
+        /* update the bytes use counters */
+        set_num_used_bytes( seqs, get_num_used_bytes( seqs ) + 1 );
+        /* the size of the bitmap, in bytes */
+        num_bytes++;       
+    }
+
+    /* add a logic branch for the case that the bit is being added to the end */
+    /* 
+     * ie, if the insert position == size, then we really want to append, and
+     * since we initialize to zero, this is done for us. 
+     */
+    if( insert_position == (size-1) ) 
+    {
+        return seqs;
+    }
+    
+    /* 1 */
+    /* store a copy of all the bits below the correct level */
+    unsigned int target_byte_index = insert_position/CHAR_BIT;
+    /* allocate memory for the copy */
+    /* TODO - eliminate the full allocation */
+    byte* bitmap_copy = calloc( num_bytes, sizeof(byte) );
+
+    /* 2&3 - make the copy by looping through the bytes */
+    unsigned int i;
+    for( i = target_byte_index + 1; i < num_bytes; i++ )
+    {
+        /* 2 - copy over the shifted bits */
+        bitmap_copy[i] = ( bitmap[i] >> 1 );
+        /* 3 - if the one bit is set */
+        if( 1 == ((bitmap[i-1])&1) ) {
+            /* set the high bit */
+            /* noting that the high bit *cant* be 1 due to the bit shift */
+            /* TODO - use a static bitmask for this */
+            bitmap_copy[i] += ( 1 << (CHAR_BIT - 1) );
+        }
+    }
+
+    /* copy the shifted bits back into the original array */
+    for( i = target_byte_index + 1; i < num_bytes; i++ )
+    {
+        bitmap[i] = bitmap_copy[i];
+    }
+    
+    /* free the copy */
+    free( bitmap_copy );
+
+    /* 6 - build the bitmask for all of the bits >= the bit we want to set */
+    unsigned int bitmask_size = CHAR_BIT - insert_position%CHAR_BIT - 1;
+    byte bitmask = 0;
+    for( i = 0; i < bitmask_size+1; i++ )
+    {
+        bitmask = ((bitmask << 1) + 1);
+    }
+    
+    /* 7 - set the bitshifted bits */
+    /* store the low bytes, and then shift them right */
+    byte low_bits = ((bitmap[target_byte_index])&bitmask) >> 1;
+    /* mask out the low bits in the real data */
+    bitmap[target_byte_index] &= (~bitmask);
+    /* combine the two */
+    bitmap[target_byte_index] |= low_bits;
+    
+    /* return the potentially realloced seqs */
+    return seqs;
+}
+
+int
+check_sequence_type_ptr( const sequences_node* const seqs, 
+                         const int index )
+{
+   /* 
+    * note that it is the callers responsibility to ensure that
+    * index is sane, ie within the limits of what we would expect 
+    * given the number of sequence types in seqs 
+    *
+    */
+    
+   /* first get the bitmap */
+    byte* bitmap = get_bitmap_start( seqs );
+
+    /* return true if it is set, and thus a ptr */
+    return check_bit( bitmap, index );
+}
+
+void
+set_sequence_type_to_ptr( sequences_node* seqs, int index )
+{
+   /* 
+    * note that it is the callers responsibility to ensure that
+    * index is sane, ie within the limits of what we would expect 
+    * given the number of sequence types in seqs 
+    *
+    */
+    
+   /* first get the bitmap */
+    byte* bitmap = get_bitmap_start( seqs );
+
+    /* set the correct bit */
+    set_bit( bitmap, index );
+    
+    return;
+}
+
+
+LETTER_TYPE* 
+get_sequences_array_start( const sequences_node* 
+                           const seqs, 
+                           const LEVEL_TYPE seq_num_letters )
+{
+    /* 
+     * BUG!!!! This is *not* being done currently BUG!!!
+     * IT IS THE CALLERS RESPONSIBILITY TO ensure that seq_length
+     * is greater than 0. If it is not, the 
+     */
+    assert( seq_num_letters > 0 );
+    
+    /*
+     * if this was the pseudo struct, this would just be
+     * return seqs->sequences;
+     */    
+    LETTER_TYPE* loc = (LETTER_TYPE*) (
+        /* the start, since it is a byte we can do size of */
+        seqs
+        /* 
+         * deal with the memory allocated for the number of sequences in the
+         * node type 
+         */
+        + sizeof(NUM_SEQ_IN_SEQ_NODE_TYPE)
+        /* memory used */
+        + sizeof(MEMORY_SEGMENT_SIZE)
+        /* memory allocated */
+        + sizeof(MEMORY_SEGMENT_SIZE)
+        /* the sizeof the bitmap */
+        + bitmap_size( get_num_sequence_types(seqs) )
+     );
+
+    return loc;
+}
+
+locs_union* 
+get_genome_locations_array_start( const sequences_node* const seqs, 
+                                  const LEVEL_TYPE seq_num_letters )
+{
+    /*
+     * if this was the pseudo struct, this would just be
+     * return seqs->locations;
+     */
+    return (locs_union*) ( 
+        /* start of the sequences array chunk */
+        (byte*) get_sequences_array_start( seqs, seq_num_letters )
+        /* the length of sequences array */
+        + seq_num_letters*sizeof(LETTER_TYPE)*get_num_sequence_types(seqs)
+    );
+}
+
+GENOME_LOC_TYPE* 
+get_overflow_genome_locations_array_start( 
+    const sequences_node* const seqs, LEVEL_TYPE seq_num_letters
+)
+{
+    return (GENOME_LOC_TYPE*) (
+        /* start of the genome_locations array */
+        (byte*) get_genome_locations_array_start( seqs, seq_num_letters )
+        /* length of genome locations array */
+        + get_num_sequence_types(seqs)*sizeof(locs_union)
+    );
+}
+
+/* return the number of bytes between the start of seqs and ptr */
+MEMORY_SEGMENT_SIZE
+bytes_before( sequences_node* seqs, void* ptr )
+{
+    return (MEMORY_SEGMENT_SIZE) ( ptr - (void*)seqs );
+}
+
+/* return the number of bytes between the start of ptr and the end of seqs */
+MEMORY_SEGMENT_SIZE
+bytes_after( sequences_node* seqs, void* ptr )
+{
+    return (MEMORY_SEGMENT_SIZE) ( 
+        get_num_used_bytes( seqs ) - 
+        bytes_before( seqs, ptr )
+    );
+}
+
+/* 
+ * make emtpy space of size size at pointer. Ie, if the memory is 
+ * 11111 ( in bytes ) then insert_empty_space( 2, 2  ) makes 1100111
+ */
+void
+insert_memory ( sequences_node* seqs, 
+                void* start,
+                MEMORY_SEGMENT_SIZE size, 
+                enum bool initialize_to_zero
+)
+{
+    /* 
+     * we assume that the realloc has already been done for us, and that the 
+     * extra allocated space is at the end of the memory block.
+     */
+
+    /* find the size of the memory that needs to be moved after this */
+    size_t bytes_to_move = bytes_after( seqs, start  );
+
+    /* move the bytes after the insert location */
+    memmove( start+size, start, bytes_to_move  );
+
+    /* TODO - make this a memset */
+    /* initialize the new memory to zero */
+    if( initialize_to_zero )
+    {
+        int i;
+        for( i = 0; i < size; i++ )
+        {
+            ((byte*)start)[i] = 0;
+        }
+        return;
+    }
+}
+
+void
+init_sequences_node( sequences_node** seqs )
+{
+    /* 
+     * We initialize the struct to have 0 genome locations, so we only 
+     * need to allocate space to store the number of genome locations.
+     * When we add a genome location, then we will grow the allocated size.
+     */
+    size_t alloc_size = 
+        sizeof(NUM_SEQ_IN_SEQ_NODE_TYPE) 
+        + 2*sizeof(MEMORY_SEGMENT_SIZE);
+
+    assert( alloc_size < MAX_SEQUENCES_NODE_SIZE ); 
+
+    /* note that the calloc initializes num_seq_types and the bitmap */
+    *seqs = calloc( alloc_size, 1 );
+    set_num_allocated_bytes( *seqs, alloc_size );
+    set_num_used_bytes( *seqs, alloc_size );
+}
+
+void
+free_seqs( sequences_node* seqs )
+{
+    free( seqs );
+}
+
+/*
+ * Return the insert location for a new sequence fragment in units
+ * of seq len. So, if the array consists of 2 sequences each with 
+ * 2 letters, then the seqs_array is of length 4 LETTER_TYPE, and 
+ * inserting into the middle position would correspond to an insert
+ * location of 1 ( not 2 ).
+ */
+insert_location
+find_insert_location( sequences_node* seqs, 
+                      LETTER_TYPE* new_seq, 
+                      LEVEL_TYPE seq_len )
+{
+    /* find the start of the sequences array */
+    LETTER_TYPE* seqs_array = get_sequences_array_start( seqs,  seq_len );
+
+    /* determine if this sequence type already exists */
+    /* 
+     * we use a binary search to find if it matches, and the insert location
+     * if it does not match 
+     */  
+    int low = 0;
+    int high = get_num_sequence_types( seqs );
+    while (low < high) {
+        int mid = low + ((high - low) / 2) ;
+        int comparison = cmp_words( seqs_array + mid*seq_len, 
+                                    new_seq, seq_len );
+        if( comparison < 0 ) {
+            low = mid + 1; 
+        } else {
+            /* can't be high = mid-1: here A[mid] >= value, */
+            /* so high can't be < mid if A[mid] == value    */
+            high = mid; 
+        }
+    }
+
+    /* make sure the binary search is working */
+    assert( low <= high );
+    assert( low <= get_num_sequence_types(seqs) );
+    assert( low >= 0 );
+
+    /* BUG!!!!! */
+
+    insert_location rv;
+    rv.location = low;
+    /* check to see if there is a match at this point */
+    if(  ( get_num_sequence_types(seqs) > 0 )
+         && ( low < get_num_sequence_types(seqs) )
+         && ( cmp_words( seqs_array+low*seq_len, new_seq, seq_len ) == 0 ) )
+    {
+        rv.is_duplicate = 1;
+    } else {
+        rv.is_duplicate = 0;
+    }
+
+    return rv;
+}
+
+/*
+ * Add a sequence that doesnt currently exist into a sequences node. This means
+ * that we dont need to deal with the extended GENOME_LOC array - FIXME, we may
+ * still need to add if the sequence cant fit into 31 bits.
+ */
+sequences_node*
+add_new_sequence_to_sequences_node( sequences_node* seqs, 
+                                    /* where in the seqs array this belongs */
+                                    int insert_loc,
+                                    /* the seq to add */
+                                    LETTER_TYPE* new_seq,
+                                    /* the length of seq in this node */
+                                    int seq_len,
+                                    /* the locations of this sequence */
+                                    GENOME_LOC_TYPE loc  )
+{
+    /* allocate the space - we need room for 1 sequence and 1 genome_loc */
+    size_t curr_size = get_num_used_bytes( seqs );
+    size_t size_needed = curr_size 
+        + seq_len*sizeof(LETTER_TYPE)
+        + sizeof( locs_union );
+
+    /* if we need to, allocate more memory */
+    if( size_needed > get_num_allocated_bytes( seqs ) )
+    {
+        sequences_node* new_seqs 
+            = realloc(seqs, size_needed);
+        
+        assert( new_seqs != NULL );
+        set_num_allocated_bytes( new_seqs, size_needed );
+        /* initialize the new bytes */
+        memset( new_seqs + curr_size, 0, size_needed - curr_size );
+        
+        seqs = new_seqs;
+    }
+
+    /* make space in the genome locations array */
+    /* get the start of the genome locations array */
+    locs_union* loc_start = 
+        get_genome_locations_array_start( seqs, seq_len );
+    /* move the pointer to the new location start */
+    loc_start += insert_loc;
+    
+    /* make space for the new genome location, and initialize it */
+    insert_memory( seqs, loc_start, sizeof(locs_union), true );
+
+    /* update the number of used bytes */
+    curr_size += sizeof( locs_union );
+    set_num_used_bytes( seqs, curr_size );
+    
+    /* this is done explicitly when the bitmap is added to */
+    // loc_start->is_pointer = 0;
+    /* TODO - make this spill over if it is too large */
+    assert( loc.loc <= 245203898 && loc.loc >= 0 );
+    loc_start->loc = loc;
+    
+    /* make space for the sequence, and initialize it */
+    LETTER_TYPE* seqs_start =
+        get_sequences_array_start( seqs, seq_len );
+    seqs_start += (seq_len*insert_loc);
+
+    insert_memory( seqs, seqs_start, seq_len*sizeof(LETTER_TYPE), true );
+
+    /* update the number of used bytes */
+    curr_size += seq_len*sizeof(LETTER_TYPE);
+    set_num_used_bytes( seqs, curr_size );
+    assert( get_num_used_bytes(seqs) == get_num_allocated_bytes(seqs) );
+    
+    memcpy( seqs_start, new_seq, sizeof(LETTER_TYPE)*seq_len );
+
+    /* insert the bit into the bitmap */
+    seqs = insert_bit_into_bitmap( seqs, insert_loc );
+    
+    /* increment the number of sequence types */
+    NUM_SEQ_IN_SEQ_NODE_TYPE curr_num_seq_types = 
+        get_num_sequence_types(seqs);
+    set_num_sequence_types( seqs, curr_num_seq_types+1 );
+    
+    return seqs;
+}
+
+/*
+ * Add a sequence that has already been added into a sequences node. This means
+ * that we dont need to add a new sequence, but we do need to either, convert
+ * the genome location into a pointer and create and extended genome location
+ * list, or we need to just update the pointer, add an entry to the extended list
+ * and update the previous entries.
+ */
+sequences_node*
+add_duplicate_sequence_to_sequences_node( 
+    sequences_node* seqs, 
+    /* where in the seqs array this belongs, in seq_len units */
+    int insert_loc,
+    /* the length of seq in this node */
+    LEVEL_TYPE seq_len,
+    /* the locations of this sequence */
+    GENOME_LOC_TYPE new_loc  )
+{
+    // DEBUG
+    /*
+    printf("adding duplicat: (add_duplicate_sequence_to_sequences_node)\n");
+    printf("Chr: %i\t Loc: %i\n", new_loc.chr, new_loc.loc );
+    */
+    
+    /* move the pointer to the new genome location start */
+    locs_union* loc = 
+        get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
+    
+    /* if there is only 1 other copy of this ( at least so far ) */
+    /* 
+     * ie, the sequence at insert loc is *not* a pointer ( and we already
+     * know that this has to be a duplicate given the function call 
+     */
+    if( !check_sequence_type_ptr(seqs, insert_loc) )
+    {
+        /* we add 2 genome locations 1 for the old, and 1 for new gen location */
+        size_t num_used_bytes = get_num_used_bytes(seqs);
+        size_t new_size = num_used_bytes + 2*sizeof(GENOME_LOC_TYPE);
+        
+        /* if necessary, realloc */
+        if( new_size > get_num_allocated_bytes(seqs) )
+        {
+            /* allocate space for the extended genome locations array */
+            seqs = realloc( seqs, new_size );
+            assert( seqs != NULL );
+            /* set the new allocated space size */
+            set_num_allocated_bytes( seqs, new_size );
+            /* initialize the new memory */
+            memset( seqs + num_used_bytes, 0, new_size - num_used_bytes);
+            /* update the pointer to the genomic locations array, if necessary */
+            loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
+        }
+
+        /* 
+         * the start of the new overflow locations - or, the end 
+         * of the previous list. We dont care about the ordering of 
+         * this list ( why would we ) so we simply append to the 
+         * end. 
+         *
+         * Also, note that we havn't updated the used size yet so we
+         * can use the get_used_bytes interface to find the end.
+         */
+        GENOME_LOC_TYPE* of_locs = 
+            (GENOME_LOC_TYPE*) ( seqs + num_used_bytes );
+        
+        /* add the entries to the list */
+        of_locs[0] = loc->loc;
+        of_locs[1] = new_loc;
+
+        /* now that the space is being used, set the new used size of seqs */
+        set_num_used_bytes( seqs, new_size );
+
+        assert( get_num_used_bytes(seqs) == get_num_allocated_bytes(seqs) );
+
+        /** convert the genome_location_node to a pointer type */
+        /* make the list a pointer */
+        set_sequence_type_to_ptr( seqs, insert_loc );
+
+        /* 
+         * set the new locations array start to be the number of bytes after the
+         * full array divided by the size of GENOME_LOC_TYPE. This is really
+         * just the index of the first entry in the array.
+         */
+        size_t egla_len = bytes_after(
+            seqs, get_overflow_genome_locations_array_start( seqs, seq_len )
+        );
+
+        loc->locs_array.locs_size = 2;
+
+        assert( egla_len % sizeof( GENOME_LOC_TYPE ) == 0 ); 
+        
+        loc->locs_array.locs_start = 
+            ( egla_len/sizeof(GENOME_LOC_TYPE) ) - 2;
+            
+    } 
+    /* this has already been converted to a pointer */
+    else {
+        /*
+         * if there are too many of these sequence types
+         * dont actually add it. 
+         */
+        if( loc->locs_array.locs_size 
+                == MAX_NUM_INDEXED_DUPS )
+        {
+            return seqs;
+        }
+        assert( loc->locs_array.locs_start 
+                <= get_num_sequence_types(seqs)
+                   *MAX_NUM_INDEXED_DUPS );
+        assert( loc->locs_array.locs_size 
+                <= MAX_NUM_INDEXED_DUPS );
+
+        /* we add memory for the new genome location */
+        size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
+
+        if( new_size > get_num_allocated_bytes(seqs) )
+        {
+            /* allocate space for the extended genome locations array */
+            seqs = realloc( seqs, new_size );
+            assert( seqs != NULL );
+            /* set the new allocated space size */
+            set_num_allocated_bytes( seqs, new_size );
+            /* update the pointer to the genomic locations array, if necessary */
+            loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
+        }
+
+        /* the start of the new overflow locations - note that we havnt updated
+           the used size yet. */
+        GENOME_LOC_TYPE* of_locs = 
+            get_overflow_genome_locations_array_start( seqs, seq_len )
+            + loc->locs_array.locs_start;
+        
+        /* move memory to make space for the new location */
+        insert_memory( seqs, of_locs, sizeof(GENOME_LOC_TYPE), false );
+
+        /* set the new value */
+        of_locs[0] = new_loc;
+
+        /* now that the space is being used, set the new used size of seqs */
+        set_num_used_bytes( seqs, new_size );
+
+        assert( get_num_used_bytes(seqs) == get_num_allocated_bytes(seqs) );
+
+        /* Make sure that we havn't grown beyond what the array can hold */
+        // assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
+
+        /* update the number of sequence */
+        assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
+        loc->locs_array.locs_size += 1;        
+
+        /* 
+         * Because we just inserted memory in the middle of this array, 
+         * we need to move the start pointers forward for every position 
+         * after this. This is a bit confusing - the array of gen locs
+         * is ordered by sequence, not by the extended array. So, we need
+         * to look at every genome location and if, it is a pointer and
+         * it starts after the array we just modified, increment the start 
+         * location.
+         */
+        locs_union* locs_start = 
+            get_genome_locations_array_start( seqs, seq_len );
+        
+        /* TODO - move this declaration earlier */
+        int new_start = loc->locs_array.locs_start;
+        int i;
+        for( i = 0; i < get_num_sequence_types(seqs); i++ )
+        {
+            if( check_sequence_type_ptr( seqs, i )
+                && locs_start[i].locs_array.locs_start > new_start  )
+            {
+                /* Make sure that the data still fits */
+                assert( locs_start[i].locs_array.locs_start < MAX_LOC_ARRAY_START );
+                locs_start[i].locs_array.locs_start++;
+            }
+        }
+        
+    }
+    
+    return seqs;
+}
+
+sequences_node*
+add_sequence_to_sequences_node(     sequences_node* seqs, 
+                                    LETTER_TYPE* new_seq,
+                                    LEVEL_TYPE num_letters,
+                                    GENOME_LOC_TYPE loc )
+{
+    /* find the location in the seqs node that the new sequence should go */
+    insert_location il = 
+        find_insert_location( seqs, new_seq, num_letters );
+    
+    /* insert it */
+    if( il.is_duplicate == 1 )
+    {
+        /* debugging */
+        /* Make sure that the sequence actually is a duplicate */
+        /* That is, 
+           1) Make sure that the sequence at il is actually a duplicate. Test
+              via a simple mem compare 
+        */
+        assert( cmp_words( get_sequences_array_start( seqs,  num_letters )
+                           + il.location*num_letters, 
+                           new_seq, 
+                           num_letters ) == 0 
+        );
+        
+        return add_duplicate_sequence_to_sequences_node( 
+            seqs, il.location, num_letters, loc 
+        );
+    } else {
+        return add_new_sequence_to_sequences_node( 
+            seqs, il.location, new_seq, num_letters, loc 
+        );
+    }
+    
+    assert( false );
+    return NULL;
+}
+
+
+inline float
+find_sequences_in_sequences_node(   const sequences_node* const seqs,
+                                    /* the curr penalty for seq */
+                                    float curr_penalty,
+                                    /* the maximum allowable penalty */
+                                    float min_match_penalty,
+                                    
+                                    /* the seq of interest */
+                                    const LETTER_TYPE* const seq,
+                                    /* the length of a full sequence */
+                                    const int seq_length,
+                                    /* the total num of letters in a seq */
+                                    const int num_letters,
+                                    /* the current level in the tree */
+                                    const int node_level,
+                                    /* the strand of the search seq */
+                                    const enum STRAND strnd,
+                    
+                                    mapped_locations* results,
+
+                                    const float* const lookuptable_position,
+                                    const float* const inverse_lookuptable_position,
+                                    const float* const lookuptable_bp
+    )
+{
+    /* store the updated maximum penalty, for if we find matches */
+    float max_penalty = -FLT_MAX;
+
+    /* we assume that the results are initialized */
+    assert( results != NULL );
+    assert( results->length <= results->allocated_length );
+    // assert( results->allocated_length < USHRT_MAX );
+
+    /* FIXME */
+    if( results->allocated_length == USHRT_MAX )
+    {
+        fprintf(stderr, "Overran max results length\n" );
+        return 1;
+    }
+
+    /* get the total number of sequences that we need to consider */
+    NUM_SEQ_IN_SEQ_NODE_TYPE num_seqs = get_num_sequence_types( seqs );
+
+    /* get the start of the sequences array */
+    LETTER_TYPE* seq_array_start = get_sequences_array_start( 
+        seqs, num_letters - node_level );
+
+    int i;
+    for( i = 0; i < num_seqs; i++ )
+    {
+        /* 
+         * store the cumulative penalty - the total penalty up till now
+         * for the i'th sequence 
+         */
+        float cum_penalty = multiple_letter_penalty(
+            /* the start of the current seq in the array */
+            seq_array_start + i*(num_letters-node_level), 
+            /* the start of the subseq in the reference sequence */
+            seq+node_level, 
+            node_level, 
+            seq_length, 
+            num_letters,
+            min_match_penalty - curr_penalty,
+            lookuptable_position,
+            inverse_lookuptable_position,
+            lookuptable_bp
+        );
+        
+        /* // debugging code
+           printf("%i: Ref %i%i\tNode %i%i\tPenalty: %e\n", 
+           i, seqs->sequences[2*i], seqs->sequences[2*i + 1], 
+           seq[0], seq[1], cum_penalty);
+        */
+
+        if( cum_penalty <= 0.5 )
+        {
+            /* 
+             * if we havnt skipped to the next sequence, then the penalty should
+             * still be above the minimum - so add it to the results
+             */
+            assert( cum_penalty >= min_match_penalty );
+            
+            /* update the cumulative penalty */
+            cum_penalty += curr_penalty;
+
+            /* if appropriate, update the max penalty */
+            if( cum_penalty > max_penalty )
+                max_penalty = cum_penalty;
+
+            /* get the correct locaton */
+            locs_union loc = 
+                get_genome_locations_array_start( 
+                    seqs, num_letters - node_level )[i];
+            
+            
+            /* 
+             * if the correct bit is set, then the genome location is a pointer.
+             */        
+
+            if( !check_sequence_type_ptr(seqs, i) )
+            {
+                /* add this location to the result set */
+                add_mapped_location(
+                    results, 
+                    loc.loc,
+                    strnd,
+                    cum_penalty
+                );
+
+            } else 
+            /* Add all of the locs in the referenced array */
+            {
+                GENOME_LOC_TYPE* locs 
+                    = get_overflow_genome_locations_array_start( 
+                        seqs,  num_letters - node_level )
+                    + loc.locs_array.locs_start;
+
+                /*
+                 * DEBUG the below memory error 
+                 * TODO - remove this comment.
+                 *
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {
+                    printf( "Loc Ptr: %p\t Loc: %ui|%ui|%ui|%ui|%ui|%ui\n", 
+                            locs + j,
+                            ( (char*) (locs + j ))[0],
+                            ( (char*) (locs + j ))[1],
+                            ( (char*) (locs + j ))[2],
+                            ( (char*) (locs + j ))[3],
+                            ( (char*) (locs + j ))[4],
+                            ( (char*) (locs + j ))[5]
+                        );
+                }
+                */
+                
+                int j;                
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {   
+                    /* 
+                     * This is a very messy way of avoiding a valgrind
+                     * error that was, potentially, a real problem. 
+                     * Possibly because valgrind is stupid, and possibly
+                     * because gcc is bad at alignment, if I try and get 
+                     * i_loc by locs[j], then it attempts to read 2 full words,
+                     * overrunning the boundary of the array. There shouldnt 
+                     * be any problem with this but, to make sure, I declare a 
+                     * temporary variable here, store it inside, and then 
+                     * call the function. 
+                     */
+                    /*
+                    GENOME_LOC_TYPE i_loc = *( 
+                        (GENOME_LOC_TYPE*)
+                        (((char*)locs) + j*sizeof(GENOME_LOC_TYPE))
+                    );
+                    */
+                    
+                    GENOME_LOC_TYPE tmp_loc = locs[j];
+                    add_mapped_location(
+                        results, tmp_loc, strnd, cum_penalty
+                    );
+                }
+            }
+        }
+        /* we are done with this sequence - move onto the next */
+    }
+
+    return max_penalty;
+}
+
+void
+raw_print_sequences_node( sequences_node* seqs )
+{
+    int i;
+    MEMORY_SEGMENT_SIZE num_used_bytes = get_num_used_bytes(seqs);
+    for( i = 0; i < num_used_bytes; i++ )
+    {
+        printf("|%i", ((unsigned char*) seqs)[i]);
+    };
+    printf("|\n");
+
+}
+
+void
+print_sequences_node( sequences_node* seqs, int seq_length )
+{
+    printf("Number Distinct Sequences: %i\n", get_num_sequence_types(seqs));
+    printf("Number Used Bytes: %i\n", get_num_used_bytes(seqs));
+    printf("Number Allocated Bytes: %i\n", get_num_allocated_bytes(seqs));
+    byte* bitmap = get_bitmap_start( seqs );
+    printf( "Bitmap: " );
+    print_bitmap( bitmap, get_num_sequence_types(seqs) );
+    
+    if( seq_length > 0 )
+    {
+        /* print out the stored sequences and their locations */
+        int i, j;
+
+        /* store the beggining of the current sequence that we are on */
+        LETTER_TYPE* curr_seq = get_sequences_array_start( seqs, seq_length );
+
+        /* get the genome locations for this sequence */
+        locs_union* locs = 
+            get_genome_locations_array_start( seqs, seq_length );
+
+        printf("Stored Sequences: \n");
+        for( i = 0; i < get_num_sequence_types(seqs); i++ )
+        {
+            /* print out the current sequence */
+            printf("%i\t", i+1);
+            for( j = 0; j < seq_length; j++ )
+            {
+                printf("%i", curr_seq[j]);
+            }
+            printf("\n");
+
+            /* print out the genome location */
+            if( check_sequence_type_ptr( seqs, i ) )
+            {
+                printf("\t Is Pntr\tStart: %i\tSize: %i\n", 
+                       locs[i].locs_array.locs_start,
+                       locs[i].locs_array.locs_size
+                );
+
+                GENOME_LOC_TYPE* e_locs = 
+                    get_overflow_genome_locations_array_start( seqs, seq_length )
+                    + locs[i].locs_array.locs_start;
+
+                for( j = 0; j < locs[i].locs_array.locs_size; j++ )
+                {
+                    printf("\t\t%i\n", e_locs[j].loc);
+                }
+            } else {
+                printf("\t Is Loc\tLoc: %i\n", locs[i].loc.loc);
+            }
+
+            /* move tot he next sequence in the array */
+            curr_seq += ( seq_length*sizeof(LETTER_TYPE) );
+        }
+    }
+}
+
+#if 0
+
+int main()
+{
+    sequences_node* seqs;
+    init_sequences_node( &seqs );
+    print_sequences_node( seqs, 0 );
+
+    LETTER_TYPE new_seq[2] = { 0, 0 };
+    LETTER_TYPE new_seq2[2] = { 0, 1 };
+    LETTER_TYPE new_seq3[2] = { 0, 2 };
+    LETTER_TYPE new_seq4[2] = { 0, 3 };
+    LETTER_TYPE new_seq5[2] = { 1, 0 };
+    LETTER_TYPE new_seq6[2] = { 1, 1 };
+    LETTER_TYPE new_seq7[2] = { 1, 2 };
+    LETTER_TYPE new_seq8[2] = { 1, 3 };
+    LETTER_TYPE new_seq9[2] = { 2, 0 };
+    LETTER_TYPE new_seq10[2] = { 2, 1 };
+
+    printf("SIZE OF GENOME_LOC: %i\n", sizeof(locs_union));
+
+    raw_print_sequences_node( seqs );
+
+    /** Add seq # 1 **/
+    GENOME_LOC_TYPE loc1 = { 0,0,0,0,0,17 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc1 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc2 = { 0,0,0,0,0,27 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc2 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc3 = { 0,0,0,0,0,37 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc3 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc4 = { 0,0,0,0,0,47 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc4 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc5 = { 0,0,0,0,0,57 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc5 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc6 = { 0,0,0,0,0,67 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc6 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc7 = { 0,0,0,0,0,77 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc7 );
+    raw_print_sequences_node( seqs );
+    
+    GENOME_LOC_TYPE loc8 = { 0,0,0,0,0,87 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc8 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc9 = { 0,0,0,0,0,97 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq, 2, loc9 );
+    raw_print_sequences_node( seqs );
+        
+    print_sequences_node( seqs, 2 );
+
+    /** SEQ 2 **/
+
+    GENOME_LOC_TYPE loc1_2 = { 0,0,0,0,0,17 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc1 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc2_2 = { 0,0,0,0,0,27 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc2 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc3_2 = { 0,0,0,0,0,37 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc3 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc4_2 = { 0,0,0,0,0,47 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc4 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc5_2 = { 0,0,0,0,0,57 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc5 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc6_2 = { 0,0,0,0,0,67 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc6 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc7_2 = { 0,0,0,0,0,77 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc7 );
+    raw_print_sequences_node( seqs );
+    
+    GENOME_LOC_TYPE loc8_2 = { 0,0,0,0,0,87 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc8 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc9_2 = { 0,0,0,0,0,97 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq3, 2, loc9 );
+    raw_print_sequences_node( seqs );
+        
+    print_sequences_node( seqs, 2 );
+
+
+    /** SEQ 3 **/
+
+    GENOME_LOC_TYPE loc1_3 = { 0,0,0,0,0,17 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc1 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc2_3 = { 0,0,0,0,0,27 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc2 );
+    raw_print_sequences_node( seqs );
+    print_sequences_node( seqs, 2 );
+
+    GENOME_LOC_TYPE loc3_3 = { 0,0,0,0,0,37 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc3 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc4_3 = { 0,0,0,0,0,47 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc4 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc5_3 = { 0,0,0,0,0,57 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc5 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc6_3 = { 0,0,0,0,0,67 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc6 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc7_3 = { 0,0,0,0,0,77 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc7 );
+    raw_print_sequences_node( seqs );
+    
+    GENOME_LOC_TYPE loc8_3 = { 0,0,0,0,0,87 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc8 );
+    raw_print_sequences_node( seqs );
+
+    GENOME_LOC_TYPE loc9_3 = { 0,0,0,0,0,97 };
+    seqs = add_sequence_to_sequences_node(seqs, new_seq2, 2, loc9 );
+    raw_print_sequences_node( seqs );
+        
+    print_sequences_node( seqs, 2 );
+
+    mapped_locations* results; 
+    init_mapped_locations( &results );
+
+    /* Test the sequence finding mechanism */
+
+    float* lookuptable_position;
+    float* inverse_lookuptable_position;
+    float* lookuptable_bp;
+
+    build_mismatch_lookup_table( 
+        &lookuptable_position,
+        &inverse_lookuptable_position,
+        &lookuptable_bp,
+        8
+    );
+
+
+    float rv;
+    rv = 
+        find_sequences_in_sequences_node(   
+            seqs, // const sequences_node* const seqs,
+            /* the curr penalty for seq */
+            0, // float curr_penalty,
+            /* the maximum allowable penalty */
+            0, // float min_match_penalty,
+            
+            /* the seq of interest */
+            new_seq, // const LETTER_TYPE* const seq,
+            /* the length of a full sequence */
+            8, // const int seq_length,
+            /* the total num of letters in a seq */
+            2, // const int num_letters,
+            /* the current level in the tree */
+            0, // const int node_level,
+            /* the strand of the search seq */
+            0, // const STRAND strnd,
+            
+            results, // mapped_locations* results,
+            
+            lookuptable_position,
+            inverse_lookuptable_position,
+            lookuptable_bp
+        );
+
+    print_mapped_locations( results );
+
+    free( seqs );
+
+    return 1;
+
+}
+
+#endif
+
