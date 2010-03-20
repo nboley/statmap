@@ -9,8 +9,6 @@
 
 #include "quality.h"
 #include "index_genome.h"
-// #include "mapped_location.h"
-// #include "sequences_node.h"
 
 /******************************************************************************/
 /* Memory function for  building the index      */
@@ -1579,112 +1577,6 @@ sort_ODI_stack( ODI_stack* stack )
 
 
 /****************************************************************************/
-
-
-
-
-#if 0 /* TODO - fix this ( or finish migrating the checks to python */
-
-/*
- * Check to see that, for a random sequence, the penalties returned for every
- * item in the tree is equal to the penalty returned by calcualting the penalty
- * on each sequence in order. This tests both that every correct sequence is
- * being returned, and the the tree's calculated penalties are equal to the 
- * full sequence penalties. Is this test passes regularly, then you can test
- * the penalty function by calling multiple_letter_penalty 
- */
-
-int 
-check_full_tree_penalty( char* genome_str, 
-                         int seq_length,
-                         float min_match_penalty,
-                         unsigned int num_tests,
-                         float* lookuptable_position,
-                         float* inverse_lookuptable_position,
-                         float* lookuptable_bp
- )
-{
-    const int num_levels = calc_num_letters( seq_length );
-
-    unsigned int i;
-    unsigned int test_num;
-    srand(time(NULL));
-
-     /* first, build the tree */
-    static_node* root;
-    init_tree(&root);
-    add_chr_from_string( root, seq_length, genome_str, 0 );
-
-    /* allocate memory for the test sequence */
-    LETTER_TYPE *rand_seq = malloc( num_levels*sizeof(LETTER_TYPE) );
-
-    for( test_num = 0; test_num < num_tests; test_num++ )
-    {
-        /* build a random sequence */
-        for( i = 0; i < (unsigned int) num_levels; i++ )
-        {
-            rand_seq[i] = rand()%ALPHABET_LENGTH;
-        }
-
-        /* find all of the matches for the random sequence */
-        mapped_locations* results;
-        init_mapped_locations(&results);
-        find_matches_from_root( root, rand_seq, seq_length,
-                                min_match_penalty, -1,
-                                results,
-                                lookuptable_position,
-                                inverse_lookuptable_position,
-                                lookuptable_bp
-        );
-        sort_mapped_locations_by_location( results );
-
-        /* loop through all of the matches, and test them against the raw genome */
-        for( i = 0; i < results->length; i++ )
-        {
-            GENOME_LOC_TYPE location = (results->locations)[i].location;
-
-            /* translate the sequence at this position */
-            LETTER_TYPE* test_seq;
-            translate_seq( genome_str + location.loc, seq_length, &test_seq );
-
-            float brute_penalty = multiple_letter_penalty(
-                test_seq, rand_seq, 
-                0, 
-                seq_length, num_levels,
-                min_match_penalty,
-                lookuptable_position,
-                inverse_lookuptable_position,
-                lookuptable_bp
-
-            );
-
-            float tree_penalty = (results->locations)[i].penalty;
-
-            assert( brute_penalty == tree_penalty );
-            if( brute_penalty != tree_penalty )
-            {
-                tree_free( test_seq );
-                tree_free( rand_seq );
-                free_tree( root );
-                return 0;
-            }
-
-            /* print out the tree penalty versus the true penalty */
-            /*
-             printf("%i\t%i\t%.2f\t%.2f\n", 
-                    i, location, brute_penalty, tree_penalty);
-            */
-            tree_free( test_seq );
-        }
-        free_mapped_locations( results );
-    }
-
-    tree_free( rand_seq );
-    free_tree( root );
-
-    return 1;
-}
-#endif
 
 #ifdef PROFILE_MEMORY_USAGE
 extern void 

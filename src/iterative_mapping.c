@@ -660,34 +660,6 @@ write_mapped_reads_to_wiggle( mapped_reads_db* rdb,
     close_traces( traces );
 }
 
-/* 
- * we probably want the wiggle writing code in statmap.c, 
- * but I keep it for now, in case we need it there or I 
- * change my mind 
- *
- */
-#if 0
-
-    /*** Write the traces as a wiggle file ***/
-    /* Update the trace from the read probabilities  */
-    update_traces_from_mapped_chipseq_reads( rdb, traces );
-
-    /* write the full wiggle out to file */
-    write_wiggle_from_traces( fwd_chr_ptrs, bkwd_chr_ptrs,
-                              genome->num_chrs, 
-                              global_chr_lens, chr_names, 
-                              argv[2], "win_20", 0.01 );
-    
-    close_traces( fwd_chr_ptrs, global_chr_lens, genome->num_chrs );
-    close_traces( bkwd_chr_ptrs, global_chr_lens, genome->num_chrs );
-    
-    return 0;
-
-}
-
-#endif
-
-
 
 
 /*

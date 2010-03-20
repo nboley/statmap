@@ -134,40 +134,6 @@ get_next_read_from_rawread_db(
 
 /**************** END Raw Read DB **********************/
 
-
-#if 0
-
-/*
- * Just an array of raw reads. 
- * 
- */
-
-#define READ_ARRAY_GROWTH_FACTOR 100
-
-typedef struct __attribute__((__packed__)) {
-    unsigned int size;
-    unsigned int allocated_size;
-    rawread* reads;
-} rawread_array;
-
-inline void 
-init_rawread_array( rawread_array** reads );
-
-inline void
-free_rawread_array( rawread_array* reads );
-
-inline void
-add_rawread_to_array( rawread_array* reads,
-                      rawread* r           
-    ); 
-
-int
-preprocess_reads( char* input_filename, 
-                  rawread_array* reads, 
-                  int (* populate_read_from_fp )( FILE*, rawread** ),
-                  int (* filter_rawread )( rawread* )  );
-#endif
-
 #endif // READS_HEADER
 
 
