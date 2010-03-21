@@ -285,7 +285,7 @@ update_traces_from_read_densities(
     long long i;
     const int chunk = 10000;
     #pragma omp parallel for schedule(dynamic, chunk) num_threads( NUM_THREADS )
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads - 1; i++ )
+    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[i];
 
@@ -353,7 +353,7 @@ update_traces_from_mapped_chipseq_reads(
     long long i;
     const int chunk = 10000;
     #pragma omp parallel for schedule(dynamic, chunk) num_threads( NUM_THREADS )
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads - 1; i++ )
+    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[i];
 
@@ -457,7 +457,7 @@ update_mapped_chipseq_reads_from_trace(
     long long k;
     const int chunk = 10000;
     #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( NUM_THREADS )
-    for( k = 0; k < (long long) reads_db->num_mmapped_reads - 1; k++ )
+    for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[k];
 

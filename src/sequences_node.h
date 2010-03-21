@@ -38,12 +38,24 @@ get_locations_from_locations_node( const locations_node* const node,
 // typedef unsigned char NUM_SEQ_IN_SEQ_NODE_TYPE;
 // #define MAX_SEQ_NODE_ENTRIES 254
 typedef unsigned char NUM_SEQ_IN_SEQ_NODE_TYPE;
-#define MAX_SEQ_NODE_ENTRIES 10
+#define MAX_SEQ_NODE_ENTRIES 200
 
+/* BUG - make this unsigned short ( see below for problem )*/
 /* we use this to store the total number of bytes allocated for a sequence node */
-typedef unsigned short MEMORY_SEGMENT_SIZE;
+typedef unsigned int MEMORY_SEGMENT_SIZE;
+/* BUG - make this USHRT_MAX
+   the reason why it is not is that for reasonable low numbners of repeats
+   ( on the order of a hundred ) then this can be overrun, and, since we
+   dont have any detection mechanism, it is a memory overflwo error. I changed
+   this to a bigger size to avoid this problem, but the only real solution is
+   to split this out into a dynamic node ( and, eventually, location node ) 
+   if the size gets too large. That is a bit complicated so, I've increased the 
+   size but plan to come back. Theoretically this could be overrun as well, but
+   I've added in a few asserts and it should be good up to tens of thousands of
+  repeats, so ti shouldnt be a problem in practice. 
+*/
 /* this value could be adjusted to be extra efficient depending on cache sizes */
-#define MAX_SEQUENCES_NODE_SIZE USHRT_MAX
+#define MAX_SEQUENCES_NODE_SIZE UINT_MAX
 
 /*** Sequence Node Specific Data Types *******************************************/
 
@@ -65,15 +77,16 @@ typedef union __attribute__((__packed__)) {
          * in units of sizeof(GENOME_LOC_TYPE) bytes after the end of 
          * the standard genome loc array.
          */
-        unsigned locs_start :16;
+        signed locs_start :16;
         /* store the size of the array, in units of the number of entries */
-        unsigned locs_size :16;
+        signed locs_size :16;
     } locs_array ;
 } locs_union;
 
-#define MAX_LOC_ARRAY_START 65535
-#define MAX_LOC_ARRAY_SIZE 65535
-
+// #define MAX_LOC_ARRAY_START 65535
+// #define MAX_LOC_ARRAY_SIZE 65535
+#define MAX_LOC_ARRAY_SIZE 32767
+#define MAX_LOC_ARRAY_START 32767
 
 /* 
  * this is a weird data type. It's important to keep all of the sequences 

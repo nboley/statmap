@@ -387,8 +387,8 @@ def test_sequence_finding( read_len, rev_comp = False ):
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     # ret_code = ( os.system( call ) >> 8 )
     if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
+        raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+        
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./tmp.sam" )
@@ -436,6 +436,20 @@ def test_threep_sequence_finding( ):
         test_sequence_finding( rl, True ) 
         print "PASS: Reverse Mapping %i BP test. ( Statmap appears to be mapping 3', perfect reads correctly )" % rl
 
+def test_short_sequences():
+    failed_lengths = []
+    rls = [ 4, 5, 7, 8, 9, 11, 12, 13, 14  ]
+    for rl in rls:
+        try:
+            test_sequence_finding( rl, False )
+        except Exception, inst:
+            failed_lengths.append( rl )
+    if len( failed_lengths ) == 0:
+        print "PASS: Short Read Mapping Passed All Index Lengths ( %s )" % ' '.join( map( str, rls ) ) 
+    else:
+        print "FAIL: Short Read Mapping Failed for Index Lengths: %s ( of %s )" \
+            % ( ' '.join( map( str, failed_lengths ) ), ' '.join( map( str, rls ) ) ) 
+        sys.exit( -1 )
 ###
 # Test to make sure that we are correctly finding paired end reads. 
 def test_paired_end_reads( read_len ):
@@ -527,13 +541,13 @@ def test_paired_end_sequence_finding( ):
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_duplicated_reads( read_len ):
-    NUM_REP = 5
+def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len ):
     rl = read_len
+    GENOME_LEN = gen_len
 
     ###### Prepare the data for the test ############################################
     # build a random genome
-    r_genome = build_random_genome( [1000,1000,1000], ["1", "2", "3"] )
+    r_genome = build_random_genome( [GENOME_LEN]*n_chrs, map( str, range( 1, n_chrs+1 ) ) )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
@@ -545,7 +559,7 @@ def test_duplicated_reads( read_len ):
     ###### Write out the test files, and run statmap ################################
     # write genome
     genome_of = open("tmp.genome", "w")
-    write_genome_to_fasta( r_genome, genome_of, NUM_REP )
+    write_genome_to_fasta( r_genome, genome_of, n_dups )
     genome_of.close()
     
     # build and write the reads
@@ -569,13 +583,13 @@ def test_duplicated_reads( read_len ):
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
-    if len(fragments)*NUM_REP != total_num_reads:
+    if len(fragments)*n_dups != total_num_reads:
         raise ValueError, "Mapping returned too few reads."
     
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
-        if len(reads_data) != NUM_REP:
+        if len(reads_data) != n_dups:
             raise ValueError, "Mapping returned incorrect number of results."
         
         
@@ -584,10 +598,10 @@ def test_duplicated_reads( read_len ):
         # make sure the chr and start locations are identical
         for i, loc in enumerate( locs ):
             if loc[0] != truth[0] \
-               or loc[1]%1000 != truth[1]:
+               or loc[1]%GENOME_LEN != truth[1]:
                 raise ValueError, \
                     "Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1]%1000, truth[0], truth[1], truth[2]  )
+                    % ( loc[0], loc[1]%GENOME_LEN, truth[0], truth[1], truth[2]  )
     
     ###### Cleanup the created files ###############################################
     if CLEANUP:
@@ -601,8 +615,15 @@ def test_duplicated_reads( read_len ):
 def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_duplicated_reads( rl ) 
+        test_duplicated_reads( rl, n_chrs=3, n_dups=5, gen_len=1000 ) 
         print "PASS: Multi-Chr and Repeated Chr Mapping %i BP Test. ( Statmap appears to be mapping multiple genome and chr with heavy perfect repeats correctly )" % rl
+
+def test_lots_of_repeat_sequence_finding( ):
+    rls = [ 16, ]
+    for rl in rls:
+        test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100 ) 
+        print "PASS: lots of repeat seqs ( %i ) %i BP Test. ( This tests a genome with lots and lots of repeats ( pbly mostly corner cases )  )" % ( 4000, rl )
+
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len ):
@@ -847,12 +868,7 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 if __name__ == '__main__':
-    chr_sizes = [450]*2
-    chr_names = ['1','2']
-    r_genome = build_random_genome( chr_sizes, chr_names )
-    genome_of = open("tmp.genome", "w")
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
+    RUN_SLOW_TESTS = False
     
     test_fivep_sequence_finding()
     test_threep_sequence_finding()
@@ -860,3 +876,11 @@ if __name__ == '__main__':
     test_repeat_sequence_finding()
     test_mutated_read_finding()
     test_snp_finding()
+
+    # We skip this test because statmap can't currently
+    # index reads less than 12 basepairs ( and it shouldn't: 
+    #     we should be building a hash table for such reads )
+    # test_short_sequences()
+    
+    if RUN_SLOW_TESTS:
+        test_lots_of_repeat_sequence_finding( )

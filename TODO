@@ -1,13 +1,10 @@
--13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
--12) raise error for too short reads
--11.9) allow mapping of N's ( do lowest quality substitution )
+X -13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
+X -12) raise error for too short reads
 -11.5) print out error for nonmapping reads
 -11.1) fix snp bug - we need to start adding mutliple reads to the index when a snp is in range
 -11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
--11) Integrate iterative mapping code
 -10) Fix the margianl vs cond prb calculations in print to sam
 -5) Fix the 'merge' join - and check the logic
--4) Fix bug that refuses to map really short reads
 X -3) Finish location node type
 X -2) Fix segfault on file bad input names
 X -2) Add options for different sequencing error types ( in fastq )
@@ -15,11 +12,6 @@ M -1) Fix occasional mapping correctness w/ paied end reads
 M ( I cant recreate this after fixing the valgrind memory error, so I 
 M   am assuming that this was it, but I'm not certain )
 M
-X 0) Fix the valgrind memory error
-X   ( it looks like, sometimes, we're missing a realloc on seq node 
-X     creation. I suspect that the declared invalid read of size 8 
-X     is actually an artifact of the word size, and that the overread 
-X     is of length 6 ). 
 0.1) use memset in the trace zeroing ( update trace from reads )
 0.8) rename mapped_short_read to packed_mapped_read
 0.9) Seperate joining and sam printing
@@ -33,11 +25,14 @@ X     is of length 6 ).
 P 2.1) Make mapped short read location type take a bitfield
 P     to conserve on disk storage space
 X 2.1) fix mapped_location vs mapped_read_location name confusion
-2.2) cleanup error codes to make them standard
+X 2.2) cleanup error codes to make them standard
 3) Add checks for paired end reads to ensure the read names are identical 
    ( except slashes )
 3.1) Finish on disk indexes
-4) remove useless code ( esp marshalling code, and ifdef's out code )
+X 4) remove useless code ( esp marshalling code, and ifdef's out code )
+4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
-
+6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
 10) Change the node type to an enum
+11) allow mapping of N's ( do lowest quality substitution )
+12) Allow mapping of really short reads

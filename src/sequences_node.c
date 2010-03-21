@@ -453,7 +453,7 @@ insert_memory ( sequences_node* seqs,
     /* initialize the new memory to zero */
     if( initialize_to_zero )
     {
-        int i;
+        size_t i;
         for( i = 0; i < size; i++ )
         {
             ((byte*)start)[i] = 0;
@@ -726,16 +726,25 @@ add_duplicate_sequence_to_sequences_node(
          * if there are too many of these sequence types
          * dont actually add it. 
          */
+        
+        /* FIXME - THIS IS A CORRECTNESS BUG
+
         if( loc->locs_array.locs_size 
                 == MAX_NUM_INDEXED_DUPS )
         {
             return seqs;
         }
+
         assert( loc->locs_array.locs_start 
                 <= get_num_sequence_types(seqs)
                    *MAX_NUM_INDEXED_DUPS );
         assert( loc->locs_array.locs_size 
                 <= MAX_NUM_INDEXED_DUPS );
+        
+        */
+
+        assert( loc->locs_array.locs_size >= 0 ); 
+        assert( loc->locs_array.locs_start >= 0 ); 
 
         /* we add memory for the new genome location */
         size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
@@ -796,7 +805,8 @@ add_duplicate_sequence_to_sequences_node(
                 && locs_start[i].locs_array.locs_start > new_start  )
             {
                 /* Make sure that the data still fits */
-                assert( locs_start[i].locs_array.locs_start < MAX_LOC_ARRAY_START );
+                assert( locs_start[i].locs_array.locs_start 
+                        < MAX_LOC_ARRAY_START );
                 locs_start[i].locs_array.locs_start++;
             }
         }
@@ -1017,7 +1027,7 @@ find_sequences_in_sequences_node(   const sequences_node* const seqs,
 void
 raw_print_sequences_node( sequences_node* seqs )
 {
-    int i;
+    size_t i;
     MEMORY_SEGMENT_SIZE num_used_bytes = get_num_used_bytes(seqs);
     for( i = 0; i < num_used_bytes; i++ )
     {

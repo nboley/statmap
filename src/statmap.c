@@ -127,15 +127,16 @@ guess_input_file_type( args_t* args )
             // If the min is less than 69, it is still most likely 
             // a log odds version, but we emit a warning anyways.
             else if ( min_qual < 69 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous.\n");
+                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
                 input_file_type = SOLEXA_LOG_ODDS_FQ;
+            } else if ( min_qual == 104 ) {
+                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+               input_file_type = TEST_SUITE_FORMAT; 
             } else {
                 fprintf( stderr, "ERROR       :  Could not automatically determine " );
                 fprintf( stderr, "input format. ( max=%i, min=%i  )\n", 
                          max_qual, min_qual );
-                fprintf( stderr, "ERROR       :  SETTING TO %i. Results could be incorrect.\n", ILLUMINA_v13_FQ );
-                input_file_type = ILLUMINA_v13_FQ;
-                // exit( -1 );
+                exit( -1 );
             }
         }
     }
@@ -232,7 +233,7 @@ parse_arguments( int argc, char** argv )
     args.snpcov_fp = NULL;
 
     args.wig_fname = NULL;
-    args.wig_fname = NULL;
+    args.wig_fp = NULL;
     
     args.candidate_mappings_prefix = NULL;
     args.sam_output_fname = NULL;
@@ -436,6 +437,12 @@ parse_arguments( int argc, char** argv )
     if( args.indexed_seq_len == -1 )
     {
         args.indexed_seq_len = guess_optimal_indexed_seq_len( &args );
+        
+        if( args.indexed_seq_len <= 11 ) 
+        {
+            fprintf( stderr, "FATAL       :  Can not index sequences less than 12 basepairs long.\n" );
+            exit( -1 );
+        }
     }
 
     /*
