@@ -59,7 +59,6 @@ populate_read_from_fastq_file( FILE* f, rawread** r );
 enum bool
 filter_rawread( rawread* r );
 
-
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 
  * reads that we may encounter. This deals with

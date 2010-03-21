@@ -9,7 +9,10 @@
 #include <assert.h>
 #include <unistd.h>
 
+#include "config.h"
+#include "statmap.h"
 #include "db_interface.h"
+
 
 /*** Generic Candidate Mappings DB Code *********************************************/
 
@@ -98,18 +101,18 @@ init_candidate_mappings_db( candidate_mappings_db* db,
     /* TODO - allow for buffered reads */
     db->buffer = NULL;
 
-    db->full_fwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
-    db->full_bkwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
-    db->full_1st_fwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
-    db->full_1st_bkwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
-    db->full_2nd_fwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
-    db->full_2nd_bkwd_rds = malloc(NUM_THREADS*sizeof(FILE*));
+    db->full_fwd_rds = malloc(num_threads*sizeof(FILE*));
+    db->full_bkwd_rds = malloc(num_threads*sizeof(FILE*));
+    db->full_1st_fwd_rds = malloc(num_threads*sizeof(FILE*));
+    db->full_1st_bkwd_rds = malloc(num_threads*sizeof(FILE*));
+    db->full_2nd_fwd_rds = malloc(num_threads*sizeof(FILE*));
+    db->full_2nd_bkwd_rds = malloc(num_threads*sizeof(FILE*));
     
     error = chdir( cmdir_name );
     assert( error == 0 );
     
     int i = 0;
-    for( i = 0; i < NUM_THREADS; i++ )
+    for( i = 0; i < num_threads; i++ )
     {
         sprintf( tfname, "thread%i.full_fwd_reads.mapped",
                  i);
@@ -149,7 +152,7 @@ close_candidate_mappings_db( candidate_mappings_db* db )
     int error;
 
     int i;
-    for( i = 0; i < NUM_THREADS; i++ )
+    for( i = 0; i < num_threads; i++ )
     {
         fclose( db->full_fwd_rds[i] );
         fclose( db->full_bkwd_rds[i] );
@@ -327,12 +330,12 @@ open_candidate_mappings_cursor (
     
     *cursor = malloc( sizeof( candidate_mappings_db_cursor ) );
     (*cursor)->db = db;
-    (*cursor)->queue_len = 6*NUM_THREADS;
+    (*cursor)->queue_len = 6*num_threads;
     (*cursor)->mappings_queue 
         = malloc(sizeof(joining_queue_datum*)*(*cursor)->queue_len);
     
-    FILE** fps = malloc(sizeof(FILE*)*6*NUM_THREADS);
-    for( i = 0; i < NUM_THREADS; i++ )
+    FILE** fps = malloc(sizeof(FILE*)*6*num_threads);
+    for( i = 0; i < num_threads; i++ )
     {
         fps[6*i + 0] = db->full_fwd_rds[i];
         fps[6*i + 1] = db->full_bkwd_rds[i];

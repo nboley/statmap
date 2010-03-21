@@ -3,18 +3,7 @@
 #ifndef CONFIG
 #define CONFIG
 
-#define NUM_THREADS 1
-
 /****** configuration options                   ******/
-/**** options relating to correctness             ****/
-
-/* The maximum number of duplicate sequences that we 
- * add to the index before ignoring them. That is, if
- * we add MAX_NUM_INDEXED_DUPS to the index then
- * dont add the MAX_NUM_INDEXED_DUPS + 1 sequence. 
- */
-#define MAX_NUM_INDEXED_DUPS 100
-
 
 /**** determine how the letters are packed       ****/
 
@@ -187,8 +176,8 @@ typedef struct __attribute__((__packed__))
 
 
 /*** Globally useful macros ***/
-#define MAX(a, b) (a > b ? a : b)
-#define MIN(a, b) (a < b ? a : b)
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 
 #endif

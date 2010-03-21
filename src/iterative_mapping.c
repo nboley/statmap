@@ -11,6 +11,7 @@
 #include <omp.h>
 #include <errno.h>
 
+#include "statmap.h"
 #include "iterative_mapping.h"
 #include "mapped_location.h"
 #include "snp.h"
@@ -165,7 +166,7 @@ zero_traces( traces_t* traces )
     /* Zero out the trace for the update */
     /* BUG FIXME TODO use memset! WTF? */
     long int i;
-    #pragma omp parallel for num_threads( NUM_THREADS )
+    #pragma omp parallel for num_threads( num_threads )
     for( i = 0; i < traces->num_traces; i++ )
     {
         unsigned int j;
@@ -200,7 +201,7 @@ renormalize_traces( TRACE_TYPE** chr_traces,
                    unsigned long num_reads )
 {
     long int i;
-    #pragma omp parallel for num_threads( NUM_THREADS )
+    #pragma omp parallel for num_threads( num_threads )
     for( i = 0; i < num_chrs; i++ )
     {
         unsigned int j;
@@ -284,7 +285,7 @@ update_traces_from_read_densities(
 
     long long i;
     const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( NUM_THREADS )
+    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
     for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[i];
@@ -352,7 +353,7 @@ update_traces_from_mapped_chipseq_reads(
 
     long long i;
     const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( NUM_THREADS )
+    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
     for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[i];
@@ -456,7 +457,7 @@ update_mapped_chipseq_reads_from_trace(
      */
     long long k;
     const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( NUM_THREADS )
+    #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( num_threads )
     for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[k];

@@ -352,7 +352,6 @@ get_sequences_array_start( const sequences_node*
                            const LEVEL_TYPE seq_num_letters )
 {
     /* 
-     * BUG!!!! This is *not* being done currently BUG!!!
      * IT IS THE CALLERS RESPONSIBILITY TO ensure that seq_length
      * is greater than 0. If it is not, the 
      */
@@ -527,8 +526,6 @@ find_insert_location( sequences_node* seqs,
     assert( low <= high );
     assert( low <= get_num_sequence_types(seqs) );
     assert( low >= 0 );
-
-    /* BUG!!!!! */
 
     insert_location rv;
     rv.location = low;
@@ -722,27 +719,15 @@ add_duplicate_sequence_to_sequences_node(
     } 
     /* this has already been converted to a pointer */
     else {
-        /*
-         * if there are too many of these sequence types
-         * dont actually add it. 
-         */
-        
-        /* FIXME - THIS IS A CORRECTNESS BUG
-
-        if( loc->locs_array.locs_size 
-                == MAX_NUM_INDEXED_DUPS )
-        {
-            return seqs;
-        }
-
-        assert( loc->locs_array.locs_start 
-                <= get_num_sequence_types(seqs)
-                   *MAX_NUM_INDEXED_DUPS );
-        assert( loc->locs_array.locs_size 
-                <= MAX_NUM_INDEXED_DUPS );
-        
-        */
-
+        /* 
+         *  FIXME - we set the type of locs_size and locs_array
+         *  to be signed so that we could detect overflows with the 
+         *  following asserts. In addition, we increased the sizes 
+         *  because we were getting sequences that had too many 
+         *  repeats. However, the correct fix is to split sequence
+         *  arrays that get too big into a child object.
+         *
+         */ 
         assert( loc->locs_array.locs_size >= 0 ); 
         assert( loc->locs_array.locs_start >= 0 ); 
 

@@ -33,6 +33,11 @@ X 4) remove useless code ( esp marshalling code, and ifdef's out code )
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
+7) Seperate seq length from *indexed* sequence length in option parsing. ( currently, 
+   I say that if the required number of HQ basepairs is too high, that it should be the 
+   indexed sequence length. This isnt *exactly* correct, because we could want this feature
+   for reads that have varying sizes. )
+9) Check the atoi, atof formatting in parse args. 
 10) Change the node type to an enum
 11) allow mapping of N's ( do lowest quality substitution )
 12) Allow mapping of really short reads

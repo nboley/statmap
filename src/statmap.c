@@ -7,6 +7,8 @@
 #include <getopt.h>
 #include <string.h>
 #include <pthread.h>
+/* to find out the  number of available processors */
+#include <sys/sysinfo.h>
 
 #include "statmap.h"
 #include "find_candidate_mappings.h"
@@ -18,6 +20,9 @@
 /* fwd declaration */
 struct snp_db_t;
 #include "snp.h"
+
+int num_threads = -1;
+int min_num_hq_bps = -1;
 
 /* Store parsed options */
 typedef struct {
@@ -44,6 +49,9 @@ typedef struct {
     float max_penalty_spread;
 
     int indexed_seq_len;
+
+    int num_threads;
+    int min_num_hq_bps;
     
     input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
@@ -243,7 +251,9 @@ parse_arguments( int argc, char** argv )
     
     args.min_match_penalty = -1;
     args.max_penalty_spread = -1;
-    
+    args.min_num_hq_bps = -1;
+
+    args.num_threads = -1;
     args.indexed_seq_len = -1;
     
     args.input_file_type = UNKNOWN;
@@ -252,7 +262,7 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:c:o:p:m:s:l:a:w:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:c:o:p:m:s:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -290,7 +300,13 @@ parse_arguments( int argc, char** argv )
         case 'w': // wig ouput file
             args.wig_fname = optarg;
             break;
-
+        case 't': // number of threads
+            args.num_threads = atoi( optarg );
+            break;
+        case 'q': // number of threads
+            args.min_num_hq_bps = atoi( optarg );
+            break;
+            
         /* optional arguments ( that you probably dont want ) */
         case 's': // indexed sequence length
                   // defaults to the read length of the first read
@@ -318,6 +334,19 @@ parse_arguments( int argc, char** argv )
             usage();
             exit( -1 );
         }
+    }
+
+    /* If we didnt set the number of threads, default to 1 */
+    if( args.num_threads == -1 )
+    {
+        /* try to get the number of available threads from the os */
+        num_threads = get_nprocs();
+        /* if we cant determine the number of threads, set it to 1 */
+        if( num_threads <= 0 )
+            num_threads = 1;
+        fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
+    } else {
+        num_threads = args.num_threads;
     }
 
     /* Ensure that the required arguments were present */
@@ -445,6 +474,20 @@ parse_arguments( int argc, char** argv )
         }
     }
 
+    /* set the min num hq basepairs if it's unset */
+    if( args.min_num_hq_bps == -1 )
+    {
+        args.min_num_hq_bps = MAX( 12, (8 + args.indexed_seq_len/2) );
+    }
+    min_num_hq_bps = args.min_num_hq_bps;
+
+    /* make sure that we dont filter *every* read */
+    if( min_num_hq_bps > args.indexed_seq_len )
+    {
+        fprintf( stderr, "WARNING     :  Required number of HQ bps set higher than the seq length. Setting it to seq length.\n" );
+        min_num_hq_bps = args.indexed_seq_len;
+    }
+
     /*
      * Try to determine the type of sequencing error. 
      */
@@ -532,9 +575,9 @@ cleanup:
 
 void
 write_mapped_reads_to_sam( rawread_db_t* rdb,
-                                  mapped_reads_db* mappings_db,
-                                  genome_data* genome,
-                                  FILE* sam_ofp )
+                           mapped_reads_db* mappings_db,
+                           genome_data* genome,
+                           FILE* sam_ofp )
 {
     int error;
     
@@ -561,7 +604,10 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
     {     
         /* 
          * If we couldnt map it anywhere,
-         * print out the read 
+         * print out the read to the non-mapping
+         * fastq file. ( Theoretically, one could
+         * rerun these with lower penalties, or 
+         * re-align these to one another. )
          */
         if( mapped_rd->num_mappings == 0 )
         {
@@ -741,6 +787,13 @@ main( int argc, char** argv )
         build_snp_db_from_snpcov_file( args.snpcov_fp, genome );
            
     /* Map the marginal reads and output them into a sam */
+    /* 
+     * Actually, this not only maps the marginal's but 
+     * calls the iterative mapping functions also. I should
+     * probably split that out into main, but for now I dont 
+     * really think that it matters too much 
+     *
+     */
     map_marginal( &args, genome );
     
     goto cleanup;

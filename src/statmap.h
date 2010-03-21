@@ -1,8 +1,11 @@
 /* Copyright (c) 2009-2010 Nathan Boley */
 
+extern int num_threads;
+extern int min_num_hq_bps;
+
 typedef enum {
     // We have not specified the file type
-    UNKNOWN = 0,
+    // UNKNOWN = 0,
     // Fastq file. Quality scores are PHRED 
     // ( offset 40, log10 prob )
     SANGER_FQ = 1,

@@ -22,7 +22,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -30,7 +30,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -379,9 +379,9 @@ def test_sequence_finding( read_len, rev_comp = False ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq \
-                               -o tmp.sam -p %.2f -m %.2f \
-                               " % ( STATMAP_PATH, -10, 2 )
-        
+                              -o tmp.sam -p %.2f -m %.2f \
+                              -t 1 " % ( STATMAP_PATH, -10, 2 )
+    
     print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -487,7 +487,7 @@ def test_paired_end_reads( read_len ):
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq  \
                                -o tmp.sam -p %.2f -m %.2f \
-                               " % ( STATMAP_PATH, -10, 2 )
+                               -t 1 " % ( STATMAP_PATH, -10, 2 )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -541,7 +541,7 @@ def test_paired_end_sequence_finding( ):
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len ):
+def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     rl = read_len
     GENOME_LEN = gen_len
 
@@ -569,7 +569,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len ):
 
     call = "%s -g tmp.genome -r tmp.fastq \
                                -o tmp.sam -p %.2f -m %.2f \
-                               " % ( STATMAP_PATH, -10, 2 )
+                               -t %i " % ( STATMAP_PATH, -10, 2, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -615,18 +615,19 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len ):
 def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_duplicated_reads( rl, n_chrs=3, n_dups=5, gen_len=1000 ) 
+        test_duplicated_reads( rl, n_chrs=3, n_dups=5, gen_len=1000, n_threads=1 ) 
         print "PASS: Multi-Chr and Repeated Chr Mapping %i BP Test. ( Statmap appears to be mapping multiple genome and chr with heavy perfect repeats correctly )" % rl
 
 def test_lots_of_repeat_sequence_finding( ):
     rls = [ 16, ]
     for rl in rls:
-        test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100 ) 
+        # setting n_threads to -1 makes it deafult to the number of avialable cores
+        test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1 ) 
         print "PASS: lots of repeat seqs ( %i ) %i BP Test. ( This tests a genome with lots and lots of repeats ( pbly mostly corner cases )  )" % ( 4000, rl )
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len ):
+def test_dirty_reads( read_len, n_threads=1 ):
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -658,7 +659,7 @@ def test_dirty_reads( read_len ):
 
     call = "%s -g tmp.genome -r tmp.fastq \
                                -o tmp.sam -p %.2f -m %.2f \
-                               " % ( STATMAP_PATH, -30, 2 )
+                               -t %i " % ( STATMAP_PATH, -30, 2, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -734,6 +735,16 @@ def test_mutated_read_finding( ):
         test_dirty_reads( rl ) 
         print "PASS: Dirty Read Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
+def test_multithreaded_mapping( ):
+    rls = [ 50, 75  ]
+    for rl in rls:
+        try: 
+            test_dirty_reads( rl ) 
+        except:
+            print "FAIL: Multi-Threaded Read Mapping %i BP Test Failed." % rl
+            raise
+        else:
+            print "PASS: Multi-Threaded Read Mapping %i BP Test. ( Statmap appears to be mapping correctly with multiple threads )" % rl
 ###
 # Test to make sure that we are correctly indexing and finding snps
 def test_snps( read_len ):
@@ -788,7 +799,7 @@ def test_snps( read_len ):
 
     call = "%s -g tmp.genome -r tmp.fastq -n tmp.snpcov \
                                -o tmp.sam -p %.2f -m %.2f \
-                               " % ( STATMAP_PATH, -10, 2 )
+                               -t 1 " % ( STATMAP_PATH, -10, 2 )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -875,7 +886,8 @@ if __name__ == '__main__':
     test_paired_end_sequence_finding( )
     test_repeat_sequence_finding()
     test_mutated_read_finding()
-    test_snp_finding()
+    #test_multithreaded_mapping( )
+    #test_snp_finding()
 
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 

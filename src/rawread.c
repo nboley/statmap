@@ -7,6 +7,7 @@
 #include <ctype.h>
 
 #include "config.h"
+#include "statmap.h"
 #include "rawread.h"
 #include "quality.h"
 #include "dna_sequence.h"
@@ -274,10 +275,14 @@ filter_rawread( rawread* r )
      *
      */
 
+    /* Make sure the global option has been set 
+       ( it's initialized to -1 ); */
+    assert( min_num_hq_bps >= 0 );
+
     /* 
      * count the number of a's and t's. 
      */
-    int num_as = 0, num_ts = 0, num_hq_bps = 0;
+    int num_hq_bps = 0;
     int i;
     for( i = 0; i < r->length; i++ )
     {
@@ -285,27 +290,13 @@ filter_rawread( rawread* r )
             ( (unsigned char) (r->error_str)[i] )
         );
         
-        /*
-        fprintf(stderr, "Qual (%c %i): %e %i\n", 
-                (r->error_str)[i], qual, 
-                (unsigned char) (r->error_str)[i], qual > 0.999 );
-        */
-
         /* count the number of hq basepairs */
         if( qual > 0.999 )
             num_hq_bps += 1;
-        
-        if( r->char_seq[i] == 'A' || r->char_seq[i] == 'a' )
-            num_as++;
-        
-        if( r->char_seq[i] == 'T' || r->char_seq[i] == 't' )
-            num_ts++;
     }
-    
-    if ( num_hq_bps < 12 )
-    {
+
+    if ( num_hq_bps < min_num_hq_bps )
         return true;
-    }
         
     return false;
 }
@@ -380,8 +371,10 @@ add_single_end_reads_to_rawread_db(
     strcat( buffer, ".nonmapping" );
     rdb->non_mapping_single_end_reads = open_check_error( buffer, "w" );
     
+    /* For now, we only support fastq files */
     assert( iftype == FASTQ );
     rdb->file_type = iftype;
+    
     return;
 }
 
@@ -482,6 +475,12 @@ get_next_mappable_read_from_rawread_db(
             rdb, r1, r2 );
     
     /* While this rawread is unmappable, continue */ 
+    /* 
+       This logic is complicated because it has to deal with both paired end
+       and non paired end reads. But, basically, it says that r1 cant be null
+       and r2 is null and r1 is mappable or r2 is not null ( ie this is paired
+       end ) and both r1 and r2 are mappable.
+    */
     while( *r1 != NULL 
            && (      ( *r2 == NULL && filter_rawread( *r1 ) == true )
                   || ( filter_rawread( *r1 ) == true && filter_rawread( *r2 ) == true )
@@ -530,7 +529,6 @@ get_next_read_from_rawread_db(
         {
             /* Make sure the mate is empty as well */
             /* This happends inside the function */
-            /* TODO - make this not assert */
             assert( rawread_db_is_empty( rdb ) );
             *r1 = NULL;
             *r2 = NULL;
@@ -540,7 +538,6 @@ get_next_read_from_rawread_db(
         rv = populate_read_from_fastq_file( 
              rdb->paired_end_2_reads, r2 );
         
-        /* TODO - make this a real error */
         /* if returned an EOF, then it should have been returned for r1 */
         assert( rv == 0 );
     }

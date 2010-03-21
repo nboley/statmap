@@ -8,6 +8,7 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "statmap.h"
 #include "find_candidate_mappings.h"
 #include "quality.h"
 #include "index_genome.h"
@@ -315,7 +316,7 @@ find_candidate_mappings( void* params )
             /****** add the results to the database ******/
             /* BUG - assert the readnames are identical */
             pthread_mutex_lock( mappings_db_mutex );
-            assert( thread_id < NUM_THREADS );
+            assert( thread_id < num_threads );
             add_candidate_mappings_to_db( 
                 mappings_db, mappings, thread_id, r->name, curr_read_key );
             pthread_mutex_unlock( mappings_db_mutex );
@@ -391,7 +392,6 @@ find_all_candidate_mappings( genome_data* genome,
 
     /* initialize the threads */
     
-    int num_threads = NUM_THREADS;
     long t;
     int rc;
     void* status;
@@ -422,7 +422,7 @@ find_all_candidate_mappings( genome_data* genome,
     /* Free attribute and wait for the other threads */    
     size_t num_reads2 = 0;
     pthread_attr_destroy(&attr);
-    for(t=0; t<NUM_THREADS; t++) {
+    for(t=0; t < num_threads; t++) {
         rc = pthread_join(thread[t], &status);
         if (rc) {
             fprintf( stderr, 
