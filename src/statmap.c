@@ -21,41 +21,9 @@
 struct snp_db_t;
 #include "snp.h"
 
+/* Set the deafults for these two global variables */
 int num_threads = -1;
 int min_num_hq_bps = -1;
-
-/* Store parsed options */
-typedef struct {
-    char* genome_fname;
-
-    char* unpaired_reads_fnames;
-    char* pair1_reads_fnames;
-    char* pair2_reads_fnames;
-
-    char* snpcov_fname;
-    FILE* snpcov_fp;
-
-    char* wig_fname;
-    FILE* wig_fp;
-    
-    char* candidate_mappings_prefix;
-
-    char* sam_output_fname;
-
-    char* log_fname;
-    FILE* log_fp;
-
-    float min_match_penalty;
-    float max_penalty_spread;
-
-    int indexed_seq_len;
-
-    int num_threads;
-    int min_num_hq_bps;
-    
-    input_file_type_t input_file_type;
-    enum assay_type_t assay_type; 
-} args_t;
 
 void usage() 
 {
@@ -64,18 +32,6 @@ void usage()
     fprintf(stderr, "      (optional) [ -o output.sam  -s indexed_seq_length -l logfile ] \n\n" );
 }
 
-/*
- * Try and determine the file type. 
- *
- * In particular, we try and determine what the sequence mutation
- * string types are.
- *
- * The method is to scan the first 10000 reads and record the 
- * max and min untranslated scores. 
- *
- *
- *
- */
 
 input_file_type_t
 guess_input_file_type( args_t* args )
@@ -184,13 +140,7 @@ guess_input_file_type( args_t* args )
     return input_file_type;
 }
 
-/*
- * Guess the optimal indexed sequence length.
- *
- * To do this, we open up the first read file and then scan for a read. The 
- * seq length of the first read is what we set the index length to.
- *
- */
+
 int
 guess_optimal_indexed_seq_len( args_t* args)
 {
@@ -507,156 +457,6 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
-void
-join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
-                             mapped_reads_db* mpd_rds_db )
-{
-    int error;
-
-    unsigned int read_id = 0;
-    
-    clock_t start, stop;
-    start = clock();
-    
-    /* Join all candidate mappings */
-
-    /* get the cursor to iterate through the candidate mappings */    
-    candidate_mappings_db_cursor* candidate_mappings_cursor;
-    open_candidate_mappings_cursor(
-        cand_mappings_db, &candidate_mappings_cursor );
-    
-    /* BUG - what is this here for ? */
-    char curr_key[ MAX_KEY_SIZE + 1];
-    
-    candidate_mappings* mappings;
-    mapped_read* mpd_rd;
-
-    /* Get the first read */
-    error = get_next_candidate_mapping_from_cursor( 
-        candidate_mappings_cursor, 
-        &mappings,
-        curr_key 
-    );
-    
-    while( CURSOR_EMPTY != error ) 
-    {
-        build_mapped_read_from_candidate_mappings( 
-            mappings, &mpd_rd, read_id );
-        
-        add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
-
-        free_mapped_read( mpd_rd );
-
-        free_candidate_mappings( mappings );
-
-        /* Get the reads */
-        error = get_next_candidate_mapping_from_cursor( 
-            candidate_mappings_cursor, 
-            &mappings,
-            curr_key 
-        );
-
-        read_id += 1;
-    }
-    
-    goto cleanup;
-    
-cleanup:
-    /* close the cursor */
-    close_candidate_mappings_cursor( candidate_mappings_cursor );
-    
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
-    
-    return;
-}
-
-
-void
-write_mapped_reads_to_sam( rawread_db_t* rdb,
-                           mapped_reads_db* mappings_db,
-                           genome_data* genome,
-                           FILE* sam_ofp )
-{
-    int error;
-    
-    clock_t start, stop;
-    start = clock();
-    
-    /* Join all candidate mappings */
-    /* get the cursor to iterate through the reads */
-    rewind_rawread_db( rdb );
-    rewind_mapped_reads_db( mappings_db );
-    
-    rawread *rd1, *rd2;
-    mapped_read* mapped_rd;
-
-    error = get_next_read_from_mapped_reads_db( 
-        mappings_db, 
-        &mapped_rd
-    );
-    
-    get_next_mappable_read_from_rawread_db( 
-        rdb, &rd1, &rd2 );
-    
-    while( !mapped_reads_db_is_empty( mappings_db ) ) 
-    {     
-        /* 
-         * If we couldnt map it anywhere,
-         * print out the read to the non-mapping
-         * fastq file. ( Theoretically, one could
-         * rerun these with lower penalties, or 
-         * re-align these to one another. )
-         */
-        if( mapped_rd->num_mappings == 0 )
-        {
-            /* If this is a single end read */
-            if( rd2 == NULL )
-            {
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_single_end_reads, rd1 );
-            } else {
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_paired_end_1_reads, rd1 );
-
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_paired_end_2_reads, rd2 );
-            }
-        /* otherwise, print it out to the sam file */
-        } else {
-            fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, genome, rd1, rd2 );
-        }
-
-        free_mapped_read( mapped_rd );
-        
-        /* Free the raw reads */
-        free_rawread( rd1 );
-        if( rd2 != NULL )
-            free_rawread( rd2 );
-
-        error = get_next_read_from_mapped_reads_db( 
-            mappings_db, 
-            &mapped_rd
-        );
-
-        get_next_mappable_read_from_rawread_db( 
-            rdb, &rd1, &rd2 );
-        
-    }
-
-    goto cleanup;
-
-cleanup:
-    free_mapped_read( mapped_rd );
-        
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
-    
-    return;
-}
 
 void
 map_marginal( args_t* args, genome_data* genome )
@@ -731,21 +531,34 @@ map_marginal( args_t* args, genome_data* genome )
     
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
+    start = clock();
     join_all_candidate_mappings( &mappings_db, mpd_rds_db );
-    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+
     /* Iterative mapping */
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
     update_mapping( mpd_rds_db, genome, 50, args->assay_type  );
-        
+    
+
+    /* Write the mapped reads to file */
     if( args->wig_fp != NULL )
         write_mapped_reads_to_wiggle( mpd_rds_db, genome, args->wig_fp );
 
+    /* TODO - move this to cleanup? */
     munmap_mapped_reads_db( mpd_rds_db );
-    
+
+    start = clock();
     write_mapped_reads_to_sam( 
         raw_rdb, mpd_rds_db, genome, sam_ofp );
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+
 
     goto cleanup;
 

@@ -209,6 +209,8 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
 int 
 sort_candidate_mappings( candidate_mappings* mappings );
 
+
+
 /*
  *  END Candidate Mapping
  *
@@ -216,10 +218,9 @@ sort_candidate_mappings( candidate_mappings* mappings );
 
 /*************************************************************************
  *
- *  Packed Mapped Reads
+ *  Mapped Reads
  * 
- *  Reads that have been joined, but unlike mapped reads proper have not
- *  had the 'extra' read inforamtion attached.
+ *  Candidate Mappings that have been joined.
  *
  */
 
@@ -353,6 +354,12 @@ int
 get_next_read_from_mapped_reads_db( 
     mapped_reads_db* rdb, 
     mapped_read** rd );
+
+void
+write_mapped_reads_to_sam( rawread_db_t* rdb,
+                           mapped_reads_db* mappings_db,
+                           genome_data* genome,
+                           FILE* sam_ofp );
 
 void
 mmap_mapped_reads_db( mapped_reads_db* rdb );

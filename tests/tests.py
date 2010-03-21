@@ -22,7 +22,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = True
+P_STATMAP_INPUT = False
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -30,7 +30,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -879,15 +879,15 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 if __name__ == '__main__':
-    RUN_SLOW_TESTS = False
+    RUN_SLOW_TESTS = True
     
     test_fivep_sequence_finding()
     test_threep_sequence_finding()
     test_paired_end_sequence_finding( )
     test_repeat_sequence_finding()
     test_mutated_read_finding()
-    #test_multithreaded_mapping( )
-    #test_snp_finding()
+    test_multithreaded_mapping( )
+    test_snp_finding()
 
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 

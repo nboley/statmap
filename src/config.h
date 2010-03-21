@@ -38,19 +38,6 @@ enum bool {
 
 typedef char NODE_TYPE;
 
-/*
- * The assay that generated these reads.
- * 
- * This only matters if we want to do 
- * iterative mapping.
- *
- */
-enum assay_type_t {
-    // UNKNOWN = 0,
-    CAGE = 1,
-    CHIP_SEQ = 2
-};
-
 /* 
  * What strand a read came from. For raw reads, this will usually be unknown
  * ( unless the assay was designed to determine strand ). For mapped reads,

@@ -41,3 +41,8 @@ X 4) remove useless code ( esp marshalling code, and ifdef's out code )
 10) Change the node type to an enum
 11) allow mapping of N's ( do lowest quality substitution )
 12) Allow mapping of really short reads
+13) Create candidate_mappings.h ( and, maybe, mapped_locations.h )
+    Currently, mapped_locations, candidate_mappings, and mapped_reads are all in mapped_location.h/c
+    This is a bit confusing, and a pretty large file. I should probably split them out into 
+    seperate files. 
+13b) Do the smae as 13 excpet with db_interface.c, which is way confusing. 

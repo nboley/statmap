@@ -481,6 +481,61 @@ get_next_candidate_mapping_from_cursor(
     return 0;
 }
 
+void
+join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
+                             mapped_reads_db* mpd_rds_db )
+{
+    int error;
 
+    unsigned int read_id = 0;
+        
+    /* Join all candidate mappings */
 
+    /* get the cursor to iterate through the candidate mappings */    
+    candidate_mappings_db_cursor* candidate_mappings_cursor;
+    open_candidate_mappings_cursor(
+        cand_mappings_db, &candidate_mappings_cursor );
+    
+    /* BUG - what is this here for ? */
+    char curr_key[ MAX_KEY_SIZE + 1];
+    
+    candidate_mappings* mappings;
+    mapped_read* mpd_rd;
+
+    /* Get the first read */
+    error = get_next_candidate_mapping_from_cursor( 
+        candidate_mappings_cursor, 
+        &mappings,
+        curr_key 
+    );
+    
+    while( CURSOR_EMPTY != error ) 
+    {
+        build_mapped_read_from_candidate_mappings( 
+            mappings, &mpd_rd, read_id );
+        
+        add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
+
+        free_mapped_read( mpd_rd );
+
+        free_candidate_mappings( mappings );
+
+        /* Get the reads */
+        error = get_next_candidate_mapping_from_cursor( 
+            candidate_mappings_cursor, 
+            &mappings,
+            curr_key 
+        );
+
+        read_id += 1;
+    }
+    
+    goto cleanup;
+    
+cleanup:
+    /* close the cursor */
+    close_candidate_mappings_cursor( candidate_mappings_cursor );
+        
+    return;
+}
 

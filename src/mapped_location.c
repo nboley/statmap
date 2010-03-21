@@ -11,6 +11,7 @@
 #include <sys/mman.h> 
 
 #include "mapped_location.h"
+#include "rawread.h"
 #include "genome.h"
 
 /*************************************************************************
@@ -1056,6 +1057,88 @@ get_next_read_from_mapped_reads_db(
 
     return 0;
 }
+
+
+void
+write_mapped_reads_to_sam( rawread_db_t* rdb,
+                           mapped_reads_db* mappings_db,
+                           genome_data* genome,
+                           FILE* sam_ofp )
+{
+    int error;
+    
+    /* Join all candidate mappings */
+    /* get the cursor to iterate through the reads */
+    rewind_rawread_db( rdb );
+    rewind_mapped_reads_db( mappings_db );
+    
+    rawread *rd1, *rd2;
+    mapped_read* mapped_rd;
+
+    error = get_next_read_from_mapped_reads_db( 
+        mappings_db, 
+        &mapped_rd
+    );
+    
+    get_next_mappable_read_from_rawread_db( 
+        rdb, &rd1, &rd2 );
+    
+    while( !mapped_reads_db_is_empty( mappings_db ) ) 
+    {     
+        /* 
+         * If we couldnt map it anywhere,
+         * print out the read to the non-mapping
+         * fastq file. ( Theoretically, one could
+         * rerun these with lower penalties, or 
+         * re-align these to one another. )
+         */
+        if( mapped_rd->num_mappings == 0 )
+        {
+            /* If this is a single end read */
+            if( rd2 == NULL )
+            {
+                fprintf_rawread_to_fastq( 
+                    rdb->non_mapping_single_end_reads, rd1 );
+            } else {
+                fprintf_rawread_to_fastq( 
+                    rdb->non_mapping_paired_end_1_reads, rd1 );
+
+                fprintf_rawread_to_fastq( 
+                    rdb->non_mapping_paired_end_2_reads, rd2 );
+            }
+        /* otherwise, print it out to the sam file */
+        } else {
+            fprintf_mapped_read_to_sam( 
+                sam_ofp, mapped_rd, genome, rd1, rd2 );
+        }
+
+        free_mapped_read( mapped_rd );
+        
+        /* Free the raw reads */
+        free_rawread( rd1 );
+        if( rd2 != NULL )
+            free_rawread( rd2 );
+
+        error = get_next_read_from_mapped_reads_db( 
+            mappings_db, 
+            &mapped_rd
+        );
+
+        get_next_mappable_read_from_rawread_db( 
+            rdb, &rd1, &rd2 );
+        
+    }
+
+    goto cleanup;
+
+cleanup:
+    free_mapped_read( mapped_rd );
+        
+    return;
+}
+
+
+
 
 void
 mmap_mapped_reads_db( mapped_reads_db* rdb )
