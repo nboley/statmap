@@ -41,8 +41,6 @@ find_candidate_mappings( void* params )
     pthread_mutex_t* mapped_cnt_mutex = td->mapped_cnt_mutex;
 
     rawread_db_t* rdb = td->rdb;
-    unsigned int* read_key = td->read_key;
-    pthread_mutex_t* ifp_mutex = td->ifp_mutex;
     
     pthread_mutex_t* mappings_db_mutex = td->mappings_db_mutex;
     candidate_mappings_db* mappings_db = td->mappings_db;
@@ -58,50 +56,39 @@ find_candidate_mappings( void* params )
 
     assert( genome->index != NULL );
 
-    int error;
     clock_t start;
     start = clock();
     
     /* build the basepair mutation rate lookup table */
     float* bp_mut_rates;
     determine_bp_mut_rates( &bp_mut_rates );
-    
-    /* to make this thread safe, we take the lock inside of 
-       the while loop and break if the raw read db is empty  */
-    while( 1  ) 
-    {        
-        /****** get the read that we want to map ******/
-        rawread *r1, *r2;
-        
-        pthread_mutex_lock( ifp_mutex );
-        (*read_key)++;
-        unsigned int curr_read_key = *read_key;
-        
-        /* check to see if ifp is empty. if it is, break out of 
-           the while loop */
-        /* RDB */
-        if( rawread_db_is_empty( rdb ) )
+
+    /* The current read of interest */
+    long readkey;
+    rawread *r1, *r2;
+    /* 
+     * While there are still mappable reads in the read DB. All locking is done
+     * in the get next read functions 
+     */
+    while( EOF != 
+           get_next_mappable_read_from_rawread_db( 
+               rdb, &readkey, &r1, &r2 )  
+         ) 
+    {                
+        /* We dont lock mapped_cnt because it's read only and we dont 
+           really care if it's wrong 
+         */
+        if( readkey % 10000 == 0 && readkey > 0 )
         {
-            (*read_key)--;
-            pthread_mutex_unlock( ifp_mutex );
-            break;
+            fprintf(stderr, "DEBUG       :  Mapped %li reads, %i successfully\n", 
+                    readkey, *mapped_cnt);
         }
 
-        /* get the next read in the file */
-        error = 
-            get_next_read_from_rawread_db( rdb, &r1, &r2 );
-        
-        /* release the lock */
-        pthread_mutex_unlock( ifp_mutex );
-        
-        if( curr_read_key % 10000 == 0 && curr_read_key > 0 )
-        {
-            pthread_mutex_lock( mapped_cnt_mutex );
-            fprintf(stderr, "DEBUG       :  Mapped %i reads, %i successfully\n", 
-                    curr_read_key, *mapped_cnt);
-            pthread_mutex_unlock( mapped_cnt_mutex );
-        }
-
+/* I got rid of this because get next mappable read takes care of this. 
+   However, they arent identical because that doesnt write out unmappable
+   reads. I think I'll do this later, but for now I keep this code block 
+*/
+#if 0 
         /* Test to see if the read is mappable. If it is not, continue */
         /* 
          * Note that both pairs of a paired end read have to be mappable
@@ -128,6 +115,7 @@ find_candidate_mappings( void* params )
                 continue;
             }
         }
+#endif
 
         /* consider both read pairs */
         int j = 0;
@@ -139,8 +127,8 @@ find_candidate_mappings( void* params )
             /* If we are logging, print the read */
             if( log_fp != NULL ) {
                 pthread_mutex_lock( log_fp_mutex );
-                fprintf(log_fp, "%i:  %s\t%.*s\t%.*s", 
-                        curr_read_key, r->name, 
+                fprintf(log_fp, "%li:  %s\t%.*s\t%.*s", 
+                        readkey, r->name, 
                         r->length, r->char_seq, 
                         r->length, r->error_str );
                 fflush( log_fp );
@@ -164,11 +152,17 @@ find_candidate_mappings( void* params )
 
             /* increment the number of reads that mapped */
             /* 
-             *  BUG - this isnt locked with the read key, 
+             *  FIXME - this isnt locked with the read key, 
              *  so the mapped cnt and cnt may be out of sync
              *  due to the threads. That is, when we print out
              *  status reports they are typically off by a read 
              *  or 2.
+             *  
+             *  FIXME - Also, what is the cost of these locks? I wonder if,
+             *  since the counts are off anyways, it may be better 
+             *  to let them accumulate and then update them out 
+             *  every, for instance, 100 reads.
+             *  
              */
             pthread_mutex_lock( mapped_cnt_mutex );
             *mapped_cnt += ( results->length > 0 ) ? true : false;
@@ -178,13 +172,13 @@ find_candidate_mappings( void* params )
                 pthread_mutex_lock( log_fp_mutex );
                 fprintf(log_fp, "\t%i\t%e\n", 
                         (int) results->length, 
-                        curr_read_key/(((double)(clock()-start))/CLOCKS_PER_SEC) ); 
+                        readkey/(((double)(clock()-start))/CLOCKS_PER_SEC) ); 
 
                 fflush( log_fp );
                 pthread_mutex_unlock( log_fp_mutex );
             }
 
-            /****** Prepare the template candidate_mapping objects ***********************************/
+            /****** Prepare the template candidate_mapping objects ***********/
             candidate_mapping template_candidate_mapping 
                 = init_candidate_mapping_from_template( 
                     r, max_subseq_len, max_penalty_spread 
@@ -202,10 +196,10 @@ find_candidate_mappings( void* params )
 
             /* 
              * We keep track of the max observed penalty so that we can filter
-             * out penalties that are too low. The index will never return results
-             * that are strictly below the minimum penalty, but it may return 
-             * results below the relative penalty. ( Read the indexing header for
-             * details )
+             * out penalties that are too low. The index will never return 
+             * results that are strictly below the minimum penalty, but it may 
+             * return  results below the relative penalty. ( Read the indexing
+             *  header for details )
              */
             float max_penalty = min_match_penalty;
 
@@ -235,7 +229,7 @@ find_candidate_mappings( void* params )
                 /* set the location */
                 template_candidate_mapping.start_bp = (result->location).loc;
                 /* set the penalty */
-                template_candidate_mapping.penalty = result->penalty;            
+                template_candidate_mapping.penalty = result->penalty;
 
                 /* if necessary, update the max observed penalty */
                 if( result->penalty > max_penalty )
@@ -257,16 +251,16 @@ find_candidate_mappings( void* params )
 
             /****** Do the recheck ******/
             /* 
-             * Currently, everything should be set *except* the gene strand. This
-             * is because we dont know what it is. Therefore, we will add these to the db
-             * with that bit unset, and then during the merging stage add to the penalty
-             * and say that it was equally likely to have come from either gene strand.
-             * This corresponds with us being equally certain that the read is 
-             * from either gene.
+             * Currently, everything should be set *except* the gene strand. 
+             * This is because we dont know what it is. Therefore, we will 
+             * add these to the db with that bit unset, and then during the 
+             * merging stage add to the penalty and say that it was equally 
+             * likely to have come from either gene strand. This corresponds
+             * with us being equally certain that the read is from either gene.
              *
-             * Also, we need to check that we dont have any low quality reads. ( This is 
-             *   possible if the path search went awry, and we found a low quality read 
-             *   before a high quality read )
+             * Also, we need to check that we dont have any low quality reads.
+             * ( This is possible if the path search went awry, and we found 
+             *   a low quality read before a high quality read )
              */
             for( i = 0; i < mappings->length; i++ )
             {
@@ -300,9 +294,9 @@ find_candidate_mappings( void* params )
                     free( snps );
                 }
 
-                /* BUG - rounding error potentially */
                 /* recheck penalty */
-                if(  max_penalty_spread > -0.01 
+                /* I set the safe bit to 1e-6, which is correct for a float */
+                if(  max_penalty_spread > -0.00001 
                      &&
                      ( (mappings->mappings + i)->penalty 
                        < ( max_penalty - max_penalty_spread ) ) )
@@ -317,8 +311,10 @@ find_candidate_mappings( void* params )
             /* BUG - assert the readnames are identical */
             pthread_mutex_lock( mappings_db_mutex );
             assert( thread_id < num_threads );
+            /* note that we add to the DB even if there are 0 that map,
+               we do this so that we can join with the rawreads easier */
             add_candidate_mappings_to_db( 
-                mappings_db, mappings, thread_id, r->name, curr_read_key );
+                mappings_db, mappings, thread_id, r->name, readkey );
             pthread_mutex_unlock( mappings_db_mutex );
 
             free_candidate_mappings( mappings );
@@ -356,13 +352,6 @@ find_all_candidate_mappings( genome_data* genome,
 
     /* initialize the necessary mutex's */
     pthread_mutex_t log_fp_mutex = PTHREAD_MUTEX_INITIALIZER;
-    /* 
-     * This locks the input file(s). It also locks read_key - the global read cnt variable.
-     * We need read_key in order to rejoin the reads after the candidate mappings are
-     * found. This lets us maintain the read order despite the fact that 
-     * the reads are mapped in separate threads.
-     */
-    pthread_mutex_t ifp_mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t mapped_cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -378,10 +367,6 @@ find_all_candidate_mappings( genome_data* genome,
     td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
 
     td_template.rdb = rdb;
-
-    unsigned int read_key = 0;
-    td_template.read_key = &read_key;
-    td_template.ifp_mutex = &ifp_mutex;
     
     td_template.mappings_db = mappings_db;
     td_template.mappings_db_mutex = &mappings_db_mutex;
@@ -439,8 +424,8 @@ find_all_candidate_mappings( genome_data* genome,
     
     /* Find all of the candidate mappings */    
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%i) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
-            mapped_cnt, read_key, 
+    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%li) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
+            mapped_cnt, rdb->readkey, 
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)mapped_cnt)*CLOCKS_PER_SEC*3600)/(stop-start)
         );

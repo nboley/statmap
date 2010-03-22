@@ -37,7 +37,7 @@ db_interface.o : db_interface.c db_interface.h mapped_location.h
 
 db_interface.h : mapped_location.h
 
-mapped_location.o : mapped_location.c mapped_location.h genome.h
+mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
 	gcc $(compile_options) -c mapped_location.c
 
 mapped_location.h : config.h genome.h rawread.h

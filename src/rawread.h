@@ -85,6 +85,16 @@ enum inputfile_type {
 };
 
 typedef struct {
+    /* 
+       This 'db' is functioning as both a cursor and a db. Therefore, 
+       readkey stores the key of the current read. Calling get_next_read
+       will pull out the next read, and increment this. rewind will
+       reset this to 0. 
+    */
+    long readkey;
+    /* We lock this mutex whenever we grab a read */
+    pthread_mutex_t* lock; 
+
     FILE* single_end_reads;
     FILE* paired_end_1_reads;
     FILE* paired_end_2_reads;
@@ -125,11 +135,13 @@ rawread_db_is_empty( rawread_db_t* rdb );
 
 int
 get_next_mappable_read_from_rawread_db( 
-    rawread_db_t* rdb, rawread** r1, rawread** r2 );
+    rawread_db_t* rdb, long* readkey,
+    rawread** r1, rawread** r2 );
 
 int
 get_next_read_from_rawread_db( 
-    rawread_db_t* rdb, rawread** r1, rawread** r2 );
+    rawread_db_t* rdb, long* readkey,
+    rawread** r1, rawread** r2 );
 
 /**************** END Raw Read DB **********************/
 

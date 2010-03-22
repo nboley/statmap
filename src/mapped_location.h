@@ -361,6 +361,24 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
                            genome_data* genome,
                            FILE* sam_ofp );
 
+/*
+ * this requires code from iterative mapping to write out the
+ * traces. It also rewquires the mapped_reads to be mmapped and 
+ * indexed. 
+ *
+ * TODO - rewrite this to not require the mmapped mapped reads.
+ * ( Why? Just 1 less dependency. Also, it confuses the order
+ *   and makes it hard. Although, actually, we could probably
+ *   just move the fp and read sicne we arent going to actually 
+ *   change anything on disk. hmmm... )
+ *
+ */
+
+void
+write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
+                              genome_data* genome,
+                              FILE* wfp );
+
 void
 mmap_mapped_reads_db( mapped_reads_db* rdb );
 

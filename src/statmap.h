@@ -110,24 +110,6 @@ guess_optimal_indexed_seq_len( args_t* args);
 args_t
 parse_arguments( int argc, char** argv );
 
-/* 
-   
-TODO - MOVE THESE
-   
-void
-join_all_candidate_mappings( 
-    candidate_mappings_db* cand_mappings_db,
-    mapped_reads_db* mpd_rds_db );
-   
-void
-write_mapped_reads_to_sam( rawread_db_t* rdb,
-                           mapped_reads_db* mappings_db,
-                           genome_data* genome,
-                           FILE* sam_ofp );
-// END MOVE THESE
-   
-*/ 
-
 void
 map_marginal( args_t* args, genome_data* genome );
 

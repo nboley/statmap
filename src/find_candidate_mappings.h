@@ -14,9 +14,6 @@ struct single_map_thread_data {
     pthread_mutex_t* log_fp_mutex;
 
     rawread_db_t* rdb;
-
-    unsigned int* read_key;
-    pthread_mutex_t* ifp_mutex;
     
     unsigned int* mapped_cnt;
     pthread_mutex_t* mapped_cnt_mutex;

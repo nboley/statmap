@@ -25,7 +25,7 @@ struct snp_db_t;
 int num_threads = -1;
 int min_num_hq_bps = -1;
 
-void usage() 
+void usage()
 {
     fprintf(stderr, "Usage: ./statmap -g genome.fa -p men_match_penalty -m max_penalty_spread \n");
     fprintf(stderr, "                 ( -r input.fastq | [ -1 input.pair1.fastq & -2 input.pair2.fastq ] ) \n");
@@ -38,17 +38,17 @@ guess_input_file_type( args_t* args )
 {
     input_file_type_t input_file_type = UNKNOWN;
 
-    // Store the minimum and max qual scores among 
-    // every observed basepair.  
+    // Store the minimum and max qual scores among
+    // every observed basepair.
     unsigned char max_qual = 0;
     unsigned char min_qual = 255;
-    
+
     // Open one of of the read input files
     char* if_name = args->unpaired_reads_fnames;
     if( if_name == NULL )
         if_name = args->pair1_reads_fnames;
     FILE* fp = fopen( if_name, "r" );
-    
+
     /* FIXME - stop assuming this is a fastq file */
     int i, j;
     for( i = 0; i < 1000; i++ )
@@ -58,7 +58,7 @@ guess_input_file_type( args_t* args )
         /* If we have reached and EOF, then break */
         if( r == NULL )
             break;
-        
+
         for( j = 0; j < r->length; j++ )
         {
             max_qual = MAX( max_qual, (unsigned char ) r->error_str[j]  );
@@ -66,51 +66,51 @@ guess_input_file_type( args_t* args )
         }
         free_rawread( r );
     }
-    
-    fprintf( stderr, 
-             "NOTICE      :  Calculated max and min quality scores as '%i' and '%i'\n", 
+
+    fprintf( stderr,
+             "NOTICE      :  Calculated max and min quality scores as '%i' and '%i'\n",
              max_qual, min_qual );
-    
-    
+
+
     /* if the max quality score is 73, ( 'I' ), then
        this is almost certainly a sanger format */
     if( max_qual == 73 ) {
         input_file_type = SANGER_FQ ;
     } else {
-        // If the max quality is 104 it's a bit tougher. 
+        // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
         if( max_qual == 104 ) {
-            /* 
-             * If the shifted min quality is less than 0, then the 
+            /*
+             * If the shifted min quality is less than 0, then the
              * format is almost certainly the log odds solexa version
              */
             if( min_qual < 64 )
             {
                 input_file_type = SOLEXA_LOG_ODDS_FQ;
-            } 
-            // If the min is less than 69, it is still most likely 
+            }
+            // If the min is less than 69, it is still most likely
             // a log odds version, but we emit a warning anyways.
             else if ( min_qual < 69 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
                 input_file_type = SOLEXA_LOG_ODDS_FQ;
             } else if ( min_qual == 104 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-               input_file_type = TEST_SUITE_FORMAT; 
+               input_file_type = TEST_SUITE_FORMAT;
             } else {
                 fprintf( stderr, "ERROR       :  Could not automatically determine " );
-                fprintf( stderr, "input format. ( max=%i, min=%i  )\n", 
+                fprintf( stderr, "input format. ( max=%i, min=%i  )\n",
                          max_qual, min_qual );
                 exit( -1 );
             }
         }
     }
-    
+
     /* print out the determined format */
-    fprintf( stderr, 
-             "NOTICE      :  Setting Input File Format to '%i'\n", 
+    fprintf( stderr,
+             "NOTICE      :  Setting Input File Format to '%i'\n",
              input_file_type );
     fclose( fp );
-    
+
     switch( input_file_type )
     {
     case 1:
@@ -126,14 +126,14 @@ guess_input_file_type( args_t* args )
         ARE_LOG_ODDS = true;
         break;
     default:
-        fprintf( stderr, 
-                 "ERROR       :  Unrecognized file format type %i\n", 
+        fprintf( stderr,
+                 "ERROR       :  Unrecognized file format type %i\n",
                  input_file_type );
         exit( -1 );
     }
-    
-    fprintf( stderr, 
-             "NOTICE      :  Set Qual_shift to '%i' and ARE_LOG_ODDS to %i\n", 
+
+    fprintf( stderr,
+             "NOTICE      :  Set Qual_shift to '%i' and ARE_LOG_ODDS to %i\n",
              QUAL_SHIFT, ARE_LOG_ODDS );
 
 
@@ -199,7 +199,7 @@ parse_arguments( int argc, char** argv )
     args.log_fname = NULL;
     args.log_fp = NULL;
     
-    args.min_match_penalty = -1;
+    args.min_match_penalty = 1;
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
@@ -307,7 +307,7 @@ parse_arguments( int argc, char** argv )
         exit( -1 );
     }
 
-    if( args.min_match_penalty == -1 )
+    if( args.min_match_penalty == 1 )
     {
         usage();
         fprintf(stderr, "ERROR       :  -p ( min match penalty ) is required\n");

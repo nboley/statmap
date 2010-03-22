@@ -5,6 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <pthread.h>
 
 #include "config.h"
 #include "statmap.h"
@@ -76,6 +77,7 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, rawread* r )
     fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
 }
 
+#if 0
 
 void
 marshal_rawread( rawread* r, char** buffer, size_t* buffer_size )
@@ -161,6 +163,8 @@ unmarshal_rawread( rawread** r, char* buffer )
     /* Add the strand */
     (*r)->strand = (enum STRAND) *buffer;
 }
+
+#endif
 
 /*
  * Populate a rawread object from a file pointer. 
@@ -308,6 +312,11 @@ init_rawread_db( rawread_db_t** rdb )
 {
     (*rdb) = malloc( sizeof( rawread_db_t ) );
 
+    (*rdb)->readkey = 0;
+
+    (*rdb)->lock = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->lock, NULL );
+
     (*rdb)->single_end_reads = NULL;
     (*rdb)->paired_end_1_reads = NULL;
     (*rdb)->paired_end_2_reads = NULL;
@@ -341,7 +350,10 @@ close_rawread_db( rawread_db_t* rdb )
         fclose( rdb->unmappable_paired_end_2_reads );
         fclose( rdb->non_mapping_paired_end_2_reads );
     }
-        
+    
+    pthread_mutex_destroy( rdb->lock );
+    free( rdb->lock );
+    
     free( rdb );
     return;
 }
@@ -424,6 +436,9 @@ add_paired_end_reads_to_rawread_db(
 void
 rewind_rawread_db( rawread_db_t* rdb )
 {
+    /* reset the read key */
+    rdb->readkey = 0;
+
     /* rewind all of the file pointers */
 
     if( rdb->paired_end_1_reads != NULL )
@@ -467,12 +482,13 @@ rawread_db_is_empty( rawread_db_t* rdb )
 
 int 
 get_next_mappable_read_from_rawread_db( 
-    rawread_db_t* rdb, rawread** r1, rawread** r2 )
+    rawread_db_t* rdb, long* readkey,
+    rawread** r1, rawread** r2 )
 {
     int rv = -10;
     
     rv = get_next_read_from_rawread_db( 
-            rdb, r1, r2 );
+            rdb, readkey, r1, r2 );
     
     /* While this rawread is unmappable, continue */ 
     /* 
@@ -483,7 +499,8 @@ get_next_mappable_read_from_rawread_db(
     */
     while( *r1 != NULL 
            && (      ( *r2 == NULL && filter_rawread( *r1 ) == true )
-                  || ( filter_rawread( *r1 ) == true && filter_rawread( *r2 ) == true )
+                  || ( filter_rawread( *r1 ) == true 
+                       && filter_rawread( *r2 ) == true )
               )
            )
     {
@@ -492,7 +509,7 @@ get_next_mappable_read_from_rawread_db(
             free_rawread( *r2 );
         
         rv = get_next_read_from_rawread_db( 
-                 rdb, r1, r2 );
+                rdb, readkey, r1, r2 );
     }
     
     return rv;
@@ -500,8 +517,11 @@ get_next_mappable_read_from_rawread_db(
 
 int
 get_next_read_from_rawread_db( 
-    rawread_db_t* rdb, rawread** r1, rawread** r2 )
+    rawread_db_t* rdb, long* readkey, 
+    rawread** r1, rawread** r2 )
 {
+    pthread_mutex_lock( rdb->lock );
+
     /* 
      * Store the return value - 
      * 0 indicates success, negative failure 
@@ -516,7 +536,12 @@ get_next_read_from_rawread_db(
         
         rv = populate_read_from_fastq_file( 
             rdb->single_end_reads, r1 );
-        return rv;
+        if( rv == EOF )
+        {
+            *r1 = NULL;
+            pthread_mutex_unlock( rdb->lock );
+            return EOF;
+        }        
     } 
     /* If the reads are paired */
     else {
@@ -532,6 +557,7 @@ get_next_read_from_rawread_db(
             assert( rawread_db_is_empty( rdb ) );
             *r1 = NULL;
             *r2 = NULL;
+            pthread_mutex_unlock( rdb->lock );
             return EOF;
         }
 
@@ -542,6 +568,11 @@ get_next_read_from_rawread_db(
         assert( rv == 0 );
     }
 
+    /* increment the read counter */
+    *readkey = rdb->readkey;
+    rdb->readkey += 1;
+
+    pthread_mutex_unlock( rdb->lock );
     return 0;
 }
 

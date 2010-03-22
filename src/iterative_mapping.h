@@ -138,6 +138,9 @@ update_chipseq_mapping(
     int max_num_iterations 
 );
 
+/* fwd declaration for the assay type */
+enum assay_type_t;
+
 int
 update_mapping( mapped_reads_db* rdb, 
                 genome_data* genome,

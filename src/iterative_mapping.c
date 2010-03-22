@@ -264,75 +264,6 @@ write_wiggle_from_traces( traces_t* traces,
  *
  *****************************************************************************/
 
-/* use this for wiggles */
-void
-update_traces_from_read_densities( 
-    mapped_reads_db* reads_db,
-    traces_t* traces
-)
-{    
-    /* zero traces */
-    zero_traces( traces );
-    
-    /* Update the trace from the reads */
-    /* 
-     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
-     * variable. I dont understand why, but I am a bit nervous because the spec used to
-     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
-     * register space and upcasting all of the unsigned longs to long longs. When 
-     * I move to open mp 3.0, I want to remove this 
-     */
-
-    long long i;
-    const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
-    {
-        char* read_start = reads_db->mmapped_reads_starts[i];
-
-        /* read a mapping into the struct */
-        mapped_read r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (mapped_read_location*) read_start;
-        
-        /* Update the trace from this mapping */
-        unsigned int j;
-        double cond_prob_sum = 0;
-        for( j = 0; j < r.num_mappings; j++ )
-        {
-            int chr_index = r.locations[j].chr;
-            unsigned int start = r.locations[j].start_pos;
-            unsigned int stop = r.locations[j].stop_pos;
-            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
-            cond_prob_sum += cond_prob;
-            
-            assert( cond_prob >= -0.0001 );
-            assert( stop >= start );            
-            assert( chr_index < traces->num_traces );
-            assert( traces->trace_lengths[chr_index] >= stop );
-
-            unsigned int k = 0;
-            for( k = start; k < stop; k++ )
-            {
-                /* update the trace */
-                #pragma omp atomic
-                traces->traces[chr_index][k] 
-                    += (1.0/(stop-start))*cond_prob;
-            }
-        }
-
-        /* Make sure that the conditional probabilities sum to 1 */
-        // fprintf( stderr, "%e\n", cond_prob_sum );
-        // assert( cond_prob_sum > 0.95 && cond_prob_sum < 1.05 );
-    }
-    
-    return;
-}
-
-
 void
 update_traces_from_mapped_chipseq_reads( 
     mapped_reads_db* reads_db,
@@ -627,40 +558,6 @@ update_mapping( mapped_reads_db* rdb,
 
     return 0;
 }
-
-void
-write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
-                              genome_data* genome,
-                              FILE* wfp )
-{
-    const double filter_threshold = 1e-6;
-
-    /* Print out the header */
-    fprintf( wfp, "track type=wiggle_0 name=%s\n", "cage_wig_track" );
-    
-    // build and update the chr traces
-    traces_t* traces;
-    init_traces( genome, &traces );
-
-
-    update_traces_from_read_densities( rdb, traces );
-    
-    int i;
-    unsigned int j;
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        fprintf( wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
-        
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
-        {
-            if( traces->traces[i][j] >= filter_threshold )
-                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[i][j] );
-        }
-    }
-
-    close_traces( traces );
-}
-
 
 
 /*

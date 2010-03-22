@@ -14,6 +14,9 @@
 #include "rawread.h"
 #include "genome.h"
 
+// this is needed for the wiggle writing code
+#include "iterative_mapping.h"
+
 /*************************************************************************
  *
  *  Mapped Location 
@@ -1066,6 +1069,8 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
                            FILE* sam_ofp )
 {
     int error;
+
+    long readkey;
     
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
@@ -1081,10 +1086,14 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
     );
     
     get_next_mappable_read_from_rawread_db( 
-        rdb, &rd1, &rd2 );
+        rdb, &readkey, &rd1, &rd2 );
     
+    int read_num = 0;
+
     while( !mapped_reads_db_is_empty( mappings_db ) ) 
     {     
+        read_num +=1; 
+        
         /* 
          * If we couldnt map it anywhere,
          * print out the read to the non-mapping
@@ -1092,6 +1101,8 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
          * rerun these with lower penalties, or 
          * re-align these to one another. )
          */
+        printf("%i: Num Reads: %i\t Mapped Read ID: %lu\n", 
+               read_num, mapped_rd->num_mappings, mapped_rd->read_id);
         if( mapped_rd->num_mappings == 0 )
         {
             /* If this is a single end read */
@@ -1125,7 +1136,7 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
         );
 
         get_next_mappable_read_from_rawread_db( 
-            rdb, &rd1, &rd2 );
+            rdb, &readkey, &rd1, &rd2 );
         
     }
 
@@ -1135,6 +1146,100 @@ cleanup:
     free_mapped_read( mapped_rd );
         
     return;
+}
+
+/* use this for wiggles */
+void
+update_traces_from_read_densities( 
+    mapped_reads_db* reads_db,
+    traces_t* traces
+)
+{    
+    /* Zero out the trace for the update */
+    /* BUG FIXME TODO use memset! WTF? */
+    int trace_num = 0;
+    for( trace_num = 0; trace_num < traces->num_traces; trace_num++ )
+    {
+        unsigned int j;
+        for( j = 0; j < traces->trace_lengths[trace_num]; j++ )
+        {
+            traces->traces[trace_num][j] = 0;
+        }
+    }
+    
+    /* Update the trace from the reads */
+    unsigned long i;
+    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+    {
+        char* read_start = reads_db->mmapped_reads_starts[i];
+
+        /* read a mapping into the struct */
+        mapped_read r;
+        r.read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        r.num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        r.locations = (mapped_read_location*) read_start;
+        
+        /* Update the trace from this mapping */
+        unsigned int j;
+        double cond_prob_sum = 0;
+        for( j = 0; j < r.num_mappings; j++ )
+        {
+            int chr_index = r.locations[j].chr;
+            unsigned int start = r.locations[j].start_pos;
+            unsigned int stop = r.locations[j].stop_pos;
+            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
+            cond_prob_sum += cond_prob;
+            
+            assert( cond_prob >= -0.0001 );
+            assert( stop >= start );            
+            assert( chr_index < traces->num_traces );
+            assert( traces->trace_lengths[chr_index] >= stop );
+
+            unsigned int k = 0;
+            for( k = start; k < stop; k++ )
+            {
+                /* update the trace */
+                traces->traces[chr_index][k] 
+                    += (1.0/(stop-start))*cond_prob;
+            }
+        }
+    }
+    
+    return;
+}
+
+
+void
+write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
+                              genome_data* genome,
+                              FILE* wfp )
+{
+    const double filter_threshold = 1e-6;
+
+    /* Print out the header */
+    fprintf( wfp, "track type=wiggle_0 name=%s\n", "cage_wig_track" );
+
+    /* build and update the chr traces */
+    traces_t* traces;
+    init_traces( genome, &traces );
+    update_traces_from_read_densities( rdb, traces );
+    
+    int i;
+    unsigned int j;
+    for( i = 0; i < traces->num_traces; i++ )
+    {
+        fprintf( wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
+        
+        for( j = 0; j < traces->trace_lengths[i]; j++ )
+        {
+            if( traces->traces[i][j] >= filter_threshold )
+                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[i][j] );
+        }
+    }
+    
+    close_traces( traces );
 }
 
 
