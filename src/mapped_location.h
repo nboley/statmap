@@ -291,7 +291,7 @@ void
 build_mapped_read_from_candidate_mappings( 
     candidate_mappings* mappings, 
     mapped_read** mpd_rd,
-    unsigned long read_id );
+    long read_id );
 
 int 
 write_mapped_read_to_file( mapped_read* read, FILE* of  );

@@ -735,7 +735,7 @@ void
 build_mapped_read_from_candidate_mappings( 
     candidate_mappings* mappings, 
     mapped_read** mpd_rd,
-    unsigned long read_id )
+    long read_id )
 {
     /* 
      * Building mapped reads has several components:
@@ -1085,37 +1085,48 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
         &mapped_rd
     );
     
-    get_next_mappable_read_from_rawread_db( 
+    get_next_read_from_rawread_db( 
         rdb, &readkey, &rd1, &rd2 );
     
-    int read_num = 0;
-
     while( !mapped_reads_db_is_empty( mappings_db ) ) 
-    {     
-        read_num +=1; 
-        
+    {             
         /* 
+         * TODO - clean this up - this is kind of a weird place to put this. 
+         *
          * If we couldnt map it anywhere,
          * print out the read to the non-mapping
          * fastq file. ( Theoretically, one could
          * rerun these with lower penalties, or 
          * re-align these to one another. )
          */
-        printf("%i: Num Reads: %i\t Mapped Read ID: %lu\n", 
-               read_num, mapped_rd->num_mappings, mapped_rd->read_id);
         if( mapped_rd->num_mappings == 0 )
         {
             /* If this is a single end read */
             if( rd2 == NULL )
             {
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_single_end_reads, rd1 );
+                if( filter_rawread( rd1 ) )
+                {
+                    fprintf_rawread_to_fastq( 
+                        rdb->unmappable_single_end_reads, rd1 );
+                } else {
+                    fprintf_rawread_to_fastq( 
+                        rdb->non_mapping_single_end_reads, rd1 );                    
+                }
             } else {
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_paired_end_1_reads, rd1 );
-
-                fprintf_rawread_to_fastq( 
-                    rdb->non_mapping_paired_end_2_reads, rd2 );
+                if( filter_rawread( rd1 ) || filter_rawread( rd2 ) )
+                {
+                    fprintf_rawread_to_fastq( 
+                        rdb->unmappable_paired_end_1_reads, rd1 );
+                    
+                    fprintf_rawread_to_fastq( 
+                        rdb->unmappable_paired_end_2_reads, rd2 );
+                } else {
+                    fprintf_rawread_to_fastq( 
+                        rdb->non_mapping_paired_end_1_reads, rd1 );
+                    
+                    fprintf_rawread_to_fastq( 
+                        rdb->non_mapping_paired_end_2_reads, rd2 );
+                }
             }
         /* otherwise, print it out to the sam file */
         } else {
@@ -1135,7 +1146,7 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
             &mapped_rd
         );
 
-        get_next_mappable_read_from_rawread_db( 
+        get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2 );
         
     }

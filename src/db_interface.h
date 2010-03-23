@@ -68,8 +68,7 @@ cmp_joining_queue_datum( const void* a, const void* b );
 #define MAX_KEY_SIZE 254
 
 typedef struct {
-    char key[MAX_KEY_SIZE+1];
-    unsigned long read_id;
+    long read_id;
     candidate_mapping mapping;
     FILE* stream; 
 } joining_queue_datum;
@@ -78,6 +77,7 @@ typedef struct {
     candidate_mappings_db* db;
     joining_queue_datum** mappings_queue;
     int queue_len;
+    long curr_read_id;
 } candidate_mappings_db_cursor;
 
 
@@ -93,9 +93,8 @@ void
 add_candidate_mappings_to_db( 
     candidate_mappings_db* db, 
     candidate_mappings* mappings,
-    int thread_num,
-    char* readname,
-    unsigned long read_id);
+    long read_id,
+    int thread_num );
 
 #define CURSOR_EMPTY 1
 
@@ -113,7 +112,7 @@ int
 get_next_candidate_mapping_from_cursor( 
     candidate_mappings_db_cursor* cursor, 
     candidate_mappings** mappings,
-    char* key );
+    long* read_id );
 
 void
 join_all_candidate_mappings( 

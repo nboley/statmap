@@ -627,7 +627,7 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1 ):
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -658,8 +658,8 @@ def test_dirty_reads( read_len, n_threads=1 ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq \
-                               -o tmp.sam -p %.2f -m %.2f \
-                               -t %i " % ( STATMAP_PATH, -30, 2, n_threads )
+                               -o tmp.sam -p %.2f -m 20 \
+                               -t %i " % ( STATMAP_PATH, min_penalty, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -732,8 +732,11 @@ def test_dirty_reads( read_len, n_threads=1 ):
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_dirty_reads( rl ) 
-        print "PASS: Dirty Read Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
+        test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
+        print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
+        # FIXME - do the work to fix these tests
+        #test_dirty_reads( rl, n_threads=1, min_penalty=-1 ) 
+        #print "PASS: Dirty Read (-1 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
@@ -880,7 +883,7 @@ if False:
 
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
-    
+
     test_fivep_sequence_finding()
     test_threep_sequence_finding()
     test_paired_end_sequence_finding( )
@@ -888,7 +891,7 @@ if __name__ == '__main__':
     test_mutated_read_finding()
     test_multithreaded_mapping( )
     test_snp_finding()
-
+    
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )

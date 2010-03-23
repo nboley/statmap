@@ -172,7 +172,7 @@ close_candidate_mappings_db( candidate_mappings_db* db )
     /* Remove the cand mapping files */
     char buffer[255];
     sprintf( buffer, "rm %s -rf\n", db->data_dir );
-    fprintf( stderr, "NOTICE      :  Removing tmp directoty: %s", buffer );
+    fprintf( stderr, "NOTICE      :  Removing tmp directory: %s", buffer );
     error = system( buffer );
     if( error != 0 )
     {
@@ -228,13 +228,9 @@ void
 add_candidate_mappings_to_db ( 
     candidate_mappings_db* db, 
     candidate_mappings* mappings,
-    int thread_num,
-    char* readname,
-    unsigned long read_id )
+    long read_id,
+    int thread_num )
 {
-    if ( mappings->length == 0 )
-        return;
-
     int error;
     
     /* TODO - add proper DB support */
@@ -245,8 +241,10 @@ add_candidate_mappings_to_db (
             mappings->mappings, db, thread_num );
         
     /* write the key to the file */
-    error = fprintf( fp, "%s\t%lu", readname, read_id );
-    error = fputc( '\0', fp );
+    /* print this as a string so that we can use unix sort */
+    error = fprintf( fp, "%lu", read_id );
+    /* Add the tab so that we can use unix sort */
+    error = fputc( '\t', fp );
     
     unsigned int i;
     for( i = 0; i < mappings->length; i++ )
@@ -258,7 +256,7 @@ add_candidate_mappings_to_db (
         error = fwrite( mapping, sizeof(candidate_mapping), 1, fp );
     }
     error = putc( '\n', fp );
-    
+
     return;
 }
 
@@ -283,41 +281,21 @@ close_candidate_mappings_cursor(
 }
 
 inline int
-get_readname_from_stream( char* buffer, 
-                          unsigned long* read_id, 
-                          int max_chars, 
+get_readname_from_stream( long* read_id, 
                           FILE* stream )
 {
     int error;
-    int i;
-    for( i = 0; i < max_chars-1; i++ )
+    error = fscanf( stream, "%lu", read_id );
+    if( 1 != error )
     {
-        buffer[i] = fgetc( stream );
-        /* If we are at the end of the stream */
-        if( feof( stream ) )
-        {
-            buffer[i] = '\0';
-            return EOF;
-        }
-
-        /* If we are at the end of the readname */
-        if( buffer[i] == '\t' )
-        {
-            /* Set the NULL byte */
-            buffer[i] = '\0';
-            
-            /* Read in the read id */
-            error = fscanf( stream, "%lu", read_id );
-            assert( error == 1 );
-            fgetc( stream );
-            
-            return 0;
-        }
+        assert( feof( stream ) );
+        return EOF;
     }
-    buffer[ max_chars - 1 ] = '\0';
-
-    fprintf(stderr, "Failed to read readname in 'get_readname_from_stream'\n" );
-    exit( -1 );
+    
+    assert( error == 1 );
+    /* Get the tab */
+    fgetc( stream );
+    return 0;    
 }
 
 void
@@ -333,6 +311,7 @@ open_candidate_mappings_cursor (
     (*cursor)->queue_len = 6*num_threads;
     (*cursor)->mappings_queue 
         = malloc(sizeof(joining_queue_datum*)*(*cursor)->queue_len);
+    (*cursor)->curr_read_id = 0;
     
     FILE** fps = malloc(sizeof(FILE*)*6*num_threads);
     for( i = 0; i < num_threads; i++ )
@@ -359,16 +338,18 @@ open_candidate_mappings_cursor (
         ((*cursor)->mappings_queue)[i]->stream = fps[i];
         
         /* Get the readnames from the stream while the reads 
-           dont have mappings */
+           dont have mappings. That is, we keep grabbing 
+           readnames and testing for a new line, which indicates
+           that there are no new mappings.
+         */
         do { 
             error = get_readname_from_stream( 
-                ((*cursor)->mappings_queue)[i]->key,
                 &(((*cursor)->mappings_queue)[i]->read_id),
-                MAX_KEY_SIZE + 1,
                 fps[i]
-            );
-            
+            );            
             error = getc( fps[i] );
+        /* I dont need to test for EOF here because EOF != \n, 
+           so if I get EOF it will break anyways */
         } while( error == '\n' );
         
         /* if the file is at eof, set the queue to NULL */
@@ -400,7 +381,7 @@ int
 get_next_candidate_mapping_from_cursor( 
     candidate_mappings_db_cursor* cursor, 
     candidate_mappings** mappings,
-    char* key )
+    long* read_id )
 {
     /* initialize a place to store the reads */
     init_candidate_mappings( mappings );
@@ -417,21 +398,21 @@ get_next_candidate_mapping_from_cursor(
         free_candidate_mappings( *mappings );
         return CURSOR_EMPTY;
     }
-
-    /* populate the key with the first key in the queue */
-    int key_len = strlen( ((cursor->mappings_queue)[0])->key ) + 1;
-    memcpy( key, ((cursor->mappings_queue)[0])->key, key_len );
-    /* explicitly set the null byte */
-    key[key_len-1] = '\0';
+    
+    /* Set the read id */
+    *read_id = cursor->curr_read_id;
+    /* increment the read id, for the next mapping */
+    cursor->curr_read_id += 1;
     
     /* now, keep adding data until the key changes */
-    do
+    while( (cursor->mappings_queue)[0] != NULL 
+           && *read_id == (cursor->mappings_queue)[0]->read_id )
     {
         /* Add the current mapped location into mapped locations */
         add_candidate_mapping( *mappings, 
                                &(((cursor->mappings_queue)[0])->mapping) );
         
-        /* get the next char in the top file to check if we are on a new read */
+        /* get the next char in the top file to check if this is a new read */
         /* If we are, this should be a new line */
         char rv = getc( ((cursor->mappings_queue)[0])->stream );
         
@@ -443,9 +424,7 @@ get_next_candidate_mapping_from_cursor(
             while( rv == '\n' )
             {
                 rv = get_readname_from_stream( 
-                    (cursor->mappings_queue)[0]->key,
                     &((cursor->mappings_queue)[0]->read_id),
-                    MAX_KEY_SIZE + 1,
                     (cursor->mappings_queue)[0]->stream
                 );
                 
@@ -458,7 +437,6 @@ get_next_candidate_mapping_from_cursor(
             assert( feof( ((cursor->mappings_queue)[0])->stream ) );
             free( (cursor->mappings_queue)[0] );
             (cursor->mappings_queue)[0] = NULL;
-            // return 0;
         } else {
             /* read in the next mapping */
             assert( rv == '\0' );
@@ -475,8 +453,7 @@ get_next_candidate_mapping_from_cursor(
                sizeof( joining_queue_datum* ), 
                cmp_joining_queue_datum );
         
-    } while( (cursor->mappings_queue)[0] != NULL 
-             && 0 == strcmp( key, ((cursor->mappings_queue)[0])->key ));
+    }
 
     return 0;
 }
@@ -487,8 +464,6 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
 {
     int error;
 
-    unsigned int read_id = 0;
-        
     /* Join all candidate mappings */
 
     /* get the cursor to iterate through the candidate mappings */    
@@ -496,8 +471,8 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     open_candidate_mappings_cursor(
         cand_mappings_db, &candidate_mappings_cursor );
     
-    /* BUG - what is this here for ? */
-    char curr_key[ MAX_KEY_SIZE + 1];
+    /* store the read key of the current read */
+    long read_key;
     
     candidate_mappings* mappings;
     mapped_read* mpd_rd;
@@ -506,13 +481,13 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     error = get_next_candidate_mapping_from_cursor( 
         candidate_mappings_cursor, 
         &mappings,
-        curr_key 
+        &read_key 
     );
     
     while( CURSOR_EMPTY != error ) 
     {
         build_mapped_read_from_candidate_mappings( 
-            mappings, &mpd_rd, read_id );
+            mappings, &mpd_rd, read_key );
         
         add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
 
@@ -524,10 +499,8 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
         error = get_next_candidate_mapping_from_cursor( 
             candidate_mappings_cursor, 
             &mappings,
-            curr_key 
+            &read_key 
         );
-
-        read_id += 1;
     }
     
     goto cleanup;

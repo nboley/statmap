@@ -13,14 +13,14 @@ M ( I cant recreate this after fixing the valgrind memory error, so I
 M   am assuming that this was it, but I'm not certain )
 M
 0.1) use memset in the trace zeroing ( update trace from reads )
-0.8) rename mapped_short_read to packed_mapped_read
-0.9) Seperate joining and sam printing
+X 0.8) rename mapped_short_read to packed_mapped_read
+X 0.9) Seperate joining and sam printing
 0.95) Fix sam printing for threaded apps and paired end reads
 1) Allow users to specify an output directory ( generic chdir )
 1.1) Make srue the read len calc is good for paired end reads
 2) Cleanup the rawreaddb interface
    i) create a cursor interface
-   ii) integrate locking and readkey with the cursor/db interface
+   X ii) integrate locking and readkey with the cursor/db interface
    X iii) remove the get_read_from_db function in statmap.c
 P 2.1) Make mapped short read location type take a bitfield
 P     to conserve on disk storage space
@@ -30,6 +30,7 @@ X 2.2) cleanup error codes to make them standard
    ( except slashes )
 3.1) Finish on disk indexes
 X 4) remove useless code ( esp marshalling code, and ifdef's out code )
+3) Fix unit tests to correctly identify reads that didnt map due to mutation rates
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate

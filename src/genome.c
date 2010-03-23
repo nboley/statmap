@@ -131,7 +131,7 @@ add_chrs_from_fasta_file(
     
     /* FIXME - ge rid of this via mmap */
     // int max_num_bytes = MAX_GENOME_LOC;
-    const unsigned int max_num_bytes = 300000000;
+    unsigned int allcd_size = 300000;
 
     /* BUG OVERFLOW */
     /* store the chromosome name - limit it to 255 characters */
@@ -148,9 +148,10 @@ add_chrs_from_fasta_file(
     }
 
     char* chr;
-    chr = malloc( (max_num_bytes+1)*sizeof(char) );
+    chr = malloc( (allcd_size+1)*sizeof(char) );
     if( chr == NULL ) {
         fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+        assert( 0 );
         exit(-1);
     }
     
@@ -158,7 +159,7 @@ add_chrs_from_fasta_file(
     int chr_index = -1;
 
     unsigned int i = 0;
-    while( i < max_num_bytes && !feof(f) )
+    while( !feof(f) )
     {
         char bp = (char) fgetc(f);
         if( !isalpha(bp) || (chr_index == -1 && i==0) ) 
@@ -181,17 +182,13 @@ add_chrs_from_fasta_file(
                 /* if we are past the first chr, add the previous chr */
                 if ( chr_index >= 0 )
                 {
-                    if( i == max_num_bytes ) {
-                        fprintf( stderr, 
-                                 "WARNING - genome file truncated to %i bytes\n",
-                                 max_num_bytes);
-                    }
-
                     /* 
                      * put a trailing null in to make it a proper string, 
                      * and add it to the genome
                      */
                     chr[i] = '\0';    
+                    /* shrink the size of chr so that we arent wasting memory */
+                    chr = realloc( chr, (i+1)*sizeof(char) );
 
                     assert( chr_name[0] != '\0' );
                     fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
@@ -228,14 +225,23 @@ add_chrs_from_fasta_file(
         assert(isalpha(bp));
         chr[i] = bp;
         i++;
-    }
 
-    if( i == max_num_bytes )
-        fprintf( stderr, "WARNING - genome file truncated to %i bytes\n",
-                 max_num_bytes);
+        if( i == allcd_size ) {
+            allcd_size += allcd_size;
+            chr = realloc( chr, (allcd_size+1)*sizeof(char) );
+            if( chr == NULL ) {
+                fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+                assert( 0 );
+                exit(-1);
+            }
+        }
+    }
     
     /* put a trailing null in to make it a proper string, and add the chr */
     chr[i] = '\0';    
+
+    /* shrink the size of chr so that we arent wasting memory */
+    chr = realloc( chr, (i+1)*sizeof(char) );
 
     assert( chr_name[0] != '\0' );
     add_chr_to_genome( chr_name, chr, i, gen );

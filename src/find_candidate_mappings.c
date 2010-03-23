@@ -314,7 +314,7 @@ find_candidate_mappings( void* params )
             /* note that we add to the DB even if there are 0 that map,
                we do this so that we can join with the rawreads easier */
             add_candidate_mappings_to_db( 
-                mappings_db, mappings, thread_id, r->name, readkey );
+                mappings_db, mappings, readkey, thread_id );
             pthread_mutex_unlock( mappings_db_mutex );
 
             free_candidate_mappings( mappings );
