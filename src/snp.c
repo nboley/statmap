@@ -3,16 +3,9 @@
 #include <string.h>
 #include <assert.h>
 
-#include "config.h"
-#include "genome.h"
+#include "snp.h"
 #include "quality.h"
 #include "index_genome.h"
-
-typedef struct {
-    char alt_bp;
-    float alt_frac;
-    GENOME_LOC_TYPE loc;    
-} snp_t;
 
 /********************************************************************************
  * Methods for dealing with the snp type
@@ -60,12 +53,6 @@ fprintf_snp( FILE* fp, snp_t* snp )
  * Methods for dealing with the snp database ( for now just a sorted array )
  *
  */
-
-struct snp_db_t {
-    int num_snps;
-    snp_t* snps;    
-};
-
 
 void
 init_snp_db( struct snp_db_t** snp_db  )
@@ -311,73 +298,6 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
     fprintf( stderr, "NOTICE      :  Loaded %i/%i snps\n", 
              genome->snp_db->num_snps, line_num-1 );
     
-    return;
-}
-
-void
-index_snp_sequences( struct snp_db_t* snp_db, genome_data* genome )
-{
-    /* initialize the constant loc elements */
-    GENOME_LOC_TYPE loc;
-    loc.snp_coverage = 0;
-
-    /* Not a junction read */
-    loc.read_type = 0;
-
-    int seq_len = genome->index->seq_length;
-    char* tmp_seq = malloc(seq_len*sizeof(char));
-
-    int i;
-    unsigned int j;
-    /*
-     * Iterate through each snp in the list. This snp 
-     * is *always* set - other snps that overlap the same
-     * ref sequence are handled inside the loop, and may or
-     * may not be set.
-     *
-     */
-    for( i = 0; i < snp_db->num_snps; i++ )
-    {
-        snp_t* snp = snp_db->snps + i;
-        
-        for( j = MAX(0, snp->loc.loc - seq_len + 1); 
-             j <= MIN( snp->loc.loc, genome->chr_lens[snp->loc.chr]-seq_len );
-             j++
-            )
-        {
-            memcpy( tmp_seq, genome->chrs[snp->loc.chr] + j, 
-                    sizeof(char)*seq_len );
-
-            /* find out how many snp's are upstream of this one */
-            /* that is, in the interval that contains the i'th snp
-               and is less than  snp->loc.loc + j + seq_len 
-               OBVIOUSLY FIX ME 
-            */
-
-            /* add in the alternate allele */
-            tmp_seq[ snp->loc.loc - j  ] = snp->alt_bp;
-
-            LETTER_TYPE *translation;
-            translate_seq( tmp_seq, seq_len, &(translation));
-            
-            /* if we cant add this sequence ( probably an N ) continue */
-            if( translation == NULL ) {
-                continue;
-            }
-            
-            loc.chr = snp->loc.chr;
-            loc.loc = j;
-            
-            /* Add the sequence into the tree */
-            add_sequence(genome->index, translation, seq_len, loc);
-            
-            free( translation );
-        }
-
-    }
-
-    free( tmp_seq );
-
     return;
 }
 

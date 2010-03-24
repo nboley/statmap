@@ -1,6 +1,9 @@
 #ifndef SNP
 #define SNP
 
+#include "config.h"
+#include "genome.h"
+
 typedef struct {
     char alt_bp;
     float alt_frac;
@@ -15,6 +18,16 @@ void
 fprintf_snp( FILE* fp, snp_t* snp );
 
 struct snp_db_t;
+
+/********************************************************************************
+ * Methods for dealing with the snp database ( for now just a sorted array )
+ *
+ */
+
+struct snp_db_t {
+    int num_snps;
+    snp_t* snps;    
+};
 
 void
 init_snp_db( struct snp_db_t** snp_db  );
@@ -38,8 +51,5 @@ add_snp_to_snp_db( struct snp_db_t* snp_db, snp_t* snp );
 
 void
 build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome );
-
-void
-index_snp_sequences( struct snp_db_t* snp_db, genome_data* genome );
 
 #endif

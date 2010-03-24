@@ -5,4 +5,4 @@ clean:
 	cd src; make clean;
 
 check: 
-	cd unit_tests; python unit_tests.py
+	cd tests; python tests.py

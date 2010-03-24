@@ -112,22 +112,6 @@ scale_penalty( float penalty, // potential_match_stack* stack,
     return rv;
 }
 
-/*
-inline float 
-scale_top_penalty( const potential_match_stack* stack, 
-                   const int max_num_levels,
-                   const float max_penalty_diff,
-                   const float min_penalty )
-{
-    potential_match* top_pmatch = stack->matches + stack->last_index - 1;
-    int level = top_pmatch->node_level;
-    float penalty = top_pmatch->penalty;
-    
-    return scale_penalty( penalty, level, 
-                          max_num_levels, max_penalty_diff, min_penalty );
-}
-*/
-
 inline size_t
 pmatch_stack_length( potential_match_stack* pmatch )
 {
@@ -673,7 +657,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                 get_genome_locations_array_start( qnode, num_letters )[i];
 
             /* 
-x             * if the correct bit is set, then the genome location is a pointer.
+             * if the correct bit is set, then the genome location is a pointer.
              */        
             if( !check_sequence_type_ptr(qnode, i) )
             {
@@ -952,48 +936,6 @@ add_sequence( index_t* index, LETTER_TYPE* seq,
             || num_sequence_types < MAX_SEQ_NODE_ENTRIES );
 
     } 
-    
-    return;
-}
-
-extern void 
-add_chr_from_string( 
-    index_t* index, int seq_length, char* chr_str, int chr_index ) 
-{
-    assert( index->index_type == TREE );
-    
-    assert( chr_index >= 0 );
-    assert( chr_index <= CHR_NUM_MAX );
-    
-    /* initialize the constant loc elements */
-    GENOME_LOC_TYPE loc;
-    loc.snp_coverage = 0; 
-    
-    loc.read_type = 0;
-        
-    assert( chr_index >= 0 );
-    assert( chr_index <= CHR_NUM_MAX );
-    loc.chr = chr_index;
-    
-    unsigned int bp_pos;
-    /* translate the sequence into the correct alphabet and add it */
-    for( bp_pos = 0; chr_str[bp_pos + seq_length - 1] != '\0'; bp_pos++ )
-    {
-        LETTER_TYPE *translation;
-        translate_seq( &(chr_str[bp_pos]), seq_length, &(translation));
-        
-        /* if we cant add this sequence ( probably an N ) continue */
-        if( translation == NULL ) {
-            continue;
-        }
-        
-        loc.loc = bp_pos;
-        
-        /* Add the sequence into the tree */
-        add_sequence(index, translation, seq_length, loc);
-
-        free( translation );
-    }
     
     return;
 }

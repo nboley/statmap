@@ -30,6 +30,9 @@ struct snp_db_t;
 typedef struct {
     /* The index for this genome */
     index_t* index;
+    /* snps, NULL if there are none */
+    struct snp_db_t* snp_db;
+    
     /* The number of chromosomes */
     int num_chrs;
     /* The chromosome names - indexed by their keys */
@@ -38,8 +41,6 @@ typedef struct {
     char** chrs;
     /* the length of the chrsomosomes in bps' */
     unsigned int* chr_lens;
-    /* snps, NULL if there are none */
-    struct snp_db_t* snp_db;
 } genome_data;
 
 void
@@ -49,7 +50,7 @@ int
 find_chr_index( genome_data* genome, const char* const chr_name );
 
 extern void
-index_genome( genome_data* gen, int seq_length );
+index_genome( genome_data* genome, int indexed_seq_len );
 
 extern void 
 add_chrs_from_fasta_file( genome_data* gen, char* filename  );

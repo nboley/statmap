@@ -96,7 +96,7 @@ enum RECHECK
     RECHECK_PENALTY = 1,
     /* recheck against chr to make sure the penalty is correct */
     RECHECK_LOCATION = 2,
-    /* we know this crosses a junction, so we test for one */
+    /* we know this crosses a snp, so we test for one */
     COVERS_SNP = 2,
     /* all rechecks have been performed, and the loc is valid */
     VALID = 4,
@@ -143,12 +143,16 @@ enum RECHECK
 #define MAX_NUM_SNPS 3
 typedef struct __attribute__((__packed__))
 {
-    unsigned snp_coverage    :MAX_NUM_SNPS;
+    /* 1 if it covers at least 1 snp */
+    unsigned covers_snp     :1;
+    unsigned snp_coverage   :MAX_NUM_SNPS;
 
     /* read_type 0 = normal, 1 = junction */
     unsigned read_type      :1;
+
     /* the chr that the read came from */
-    unsigned chr            :16;
+    unsigned chr            :15;
+
     /* 
      * Start of the sequence in the 5' direction - 
      * so a read of length L that maps here covers
@@ -156,9 +160,10 @@ typedef struct __attribute__((__packed__))
      * MAX GENOME POSITION IS 33x10^6
      */
     unsigned loc            :28; // 32 - 4
+
 } GENOME_LOC_TYPE;
 
-#define CHR_NUM_MAX 65536 - 1 // 2**16 - 1
+#define CHR_NUM_MAX 32768 - 1 // 2**16 - 1
 #define LOCATION_MAX 268435456 - 1 // 2**28 = 268435456
 
 

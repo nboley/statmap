@@ -1,7 +1,7 @@
 X -13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
 X -12) raise error for too short reads
 -11.5) print out error for nonmapping reads
--11.1) fix snp bug - we need to start adding mutliple reads to the index when a snp is in range
+X -11.1) fix snp bug - we need to start adding mutliple reads to the index when a snp is in range
 -11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
 -10) Fix the margianl vs cond prb calculations in print to sam
 -5) Fix the 'merge' join - and check the logic

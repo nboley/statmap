@@ -204,7 +204,6 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                                         const int num_levels,
                                         LEVEL_TYPE level   );
 
-
 inline int 
 find_child_index_in_dynamic_node ( 
     dynamic_node* node, 
@@ -218,10 +217,6 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 inline void 
 add_sequence( index_t* index, LETTER_TYPE* seq, 
               const int seq_length, GENOME_LOC_TYPE genome_loc );
-
-extern void 
-add_chr_from_string( 
-    index_t* index, int seq_length, char* chr_str, int chr_index );
 
 extern void
 add_junction_positions_from_chr_string( 
