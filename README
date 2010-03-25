@@ -41,8 +41,8 @@ Simulate_chipseq.py
 
 This simulates and maps a chipseq experiment to measure the ability of the chipseq
 kernel to distringuish between repeated regions. It runs the experiment for repeats 
-of various qualities, maps back to the region, and then plots the densities which
-it saves as 'chipseq_sim_output.wig'
+of various qualities, maps back to the region, and then plots the densities to a png,
+which it saves as 'chipseq_sim_output.wig'
 
 ===== Arguments ====================================================================
 
@@ -99,7 +99,7 @@ Optional Arguments:
 
 -a : The type of the underlying assay.
 
-The two calid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this argument
+The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this argument
 is set, then the data will be mapped iteratively. If not, then only the marginal mappings
 will be produced.
 

@@ -670,7 +670,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./tmp.sam" )
-    total_num_reads = sum( 1 for line in sam_fp )
+    mapped_read_ids = set( ( line.split("\t")[0].strip() for line in sam_fp ) )
+    total_num_reads = len( mapped_read_ids ) 
     sam_fp.seek(0)
 
     # find the unmappable reads
@@ -680,9 +681,16 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
     unmappable_fp.close()
 
+    all_read_ids = set(map(str, range(100)))
+    all_read_ids = all_read_ids - mapped_read_ids
+    all_read_ids = all_read_ids - unmappable_reads_set
+    all_read_ids = list(all_read_ids)
+    
+    all_read_ids.sort( )
+
     if len(fragments) != total_num_reads + num_unmappable_reads:
-        raise ValueError, "Mapping returned too few reads %i/( %i + %i )." \
-            % ( len(fragments), total_num_reads, num_unmappable_reads )
+        raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
+            % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
 
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
@@ -884,13 +892,15 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
+    """
     test_fivep_sequence_finding()
     test_threep_sequence_finding()
     test_paired_end_sequence_finding( )
     test_repeat_sequence_finding()
+    """
     test_mutated_read_finding()
-    test_multithreaded_mapping( )
-    test_snp_finding()
+    #test_multithreaded_mapping( )
+    #test_snp_finding()
     
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 

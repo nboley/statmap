@@ -137,6 +137,11 @@ typedef struct __attribute__((packed))__{
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
 
+    /*** Alternate Genome Info ***/
+    /* if this covers a snp */
+    enum bool does_cover_snp;
+    unsigned snp_bitfield :MAX_NUM_SNPS;
+
     /*** Info related to the mapped read ***/
     /* 
      * which strand direction this read is ( ie, it is fwd

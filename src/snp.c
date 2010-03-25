@@ -88,11 +88,10 @@ sort_snp_db( struct snp_db_t* snp_db )
 void
 find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start, 
                      int stop, /* NOT including stop */ 
-                     int* num_snps, int** snp_indexes )
+                     int* num_snps, snp_t** snps )
 {
     *num_snps = 0;
-    *snp_indexes = malloc( (stop-start)*sizeof(int) );
-
+    
     /* we use a binary search to find the insert location for start */
     /* then, we scan along until we have passed stop */
     
@@ -103,11 +102,11 @@ find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start,
      */
     int low = 0;
     int high = snp_db->num_snps;
-    snp_t* snps = snp_db->snps;
+    snp_t* all_snps = snp_db->snps;
 
     while (low < high) {
         int mid = low + ((high - low) / 2) ;
-        int comparison = cmp_snp_to_location( snps + mid, chr, start );
+        int comparison = cmp_snp_to_location( all_snps + mid, chr, start );
         if( comparison < 0 ) {
             low = mid + 1; 
         } else {
@@ -117,17 +116,19 @@ find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start,
         }
     }
 
-    assert( snps[low].loc.chr == chr );
-    assert( snps[low].loc.loc >= start );
+    assert( all_snps[low].loc.chr == chr );
+    assert( all_snps[low].loc.loc >= start );
+    *snps = all_snps + low;
     /* TODO - optimize the start */
     while( low < snp_db->num_snps
-           && snps[low].loc.chr == chr
-           && snps[low].loc.loc < stop )
+           && all_snps[low].loc.chr == chr
+           && all_snps[low].loc.loc < stop )
     {
-        (*snp_indexes)[*num_snps] = low;
         *num_snps += 1;
         low += 1;
     }
+
+    return;
 }
 
 void

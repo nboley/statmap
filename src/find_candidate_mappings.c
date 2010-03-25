@@ -7,6 +7,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <pthread.h>
+#include "math.h"
 
 #include "statmap.h"
 #include "find_candidate_mappings.h"
@@ -83,40 +84,7 @@ find_candidate_mappings( void* params )
             fprintf(stderr, "DEBUG       :  Mapped %li reads, %i successfully\n", 
                     readkey, *mapped_cnt);
         }
-
-/* I got rid of this because get next mappable read takes care of this. 
-   However, they arent identical because that doesnt write out unmappable
-   reads. I think I'll do this later, but for now I keep this code block 
-*/
-#if 0 
-        /* Test to see if the read is mappable. If it is not, continue */
-        /* 
-         * Note that both pairs of a paired end read have to be mappable
-         * for the read to be mappable.
-         */
-        /* If this is a paired end read */
-        if( r2 != NULL )
-        {
-            if ( filter_rawread( r1 ) == true
-                 || filter_rawread( r2 ) == true )
-            {
-                free_rawread( r1 );
-                free_rawread( r2 );
-                continue;
-            }
-        } 
-        /* Otherwise, this is a single ended read */
-        else {
-            if( filter_rawread( r1 ) == true  )
-            {   
-                fprintf_rawread_to_fastq( 
-                    rdb->unmappable_single_end_reads, r1 );
-                free_rawread( r1 );
-                continue;
-            }
-        }
-#endif
-
+        
         /* consider both read pairs */
         int j = 0;
         rawread* reads[2] = { r1, r2 };
@@ -235,9 +203,16 @@ find_candidate_mappings( void* params )
                 if( result->penalty > max_penalty )
                     max_penalty = result->penalty;
 
-                if( result->location.snp_coverage != 0 )
+                if( result->location.covers_snp == 1 )
                 {
                     template_candidate_mapping.recheck = COVERS_SNP;
+                    template_candidate_mapping.snp_bitfield = 
+                        result->location.snp_coverage;
+                    template_candidate_mapping.does_cover_snp = true;
+                } else {
+                    template_candidate_mapping.does_cover_snp = false;
+                    assert( 0 == result->location.snp_coverage );
+                    template_candidate_mapping.snp_bitfield = 0;
                 }
 
                 add_candidate_mapping( mappings, &template_candidate_mapping );
@@ -265,14 +240,15 @@ find_candidate_mappings( void* params )
             for( i = 0; i < mappings->length; i++ )
             {
                 /* recheck location */
-                /* FIXME - TODO */
+                /* 
+                   For now we assume that there arent too many snps. But, in the 
+                   future we may need to do a full recheck if the number of snps is
+                   greater than MAX_NUM_SNPS
+                */
                 if( (mappings->mappings + i)->recheck == COVERS_SNP )
                 {
-                    // find all snps that cover this read
-                    // read start = (mappings->mappings + i)->start_bp
-                    // read_length = (mappings->mappings + i)->rd_len
                     int num_snps;
-                    int* snps;
+                    snp_t* snps;
 
                     find_snps_in_snp_db( 
                         genome->snp_db, 
@@ -284,17 +260,31 @@ find_candidate_mappings( void* params )
                         &snps
                     );
 
-                    printf("FOUND %i SNP READ(s)\n", num_snps);
-                    int m = 0;
-                    for( m = 0; m < num_snps; m++ )
-                    {
-                        printf( "Snp index: %i %i\n", snps[m], num_snps );
-                    }
-
-                    free( snps );
+                    /* TODO optimize this to use a bitshift at each loop */
+                    int snp_index; 
+                    for( snp_index = 0; snp_index < num_snps; snp_index++ )
+                    {                        
+                        /* If the correct bit is set */
+                        /* We cap the min penalties to enable the fast math optimizations */
+                        if( (template_candidate_mapping.snp_bitfield&(1<<snp_index)) > 0 ) 
+                        {
+                            (mappings->mappings + i)->penalty 
+                                += MAX( -1e10, log10(snps[snp_index].alt_frac) );
+                        } else {
+                            (mappings->mappings + i)->penalty 
+                                += MAX( -1e10, log10(1-snps[snp_index].alt_frac) );
+                        }
+                    }                    
                 }
-
+                
                 /* recheck penalty */
+                /* 
+                 * We always need to do this because of the way the search queue
+                 * handles poor branches. If our brnach prediction fails we could
+                 * add a low probability read, and then go back and find a very 
+                 * good read which would invalidate the previous. Then, the read
+                 * may not belong, but it isnt removed in the index searching method.
+                 */
                 /* I set the safe bit to 1e-6, which is correct for a float */
                 if(  max_penalty_spread > -0.00001 
                      &&

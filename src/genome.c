@@ -94,6 +94,140 @@ add_chr_to_genome( char* chr_name,
     (gen->chrs)[gen->num_chrs - 1][chr_len] = '\0';
 }
 
+extern void 
+add_chrs_from_fasta_file( 
+    genome_data* gen, char* filename   )
+{
+    int error;
+    
+    /* FIXME - ge rid of this via mmap */
+    // int max_num_bytes = MAX_GENOME_LOC;
+    unsigned int allcd_size = 300000;
+
+    /* BUG OVERFLOW */
+    /* store the chromosome name - limit it to 255 characters */
+    char chr_name[255];
+    chr_name[0] = '\0';
+
+    /* open the chromosome file */
+    FILE* f;
+    f = fopen( filename, "r");
+    if( f == NULL ) {
+        fprintf(stderr, "FATAL       :  Unable to open '%s'\n", filename);
+        exit(-1);
+        return;
+    }
+
+    char* chr;
+    chr = malloc( (allcd_size+1)*sizeof(char) );
+    if( chr == NULL ) {
+        fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+        assert( 0 );
+        exit(-1);
+    }
+    
+    /* store the index of the current chr */
+    int chr_index = -1;
+
+    unsigned int i = 0;
+    while( !feof(f) )
+    {
+        char bp = (char) fgetc(f);
+        if( !isalpha(bp) || (chr_index == -1 && i==0) ) 
+        {
+            /* 
+             *  if we read a new line, then the next line could be a label. 
+             * Therefore, we read the next character and if it is not a >
+             * then we continue as usual. If it is, we read until the next 
+             * chr.
+             */
+            if( isspace(bp) ) {
+                bp = (char) fgetc(f);
+            }
+            /* check to see if we are at the end of the file */
+            if( feof(f) )
+                break;
+            
+            if( bp == '>' )
+            {
+                /* if we are past the first chr, add the previous chr */
+                if ( chr_index >= 0 )
+                {
+                    /* 
+                     * put a trailing null in to make it a proper string, 
+                     * and add it to the genome
+                     */
+                    chr[i] = '\0';    
+                    /* shrink the size of chr so that we arent wasting memory */
+                    chr = realloc( chr, (i+1)*sizeof(char) );
+
+                    assert( chr_name[0] != '\0' );
+                    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
+                            chr_name, i);
+                    add_chr_to_genome( chr_name, chr, i, gen );
+                    
+                    if( !feof(f)) {
+                        /* reset the bp index to 0 */
+                        i = 0;
+                    }
+                }
+
+                /* move to the next chr index */
+                chr_index++;
+
+                /* OVERFLOW BUG - check chr_name */
+                /* read in the next string as the chromosome */
+                error = fscanf(f, "%s\n", chr_name );
+
+                /* if we are at the end of the file, break */
+                if( feof(f) ) {
+                    break;
+                } else {
+                    bp = (char) fgetc(f);
+                }                    
+            } else if ( i == 0 && chr_index == -1 )
+            {
+                /* move to the next chr index */
+                chr_index++;
+                sprintf(chr_name, "Default");
+            }
+        }
+        
+        assert(isalpha(bp));
+        chr[i] = bp;
+        i++;
+
+        if( i == allcd_size ) {
+            allcd_size += allcd_size;
+            chr = realloc( chr, (allcd_size+1)*sizeof(char) );
+            if( chr == NULL ) {
+                fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+                assert( 0 );
+                exit(-1);
+            }
+        }
+    }
+    
+    /* put a trailing null in to make it a proper string, and add the chr */
+    chr[i] = '\0';    
+
+    /* shrink the size of chr so that we arent wasting memory */
+    chr = realloc( chr, (i+1)*sizeof(char) );
+
+    assert( chr_name[0] != '\0' );
+    add_chr_to_genome( chr_name, chr, i, gen );
+    
+    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", chr_name, i);
+    free(chr);
+
+
+    /* close the input file */
+    fclose(f);
+
+    return;
+}
+
+
 /*
  * Forward declaration for translate_sequence. I wanted to avoid including
  * DNA sequence.h for this single declaration 
@@ -279,137 +413,3 @@ index_genome( genome_data* genome, int indexed_seq_len )
     return;
 }
 
-
-
-extern void 
-add_chrs_from_fasta_file( 
-    genome_data* gen, char* filename   )
-{
-    int error;
-    
-    /* FIXME - ge rid of this via mmap */
-    // int max_num_bytes = MAX_GENOME_LOC;
-    unsigned int allcd_size = 300000;
-
-    /* BUG OVERFLOW */
-    /* store the chromosome name - limit it to 255 characters */
-    char chr_name[255];
-    chr_name[0] = '\0';
-
-    /* open the chromosome file */
-    FILE* f;
-    f = fopen( filename, "r");
-    if( f == NULL ) {
-        fprintf(stderr, "FATAL       :  Unable to open '%s'\n", filename);
-        exit(-1);
-        return;
-    }
-
-    char* chr;
-    chr = malloc( (allcd_size+1)*sizeof(char) );
-    if( chr == NULL ) {
-        fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
-        assert( 0 );
-        exit(-1);
-    }
-    
-    /* store the index of the current chr */
-    int chr_index = -1;
-
-    unsigned int i = 0;
-    while( !feof(f) )
-    {
-        char bp = (char) fgetc(f);
-        if( !isalpha(bp) || (chr_index == -1 && i==0) ) 
-        {
-            /* 
-             *  if we read a new line, then the next line could be a label. 
-             * Therefore, we read the next character and if it is not a >
-             * then we continue as usual. If it is, we read until the next 
-             * chr.
-             */
-            if( isspace(bp) ) {
-                bp = (char) fgetc(f);
-            }
-            /* check to see if we are at the end of the file */
-            if( feof(f) )
-                break;
-            
-            if( bp == '>' )
-            {
-                /* if we are past the first chr, add the previous chr */
-                if ( chr_index >= 0 )
-                {
-                    /* 
-                     * put a trailing null in to make it a proper string, 
-                     * and add it to the genome
-                     */
-                    chr[i] = '\0';    
-                    /* shrink the size of chr so that we arent wasting memory */
-                    chr = realloc( chr, (i+1)*sizeof(char) );
-
-                    assert( chr_name[0] != '\0' );
-                    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
-                            chr_name, i);
-                    add_chr_to_genome( chr_name, chr, i, gen );
-                    
-                    if( !feof(f)) {
-                        /* reset the bp index to 0 */
-                        i = 0;
-                    }
-                }
-
-                /* move to the next chr index */
-                chr_index++;
-
-                /* OVERFLOW BUG - check chr_name */
-                /* read in the next string as the chromosome */
-                error = fscanf(f, "%s\n", chr_name );
-
-                /* if we are at the end of the file, break */
-                if( feof(f) ) {
-                    break;
-                } else {
-                    bp = (char) fgetc(f);
-                }                    
-            } else if ( i == 0 && chr_index == -1 )
-            {
-                /* move to the next chr index */
-                chr_index++;
-                sprintf(chr_name, "Default");
-            }
-        }
-        
-        assert(isalpha(bp));
-        chr[i] = bp;
-        i++;
-
-        if( i == allcd_size ) {
-            allcd_size += allcd_size;
-            chr = realloc( chr, (allcd_size+1)*sizeof(char) );
-            if( chr == NULL ) {
-                fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
-                assert( 0 );
-                exit(-1);
-            }
-        }
-    }
-    
-    /* put a trailing null in to make it a proper string, and add the chr */
-    chr[i] = '\0';    
-
-    /* shrink the size of chr so that we arent wasting memory */
-    chr = realloc( chr, (i+1)*sizeof(char) );
-
-    assert( chr_name[0] != '\0' );
-    add_chr_to_genome( chr_name, chr, i, gen );
-    
-    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", chr_name, i);
-    free(chr);
-
-
-    /* close the input file */
-    fclose(f);
-
-    return;
-}

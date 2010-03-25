@@ -97,7 +97,7 @@ enum RECHECK
     /* recheck against chr to make sure the penalty is correct */
     RECHECK_LOCATION = 2,
     /* we know this crosses a snp, so we test for one */
-    COVERS_SNP = 2,
+    COVERS_SNP = 3,
     /* all rechecks have been performed, and the loc is valid */
     VALID = 4,
     /* one or more rechecks failed */

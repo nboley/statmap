@@ -41,7 +41,7 @@ sort_snp_db( struct snp_db_t* snp_db );
 void
 find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start, 
                      int stop, /* NOT including stop */ 
-                     int* num_snps, int** snp_indexes );
+                     int* num_snps, snp_t** snps );
 
 void
 fprintf_snp_db( FILE* fp, struct snp_db_t* snp_db );
