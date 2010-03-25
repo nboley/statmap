@@ -31,6 +31,11 @@ X 2.2) cleanup error codes to make them standard
 3.1) Finish on disk indexes
 X 4) remove useless code ( esp marshalling code, and ifdef's out code )
 3) Fix unit tests to correctly identify reads that didnt map due to mutation rates
+3.1 ) The get next candidate mapping will stop returning read ids if it gets to 
+    the end of the db ( iow, the file is empty ) even if there are still read ids
+    remaining. We fix this in the sam printing code by looking at rawreads instead.
+    But we should probably reorganize this a bit so that candidate mappings keep
+    track of every read.
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate

@@ -415,6 +415,8 @@ init_mapped_read( mapped_read** rd )
 void
 free_mapped_read( mapped_read* rd )
 {
+    if( rd == NULL )
+        return;
     free( rd->locations );
     rd->locations = NULL;
     free( rd );
@@ -1029,6 +1031,8 @@ get_next_read_from_mapped_reads_db(
     if( 1 != rv )
     {
         assert( feof( rdb->fp ) );
+        free_mapped_read( *rd );
+        *rd = NULL;
         return EOF;
     }
     
@@ -1087,9 +1091,9 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
     
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd1, &rd2 );
-    
-    while( !mapped_reads_db_is_empty( mappings_db ) ) 
-    {             
+
+    while( rd1 != NULL ) 
+    {         
         /* 
          * TODO - clean this up - this is kind of a weird place to put this. 
          *
@@ -1099,7 +1103,9 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
          * rerun these with lower penalties, or 
          * re-align these to one another. )
          */
-        if( mapped_rd->num_mappings == 0 )
+        /* We test for mapped read NULL in case the last read was unmappable */
+        if( mapped_rd == NULL 
+            || mapped_rd->num_mappings == 0 )
         {
             /* If this is a single end read */
             if( rd2 == NULL )
@@ -1133,7 +1139,7 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
             fprintf_mapped_read_to_sam( 
                 sam_ofp, mapped_rd, genome, rd1, rd2 );
         }
-
+        
         free_mapped_read( mapped_rd );
         
         /* Free the raw reads */
@@ -1148,13 +1154,18 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
 
         get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2 );
-        
     }
 
     goto cleanup;
 
 cleanup:
     free_mapped_read( mapped_rd );
+
+    /* Free the raw reads */
+    if( rd1 != NULL )
+        free_rawread( rd1 );
+    if( rd2 != NULL )
+        free_rawread( rd2 );
         
     return;
 }
