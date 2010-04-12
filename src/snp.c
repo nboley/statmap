@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
 #include "snp.h"
@@ -43,8 +44,8 @@ cmp_snp_to_location( snp_t* snp,
 void
 fprintf_snp( FILE* fp, snp_t* snp )
 {
-    fprintf( fp, "Chr: %u\tLoc: %u\tAlt Allele: %c\tProb: %e\n",
-             snp->loc.chr, snp->loc.loc, snp->alt_bp, snp->alt_frac );
+    fprintf( fp, "Chr: %u\tLoc: %u\tAlt Allele: %c\tProb: %e\tRef Cnt: %.2f\tAlt Cnt: %.2f\n",
+             snp->loc.chr, snp->loc.loc, snp->alt_bp, snp->alt_frac, snp->ref_cnt, snp->alt_cnt );
     return;
 }
 
@@ -85,8 +86,13 @@ sort_snp_db( struct snp_db_t* snp_db )
     return;
 }
 
+/*
+ * Return the snps that cover basepairs in [start, stop)
+ *
+ */
 void
-find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start, 
+find_snps_in_snp_db( struct snp_db_t* snp_db, 
+                     int chr, int start, 
                      int stop, /* NOT including stop */ 
                      int* num_snps, snp_t** snps )
 {
@@ -119,6 +125,7 @@ find_snps_in_snp_db( struct snp_db_t* snp_db, int chr, int start,
     assert( all_snps[low].loc.chr == chr );
     assert( all_snps[low].loc.loc >= start );
     *snps = all_snps + low;
+    // fprintf(stderr, "Low: %i\t Start: %i\n", low, start);
     /* TODO - optimize the start */
     while( low < snp_db->num_snps
            && all_snps[low].loc.chr == chr
@@ -289,6 +296,10 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
         /* set the alt allele */
         snp.alt_bp = altallele;
         snp.alt_frac = alt_frac_est;
+        
+        /* set the new items */
+        snp.alt_cnt = 0;
+        snp.ref_cnt = 0;
 
         add_snp_to_snp_db( genome->snp_db, &snp );
     }
@@ -300,5 +311,85 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
              genome->snp_db->num_snps, line_num-1 );
     
     return;
+}
+
+void
+update_snp_estimates_from_candidate_mappings( mapped_reads_db* rdb, genome_data* genome )
+{
+    /* zero out the snp counts */
+    int snp_index;
+    for( snp_index = 0; snp_index < genome->snp_db->num_snps; snp_index++ )
+    {
+        (genome->snp_db->snps)[snp_index].alt_cnt = 0;
+        (genome->snp_db->snps)[snp_index].ref_cnt = 0;
+    }
+
+    /* update the counts */
+    mapped_read* rd;    
+    rewind_mapped_reads_db( rdb );
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
+    {
+        int i;
+        for( i = 0; i < rd->num_mappings; i++ )
+        {
+            mapped_read_location* loc = rd->locations + i;
+            if( ( loc->flag & FIRST_READ_COVERS_SNP ) > 0 )
+            {
+                int num_snps;
+                snp_t* snps;
+                
+                find_snps_in_snp_db( 
+                    genome->snp_db, 
+                    (rd->locations + i)->chr,
+                    (rd->locations + i)->start_pos,
+                    (rd->locations + i)->stop_pos,
+                    &num_snps,
+                    &snps
+                );
+
+                /* TODO optimize this to use a bitshift at each loop */
+                for( snp_index = 0; snp_index < num_snps; snp_index++ )
+                {                        
+                    /* If the correct bit is set */
+                    /* We cap the min penalties to enable the fast math optimizations */
+                    if( ( (loc->snps_bm_r1)&(1<<snp_index) ) > 0 ) 
+                    {
+                        snps[snp_index].alt_cnt += (rd->locations + i)->cond_prob;
+                    } else {
+                        snps[snp_index].ref_cnt += (rd->locations + i)->cond_prob;
+                    }
+                }                    
+            }
+        }        
+    }
+}
+
+
+void
+write_snps_to_file( FILE* ofp, genome_data* genome )
+{
+    /* Write the header */
+    fprintf( ofp, "chr_name\tposition\t \tRef_Allelle\tAllele1\tAllele2\t \tCount1\tCount2\n" );
+
+    /* Loop through each snp in the db, and print them */
+    int snp_index;
+    for( snp_index = 0; snp_index < genome->snp_db->num_snps; snp_index++ )
+    {
+        /* Store a local ref - this should be optimized out */
+        snp_t* snp;
+        snp = genome->snp_db->snps + snp_index;
+        
+        /* determine the reference basepair */
+        char refallele = toupper( genome->chrs[ snp->loc.chr ][ snp->loc.loc ] );
+        
+        fprintf( 
+            ofp, 
+            "%s\t%u\t \t%c\t%c\t%c\t \t%.0f\t%.0f\n",
+            genome->chr_names[ snp->loc.chr ], snp->loc.loc, 
+            refallele, refallele, snp->alt_bp, 
+            snp->ref_cnt, snp->alt_cnt
+        );
+    }
+    
 }
 

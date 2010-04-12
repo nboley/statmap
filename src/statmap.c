@@ -536,21 +536,30 @@ map_marginal( args_t* args, genome_data* genome )
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
-
+    
     /* Iterative mapping */
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
-    update_mapping( mpd_rds_db, genome, 50, args->assay_type  );
+    update_mapping( mpd_rds_db, genome, 500, args->assay_type  );
     
-
     /* Write the mapped reads to file */
     if( args->wig_fp != NULL )
         write_mapped_reads_to_wiggle( mpd_rds_db, genome, args->wig_fp );
-
+    
     /* TODO - move this to cleanup? */
     munmap_mapped_reads_db( mpd_rds_db );
 
+    /* If appropriate, print out the snp db */
+    if( args->snpcov_fp != NULL )
+    {
+        update_snp_estimates_from_candidate_mappings( mpd_rds_db );
+        char* snp_fname = "updated_snp_cnts.snp";
+        FILE* snp_fp = fopen( snp_fname, "w" );
+        write_snps_to_file( snp_fp, genome );
+        fclose( snp_fp );
+    }
+    
     start = clock();
     write_mapped_reads_to_sam( 
         raw_rdb, mpd_rds_db, genome, sam_ofp );

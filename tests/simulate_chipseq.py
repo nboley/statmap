@@ -172,7 +172,7 @@ def parse_wig( fname, genome ):
     fp.close()
     return density
 
-def test_chipseq_region( mutation_rate, wig_fname = 'tmp.wig', iterative=True ):
+def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     region = build_chipseq_region( )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
@@ -186,10 +186,13 @@ def test_chipseq_region( mutation_rate, wig_fname = 'tmp.wig', iterative=True ):
     # write a second genome
     chr2L = genome['chr2L']
     mutated_chr2L = array.array( 'c', chr2L )
-    for index, curr_bp in enumerate(mutated_chr2L):
-        if random.random() < mutation_rate:
-            valid_bps = [ bp for bp in bps if bp != curr_bp ]
-            mutated_chr2L[index] = random.choice( valid_bps )
+
+    # mutated num_mutations random indexes
+    rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
+    for rand_index in rand_indexes:
+        curr_bp = mutated_chr2L[ rand_index ]
+        valid_bps = [ bp for bp in bps if bp != curr_bp ]
+        mutated_chr2L[rand_index] = random.choice( valid_bps )
     
     genome['chr2L'] = chr2L + mutated_chr2L.tostring()
     sc.write_genome_to_fasta( genome, genome_of, 1 )
@@ -202,7 +205,7 @@ def test_chipseq_region( mutation_rate, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                           -o tmp.sam -p %.2f -m %.2f -w %s \
+                           -o tmp.sam -p %.2f -m %.2f -w %s\
                            " % ( sc.STATMAP_PATH, -10, 2, wig_fname )
     if iterative:
         call += " -a i"
@@ -234,9 +237,9 @@ def test_chipseq_region( mutation_rate, wig_fname = 'tmp.wig', iterative=True ):
     raw_input()
 
 def build_all_wiggles():
-    for mr in ( 0.0001, 0.001, 0.01, 0.01, 0.02, 0.03, 0.06, 0.10, 0.20, 0.00):
-        test_chipseq_region( mr, "relaxed_%.5f_marginal.wig" % mr, iterative=False  )
-        test_chipseq_region( mr, "relaxed_%.5f_relaxed.wig" % mr, iterative=True  )
+    for mr in ( 0, 1, 10, 25, 100, 1000 ):
+        test_chipseq_region( mr, "relaxed_%i_marginal.wig" % mr, iterative=False  )
+        test_chipseq_region( mr, "relaxed_%i_relaxed.wig" % mr, iterative=True  )
 
 def plot_all_wiggles():
     # build and plot the true density
@@ -264,12 +267,12 @@ def plot_all_wiggles():
 
     rpy.r.points( true_density, col='black', type='l' )
     
-    wig_fname = "relaxed_%.5f_marginal.wig" % 0.000
+    wig_fname = "relaxed_%i_marginal.wig" % 0
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
     
-    wig_fname = "relaxed_%.5f_relaxed.wig" % 0.000
+    wig_fname = "relaxed_%i_relaxed.wig" % 0
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.points( density, type='l', col='red' )
@@ -277,25 +280,25 @@ def plot_all_wiggles():
     rpy.r.points( true_density.max()*numpy.array(bind_prbs), type='l', col='green' )
 
     # plot the various mutation rates
-    wig_fname = "relaxed_%.5f_marginal.wig" % 0.0001
+    wig_fname = "relaxed_%i_marginal.wig" % 1
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.plot( density, type='l', ylim=(0,1.2*true_density.max()), col='orange', ylab='Density', xlab='Bps from Region Start', lty=4 )
     
-    wig_fname = "relaxed_%.5f_relaxed.wig" % 0.0001
+    wig_fname = "relaxed_%i_relaxed.wig" % 1
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.points( density, type='l', col='orange' )
     
-    for mr, color in zip( ( 0.001, 0.01, 0.03, 0.10), \
+    for mr, color in zip( ( 10, 25, 100, 1000), \
                           ( 'blue', 'red', 'green', 'black') ):
-        wig_fname = "relaxed_%.5f_marginal.wig" % mr
+        wig_fname = "relaxed_%i_marginal.wig" % mr
         print wig_fname
         density = parse_wig( wig_fname, genome )
         density = density/density.sum()
         rpy.r.points( density, type='l', col=color, main='', xlab='', ylab='', lty=4 )
         
-        wig_fname = "relaxed_%.5f_relaxed.wig" % mr
+        wig_fname = "relaxed_%i_relaxed.wig" % mr
         density = parse_wig( wig_fname, genome )
         density = density/density.sum()
         rpy.r.points( density, type='l', col=color )

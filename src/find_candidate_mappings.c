@@ -240,7 +240,13 @@ find_candidate_mappings( void* params )
             for( i = 0; i < mappings->length; i++ )
             {
                 /* recheck location */
-                /* 
+
+/* 
+   I dont know if this is correct ( actually, I'm pretty sure that it is not ) 
+   but I dont know where else to put this 
+*/
+#if 0              
+                /* FIXME
                    For now we assume that there arent too many snps. But, in the 
                    future we may need to do a full recheck if the number of snps is
                    greater than MAX_NUM_SNPS
@@ -270,12 +276,15 @@ find_candidate_mappings( void* params )
                         {
                             (mappings->mappings + i)->penalty 
                                 += MAX( -1e10, log10(snps[snp_index].alt_frac) );
+                            snps[snp_index].alt_cnt += pow( 10, (mappings->mappings + i)->penalty ) ;
                         } else {
                             (mappings->mappings + i)->penalty 
                                 += MAX( -1e10, log10(1-snps[snp_index].alt_frac) );
+                            snps[snp_index].ref_cnt += pow( 10,  (mappings->mappings + i)->penalty ) ;
                         }
                     }                    
                 }
+#endif
                 
                 /* recheck penalty */
                 /* 

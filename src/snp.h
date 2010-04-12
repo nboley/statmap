@@ -7,7 +7,10 @@
 typedef struct {
     char alt_bp;
     float alt_frac;
-    GENOME_LOC_TYPE loc;    
+    GENOME_LOC_TYPE loc;   
+    /* The number of reference, and alternate bps observed */
+    float alt_cnt;
+    float ref_cnt;
 } snp_t;
 
 

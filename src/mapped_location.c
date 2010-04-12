@@ -794,6 +794,13 @@ build_mapped_read_from_candidate_mappings(
         loc.flag = 0;
         if( BKWD == (mappings->mappings)[i].rd_strnd )
             loc.flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
+        
+        if( (mappings->mappings)[i].does_cover_snp )
+        {
+            loc.flag |= FIRST_READ_COVERS_SNP;
+            loc.snps_bm_r1 = (mappings->mappings)[i].snp_bitfield;
+        }
+
         loc.chr = (mappings->mappings)[i].chr;
         loc.start_pos = (mappings->mappings)[i].start_bp;;
         loc.stop_pos = loc.start_pos + (mappings->mappings)[i].rd_len;;
@@ -880,6 +887,18 @@ build_mapped_read_from_candidate_mappings(
                         
             if( FWD == first_read->rd_strnd )
                 loc.flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
+
+            if( first_read->does_cover_snp )
+            {
+                loc.flag |= FIRST_READ_COVERS_SNP;
+                loc.snps_bm_r1 = first_read->snp_bitfield;
+            }
+
+            if( second_read->does_cover_snp )
+            {
+                loc.flag |= SECOND_READ_COVERS_SNP;
+                loc.snps_bm_r2 = second_read->snp_bitfield;
+            }            
             
             /* Set the chr */
             loc.chr = first_read->chr;

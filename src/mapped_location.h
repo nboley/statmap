@@ -240,6 +240,10 @@ sort_candidate_mappings( candidate_mappings* mappings );
 #define FIRST_READ_WAS_REV_COMPLEMENTED 2
 /* Set if the first read ( ie read_name/1 ) maps to start_pos */
 #define FIRST_PAIR_IS_FIRST_IN_GENOME 4
+/* set if the first read covers a snp */
+#define FIRST_READ_COVERS_SNP 8
+/* set if the second read covers a snp */
+#define SECOND_READ_COVERS_SNP 16
 
 typedef struct  __attribute__((__packed__)) {
     // if stop_pos > start_pos, the strand is pos
@@ -248,6 +252,8 @@ typedef struct  __attribute__((__packed__)) {
     // that it maps into
     // enum STRAND strand;
     unsigned char flag;
+    unsigned snps_bm_r1 :MAX_NUM_SNPS;
+    unsigned snps_bm_r2 :MAX_NUM_SNPS;
     unsigned char chr;
     unsigned int start_pos;
     unsigned int stop_pos;

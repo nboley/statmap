@@ -3,6 +3,7 @@ import numpy
 import string
 import random
 from itertools import izip
+from operator import itemgetter
 import bisect 
 import gzip
 import collections
@@ -208,10 +209,16 @@ def build_snps_from_genome( genome, num ):
     chr_lens_cdr = [ sum(chr_lens[:i]) for i in xrange(len(genome)+1) ]
     chr_lens_cdr[0] = 0
     chr_lens_cdr = numpy.array( chr_lens_cdr )
+    # sample all of the chr's
+    samples = set()
     for loop in xrange( num ):
         rnd_num = random.randint( 0, chr_lens_cdr[-1] - 1  )
         chr_index = chr_lens_cdr.searchsorted( rnd_num  ) - 1
+        # make sure that we dont get duplicates
         rnd_bp = random.randint( 0, chr_lens[chr_index] - 1 )
+        while ( chr_index, rnd_bp ) in samples:
+            rnd_bp = random.randint( 0, chr_lens[chr_index] - 1 )
+        samples.add( ( chr_index, rnd_bp )  )
         ref_bp = genome[chr_names[chr_index]][rnd_bp].upper()
         bps = ['A', 'C', 'G', 'T']
         bps.remove( ref_bp.upper() )
@@ -758,7 +765,7 @@ def test_multithreaded_mapping( ):
             print "PASS: Multi-Threaded Read Mapping %i BP Test. ( Statmap appears to be mapping correctly with multiple threads )" % rl
 ###
 # Test to make sure that we are correctly indexing and finding snps
-def test_snps( read_len ):
+def test_snps( read_len, num_snps = 10 ):
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -766,7 +773,8 @@ def test_snps( read_len ):
     r_genome = build_random_genome( [1000,], ["1",] )
     
     # build the snps
-    snps = build_snps_from_genome( r_genome, 10 )
+    snps = build_snps_from_genome( r_genome, num_snps )
+    snps.sort( key = itemgetter(1) )
     try:
         for snp in snps:
             assert r_genome[ snp[0] ][snp[1]].upper() != snp[3].upper()
@@ -780,23 +788,28 @@ def test_snps( read_len ):
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
+    fragments = sample_uniformily_from_genome( r_genome, nsamples=500, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
  
+    ref_snps = [0]*num_snps
+    alt_snps = [0]*num_snps
     # mutate the snps
     for index, (read, fragment) in enumerate(zip(reads, fragments)):
-        for snp in snps:
+        for snp_index, snp in enumerate(snps):
             # if this read covers the snp
             if snp[0] == fragment[0] \
                and snp[1] >= fragment[1] \
                and snp[1] < fragment[2]:
                 if random.random() > 0.5:
-                    tmp = array.array('c', read)
+                    tmp = array.array('c', reads[index])
                     tmp[snp[1]-fragment[1]] = snp[3]
                     assert reads[index] != tmp.tostring()
                     reads[index] = tmp.tostring()
-
+                    alt_snps[snp_index] += 1
+                else:
+                    ref_snps[snp_index] += 1
+    
     ###### Write out the test files, and run statmap ################################
     # write genome
     genome_of = open("tmp.genome", "w")
@@ -810,7 +823,7 @@ def test_snps( read_len ):
 
     call = "%s -g tmp.genome -r tmp.fastq -n tmp.snpcov \
                                -o tmp.sam -p %.2f -m %.2f \
-                               -t 1 " % ( STATMAP_PATH, -10, 2 )
+                               -t 1 " % ( STATMAP_PATH, -10.0, 0.50 )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -826,7 +839,7 @@ def test_snps( read_len ):
     sam_fp.seek(0)
     
     if len(fragments) != total_num_reads:
-        raise ValueError, "Mapping returned too few reads."
+        raise ValueError, "Mapping returned too few reads. ( %i / %i )" % ( total_num_reads, len(fragments) )
             
     for loop, (reads_data, truth) in enumerate( izip( iter_sam_reads( sam_fp ), fragments ) ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
@@ -847,7 +860,18 @@ def test_snps( read_len ):
                 % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
+
+    ###### Test the snp file to make sure that each of the snps appears #############
     
+    snp_fp = open( "updated_snp_cnts.snp" )
+    lines = list( snp_fp )
+    snp_fp.close()
+    for line_num, (line, ref_cnt, alt_cnt) in enumerate(zip( lines[1:], ref_snps, alt_snps)):
+        data = map( int, line.strip().split("\t")[-2:] )
+        if data[0] != ref_cnt or data[1] != alt_cnt:
+            print line.strip(), data, [ref_cnt, alt_cnt]
+            raise ValueError, "The wrong number of snps was discovered ( %s vs %s ) " % ( data, [ref_cnt, alt_cnt] )
+
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
@@ -890,7 +914,7 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 if __name__ == '__main__':
-    RUN_SLOW_TESTS = True
+    RUN_SLOW_TESTS = False
 
     test_fivep_sequence_finding()
     test_threep_sequence_finding()

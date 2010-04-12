@@ -1,10 +1,14 @@
+
 X -13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
 X -12) raise error for too short reads
--11.5) print out error for nonmapping reads
+X -11.5) print out nonmapping reads to fastq.nonmapping
 X -11.1) fix snp bug - we need to start adding mutliple reads to the index when a snp is in range
--11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
--10) Fix the margianl vs cond prb calculations in print to sam
--5) Fix the 'merge' join - and check the logic
+X -11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
+X -11) Fix snp unit tests to be more comprehensive
+X -10.9) Fix snp mapping code to update snp cnts
+-10) Fix the marginal vs cond prb calculations in print to sam
+-5) Fix the 'merge' join for the candidate map joining - and check the logic
+-3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
 X -3) Finish location node type
 X -2) Fix segfault on file bad input names
 X -2) Add options for different sequencing error types ( in fastq )
@@ -18,6 +22,7 @@ X 0.9) Seperate joining and sam printing
 0.95) Fix sam printing for threaded apps and paired end reads
 1) Allow users to specify an output directory ( generic chdir )
 1.1) Make srue the read len calc is good for paired end reads
+     That is, we should graba  couple of sequences from both files
 2) Cleanup the rawreaddb interface
    i) create a cursor interface
    X ii) integrate locking and readkey with the cursor/db interface
@@ -45,10 +50,11 @@ X 4) remove useless code ( esp marshalling code, and ifdef's out code )
    for reads that have varying sizes. )
 9) Check the atoi, atof formatting in parse args. 
 10) Change the node type to an enum
-11) allow mapping of N's ( do lowest quality substitution )
+11) allow mapping of N's
 12) Allow mapping of really short reads
 13) Create candidate_mappings.h ( and, maybe, mapped_locations.h )
     Currently, mapped_locations, candidate_mappings, and mapped_reads are all in mapped_location.h/c
     This is a bit confusing, and a pretty large file. I should probably split them out into 
     seperate files. 
 13b) Do the smae as 13 excpet with db_interface.c, which is way confusing. 
+14)  Check for duplicates in the snp coverage file

@@ -348,7 +348,7 @@ index_genome( genome_data* genome, int indexed_seq_len )
                 /* If there are too many snps in this sequence, print a warning */
                 if( snp_ub - snp_lb > MAX_NUM_SNPS )
                 {
-                    fprintf(stderr, "ERROR     :  Can not add the sequence at '%i:%i' - it contains %i SNPs ( %i max )\n", 
+                    fprintf(stderr, "ERROR       :  Can not add the sequence at 'chr %i: bp %i' - it contains %i SNPs ( %i max )\n", 
                             chr_index, bp_index, snp_ub - snp_lb, MAX_NUM_SNPS );
                     continue;
                 }
@@ -365,8 +365,10 @@ index_genome( genome_data* genome, int indexed_seq_len )
                 
                 /* Make sure there is room in the bitmap to store all of the snips */
                 assert( sizeof(unsigned int)*8 > MAX_NUM_SNPS  );
+                /* bm stands for bitmap */
                 unsigned int bm;
-                for( bm = 1; bm <= (((unsigned int)1) <<  (snp_ub - snp_lb - 1)); bm++ )
+                assert( snp_ub > snp_lb );
+                for( bm = 0; bm < (((unsigned int)1) << (snp_ub - snp_lb)); bm++ )
                 {
                     /* Make a copy of the sequence that we will be mutating */
                     /* 
