@@ -522,9 +522,7 @@ fprintf_nonpaired_mapped_read_as_sam(
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    // BUG // 
-    // fprintf( sam_fp, "|%e|", -10*log10( 1 - pow( 10, pkd_rd->seq_error ) ) );
-    fprintf( sam_fp, "%i\t", (int) ( -10*log10( 1 - pow( 10, pkd_rd->seq_error ) ) ) );
+    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10( 1 - pkd_rd->cond_prob)) ) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", rd_len );
@@ -536,7 +534,27 @@ fprintf_nonpaired_mapped_read_as_sam(
     fprintf( sam_fp, "%.*s\t", rd_len, seq );
 
     /* print the quality string */
-    fprintf( sam_fp, "%.*s\n", rd_len, phred_qualities );
+    fprintf( sam_fp, "%.*s\t", rd_len, phred_qualities );
+
+    /* Print the optional fields */
+    /* For single end reads, we use 
+       MQ - Phred likelihood of the read, conditional on 
+            the mapping locations being correct 
+       
+       I take this to mean the phred scaled probabilites of 
+       observing the sequence, given that they came from the 
+       location in the genome that this mapping refers to.
+       
+       I also use 
+       XQ - which is just the probability of observing this
+            sequence, given that they came from this location
+       
+       XP - the probability that the read came from this location,
+            given that it came from somewhere on the genome
+    */
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->seq_error))) );
+    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
 
     return;
 }
@@ -599,8 +617,7 @@ fprintf_paired_mapped_read_as_sam(
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    /* BUGGGGG!!!! FIXME */
-    fprintf( sam_fp, "%u\t", (unsigned int) (-10*log10( 1 - pkd_rd->seq_error)) );
+    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r1_len );
@@ -612,14 +629,48 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%u\t", r2_start );
 
     /* print the inferred insert size */
-    fprintf( sam_fp, "%i\t", r2_start - r1_start + r1_len );
+    /* This is stupid and screwed up, but quoting from the standard...
+    
+      If the two reads in a pair are mapped to the same reference, ISIZE 
+      equals the difference between the coordinate of the 5ʼ-end of the 
+      mate and of the 5ʼ-end of the current read; otherwise ISIZE equals 
+      0 (by the “5ʼ-end” we mean the 5ʼ-end of the original read, so for 
+      Illumina short-insert paired end reads this calculates the difference 
+      in mapping coordinates of the outer edges of the original sequenced 
+      fragment). ISIZE is negative if the mate is mapped to a smaller 
+      coordinate than the current read.
+    
+      So I guess this means that I should be aiming for the fragment length, 
+      subject of course to the correct sign conventions 
+    */
+    fprintf( sam_fp, "%i\t", r2_start - r1_start - r1_len + r1_len + r2_len );
 
     /* print the actual sequence */
     fprintf( sam_fp, "%.*s\t", r1_len, r1_seq );
 
     /* print the quality string */
-    fprintf( sam_fp, "%.*s\n", r1_len, r1_phred_qualities );
+    fprintf( sam_fp, "%.*s\t", r1_len, r1_phred_qualities );
 
+    /* Print the optional fields */
+    /* For paired end reads, we use 
+       PQ - Phred likelihood of the read pair, conditional on both 
+            the mapping locations being correct 
+       
+       I take this to mean the phred scaled probabilites of 
+       observing the sequences, given that they came from the 
+       location in the genome that this mapping refers to.
+       
+       I also use 
+       XQ - which is just the probability of observing these 
+            sequences, given that they came from this location
+       
+       XP - the probability that the read came from this location,
+            given that it came from somewhere on the genome
+    */
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(1-pkd_rd->seq_error))) );
+    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
+   
     /*************************************************************/
     /*************************************************************/
     /*************************************************************/
@@ -662,8 +713,7 @@ fprintf_paired_mapped_read_as_sam(
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    /* BUGGGGG!!!! FIXME */
-    fprintf( sam_fp, "%u\t", (unsigned int) (-10*log10( 1 - pkd_rd->seq_error)) );
+    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r2_len );
@@ -675,13 +725,47 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%u\t", r2_start );
 
     /* print the inferred insert size */
-    fprintf( sam_fp, "%i\t", r2_start - r1_start + r2_len );
+    /* This is stupid and screwed up, but quoting fromt he standard... */
+    /*
+      If the two reads in a pair are mapped to the same reference, ISIZE 
+      equals the difference between the coordinate of the 5ʼ-end of the 
+      mate and of the 5ʼ-end of the current read; otherwise ISIZE equals 
+      0 (by the “5ʼ-end” we mean the 5ʼ-end of the original read, so for 
+      Illumina short-insert paired end reads this calculates the difference 
+      in mapping coordinates of the outer edges of the original sequenced 
+      fragment). ISIZE is negative if the mate is mapped to a smaller 
+      coordinate than the current read.
+    */
+    /* So I guess this means that I should be aiming for the fragment length, 
+       subject of course to the correct sign conventions 
+    */
+    fprintf( sam_fp, "%i\t", r2_start - r1_start + r2_len - r1_len - r2_len );
 
     /* print the actual sequence */
     fprintf( sam_fp, "%.*s\t", r2_len, r2_seq );
 
     /* print the quality string */
-    fprintf( sam_fp, "%.*s\n", r2_len, r2_phred_qualities );
+    fprintf( sam_fp, "%.*s\t", r2_len, r2_phred_qualities );
+
+    /* Print the optional fields */
+    /* For paired end reads, we use 
+       PQ - Phred likelihood of the read pair, conditional on both 
+            the mapping locations being correct 
+       
+       I take this to mean the phred scaled probabilites of 
+       observing the sequences, given that they came from the 
+       location in the genome that this mapping refers to.
+      
+       I also use 
+       XQ - which is just the probability of observing these 
+            sequences, given that they came from this location
+       
+       XP - the probability that the read came from this location,
+            given that it came from somewhere on the genome
+    */
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(pkd_rd->seq_error))) );
+    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
 
     return;
 }
