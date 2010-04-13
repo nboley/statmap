@@ -617,7 +617,8 @@ fprintf_paired_mapped_read_as_sam(
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
+    fprintf( sam_fp, "%u\t", (unsigned int) 
+             MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r1_len );
@@ -667,7 +668,8 @@ fprintf_paired_mapped_read_as_sam(
        XP - the probability that the read came from this location,
             given that it came from somewhere on the genome
     */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(1-pkd_rd->seq_error))) );
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
+             MIN( 254, (-10*log10(1-pkd_rd->seq_error))) );
     fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
     fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
    
@@ -713,7 +715,8 @@ fprintf_paired_mapped_read_as_sam(
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
+    fprintf( sam_fp, "%u\t", (unsigned int) 
+             MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r2_len );
@@ -763,7 +766,8 @@ fprintf_paired_mapped_read_as_sam(
        XP - the probability that the read came from this location,
             given that it came from somewhere on the genome
     */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(pkd_rd->seq_error))) );
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
+             MIN( 254, (-10*log10(pkd_rd->seq_error))) );
     fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
     fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
 
@@ -943,6 +947,7 @@ build_mapped_read_from_candidate_mappings(
     {
         /* initialize j to be the start of the second half of the reads */
         j = p2_start;
+        
         /* while the read matches are still possible */
         while( j < mappings->length 
                && mappings->mappings[i].chr 
@@ -1003,9 +1008,9 @@ build_mapped_read_from_candidate_mappings(
             prob_sum += loc.seq_error;
             loc.cond_prob = -1;
 
-            // BUG BUG BUG
-            if( abs(loc.stop_pos - loc.start_pos) < 800 )
-                add_location_to_mapped_read( *mpd_rd, &loc );
+            // I dont know why I put this in
+            // if( abs(loc.stop_pos - loc.start_pos) < 800 )
+            add_location_to_mapped_read( *mpd_rd, &loc );
 
             j++;
         };

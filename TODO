@@ -6,7 +6,7 @@ X -11.1) fix snp bug - we need to start adding mutliple reads to the index when 
 X -11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
 X -11) Fix snp unit tests to be more comprehensive
 X -10.9) Fix snp mapping code to update snp cnts
--10) Fix the marginal vs cond prb calculations in print to sam
+X -10) Fix the marginal vs cond prb calculations in print to sam
 -5) Fix the 'merge' join for the candidate map joining - and check the logic
 -3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
 X -3) Finish location node type
@@ -43,7 +43,7 @@ X 4) remove useless code ( esp marshalling code, and ifdef's out code )
     track of every read.
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
-6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
+X 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
 7) Seperate seq length from *indexed* sequence length in option parsing. ( currently, 
    I say that if the required number of HQ basepairs is too high, that it should be the 
    indexed sequence length. This isnt *exactly* correct, because we could want this feature
