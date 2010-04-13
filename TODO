@@ -7,7 +7,9 @@ X -11.1) fix snp bug - doesnt adjust errors for ref sequences that cover snps
 X -11) Fix snp unit tests to be more comprehensive
 X -10.9) Fix snp mapping code to update snp cnts
 X -10) Fix the marginal vs cond prb calculations in print to sam
--5) Fix the 'merge' join for the candidate map joining - and check the logic
+-5) Fix the 'merge' join for the candidate map joining
+    Currently, this is correct but it is just using the naive N^2 algorithm.
+    At the very least, it needs to be N^2 in chromosome and matched read pairs
 -3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
 X -3) Finish location node type
 X -2) Fix segfault on file bad input names
@@ -16,10 +18,11 @@ M -1) Fix occasional mapping correctness w/ paied end reads
 M ( I cant recreate this after fixing the valgrind memory error, so I 
 M   am assuming that this was it, but I'm not certain )
 M
-0.1) use memset in the trace zeroing ( update trace from reads )
+X 0.1) use memset in the trace zeroing ( update trace from reads )
 X 0.8) rename mapped_short_read to packed_mapped_read
 X 0.9) Seperate joining and sam printing
-0.95) Fix sam printing for threaded apps and paired end reads
+M 0.95) Fix sam printing for threaded apps and paired end reads
+M ( I dont know what I was talking about here - but it seems to work )
 1) Allow users to specify an output directory ( generic chdir )
 1.1) Make srue the read len calc is good for paired end reads
      That is, we should graba  couple of sequences from both files
@@ -27,14 +30,14 @@ X 0.9) Seperate joining and sam printing
    i) create a cursor interface
    X ii) integrate locking and readkey with the cursor/db interface
    X iii) remove the get_read_from_db function in statmap.c
-P 2.1) Make mapped short read location type take a bitfield
-P     to conserve on disk storage space
+X 2.1) Make mapped short read location type take a bitfield
+X      to conserve on disk storage space
 X 2.1) fix mapped_location vs mapped_read_location name confusion
 X 2.2) cleanup error codes to make them standard
 3) Add checks for paired end reads to ensure the read names are identical 
    ( except slashes )
 3.1) Finish on disk indexes
-X 4) remove useless code ( esp marshalling code, and ifdef's out code )
+3.11) remove useless code ( esp marshalling code, and ifdef's out code )
 3) Fix unit tests to correctly identify reads that didnt map due to mutation rates
 3.1 ) The get next candidate mapping will stop returning read ids if it gets to 
     the end of the db ( iow, the file is empty ) even if there are still read ids

@@ -320,7 +320,7 @@ write_mapped_read_to_file( mapped_read* read, FILE* of  );
  *
  */
 
-typedef struct {
+struct mapped_reads_db {
     FILE* fp;
     /* Set this to locked when we mmap it - 
        then forbid any new writes to the 
@@ -335,40 +335,40 @@ typedef struct {
     char** mmapped_reads_starts;
     unsigned long num_mmapped_reads;
     
-} mapped_reads_db;
+};
 
 typedef struct {
     /* the current position of the fp */
     long int fpos;
-    mapped_reads_db* rdb;
+    struct mapped_reads_db* rdb;
 } mapped_reads_db_cursor;
 
 void
-init_mapped_reads_db( mapped_reads_db** rdb, char* fname );
+init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
 
 void
-close_mapped_reads_db( mapped_reads_db* rdb );
+close_mapped_reads_db( struct mapped_reads_db* rdb );
 
 void
 add_read_to_mapped_reads_db( 
-    mapped_reads_db* rdb,
+    struct mapped_reads_db* rdb,
     mapped_read* rd
 );
 
 void
-rewind_mapped_reads_db( mapped_reads_db* rdb );
+rewind_mapped_reads_db( struct mapped_reads_db* rdb );
 
 enum bool
-mapped_reads_db_is_empty( mapped_reads_db* rdb );
+mapped_reads_db_is_empty( struct mapped_reads_db* rdb );
 
 int
 get_next_read_from_mapped_reads_db( 
-    mapped_reads_db* rdb, 
+    struct mapped_reads_db* rdb, 
     mapped_read** rd );
 
 void
 write_mapped_reads_to_sam( rawread_db_t* rdb,
-                           mapped_reads_db* mappings_db,
+                           struct mapped_reads_db* mappings_db,
                            genome_data* genome,
                            FILE* sam_ofp );
 
@@ -386,18 +386,18 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
  */
 
 void
-write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
+write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
                               genome_data* genome,
                               FILE* wfp );
 
 void
-mmap_mapped_reads_db( mapped_reads_db* rdb );
+mmap_mapped_reads_db( struct mapped_reads_db* rdb );
 
 void
-munmap_mapped_reads_db( mapped_reads_db* rdb );
+munmap_mapped_reads_db( struct mapped_reads_db* rdb );
 
 void
-index_mapped_reads_db( mapped_reads_db* rdb );
+index_mapped_reads_db( struct mapped_reads_db* rdb );
 
 
 /*

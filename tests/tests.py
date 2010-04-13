@@ -878,9 +878,11 @@ def test_snps( read_len, num_snps = 10 ):
         os.remove("./tmp.sam")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
+        os.remove("./updated_snp_cnts.snp")
         os.remove("./test.mapped_reads_db")
         os.remove("./tmp.fastq.nonmapping")
         os.remove("./tmp.fastq.unmappable")
+
         
 
 def test_snp_finding( ):

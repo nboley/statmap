@@ -460,7 +460,7 @@ get_next_candidate_mapping_from_cursor(
 
 void
 join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
-                             mapped_reads_db* mpd_rds_db )
+                             struct mapped_reads_db* mpd_rds_db )
 {
     int error;
 

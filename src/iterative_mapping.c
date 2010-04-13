@@ -10,6 +10,7 @@
 #include <math.h>
 #include <omp.h>
 #include <errno.h>
+#include <float.h>
 
 #include "statmap.h"
 #include "iterative_mapping.h"
@@ -108,6 +109,23 @@ close_stranded_traces( stranded_traces_t* traces )
 }
 
 void
+zero_stranded_traces( stranded_traces_t* traces )
+{
+    /* Zero out the trace for the update */
+    long int i;
+    #pragma omp parallel for num_threads( num_threads )
+    for( i = 0; i < traces->num_traces; i++ )
+    {
+        memset( traces->fwd_traces + i, 0, 
+                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
+
+        memset( traces->bkwd_traces + i, 0, 
+                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
+    }
+}
+
+
+void
 init_traces( const genome_data* const genome,
              traces_t** traces )
 {
@@ -164,16 +182,12 @@ void
 zero_traces( traces_t* traces )
 {
     /* Zero out the trace for the update */
-    /* BUG FIXME TODO use memset! WTF? */
     long int i;
     #pragma omp parallel for num_threads( num_threads )
     for( i = 0; i < traces->num_traces; i++ )
     {
-        unsigned int j;
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
-        {
-            traces->traces[i][j] = 0;
-        }
+        memset( traces->traces + i, 0, 
+                sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
     }
 }
 
@@ -189,6 +203,24 @@ sum_traces( traces_t* traces )
         for( j = 0; j < traces->trace_lengths[i]; j++ )
             sum += traces->traces[i][j];
     
+    return sum;
+}
+
+double
+sum_stranded_traces( stranded_traces_t* traces )
+{
+    double sum = 0;
+
+    int i;
+    unsigned int j;
+    for( i = 0; i < traces->num_traces; i++ )
+    {
+        for( j = 0; j < traces->trace_lengths[i]; j++ )
+        {
+            sum += traces->fwd_traces[i][j];
+            sum += traces->bkwd_traces[i][j];
+        }
+    }
     return sum;
 }
 
@@ -266,7 +298,7 @@ write_wiggle_from_traces( traces_t* traces,
 
 void
 update_traces_from_mapped_chipseq_reads( 
-    mapped_reads_db* reads_db,
+    struct mapped_reads_db* reads_db,
     traces_t* traces
 )
 {    
@@ -299,7 +331,6 @@ update_traces_from_mapped_chipseq_reads(
         
         /* Update the trace from this mapping */
         unsigned int j;
-        double cond_prob_sum = 0;
         for( j = 0; j < r.num_mappings; j++ )
         {
             int chr_index = r.locations[j].chr;
@@ -307,7 +338,6 @@ update_traces_from_mapped_chipseq_reads(
             unsigned int start = r.locations[j].start_pos;
             unsigned int stop = r.locations[j].stop_pos;
             ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
-            cond_prob_sum += cond_prob;
             
             assert( cond_prob >= -0.0001 );
             assert( stop >= start );
@@ -361,10 +391,6 @@ update_traces_from_mapped_chipseq_reads(
                 }
             }
         }
-
-        /* Make sure that the conditional probabilities sum to 1 */
-        // fprintf( stderr, "%e\n", cond_prob_sum );
-        // assert( cond_prob_sum > 0.95 && cond_prob_sum < 1.05 );
     }
     
     return;
@@ -372,7 +398,7 @@ update_traces_from_mapped_chipseq_reads(
 
 double
 update_mapped_chipseq_reads_from_trace( 
-    mapped_reads_db* reads_db,
+    struct mapped_reads_db* reads_db,
     traces_t* traces
 )
 {    
@@ -481,8 +507,9 @@ update_mapped_chipseq_reads_from_trace(
 }
 
 
+
 int
-update_chipseq_mapping( mapped_reads_db* rdb, 
+update_chipseq_mapping( struct mapped_reads_db* rdb, 
                         genome_data* genome,
                         int max_num_iterations )
 {
@@ -525,8 +552,242 @@ update_chipseq_mapping( mapped_reads_db* rdb,
     return 0;
 }
 
+
+void
+update_traces_from_mapped_cage_reads( 
+    struct mapped_reads_db* reads_db,
+    stranded_traces_t* traces
+)
+{    
+    /* zero traces */
+    zero_stranded_traces( traces );
+    
+    /* Update the trace from the reads */
+    /* 
+     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
+     * variable. I dont understand why, but I am a bit nervous because the spec used to
+     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
+     * register space and upcasting all of the unsigned longs to long longs. When 
+     * I move to open mp 3.0, I want to remove this 
+     */
+
+    long long i;
+    const int chunk = 10000;
+    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
+    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+    {
+        char* read_start = reads_db->mmapped_reads_starts[i];
+
+        /* read a mapping into the struct */
+        mapped_read r;
+        r.read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        r.num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        r.locations = (mapped_read_location*) read_start;
+        
+        /* Update the trace from this mapping */
+        unsigned int j;
+        for( j = 0; j < r.num_mappings; j++ )
+        {
+            int chr_index = r.locations[j].chr;
+            unsigned char flag = r.locations[j].flag;
+            unsigned int start = r.locations[j].start_pos;
+            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
+            
+            assert( cond_prob >= -0.0001 );
+            
+            /* Make sure the reference genome is correct */            
+            assert( chr_index < traces->num_traces );
+            
+            /* update the trace */
+            /* If the reads are paired */
+            if( (flag&IS_PAIRED) != 0 )
+            {
+                fprintf( stderr, "FATAL: paired cage reads are not supported" );
+                exit( -1 );                
+            } 
+            /* If the read is *not* paired */
+            else {
+                /* store the trace that we care about */
+                TRACE_TYPE** trace;
+                
+                /* If this is in the fwd strnanded transcriptome */
+                if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+                {
+                    trace = traces->fwd_traces;
+                } 
+                /* We are in the 3' ( negative ) transcriptome */
+                else {
+                    trace = traces->bkwd_traces;
+                }
+
+                trace[ chr_index ][ start ] += cond_prob; 
+            }
+        }
+    }
+    
+    return;
+}
+
+
+double
+update_mapped_cage_reads_from_traces( 
+    struct mapped_reads_db* reads_db,
+    stranded_traces_t* traces
+)
+{    
+    /* store the total accumulated error */
+    double abs_error = 0;
+
+    /* 
+     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
+     * variable. I dont understand why, but I am a bit nervous because the spec used to
+     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
+     * register space and upcasting all of the unsigned longs to long longs. When 
+     * I move to open mp 3.0, I want to remove this 
+     */
+    long long k;
+    const int chunk = 10000;
+    #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( num_threads )
+    for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
+    {
+        char* read_start = reads_db->mmapped_reads_starts[k];
+
+        /* read a mapping into the struct */
+        mapped_read r;
+        r.read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        r.num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        r.locations = (mapped_read_location*) read_start;
+        
+        /* allocate space to store the temporary values */
+        ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r.num_mappings) );
+
+        /* Update the reads from the trace */
+        double density_sum = 0;
+        unsigned int i;
+        for( i = 0; i < r.num_mappings; i++ )
+        {
+            /* calculate the mean density */
+            /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
+            double window_density = 2*DBL_EPSILON;
+
+            int chr_index = r.locations[i].chr;
+            unsigned char flag = r.locations[i].flag;
+            unsigned int start = r.locations[i].start_pos;
+            
+            /* If the reads are paired */
+            unsigned int j = 0;
+            if( (flag&IS_PAIRED) > 1 )
+            {
+                fprintf( stderr, "FATAL: paired cage reads are not supported" );
+                exit( -1 );
+            } 
+            /* If the read is *not* paired */
+            else {
+                /* store the trace that we care about */
+                TRACE_TYPE** trace;
+                
+                /* If this is in the fwd strnanded transcriptome */
+                if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+                {
+                    trace = traces->fwd_traces;
+                } 
+                /* We are in the 3' ( negative ) transcriptome */
+                else {
+                    trace = traces->bkwd_traces;
+                }
+
+                for( j = start;
+                     j < MIN( traces->trace_lengths[chr_index], 
+                              start + WINDOW_SIZE ); 
+                     j++ )
+                {
+                    window_density += trace[chr_index][j];
+                }
+            }
+            
+            new_prbs[i] = r.locations[i].seq_error*window_density;
+            density_sum += new_prbs[i];
+        }
+        
+        /* renormalize the read probabilities */
+        if( density_sum > 0 )
+        {
+            for( i = 0; i < r.num_mappings; i++ )
+            {
+                /** Calculate the error, to check for convergence */
+                /* quadratic error */
+                // abs_error += pow(new_prbs[i]/density_sum 
+                //                 - r.locations[i].cond_prob, 2 ) ;
+                /* absolute value error */
+                double normalized_density = new_prbs[i]/density_sum; 
+
+                abs_error += MAX( normalized_density - r.locations[i].cond_prob,
+                                 -normalized_density  + r.locations[i].cond_prob);
+                
+                r.locations[i].cond_prob = normalized_density;
+            }
+        }      
+
+        /* Free the tmp array */
+        free( new_prbs );
+    }
+    
+
+    return abs_error;
+}
+
+
+
 int
-update_mapping( mapped_reads_db* rdb, 
+update_cage_mapping( struct mapped_reads_db* rdb, 
+                     genome_data* genome,
+                     int max_num_iterations )
+{
+    clock_t start, stop;
+
+    /*** Update the trace from the reads ***/
+    
+    // build the chr traces
+    stranded_traces_t* traces;
+    init_stranded_traces( genome, &traces );
+    
+    double abs_error = 0;
+    int num_iterations = 0;
+    for( num_iterations = 0; 
+         num_iterations < max_num_iterations; 
+         num_iterations++ )
+    {
+        start = clock();
+        
+        /* Update the trace from the read probabilities  */
+        update_traces_from_mapped_cage_reads( rdb, traces );
+        
+        /* Update the read probabilities from the trace */
+        abs_error = update_mapped_cage_reads_from_traces( rdb, traces );
+        
+        stop = clock( );
+        fprintf( stderr, "Iter %i: Error: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
+                 num_iterations, abs_error, 
+                 ((double)stop-(double)start)/CLOCKS_PER_SEC,
+                 sum_stranded_traces( traces )/rdb->num_mmapped_reads
+            );
+        
+        if( abs_error < 1e-4 )
+            break;
+    }
+
+    close_stranded_traces( traces );
+    
+    return 0;
+}
+
+
+int
+update_mapping( struct mapped_reads_db* rdb, 
                 genome_data* genome,
                 int max_num_iterations,
                 enum assay_type_t assay_type      )
@@ -543,7 +804,9 @@ update_mapping( mapped_reads_db* rdb,
     switch( assay_type )
     {
     case CAGE:
-        fprintf( stderr, "Cant currently iteratively update CAGE experiments." );
+        error = update_cage_mapping (
+            rdb, genome, max_num_iterations 
+        );
         break;
     case CHIP_SEQ:
         error = update_chipseq_mapping (

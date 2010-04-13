@@ -72,7 +72,7 @@ renormalize_traces( TRACE_TYPE** chr_traces,
 */
 
 void
-write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
+write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
                               genome_data* genome,
                               FILE* wfp );
 
@@ -120,20 +120,20 @@ build_reads_start_array( char* reads_data, size_t reads_data_size,
 
 void
 update_traces_from_mapped_chipseq_reads( 
-    mapped_reads_db* reads_db,
+    struct mapped_reads_db* reads_db,
     traces_t* traces
 );
 
 
 double
 update_mapped_chipseq_reads_from_trace( 
-    mapped_reads_db* reads_db,
+    struct mapped_reads_db* reads_db,
     traces_t* traces
 );
 
 int 
 update_chipseq_mapping( 
-    mapped_reads_db* rdb, 
+    struct mapped_reads_db* rdb, 
     genome_data* genome,
     int max_num_iterations 
 );
@@ -142,7 +142,7 @@ update_chipseq_mapping(
 enum assay_type_t;
 
 int
-update_mapping( mapped_reads_db* rdb, 
+update_mapping( struct mapped_reads_db* rdb, 
                 genome_data* genome,
                 int max_num_iterations,
                 enum assay_type_t       );

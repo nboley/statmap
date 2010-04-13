@@ -1040,9 +1040,9 @@ renormalize_probabilities:
 
 
 void
-init_mapped_reads_db( mapped_reads_db** rdb, char* fname )
+init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
 {
-    *rdb = malloc(sizeof(mapped_reads_db));
+    *rdb = malloc(sizeof(struct mapped_reads_db));
     (*rdb)->fp = fopen( fname, "w+" );
     if( (*rdb)->fp == NULL )
     {
@@ -1062,7 +1062,7 @@ init_mapped_reads_db( mapped_reads_db** rdb, char* fname )
 }
 
 void
-close_mapped_reads_db( mapped_reads_db* rdb )
+close_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     munmap_mapped_reads_db( rdb );
     fclose( rdb->fp );
@@ -1072,7 +1072,7 @@ close_mapped_reads_db( mapped_reads_db* rdb )
 
 void
 add_read_to_mapped_reads_db( 
-    mapped_reads_db* rdb,
+    struct mapped_reads_db* rdb,
     mapped_read* rd)
 {
     if ( true == rdb->locked )
@@ -1095,7 +1095,7 @@ add_read_to_mapped_reads_db(
 }
 
 void
-rewind_mapped_reads_db( mapped_reads_db* rdb )
+rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     if ( true == rdb->locked )
     {
@@ -1109,7 +1109,7 @@ rewind_mapped_reads_db( mapped_reads_db* rdb )
 }
 
 enum bool
-mapped_reads_db_is_empty( mapped_reads_db* rdb )
+mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
 {
     if( feof( rdb->fp ) )
         return true;
@@ -1119,7 +1119,7 @@ mapped_reads_db_is_empty( mapped_reads_db* rdb )
 
 int
 get_next_read_from_mapped_reads_db( 
-    mapped_reads_db* rdb, 
+    struct mapped_reads_db* rdb, 
     mapped_read** rd )
 {
     if ( true == rdb->locked )
@@ -1176,7 +1176,7 @@ get_next_read_from_mapped_reads_db(
 
 void
 write_mapped_reads_to_sam( rawread_db_t* rdb,
-                           mapped_reads_db* mappings_db,
+                           struct mapped_reads_db* mappings_db,
                            genome_data* genome,
                            FILE* sam_ofp )
 {
@@ -1281,7 +1281,7 @@ cleanup:
 /* use this for wiggles */
 void
 update_traces_from_read_densities( 
-    mapped_reads_db* reads_db,
+    struct mapped_reads_db* reads_db,
     traces_t* traces
 )
 {    
@@ -1342,7 +1342,7 @@ update_traces_from_read_densities(
 
 
 void
-write_mapped_reads_to_wiggle( mapped_reads_db* rdb, 
+write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
                               genome_data* genome,
                               FILE* wfp )
 {
@@ -1376,7 +1376,7 @@ write_mapped_reads_to_wiggle( mapped_reads_db* rdb,
 
 
 void
-mmap_mapped_reads_db( mapped_reads_db* rdb )
+mmap_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     /* get the file descriptor for the file we wish to mmap */
     int fdin = fileno( rdb->fp );
@@ -1412,7 +1412,7 @@ mmap_mapped_reads_db( mapped_reads_db* rdb )
 }
 
 void
-munmap_mapped_reads_db( mapped_reads_db* rdb )
+munmap_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     if( rdb->mmapped_data == NULL )
         return;
@@ -1437,7 +1437,7 @@ munmap_mapped_reads_db( mapped_reads_db* rdb )
 }
 
 void
-index_mapped_reads_db( mapped_reads_db* rdb )
+index_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     
 

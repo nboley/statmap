@@ -314,7 +314,8 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
 }
 
 void
-update_snp_estimates_from_candidate_mappings( mapped_reads_db* rdb, genome_data* genome )
+update_snp_estimates_from_candidate_mappings( 
+    struct mapped_reads_db* rdb, genome_data* genome )
 {
     /* zero out the snp counts */
     int snp_index;

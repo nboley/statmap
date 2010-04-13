@@ -27,7 +27,7 @@ find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h 
 find_candidate_mappings.h : genome.h rawread.h db_interface.h
 
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h
-	gcc $(compile_options) -c iterative_mapping.c  --openmp
+	gcc $(compile_options) --openmp -c iterative_mapping.c
 
 iterative_mapping.h : config.h genome.h
 

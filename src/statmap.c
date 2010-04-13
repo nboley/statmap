@@ -486,7 +486,7 @@ map_marginal( args_t* args, genome_data* genome )
     init_candidate_mappings_db( &mappings_db, 
                                 args->candidate_mappings_prefix );
     
-    mapped_reads_db* mpd_rds_db;
+    struct mapped_reads_db* mpd_rds_db;
     init_mapped_reads_db( &mpd_rds_db, "test.mapped_reads_db" );
 
     /***** END initialize the mappings dbs */
@@ -553,7 +553,7 @@ map_marginal( args_t* args, genome_data* genome )
     /* If appropriate, print out the snp db */
     if( args->snpcov_fp != NULL )
     {
-        update_snp_estimates_from_candidate_mappings( mpd_rds_db );
+        update_snp_estimates_from_candidate_mappings( mpd_rds_db, genome );
         char* snp_fname = "updated_snp_cnts.snp";
         FILE* snp_fp = fopen( snp_fname, "w" );
         write_snps_to_file( snp_fp, genome );
