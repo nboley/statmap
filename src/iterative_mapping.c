@@ -65,12 +65,12 @@ init_stranded_traces( const genome_data* const genome,
 
         /* initialize the forward trace */
         (*traces)->fwd_traces[i] = init_trace( (*traces)->trace_lengths[i] );
-        memset( (*traces)->fwd_traces + i, 0, 
+        memset( (*traces)->fwd_traces[i], 0, 
                 sizeof(TRACE_TYPE)*(*traces)->trace_lengths[i] );
 
         /* initialize the backwards trace */
         (*traces)->bkwd_traces[i] = init_trace( (*traces)->trace_lengths[i] );
-        memset( (*traces)->bkwd_traces + i, 0, 
+        memset( (*traces)->bkwd_traces[i], 0, 
                 sizeof(TRACE_TYPE)*(*traces)->trace_lengths[i] );
     }
     
@@ -116,10 +116,10 @@ zero_stranded_traces( stranded_traces_t* traces )
     #pragma omp parallel for num_threads( num_threads )
     for( i = 0; i < traces->num_traces; i++ )
     {
-        memset( traces->fwd_traces + i, 0, 
+        memset( traces->fwd_traces[i], 0, 
                 sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
 
-        memset( traces->bkwd_traces + i, 0, 
+        memset( traces->bkwd_traces[i], 0, 
                 sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
     }
 }
@@ -186,7 +186,7 @@ zero_traces( traces_t* traces )
     #pragma omp parallel for num_threads( num_threads )
     for( i = 0; i < traces->num_traces; i++ )
     {
-        memset( traces->traces + i, 0, 
+        memset( traces->traces[i], 0, 
                 sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
     }
 }
