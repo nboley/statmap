@@ -5,6 +5,11 @@
 
 /****** configuration options                   ******/
 
+#define SAVE_STARTING_SAMPLES true
+#define STARTING_SAMPLES_PATH "./starting_samples/"
+#define SAVE_SAMPLES true
+#define RELAXED_SAMPLES_PATH "./samples/"
+
 /**** determine how the letters are packed       ****/
 
 typedef unsigned char LEVEL_TYPE;

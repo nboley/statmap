@@ -444,6 +444,21 @@ add_location_to_mapped_read(
     return;
 }
 
+
+void
+reset_read_cond_probs( mapped_read* rd  )
+{
+    double prb_sum = 0;
+    int i;
+    for( i = 0; i < rd->num_mappings; i++ )
+        prb_sum += rd->locations[i].seq_error;
+
+    for( i = 0; i < rd->num_mappings; i++ )
+        rd->locations[i].cond_prob = rd->locations[i].seq_error/prb_sum;
+
+    return;
+};
+
 void
 fprintf_mapped_read( FILE* fp, mapped_read* r )
 {
@@ -491,7 +506,7 @@ void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
     mapped_read_location* pkd_rd,
-    genome_data* genome,
+    struct genome_data* genome,
     char* key, 
     char* seq,
     char* phred_qualities
@@ -563,7 +578,7 @@ void
 fprintf_paired_mapped_read_as_sam( 
     FILE* sam_fp,
     mapped_read_location* pkd_rd,
-    genome_data* genome,
+    struct genome_data* genome,
     char* r1_key, 
     char* r1_seq,
     char* r1_phred_qualities,
@@ -779,7 +794,7 @@ void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
     mapped_read* mpd_rd,
-    genome_data* genome,
+    struct genome_data* genome,
     rawread* rr1,
     rawread* rr2
 )
@@ -1009,8 +1024,9 @@ build_mapped_read_from_candidate_mappings(
             loc.cond_prob = -1;
 
             // I dont know why I put this in
-            // if( abs(loc.stop_pos - loc.start_pos) < 800 )
-            add_location_to_mapped_read( *mpd_rd, &loc );
+            // BUG - BUG!! - REMOVE - I put this in for the duplications
+            if( abs(loc.stop_pos - loc.start_pos) < 800 )
+                add_location_to_mapped_read( *mpd_rd, &loc );
 
             j++;
         };
@@ -1177,7 +1193,7 @@ get_next_read_from_mapped_reads_db(
 void
 write_mapped_reads_to_sam( rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
-                           genome_data* genome,
+                           struct genome_data* genome,
                            FILE* sam_ofp )
 {
     int error;
@@ -1285,20 +1301,14 @@ update_traces_from_read_densities(
     traces_t* traces
 )
 {    
-    /* Zero out the trace for the update */
-    /* BUG FIXME TODO use memset! WTF? */
-    int trace_num = 0;
-    for( trace_num = 0; trace_num < traces->num_traces; trace_num++ )
+    int i;
+    for( i = 0; i < traces->num_chrs; i++ )
     {
-        unsigned int j;
-        for( j = 0; j < traces->trace_lengths[trace_num]; j++ )
-        {
-            traces->traces[trace_num][j] = 0;
-        }
+        memset( traces->traces[0] + i, 0, 
+                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
     }
     
     /* Update the trace from the reads */
-    unsigned long i;
     for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[i];
@@ -1324,14 +1334,14 @@ update_traces_from_read_densities(
             
             assert( cond_prob >= -0.0001 );
             assert( stop >= start );            
-            assert( chr_index < traces->num_traces );
+            assert( chr_index < traces->num_chrs );
             assert( traces->trace_lengths[chr_index] >= stop );
 
             unsigned int k = 0;
             for( k = start; k < stop; k++ )
             {
                 /* update the trace */
-                traces->traces[chr_index][k] 
+                traces->traces[0][chr_index][k] 
                     += (1.0/(stop-start))*cond_prob;
             }
         }
@@ -1343,7 +1353,7 @@ update_traces_from_read_densities(
 
 void
 write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
-                              genome_data* genome,
+                              struct genome_data* genome,
                               FILE* wfp )
 {
     const double filter_threshold = 1e-6;
@@ -1353,19 +1363,23 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
 
     /* build and update the chr traces */
     traces_t* traces;
-    init_traces( genome, &traces );
-    update_traces_from_read_densities( rdb, traces );
+    init_traces( genome, &traces, 1 );
+
+    update_traces_from_mapped_reads( 
+        rdb, traces,
+        naive_update_trace_expectation_from_location
+    );
     
     int i;
     unsigned int j;
-    for( i = 0; i < traces->num_traces; i++ )
+    for( i = 0; i < traces->num_chrs; i++ )
     {
         fprintf( wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
         
         for( j = 0; j < traces->trace_lengths[i]; j++ )
         {
-            if( traces->traces[i][j] >= filter_threshold )
-                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[i][j] );
+            if( traces->traces[0][i][j] >= filter_threshold )
+                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
         }
     }
     

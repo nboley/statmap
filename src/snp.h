@@ -53,15 +53,15 @@ void
 add_snp_to_snp_db( struct snp_db_t* snp_db, snp_t* snp );
 
 void
-build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome );
+build_snp_db_from_snpcov_file( FILE* fp, struct genome_data* genome );
 
 struct mapped_reads_db;
 
 void
 update_snp_estimates_from_candidate_mappings( 
-    struct mapped_reads_db* rdb, genome_data* genome );
+    struct mapped_reads_db* rdb, struct genome_data* genome );
 
 void
-write_snps_to_file( FILE* ofp, genome_data* genome );
+write_snps_to_file( FILE* ofp, struct genome_data* genome );
 
 #endif

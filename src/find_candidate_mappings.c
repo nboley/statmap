@@ -34,7 +34,7 @@ find_candidate_mappings( void* params )
 
     int thread_id = td->thread_id;
 
-    genome_data* genome = td->genome;
+    struct genome_data* genome = td->genome;
     FILE* log_fp = td->log_fp;
     pthread_mutex_t* log_fp_mutex = td->log_fp_mutex;
     
@@ -330,7 +330,7 @@ find_candidate_mappings( void* params )
 }
 
 void
-find_all_candidate_mappings( genome_data* genome,
+find_all_candidate_mappings( struct genome_data* genome,
                              FILE* log_fp,
                              rawread_db_t* rdb,
 

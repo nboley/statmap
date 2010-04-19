@@ -459,7 +459,7 @@ parse_arguments( int argc, char** argv )
 
 
 void
-map_marginal( args_t* args, genome_data* genome )
+map_marginal( args_t* args, struct genome_data* genome )
 {
     /* store clock times - useful for benchmarking */
     clock_t start, stop;
@@ -541,7 +541,7 @@ map_marginal( args_t* args, genome_data* genome )
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
-    update_mapping( mpd_rds_db, genome, 500, args->assay_type  );
+    generic_update_mapping( mpd_rds_db, genome, args->assay_type  );
     
     /* Write the mapped reads to file */
     if( args->wig_fp != NULL )
@@ -600,7 +600,7 @@ main( int argc, char** argv )
     args_t args = parse_arguments( argc, argv );
     
     /* Load the genome */
-    genome_data* genome;
+    struct genome_data* genome;
     init_genome( &genome );
     add_chrs_from_fasta_file( genome, args.genome_fname );
 

@@ -27,7 +27,7 @@ typedef struct {
 struct static_node;
 struct snp_db_t;
 
-typedef struct {
+struct genome_data {
     /* The index for this genome */
     index_t* index;
     /* snps, NULL if there are none */
@@ -41,25 +41,25 @@ typedef struct {
     char** chrs;
     /* the length of the chrsomosomes in bps' */
     unsigned int* chr_lens;
-} genome_data;
+};
 
 void
-add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  genome_data* gen ); 
+add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  struct genome_data* gen ); 
 
 int
-find_chr_index( genome_data* genome, const char* const chr_name );
+find_chr_index( struct genome_data* genome, const char* const chr_name );
 
 extern void
-index_genome( genome_data* genome, int indexed_seq_len );
+index_genome( struct genome_data* genome, int indexed_seq_len );
 
 extern void 
-add_chrs_from_fasta_file( genome_data* gen, char* filename  );
+add_chrs_from_fasta_file( struct genome_data* gen, char* filename  );
 
 void
-init_genome( genome_data** gen );
+init_genome( struct genome_data** gen );
 
 void
-free_genome( genome_data* gen );
+free_genome( struct genome_data* gen );
 
 
 #endif //#ifndef GENOME

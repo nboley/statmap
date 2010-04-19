@@ -9,7 +9,7 @@
 
 struct single_map_thread_data {
     int thread_id;
-    genome_data* genome;
+    struct genome_data* genome;
     FILE* log_fp;
     pthread_mutex_t* log_fp_mutex;
 
@@ -31,7 +31,7 @@ find_candidate_mappings( void* params );
 
 
 void
-find_all_candidate_mappings( genome_data* genome,
+find_all_candidate_mappings( struct genome_data* genome,
                              FILE* log_fp,
                              rawread_db_t* rdb,
 

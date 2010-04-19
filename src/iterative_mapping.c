@@ -17,289 +17,46 @@
 #include "mapped_location.h"
 #include "snp.h"
 
-/******************************************************************************
- * Chr Trace Code
- *
- * Chr traces are just arrays that store expectations of cnts at each basepair. 
- * Below is code for manipulating them.
- *
- *****************************************************************************/
-
-/* build an mmapped array to store the density */
-TRACE_TYPE*
-init_trace( size_t size  )
+static TRACE_TYPE 
+min( TRACE_TYPE a, TRACE_TYPE b )
 {
-    void* chr_trace
-        = mmap( NULL, sizeof(TRACE_TYPE)*size, 
-                PROT_READ|PROT_WRITE, MAP_ANON|MAP_POPULATE|MAP_PRIVATE, 0, 0 );
-    
-    if( chr_trace == (void*) -1 )
-    {
-        fprintf(stderr, "Can not anonymous mmap of size '%u'\n", size );
-        exit( -1 );
-    }
-    
-    return (TRACE_TYPE*) chr_trace;
+    if( a > b )
+        return b;
+    return a;
 }
 
-/* Build mmapped arrays for all of the chrs ***/
-void
-init_stranded_traces( const genome_data* const genome,
-                      stranded_traces_t** traces )
+static TRACE_TYPE 
+max( TRACE_TYPE a, TRACE_TYPE b )
 {
-    /* Allocate space for the struct */
-    *traces = malloc( sizeof( stranded_traces_t ) );
-    
-    /* set the number of traces */
-    (*traces)->num_traces = genome->num_chrs;
-
-    /* Allocate space for the pointers to the chr's individual traces */
-    (*traces)->fwd_traces = malloc( (*traces)->num_traces*sizeof(TRACE_TYPE*) );
-    (*traces)->bkwd_traces = malloc( (*traces)->num_traces*sizeof(TRACE_TYPE*) );
-    
-    int i;
-    for( i = 0; i < (*traces)->num_traces; i++ )
-    {
-        /* initialize the trace length, in bps */
-        (*traces)->trace_lengths[i] = genome->chr_lens[i];
-
-        /* initialize the forward trace */
-        (*traces)->fwd_traces[i] = init_trace( (*traces)->trace_lengths[i] );
-        memset( (*traces)->fwd_traces[i], 0, 
-                sizeof(TRACE_TYPE)*(*traces)->trace_lengths[i] );
-
-        /* initialize the backwards trace */
-        (*traces)->bkwd_traces[i] = init_trace( (*traces)->trace_lengths[i] );
-        memset( (*traces)->bkwd_traces[i], 0, 
-                sizeof(TRACE_TYPE)*(*traces)->trace_lengths[i] );
-    }
-    
-    return;
+    if( a > b )
+        return a;
+    return b;
 }
 
 void
-close_stranded_traces( stranded_traces_t* traces )
+naive_update_trace_expectation_from_location( 
+    const traces_t* const traces, 
+    const mapped_read_location* const loc )
 {
-    int i, error; 
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        error = munmap( traces->fwd_traces[i], 
-                        sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
-        if( error == -1 )
-        {
-            perror( "Problem closing mmaped trace" );
-            assert( false );
-            exit( -1 );
-        }
+    int chr_index = loc->chr;
+    unsigned int start = loc->start_pos;
+    unsigned int stop = loc->stop_pos;
+    ML_PRB_TYPE cond_prob = loc->cond_prob;
 
-        error = munmap( traces->bkwd_traces[i], 
-                        sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
-        if( error == -1 )
-        {
-            perror( "Problem closing mmaped trace" );
-            assert( false );
-            exit( -1 );
-        }
-    }
-
-    free( traces->trace_lengths );
-    free( traces );
+    unsigned int i;
+    for( i = start; i <= stop; i++ )
+        traces->traces[0][chr_index][i] += cond_prob;
 
     return;
 }
 
 void
-zero_stranded_traces( stranded_traces_t* traces )
-{
-    /* Zero out the trace for the update */
-    long int i;
-    #pragma omp parallel for num_threads( num_threads )
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        memset( traces->fwd_traces[i], 0, 
-                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
-
-        memset( traces->bkwd_traces[i], 0, 
-                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
-    }
-}
-
-
-void
-init_traces( const genome_data* const genome,
-             traces_t** traces )
-{
-    /* Allocate space for the struct */
-    *traces = malloc( sizeof( stranded_traces_t ) );
-    
-    /* set the number of traces */
-    (*traces)->num_traces = genome->num_chrs;
-
-    /* Allocate space for the pointers to the chr's individual traces */
-    (*traces)->trace_lengths = malloc( 
-        (*traces)->num_traces*sizeof(unsigned int) );
-    (*traces)->traces = malloc( (*traces)->num_traces*sizeof(TRACE_TYPE*) );
-    
-    int i;
-    for( i = 0; i < genome->num_chrs; i++ )
-    {
-        /* initialize the trace length, in bps */
-        (*traces)->trace_lengths[i] = genome->chr_lens[i];
-
-        /* initialize the forward trace */
-        (*traces)->traces[i] = init_trace( (*traces)->trace_lengths[i] );
-        memset( (*traces)->traces[i], 0, 
-                sizeof(TRACE_TYPE)*(*traces)->trace_lengths[i] );
-    }
-    
-    return;
-}
-
-void
-close_traces( traces_t* traces )
-{
-    int i, error; 
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        error = munmap( traces->traces[i], 
-                        sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
-        if( error == -1 )
-        {
-            perror( "Problem closing mmaped trace" );
-            assert( false );
-            exit( -1 );
-        }
-    }
-
-    free( traces->trace_lengths );
-    free( traces->traces );
-    free( traces );
-
-    return;
-}
-
-void
-zero_traces( traces_t* traces )
-{
-    /* Zero out the trace for the update */
-    long int i;
-    #pragma omp parallel for num_threads( num_threads )
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        memset( traces->traces[i], 0, 
-                sizeof(TRACE_TYPE)*traces->trace_lengths[i] );
-    }
-}
-
-
-double
-sum_traces( traces_t* traces )
-{
-    double sum = 0;
-
-    int i;
-    unsigned int j;
-    for( i = 0; i < traces->num_traces; i++ )
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
-            sum += traces->traces[i][j];
-    
-    return sum;
-}
-
-double
-sum_stranded_traces( stranded_traces_t* traces )
-{
-    double sum = 0;
-
-    int i;
-    unsigned int j;
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
-        {
-            sum += traces->fwd_traces[i][j];
-            sum += traces->bkwd_traces[i][j];
-        }
-    }
-    return sum;
-}
-
-
- /*
-void
-renormalize_traces( TRACE_TYPE** chr_traces, 
-                   int num_chrs, 
-                   unsigned int* chr_lens,
-                   unsigned long num_reads )
-{
-    long int i;
-    #pragma omp parallel for num_threads( num_threads )
-    for( i = 0; i < num_chrs; i++ )
-    {
-        unsigned int j;
-        for( j = 0; j < chr_lens[i]; j++ )
-        {
-            chr_traces[i][j] /= num_reads;
-        }
-    }
-    
-}
- */
-
-void
-write_wiggle_from_traces( traces_t* traces,
-                          char** trace_names,
-                          
-                          const char* output_fname, 
-                          const char* track_name,
-                          
-                          const double filter_threshold )
-{    
-    FILE* wfp = fopen( output_fname, "w" );
-    /* Print out the header */
-    fprintf( wfp, "track type=wiggle_0 name=%s\n", track_name );
-
-    int i;
-    unsigned int j;
-    for( i = 0; i < traces->num_traces; i++ )
-    {
-        /* Print out the new chr start line */
-        if( trace_names == NULL ) {
-            fprintf( wfp, "variableStep chrom=%i\n", i );
-        } else {
-            fprintf( wfp, "variableStep chrom=%s\n", trace_names[i] );
-        }
-        
-        
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
-        {
-            if( traces->traces[i][j] > filter_threshold )
-                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[i][j] );
-        }
-    }
-    
-    fclose( wfp );
-}
-
-
-/*
- * END Chr Trace Code
- *
- *****************************************************************************/
-
-/*****************************************************************************
- * 
- * Mapped Reads Fns
- *
- * Methods for dealing with mapped short reads in the context of iterative 
- * updates.
- *
- *****************************************************************************/
-
-void
-update_traces_from_mapped_chipseq_reads( 
+update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces
+    traces_t* traces,
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc)
 )
 {    
     /* zero traces */
@@ -331,65 +88,8 @@ update_traces_from_mapped_chipseq_reads(
         
         /* Update the trace from this mapping */
         unsigned int j;
-        for( j = 0; j < r.num_mappings; j++ )
-        {
-            int chr_index = r.locations[j].chr;
-            unsigned char flag = r.locations[j].flag;
-            unsigned int start = r.locations[j].start_pos;
-            unsigned int stop = r.locations[j].stop_pos;
-            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
-            
-            assert( cond_prob >= -0.0001 );
-            assert( stop >= start );
-
-            /* Make sure the reference genome is correct */
-            //  FIXME - debugging code 
-            /*
-            printf( "%i:%u/%i - Chr Index: %i Loc: %u\n", 
-                    (int)i, j, (int)reads_db->num_mmapped_reads, chr_index, stop  );
-            */
-            
-            assert( chr_index < traces->num_traces );
-            assert( traces->trace_lengths[chr_index] >= stop );
-
-            /* update the trace */
-            /* If the reads are paired */
-            unsigned int k = 0;
-            if( (flag&IS_PAIRED) != 0 )
-            {
-                for( k = start; k < stop; k++ )
-                {
-                    assert( chr_index < traces->num_traces );
-                    assert( k < traces->trace_lengths[chr_index] );
-                    
-                    #pragma omp atomic
-                    traces->traces[chr_index][k] 
-                        += (1.0/(stop-start))*cond_prob;
-                }
-            } 
-            /* If the read is *not* paired */
-            else {
-                /* FIXME - hope that we actually have a fragment length */
-                /* FIXME get the real fragment length */
-                /* FIXME - cleanup the stop condition */
-                unsigned int frag_len = 400;
-                for( k = 0; k < frag_len; k++ )
-                {
-                    if( start + k < traces->trace_lengths[chr_index] )
-                    {
-                        #pragma omp atomic
-                        traces->traces[chr_index][start + k] 
-                            += k*cond_prob/( frag_len*frag_len  );
-                    }
-                    
-                    if( stop >= k )
-                    {
-                        #pragma omp atomic
-                        traces->traces[chr_index][stop - k] 
-                            += k*cond_prob/( frag_len*frag_len  );
-                    }
-                }
-            }
+        for( j = 0; j < r.num_mappings; j++ ) {
+            update_trace_expectation_from_location( traces, r.locations + j );
         }
     }
     
@@ -397,10 +97,12 @@ update_traces_from_mapped_chipseq_reads(
 }
 
 double
-update_mapped_chipseq_reads_from_trace( 
+update_mapped_reads_from_trace( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces
-)
+    traces_t* traces,
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+    )
 {    
     /* store the total accumulated error */
     double abs_error = 0;
@@ -426,101 +128,29 @@ update_mapped_chipseq_reads_from_trace(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (mapped_read_location*) read_start;
-        
-        /* allocate space to store the temporary values */
-        ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r.num_mappings) );
 
-        /* Update the reads from the trace */
-        double density_sum = 0;
-        unsigned int i;
-        for( i = 0; i < r.num_mappings; i++ )
-        {
-            /* calculate the mean density */
-            double window_density = 0;
-
-            int chr_index = r.locations[i].chr;
-            unsigned char flag = r.locations[i].flag;
-            unsigned int start = r.locations[i].start_pos;
-            unsigned int stop = r.locations[i].stop_pos;
-            
-            /* If the reads are paired */
-            unsigned int j = 0;
-            if( (flag&IS_PAIRED) > 1 )
-            {
-                for( j = start; j <= stop; j++ )
-                {
-                    assert( j > 0 && j < traces->trace_lengths[chr_index] );
-
-                    #pragma omp atomic
-                    window_density += traces->traces[chr_index][j];
-                }
-            } 
-            /* If the read is *not* paired */
-            else {
-                /* FIXME - hope that we actually have a fragment length */
-                /* FIXME get the real fragment length */
-                /* FIXME - cleanup the stop condition */
-                unsigned int frag_len = 400;
-                for( j = start; 
-                     j < MIN(traces->trace_lengths[chr_index], start + frag_len); 
-                     j++ )
-                {
-                    window_density += traces->traces[chr_index][j];
-                }
-            }
-            
-            new_prbs[i] = r.locations[i].seq_error*window_density;
-            density_sum += new_prbs[i];
-        }
-        
-        /* renormalize the read probabilities */
-        /* 
-         * if we skip the density at the mapped bp, it's possible for the sum to be zero.
-         * If this is the case, ignore the read ( and report at the end )
-         * 
-         *   BUG!!!! FIXME The 'report at the end' ( from above ) is not happening
-         */
-        if( density_sum > 0 )
-        {
-            for( i = 0; i < r.num_mappings; i++ )
-            {
-                /** Calculate the error, to check for convergence */
-                /* quadratic error */
-                // abs_error += pow(new_prbs[i]/density_sum 
-                //                 - r.locations[i].cond_prob, 2 ) ;
-                /* absolute value error */
-                double normalized_density = new_prbs[i]/density_sum; 
-
-                abs_error += MAX( normalized_density - r.locations[i].cond_prob,
-                                 -normalized_density  + r.locations[i].cond_prob);
-                
-                r.locations[i].cond_prob = normalized_density;
-            }
-        }      
-
-        /* Free the tmp array */
-        free( new_prbs );
+        abs_error += update_mapped_read_prbs( traces, &r );        
     }
     
 
     return abs_error;
 }
 
-
-
 int
-update_chipseq_mapping( struct mapped_reads_db* rdb, 
-                        genome_data* genome,
-                        int max_num_iterations )
+update_mapping(
+    struct mapped_reads_db* rdb,
+    traces_t* starting_trace,
+    int max_num_iterations,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+    )
 {
     clock_t start, stop;
-
-    /*** Update the trace from the reads ***/
-    
-    // build the chr traces
-    traces_t* traces;
-    init_traces( genome,
-                 &traces );
     
     double abs_error = 0;
     int num_iterations = 0;
@@ -529,38 +159,46 @@ update_chipseq_mapping( struct mapped_reads_db* rdb,
          num_iterations++ )
     {
         start = clock();
-        
-        /* Update the trace from the read probabilities  */
-        update_traces_from_mapped_chipseq_reads( rdb, traces );
-        
-        /* Update the read probabilities from the trace */
-        abs_error = update_mapped_chipseq_reads_from_trace( rdb, traces );
+
+        update_traces_from_mapped_reads( 
+            rdb, starting_trace, 
+            update_trace_expectation_from_location
+        );
+
+        abs_error = update_mapped_reads_from_trace(
+            rdb, starting_trace, 
+            update_mapped_read_prbs
+        );
         
         stop = clock( );
         fprintf( stderr, "Iter %i: Error: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
                  num_iterations, abs_error, 
                  ((double)stop-(double)start)/CLOCKS_PER_SEC,
-                 sum_traces( traces )/rdb->num_mmapped_reads
+                 sum_traces( starting_trace )/rdb->num_mmapped_reads
             );
         
-        if( abs_error < 1e-4 )
+        if( abs_error < 1e-2 )
             break;
     }
-
-    close_traces( traces );
     
     return 0;
 }
 
-
 void
-update_traces_from_mapped_cage_reads( 
-    struct mapped_reads_db* reads_db,
-    stranded_traces_t* traces
-)
-{    
+build_random_starting_trace( 
+    traces_t* traces, 
+    struct mapped_reads_db* rdb,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+    )
+{
     /* zero traces */
-    zero_stranded_traces( traces );
+    zero_traces( traces );
     
     /* Update the trace from the reads */
     /* 
@@ -572,12 +210,10 @@ update_traces_from_mapped_cage_reads(
      */
 
     long long i;
-    const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+    for( i = 0; i < (long long) rdb->num_mmapped_reads; i++ )
     {
-        char* read_start = reads_db->mmapped_reads_starts[i];
-
+        char* read_start = rdb->mmapped_reads_starts[i];
+        
         /* read a mapping into the struct */
         mapped_read r;
         r.read_id = *((unsigned long*) read_start);
@@ -585,45 +221,39 @@ update_traces_from_mapped_cage_reads(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (mapped_read_location*) read_start;
-        
-        /* Update the trace from this mapping */
-        unsigned int j;
-        for( j = 0; j < r.num_mappings; j++ )
-        {
-            int chr_index = r.locations[j].chr;
-            unsigned char flag = r.locations[j].flag;
-            unsigned int start = r.locations[j].start_pos;
-            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
-            
-            assert( cond_prob >= -0.0001 );
-            
-            /* Make sure the reference genome is correct */            
-            assert( chr_index < traces->num_traces );
-            
-            /* update the trace */
-            /* If the reads are paired */
-            if( (flag&IS_PAIRED) != 0 )
-            {
-                fprintf( stderr, "FATAL: paired cage reads are not supported" );
-                exit( -1 );                
-            } 
-            /* If the read is *not* paired */
-            else {
-                /* store the trace that we care about */
-                TRACE_TYPE** trace;
-                
-                /* If this is in the fwd strnanded transcriptome */
-                if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
-                {
-                    trace = traces->fwd_traces;
-                } 
-                /* We are in the 3' ( negative ) transcriptome */
-                else {
-                    trace = traces->bkwd_traces;
-                }
 
-                trace[ chr_index ][ start ] += cond_prob; 
+        /* reset the read cond prbs under a uniform prior */
+        reset_read_cond_probs( &r  );
+        
+        /* update the read conditional probabilities from the trace */
+        update_mapped_read_prbs( traces, &r );        
+
+        /* Choose a random location, and use this */
+        unsigned int j;
+        float random_num = (float)rand()/(float)RAND_MAX;
+        float cum_dist = 0;
+        for( j = 0; j < r.num_mappings; j++ ) 
+        {
+            cum_dist += r.locations[j].cond_prob;
+            if( random_num <= cum_dist )
+            {
+                float tmp_cond_prb = r.locations[j].cond_prob;
+                r.locations[j].cond_prob = 1.0;
+                update_trace_expectation_from_location( traces, r.locations + j );
+                r.locations[j].cond_prob = tmp_cond_prb;
+                break;
             }
+        }
+        
+        /* deal with potential rounding errors */
+        /* If this happens, no read would have been added */
+        if( random_num > cum_dist )
+        {
+                float tmp_cond_prb = r.locations[r.num_mappings-1].cond_prob;
+                r.locations[r.num_mappings-1].cond_prob = 1.0;
+                update_trace_expectation_from_location( 
+                    traces, r.locations + r.num_mappings - 1 );
+                r.locations[r.num_mappings-1].cond_prob = tmp_cond_prb;
         }
     }
     
@@ -631,195 +261,512 @@ update_traces_from_mapped_cage_reads(
 }
 
 
-double
-update_mapped_cage_reads_from_traces( 
-    struct mapped_reads_db* reads_db,
-    stranded_traces_t* traces
-)
-{    
-    /* store the total accumulated error */
-    double abs_error = 0;
-
-    /* 
-     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
-     * variable. I dont understand why, but I am a bit nervous because the spec used to
-     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
-     * register space and upcasting all of the unsigned longs to long longs. When 
-     * I move to open mp 3.0, I want to remove this 
-     */
-    long long k;
-    const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( num_threads )
-    for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
-    {
-        char* read_start = reads_db->mmapped_reads_starts[k];
-
-        /* read a mapping into the struct */
-        mapped_read r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (mapped_read_location*) read_start;
-        
-        /* allocate space to store the temporary values */
-        ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r.num_mappings) );
-
-        /* Update the reads from the trace */
-        double density_sum = 0;
-        unsigned int i;
-        for( i = 0; i < r.num_mappings; i++ )
-        {
-            /* calculate the mean density */
-            /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
-            double window_density = 2*DBL_EPSILON;
-
-            int chr_index = r.locations[i].chr;
-            unsigned char flag = r.locations[i].flag;
-            unsigned int start = r.locations[i].start_pos;
-            
-            /* If the reads are paired */
-            unsigned int j = 0;
-            if( (flag&IS_PAIRED) > 1 )
-            {
-                fprintf( stderr, "FATAL: paired cage reads are not supported" );
-                exit( -1 );
-            } 
-            /* If the read is *not* paired */
-            else {
-                /* store the trace that we care about */
-                TRACE_TYPE** trace;
-                
-                /* If this is in the fwd strnanded transcriptome */
-                if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
-                {
-                    trace = traces->fwd_traces;
-                } 
-                /* We are in the 3' ( negative ) transcriptome */
-                else {
-                    trace = traces->bkwd_traces;
-                }
-
-                for( j = start;
-                     j < MIN( traces->trace_lengths[chr_index], 
-                              start + WINDOW_SIZE ); 
-                     j++ )
-                {
-                    window_density += trace[chr_index][j];
-                }
-            }
-            
-            new_prbs[i] = r.locations[i].seq_error*window_density;
-            density_sum += new_prbs[i];
-        }
-        
-        /* renormalize the read probabilities */
-        if( density_sum > 0 )
-        {
-            for( i = 0; i < r.num_mappings; i++ )
-            {
-                /** Calculate the error, to check for convergence */
-                /* quadratic error */
-                // abs_error += pow(new_prbs[i]/density_sum 
-                //                 - r.locations[i].cond_prob, 2 ) ;
-                /* absolute value error */
-                double normalized_density = new_prbs[i]/density_sum; 
-
-                abs_error += MAX( normalized_density - r.locations[i].cond_prob,
-                                 -normalized_density  + r.locations[i].cond_prob);
-                
-                r.locations[i].cond_prob = normalized_density;
-            }
-        }      
-
-        /* Free the tmp array */
-        free( new_prbs );
-    }
-    
-
-    return abs_error;
-}
+/*
+ * END Chr Trace Code
+ *
+ *****************************************************************************/
 
 
+/******************************************************************************
+ *
+ * High-Level Functions 
+ *
+ *****************************************************************************/
 
 int
-update_cage_mapping( struct mapped_reads_db* rdb, 
-                     genome_data* genome,
-                     int max_num_iterations )
+sample_random_traces( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    int trace_dim,
+    int num_samples,
+    int max_num_iterations,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+    
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+                          
+)
 {
-    clock_t start, stop;
+    /* Seed the random number generator */
+    srand ( time(NULL) );
 
-    /*** Update the trace from the reads ***/
-    
-    // build the chr traces
-    stranded_traces_t* traces;
-    init_stranded_traces( genome, &traces );
-    
-    double abs_error = 0;
-    int num_iterations = 0;
-    for( num_iterations = 0; 
-         num_iterations < max_num_iterations; 
-         num_iterations++ )
+    /* initialize the max and min traces */
+    traces_t *max_trace, *min_trace;
+    init_traces( genome, &min_trace, trace_dim );
+    init_traces( genome, &max_trace, trace_dim );
+            
+    /* build bootstrap samples. Then take the max and min. */
+    int i;
+    for( i = 0; i < num_samples; i++ )
     {
-        start = clock();
+        traces_t* sample_trace;
+        init_traces( genome, &sample_trace, trace_dim );
+
+        build_random_starting_trace( 
+            sample_trace, rdb, 
+            update_trace_expectation_from_location,
+            update_mapped_read_prbs
+        );
         
-        /* Update the trace from the read probabilities  */
-        update_traces_from_mapped_cage_reads( rdb, traces );
+        if( SAVE_STARTING_SAMPLES )
+        {
+            char buffer[100];
+            sprintf( buffer, "%ssample%i.wig", STARTING_SAMPLES_PATH, i+1 );
+            
+            int j;
+            for( j = 0; j < trace_dim; j++ )
+            {
+                char buffer2[100];
+                sprintf( buffer2, "start_sample_%i_track_%i", i+1, j+1 );
+
+                write_wiggle_from_traces( 
+                    sample_trace, j, genome->chr_names, 
+                    buffer2, "start_sample", 1e-2 );
+            }
+        }
+
+        /* update the mapping */
+        update_mapping( 
+            rdb, sample_trace, max_num_iterations,
+            update_trace_expectation_from_location,
+            update_mapped_read_prbs
+        );
         
-        /* Update the read probabilities from the trace */
-        abs_error = update_mapped_cage_reads_from_traces( rdb, traces );
+        if( SAVE_SAMPLES )
+        {
+            char buffer[100];
+            sprintf( buffer, "%ssample%i.wig", RELAXED_SAMPLES_PATH, i+1 );
+
+            int j;
+            for( j = 0; j < trace_dim; j++ )
+            {
+                char buffer2[100];
+                sprintf( buffer2, "relaxed_sample_%i_track_%i", i+1, j+1 );
+
+                write_wiggle_from_traces( 
+                    sample_trace, j, genome->chr_names, 
+                    buffer2, "relaxed_sample", 1e-2 );
+            }
+        }
+
+        aggregate_over_traces( max_trace, sample_trace, max );
+
+        aggregate_over_traces( min_trace, sample_trace, min );
+
+        close_traces( sample_trace );
         
-        stop = clock( );
-        fprintf( stderr, "Iter %i: Error: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
-                 num_iterations, abs_error, 
-                 ((double)stop-(double)start)/CLOCKS_PER_SEC,
-                 sum_stranded_traces( traces )/rdb->num_mmapped_reads
-            );
-        
-        if( abs_error < 1e-4 )
-            break;
+        printf( "Sample %i\n", i+1 );
     }
 
-    close_stranded_traces( traces );
+    int j;
+    for( j = 0; j < trace_dim; j++ )
+    {
+        char buffer[100];
+        sprintf( buffer, "max_trace_track_%i", j+1 );
+        write_wiggle_from_traces( max_trace, 0, genome->chr_names, 
+                                  "max_trace.wig", buffer, 1e-2 );
+
+        sprintf( buffer, "min_trace_track_%i", j+1 );
+        write_wiggle_from_traces( min_trace, 0, genome->chr_names, 
+                                  "min_trace.wig", buffer, 1e-2 );
+        
+    }
+    
+    close_traces( max_trace );
+    close_traces( min_trace );
     
     return 0;
 }
 
 
-int
-update_mapping( struct mapped_reads_db* rdb, 
-                genome_data* genome,
-                int max_num_iterations,
-                enum assay_type_t assay_type      )
+/*
+ *
+ * END High-Level Functions 
+ *
+ ******************************************************************************/
+
+
+/*****************************************************************************
+ * 
+ * ChIP Seq specific functions 
+ *
+ *****************************************************************************/
+
+void 
+update_chipseq_trace_expectation_from_location(
+    const traces_t* const traces, 
+    const mapped_read_location* const loc )
 {
+    int chr_index = loc->chr;
+    unsigned char flag = loc->flag;
+    unsigned int start = loc->start_pos;
+    unsigned int stop = loc->stop_pos;
+    ML_PRB_TYPE cond_prob = loc->cond_prob;
+    
+    assert( cond_prob >= -0.0001 );
+    assert( stop >= start );
+    
+    /* Make sure the reference genome is correct */            
+    assert( chr_index < traces->num_traces );
+    assert( traces->trace_lengths[chr_index] >= stop );
+    
+    /* update the trace */
+    /* If the reads are paired */
+    unsigned int k = 0;
+    if( (flag&IS_PAIRED) != 0 )
+    {
+        for( k = start; k < stop; k++ )
+        {
+            assert( chr_index < traces->num_chrs );
+            assert( k < traces->trace_lengths[chr_index] );
+            
+            #pragma omp atomic
+            traces->traces[0][chr_index][k] 
+                += (1.0/(stop-start))*cond_prob;
+        }
+    } 
+    /* If the read is *not* paired */
+    else {
+        /* FIXME - hope that we actually have a fragment length */
+        /* FIXME get the real fragment length */
+        /* FIXME - cleanup the stop condition */
+        unsigned int frag_len = 400;
+        for( k = 0; k < frag_len; k++ )
+        {
+            if( start + k < traces->trace_lengths[chr_index] )
+            {
+                #pragma omp atomic
+                traces->traces[0][chr_index][start + k] 
+                    += k*cond_prob/( frag_len*frag_len  );
+            }
+            
+            if( stop >= k )
+            {
+                #pragma omp atomic
+                traces->traces[0][chr_index][stop - k] 
+                    += k*cond_prob/( frag_len*frag_len  );
+            }
+        }
+    }
+
+    return;
+}
+
+double 
+update_chipseq_mapped_read_prbs( const traces_t* const traces, 
+                                 const mapped_read* const r  )
+{
+    double abs_error = 0;
+    
+    /* allocate space to store the temporary values */
+    ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
+    
+    /* Update the reads from the trace */
+    double density_sum = 0;
+    unsigned int i;
+    for( i = 0; i < r->num_mappings; i++ )
+    {
+        /* calculate the mean density */
+        double window_density = 0;
+        
+        int chr_index = r->locations[i].chr;
+        unsigned char flag = r->locations[i].flag;
+        unsigned int start = r->locations[i].start_pos;
+        unsigned int stop = r->locations[i].stop_pos;
+        
+        /* If the reads are paired */
+        unsigned int j = 0;
+        if( (flag&IS_PAIRED) > 1 )
+        {
+            for( j = start; j <= stop; j++ )
+            {
+                assert( j > 0 && j < traces->trace_lengths[chr_index] );
+                
+                window_density += traces->traces[0][chr_index][j];
+            }
+        } 
+        /* If the read is *not* paired */
+        else {
+            /* FIXME - hope that we actually have a fragment length */
+            /* FIXME get the real fragment length */
+            /* FIXME - cleanup the stop condition */
+            unsigned int frag_len = 400;
+            for( j = start; 
+                 j < MIN(traces->trace_lengths[chr_index], start + frag_len); 
+                 j++ )
+            {
+                window_density += traces->traces[0][chr_index][j];
+            }
+        }
+        
+        new_prbs[i] = r->locations[i].seq_error*window_density;
+        density_sum += new_prbs[i];
+    }
+    
+    /* renormalize the read probabilities */
+    /* 
+     * if we skip the density at the mapped bp, it's possible for the sum to 
+     * be zero. If this is the case, ignore the read ( and report at the end )
+     * 
+     *   BUG!!!! FIXME The 'report at the end' ( from above ) is not happening
+     */
+    if( density_sum > 0 )
+    {
+        for( i = 0; i < r->num_mappings; i++ )
+        {
+            /** Calculate the error, to check for convergence */
+            /* absolute value error */
+            double normalized_density = new_prbs[i]/density_sum; 
+            
+            abs_error += MAX( normalized_density - r->locations[i].cond_prob,
+                              -normalized_density  + r->locations[i].cond_prob);
+            
+            r->locations[i].cond_prob = normalized_density;
+        }
+    }      
+    
+    /* Free the tmp array */
+    free( new_prbs );
+
+    return abs_error;
+}
+
+/*****************************************************************************
+ * 
+ * CAGE specific functions 
+ *
+ *****************************************************************************/
+
+void update_CAGE_trace_expectation_from_location(
+    const traces_t* const traces, 
+    const mapped_read_location* const loc )
+{
+    int chr_index = loc->chr;
+    unsigned char flag = loc->flag;
+    unsigned int start = loc->start_pos;
+    unsigned int stop = loc->stop_pos;
+    ML_PRB_TYPE cond_prob = loc->cond_prob;
+    
+    assert( cond_prob >= -0.0001 );
+    assert( stop >= start );
+    
+    /* Make sure the reference genome is correct */            
+    assert( chr_index < traces->num_traces );
+    assert( traces->trace_lengths[chr_index] >= stop );
+
+    assert( cond_prob >= -0.0001 );
+    
+    /* Make sure the reference genome is correct */            
+    assert( chr_index < traces->num_traces );
+    
+    /* update the trace */
+    /* If the reads are paired */
+    if( (flag&IS_PAIRED) != 0 )
+    {
+        fprintf( stderr, "FATAL: paired cage reads are not supported" );
+        exit( -1 );                
+    } 
+    /* If the read is *not* paired */
+    else {
+        /* store the trace that we care about */
+        TRACE_TYPE** trace;
+        
+        /* If this is in the fwd strnanded transcriptome */
+        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        {
+            trace = traces->traces[0];
+        } 
+        /* We are in the 3' ( negative ) transcriptome */
+        else {
+            trace = traces->traces[1];
+        }
+        
+        trace[ chr_index ][ start ] += cond_prob; 
+    }
+    
+    return;
+}
+
+double update_CAGE_mapped_read_prbs( 
+    const traces_t* const traces, 
+    const mapped_read* const r  )
+{
+    double abs_error = 0;
+    
+    /* allocate space to store the temporary values */
+    ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
+    
+    /* Update the reads from the trace */
+    double density_sum = 0;
+    unsigned int i;
+    for( i = 0; i < r->num_mappings; i++ )
+    {
+        /* calculate the mean density */
+        /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
+        double window_density = 2*DBL_EPSILON;
+        
+        int chr_index = r->locations[i].chr;
+        unsigned char flag = r->locations[i].flag;
+        unsigned int start = r->locations[i].start_pos;
+        
+        /* If the reads are paired */
+        unsigned int j = 0;
+        if( (flag&IS_PAIRED) > 0 )
+        {
+            fprintf( stderr, "FATAL: paired cage reads are not supported" );
+            exit( -1 );
+        } 
+        /* If the read is *not* paired */
+        else {
+            /* store the trace that we care about */
+            TRACE_TYPE** trace;
+            
+            /* If this is in the fwd strnanded transcriptome */
+            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            {
+                trace = traces->traces[0];
+            } 
+            /* We are in the 3' ( negative ) transcriptome */
+            else {
+                trace = traces->traces[1];
+            }
+            
+            for( j = start;
+                 j < MIN( traces->trace_lengths[chr_index], 
+                          start + WINDOW_SIZE ); 
+                 j++ )
+            {
+                window_density += trace[chr_index][j];
+            }
+        }
+        
+        new_prbs[i] = r->locations[i].seq_error*window_density;
+        density_sum += new_prbs[i];
+    }
+    
+    /* renormalize the read probabilities */
+    if( density_sum > 0 )
+    {
+        for( i = 0; i < r->num_mappings; i++ )
+        {
+            /** Calculate the error, to check for convergence */
+            /* quadratic error */
+            // abs_error += pow(new_prbs[i]/density_sum 
+            //                 - r.locations[i].cond_prob, 2 ) ;
+            /* absolute value error */
+            double normalized_density = new_prbs[i]/density_sum; 
+            
+            abs_error += MAX( normalized_density - r->locations[i].cond_prob,
+                              -normalized_density  + r->locations[i].cond_prob);
+            
+            r->locations[i].cond_prob = normalized_density;
+        }
+    }      
+    
+    /* Free the tmp array */
+    free( new_prbs );   
+
+    return abs_error;
+}
+
+
+/*
+ * END Cage Mapping Code
+ *
+ ******************************************************************************/
+
+/******************************************************************************
+ *
+ * Entry point(s) into the iterative mapping code
+ *
+ */
+
+
+
+int
+generic_update_mapping( struct mapped_reads_db* rdb, 
+                        struct genome_data* genome,
+                        enum assay_type_t assay_type      )
+{
+    const int max_num_iterations = 500;
+    const int num_samples = 100;
 
     int error = 0;
-
+    
     /* 
      * dispatch the correct update function. If no 
      * update code exists, then print a warning
      * and return without doing anything. 
      */
 
+    void (*update_expectation)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc) 
+        = NULL;
+    
+    double (*update_reads)( const traces_t* const traces, 
+                            const mapped_read* const r  )
+        = NULL;
+
+    
+    int trace_size = -1;
+
     switch( assay_type )
     {
     case CAGE:
-        error = update_cage_mapping (
-            rdb, genome, max_num_iterations 
-        );
+        update_expectation = update_CAGE_trace_expectation_from_location;
+        update_reads = update_CAGE_mapped_read_prbs;
+        trace_size = 2;
         break;
+    
     case CHIP_SEQ:
-        error = update_chipseq_mapping (
-            rdb, genome, max_num_iterations 
-        );
+        update_expectation = update_chipseq_trace_expectation_from_location;
+        update_reads = update_chipseq_mapped_read_prbs;
+        trace_size = 1;
         break;
+    
     default:
         fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'.\n", assay_type);
-        fprintf( stderr, "WARNING     :  Returning marginal mappings.\n" );
+        fprintf( stderr, "WARNING     :      Returning marginal mappings.\n" );
+        return 1;
         break;
     }
 
+    /* initialize the trace that we will store the expectation in */
+    traces_t* uniform_trace;
+    init_traces( genome, &uniform_trace, trace_size );
+
+    error = update_mapping (
+        rdb, 
+        uniform_trace,
+        max_num_iterations,
+        update_expectation,
+        update_reads
+    );
+    
+    int j;
+    for( j = 0; j < trace_size; j++ )
+    {
+        char buffer[100];
+        sprintf( buffer, "expectation_track_%i", j+1 );
+        
+        write_wiggle_from_traces( 
+            uniform_trace, j, genome->chr_names, 
+            "relaxed_mapping.wig", buffer, 1e-2 );
+    }
+    
+    close_traces( uniform_trace );
+    
+    error = sample_random_traces(
+        rdb, genome, trace_size, num_samples, max_num_iterations, 
+        update_expectation, update_reads
+    );
+
     return 0;
+    
 }
 
 

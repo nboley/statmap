@@ -1,4 +1,5 @@
-
+-14) write method to reset read conditional prbs
+-13.9) Split out trace writing code
 X -13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
 X -12) raise error for too short reads
 X -11.5) print out nonmapping reads to fastq.nonmapping
@@ -23,6 +24,7 @@ X 0.8) rename mapped_short_read to packed_mapped_read
 X 0.9) Seperate joining and sam printing
 M 0.95) Fix sam printing for threaded apps and paired end reads
 M ( I dont know what I was talking about here - but it seems to work )
+0.96) Fix sample wiggle printing code so that it works for other trace types
 1) Allow users to specify an output directory ( generic chdir )
 1.1) Make srue the read len calc is good for paired end reads
      That is, we should graba  couple of sequences from both files

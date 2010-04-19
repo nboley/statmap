@@ -12,9 +12,9 @@
 #include "snp.h"
 
 void
-init_genome( genome_data** gen )
+init_genome( struct genome_data** gen )
 {
-    *gen = malloc( sizeof( genome_data ) );
+    *gen = malloc( sizeof( struct genome_data ) );
     (*gen)->index = NULL;
     (*gen)->num_chrs = 0;
     (*gen)->chr_names = NULL;
@@ -24,7 +24,7 @@ init_genome( genome_data** gen )
 }
 
 void
-free_genome( genome_data* gen )
+free_genome( struct genome_data* gen )
 {
     int i;
     
@@ -49,7 +49,7 @@ free_genome( genome_data* gen )
 }
 
 int
-find_chr_index( genome_data* genome, const char* const chr_name )
+find_chr_index( struct genome_data* genome, const char* const chr_name )
 {
     int i = 0;
     for( i = 0; i < genome->num_chrs; i++ )
@@ -67,7 +67,7 @@ void
 add_chr_to_genome( char* chr_name, 
                    char* chr_str, 
                    unsigned int chr_len,
-                   genome_data* gen )
+                   struct genome_data* gen )
 {
     /* find the length of the chromosome name  */
     int chr_name_len = strlen( chr_name );
@@ -96,7 +96,7 @@ add_chr_to_genome( char* chr_name,
 
 extern void 
 add_chrs_from_fasta_file( 
-    genome_data* gen, char* filename   )
+    struct genome_data* gen, char* filename   )
 {
     int error;
     
@@ -236,7 +236,7 @@ inline LETTER_TYPE*
 translate_seq(char*, int num_letters, LETTER_TYPE** );
 
 extern void
-index_genome( genome_data* genome, int indexed_seq_len )
+index_genome( struct genome_data* genome, int indexed_seq_len )
 {
     /* initialize the tree structure */
     init_tree( &(genome->index), indexed_seq_len );

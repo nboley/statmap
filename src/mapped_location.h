@@ -287,13 +287,16 @@ add_location_to_mapped_read(
     mapped_read* rd, mapped_read_location* loc );
 
 void
+reset_read_cond_probs( mapped_read* rd  );
+
+void
 fprintf_mapped_read( FILE* fp, mapped_read* r );
 
 void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
     mapped_read* pkd_rd,
-    genome_data* genome,
+    struct genome_data* genome,
     rawread* rr1,
     rawread* rr2
 );
@@ -369,7 +372,7 @@ get_next_read_from_mapped_reads_db(
 void
 write_mapped_reads_to_sam( rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
-                           genome_data* genome,
+                           struct genome_data* genome,
                            FILE* sam_ofp );
 
 /*
@@ -387,7 +390,7 @@ write_mapped_reads_to_sam( rawread_db_t* rdb,
 
 void
 write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
-                              genome_data* genome,
+                              struct genome_data* genome,
                               FILE* wfp );
 
 void

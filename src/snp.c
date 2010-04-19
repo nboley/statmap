@@ -177,7 +177,7 @@ add_snp_to_snp_db( struct snp_db_t* snp_db, snp_t* snp )
  */
 
 void
-build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
+build_snp_db_from_snpcov_file( FILE* fp, struct genome_data* genome )
 {
     int line_num = 0;
     
@@ -217,7 +217,7 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
     char chr[255];
     unsigned int pos;
     char refallele;
-    char altallele;
+    char altallele = '\0';
     char allele1;
     char allele2;
     
@@ -315,7 +315,7 @@ build_snp_db_from_snpcov_file( FILE* fp, genome_data* genome )
 
 void
 update_snp_estimates_from_candidate_mappings( 
-    struct mapped_reads_db* rdb, genome_data* genome )
+    struct mapped_reads_db* rdb, struct genome_data* genome )
 {
     /* zero out the snp counts */
     int snp_index;
@@ -367,7 +367,7 @@ update_snp_estimates_from_candidate_mappings(
 
 
 void
-write_snps_to_file( FILE* ofp, genome_data* genome )
+write_snps_to_file( FILE* ofp, struct genome_data* genome )
 {
     /* Write the header */
     fprintf( ofp, "chr_name\tposition\t \tRef_Allelle\tAllele1\tAllele2\t \tCount1\tCount2\n" );

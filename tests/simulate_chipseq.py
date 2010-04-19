@@ -5,6 +5,8 @@ import bisect
 import rpy
 import numpy
 import sys
+import os
+import fnmatch
 import re
 import subprocess
 
@@ -236,12 +238,15 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     rpy.r.points( density.max()*numpy.array(bind_prbs), type='l', col='red' )
     raw_input()
 
-def build_all_wiggles():
-    for mr in ( 0, 1, 10, 25, 100, 1000 ):
-        test_chipseq_region( mr, "relaxed_%i_marginal.wig" % mr, iterative=False  )
+def build_all_wiggles( mutations, do_marginal=True ):
+    all_mutations = [ 0, ]
+    all_mutations.extend( mutations )
+    for mr in all_mutations:
+        if do_marginal:
+            test_chipseq_region( mr, "relaxed_%i_marginal.wig" % mr, iterative=False  )
         test_chipseq_region( mr, "relaxed_%i_relaxed.wig" % mr, iterative=True  )
 
-def plot_all_wiggles():
+def plot_all_wiggles( mutations ):
     # build and plot the true density
     region = build_chipseq_region( )
     genome = { 'chr2L': region + region }
@@ -279,18 +284,22 @@ def plot_all_wiggles():
 
     rpy.r.points( true_density.max()*numpy.array(bind_prbs), type='l', col='green' )
 
+    if len(mutations) == 0:
+        rpy.r.dev_off()
+        return
+    
     # plot the various mutation rates
-    wig_fname = "relaxed_%i_marginal.wig" % 1
+    wig_fname = "relaxed_%i_marginal.wig" % mutations[0]
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.plot( density, type='l', ylim=(0,1.2*true_density.max()), col='orange', ylab='Density', xlab='Bps from Region Start', lty=4 )
     
-    wig_fname = "relaxed_%i_relaxed.wig" % 1
+    wig_fname = "relaxed_%i_relaxed.wig" % mutations[0]
     density = parse_wig( wig_fname, genome )
     density = density/density.sum()
     rpy.r.points( density, type='l', col='orange' )
     
-    for mr, color in zip( ( 10, 25, 100, 1000), \
+    for mr, color in zip( mutations[1:], \
                           ( 'blue', 'red', 'green', 'black') ):
         wig_fname = "relaxed_%i_marginal.wig" % mr
         print wig_fname
@@ -305,9 +314,50 @@ def plot_all_wiggles():
     
     rpy.r.dev_off()
 
+def plot_wig_bounds( dir, png_fname):
+    region = build_chipseq_region( )
+    genome = { 'chr2L': region + region }
+
+    rpy.r.png( png_fname, width=1900, height=750 )
+
+    fnames = []
+    curr_dir = os.getcwd()
+    os.chdir(dir)
+    for file in os.listdir('.'):
+        if fnmatch.fnmatch(file, '*.wig'):
+            fnames.append( file )
+    
+    wig_fname = fnames[0]
+    density = parse_wig( wig_fname, genome )
+    max= density.max()
+    rpy.r.plot( density, type='l', col='black', main='', xlab='', ylab='', lty=4, ylim=(0, 4) )
+
+    for fname in fnames[1:]:
+        density = parse_wig( fname, genome )
+        rpy.r.points( density, type='l', col='black', main='', xlab='', ylab='', lty=4 )
+
+    os.chdir(curr_dir)
+
+    density = parse_wig( "max_trace.wig", genome )
+    rpy.r.points( density, type='l', col='blue', main='', xlab='', ylab='', lty=4 )
+    
+    density = parse_wig( "min_trace.wig", genome )
+    rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
+    
+    rpy.r.dev_off()
+
+
+
 if __name__ == '__main__':
-    build_all_wiggles()
-    plot_all_wiggles()
+    mutations = [] # [ 1, 10, 25, 100, 1000  ]
+    build_all_wiggles( mutations, False )
+    plot_wig_bounds( "./samples/", "relaxed_samples.png")
+    plot_wig_bounds( "./starting_samples/", "starting_samples.png")
+    sys.exit( -1 )
+
+    mutations = [] # [ 1, 10, 25, 100, 1000  ]
+    build_all_wiggles( mutations, False )
+    plot_all_wiggles( mutations )
     if sc.CLEANUP:
         subprocess.call( "rm *.wig", shell=True )
         subprocess.call( "rm tmp.*", shell=True )

@@ -111,7 +111,7 @@ args_t
 parse_arguments( int argc, char** argv );
 
 void
-map_marginal( args_t* args, genome_data* genome );
+map_marginal( args_t* args, struct genome_data* genome );
 
 int 
 main( int argc, char** argv );

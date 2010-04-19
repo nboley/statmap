@@ -1,9 +1,9 @@
 
-compile_options = -O0 -g --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O3 --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o db_interface.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
-	  iterative_mapping.o snp.o
+	  iterative_mapping.o snp.o trace.o
 
 all: statmap
 
@@ -29,7 +29,12 @@ find_candidate_mappings.h : genome.h rawread.h db_interface.h
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h
 	gcc $(compile_options) --openmp -c iterative_mapping.c
 
-iterative_mapping.h : config.h genome.h
+iterative_mapping.h : config.h genome.h trace.h
+
+trace.o: trace.c trace.h
+	gcc $(compile_options) -c trace.c
+
+trace.h:
 
 # utility objects
 db_interface.o : db_interface.c db_interface.h mapped_location.h

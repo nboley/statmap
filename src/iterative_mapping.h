@@ -14,137 +14,142 @@
 #define WINDOW_SIZE 20
 
 
-/******************************************************************************
- * Chr Trace Code
- *
- * Chr traces are just arrays that store cnt expectations at each basepair. 
- * Below is the code for manipulating them.
+/* Forward declaration for the trace type */
+#include "trace.h"
+
+void
+naive_update_trace_expectation_from_location( 
+    const traces_t* const traces, 
+    const mapped_read_location* const loc );
+
+
+void
+update_traces_from_mapped_reads( 
+    struct mapped_reads_db* reads_db,
+    traces_t* traces,
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc)
+);
+
+
+double
+update_mapped_reads_from_trace( 
+    struct mapped_reads_db* reads_db,
+    traces_t* traces,
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+);
+
+int
+update_mapping(
+    struct mapped_reads_db* rdb,
+    traces_t* starting_trace,
+    int max_num_iterations,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+    );
+
+void
+build_random_starting_trace( 
+    traces_t* traces, 
+    struct mapped_reads_db* rdb,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+    );
+
+/*****************************************************************************
+ * 
+ * High Level functions 
  *
  *****************************************************************************/
 
-#define TRACE_TYPE float
+int
+sample_random_traces( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    int trace_dim,
+    int num_samples,
+    int max_num_iterations,
+    
+    void (* const update_trace_expectation_from_location)(
+        const traces_t* const traces, 
+        const mapped_read_location* const loc),
+    
+    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+                                              const mapped_read* const r  )
+                          
+    );
 
-typedef struct {
-    int num_traces;
-    unsigned int* trace_lengths;
-    TRACE_TYPE** fwd_traces;
-    TRACE_TYPE** bkwd_traces;
-} stranded_traces_t;
+/*****************************************************************************
+ * 
+ * ChIP Seq specific functions 
+ *
+ *****************************************************************************/
 
-typedef struct {
-    /* Usually, this is just the number of chrs */
-    int num_traces;
-    unsigned int* trace_lengths;
-    TRACE_TYPE** traces;
-} traces_t;
+void 
+update_chipseq_trace_expectation_from_location(
+    const traces_t* const traces, 
+    const mapped_read_location* const loc );
 
-/* build an mmapped array to store the density */
-TRACE_TYPE*
-init_trace( size_t size );
+double 
+update_chipseq_mapped_read_prbs( const traces_t* const traces, 
+                                 const mapped_read* const r  );
 
-void
-init_stranded_traces( const genome_data* const genome,
-                      stranded_traces_t** traces );
+int
+update_chipseq_mapping( struct mapped_reads_db* rdb, 
+                        struct genome_data* genome,
+                        int max_num_iterations );
 
-void
-close_stranded_traces( stranded_traces_t* traces );
+/* END ChIP Seq specific functions  ******************************************/
 
+/*****************************************************************************
+ * 
+ * CAGE specific functions 
+ *
+ *****************************************************************************/
 
-void
-init_traces( const genome_data* const genome,
-             traces_t** traces );
+void update_CAGE_trace_expectation_from_location(
+    const traces_t* const traces, 
+    const mapped_read_location* const loc );
 
-void
-close_traces( traces_t* traces );
+double update_CAGE_mapped_read_prbs( 
+    const traces_t* const traces, 
+    const mapped_read* const r  );
 
-/*
-double
-sum_traces( TRACE_TYPE** chr_traces, 
-            unsigned int num_chrs, 
-            unsigned int* chr_lens );
-*/
-/*
-void
-renormalize_traces( TRACE_TYPE** chr_traces, 
-                    int num_chrs, 
-                    unsigned int* chr_lens,
-                    unsigned long num_reads );
-*/
+int
+update_cage_mapping( struct mapped_reads_db* rdb, 
+                     struct genome_data* genome,
+                     int max_num_iterations );
+
+/* END CAGE specific functions  **********************************************/
 
 void
 write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
-                              genome_data* genome,
+                              struct genome_data* genome,
                               FILE* wfp );
-
-
-void
-write_wiggle_from_traces( traces_t* traces,
-                          char** trace_names,
-                          
-                          const char* output_fname, 
-                          const char* track_name,
-                          
-                          const double filter_threshold );
 
 /*
  * END Chr Trace Code
  *
  *****************************************************************************/
 
-/*****************************************************************************
- * 
- * Mapped Short Reads Fns
- *
- * Methods for dealing with mapped short reads in the context of iterative 
- * updates.
- *
- *****************************************************************************/
-
-
-void
-mmap_mapped_short_reads_file( char* fname, 
-                              char** mapped_short_reads, 
-                              size_t* mapped_short_reads_size );
-
-void
-build_reads_start_array( char* reads_data, size_t reads_data_size,
-                         char*** reads_starts_array, unsigned long* num_reads );
-
-/*
- * 
- * END Mapped Short Reads Fns
- *
- *****************************************************************************/
-
-/* Integrated trace/rawread info */
-
-void
-update_traces_from_mapped_chipseq_reads( 
-    struct mapped_reads_db* reads_db,
-    traces_t* traces
-);
-
-
-double
-update_mapped_chipseq_reads_from_trace( 
-    struct mapped_reads_db* reads_db,
-    traces_t* traces
-);
-
-int 
-update_chipseq_mapping( 
-    struct mapped_reads_db* rdb, 
-    genome_data* genome,
-    int max_num_iterations 
-);
-
 /* fwd declaration for the assay type */
 enum assay_type_t;
 
 int
-update_mapping( struct mapped_reads_db* rdb, 
-                genome_data* genome,
-                int max_num_iterations,
-                enum assay_type_t       );
+generic_update_mapping( struct mapped_reads_db* rdb, 
+                        struct genome_data* genome,
+                        enum assay_type_t       );
 
 #endif
