@@ -14,8 +14,10 @@
 
 #include "statmap.h"
 #include "iterative_mapping.h"
+#include "trace.h"
 #include "mapped_location.h"
 #include "snp.h"
+#include "genome.h"
 
 static TRACE_TYPE 
 min( TRACE_TYPE a, TRACE_TYPE b )
@@ -35,7 +37,7 @@ max( TRACE_TYPE a, TRACE_TYPE b )
 
 void
 naive_update_trace_expectation_from_location( 
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
@@ -53,9 +55,9 @@ naive_update_trace_expectation_from_location(
 void
 update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces,
+    struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc)
 )
 {    
@@ -99,8 +101,8 @@ update_traces_from_mapped_reads(
 double
 update_mapped_reads_from_trace( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces,
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    struct trace_t* traces,
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
     )
 {    
@@ -139,14 +141,14 @@ update_mapped_reads_from_trace(
 int
 update_mapping(
     struct mapped_reads_db* rdb,
-    traces_t* starting_trace,
+    struct trace_t* starting_trace,
     int max_num_iterations,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
     )
 {
@@ -186,14 +188,14 @@ update_mapping(
 
 void
 build_random_starting_trace( 
-    traces_t* traces, 
+    struct trace_t* traces, 
     struct mapped_reads_db* rdb,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
     )
 {
@@ -277,15 +279,18 @@ int
 sample_random_traces( 
     struct mapped_reads_db* rdb, 
     struct genome_data* genome,
-    int trace_dim,
+
+    int num_tracks,
+    char** track_names,
+
     int num_samples,
     int max_num_iterations,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
     
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
                           
 )
@@ -294,16 +299,16 @@ sample_random_traces(
     srand ( time(NULL) );
 
     /* initialize the max and min traces */
-    traces_t *max_trace, *min_trace;
-    init_traces( genome, &min_trace, trace_dim );
-    init_traces( genome, &max_trace, trace_dim );
+    struct trace_t *max_trace, *min_trace;
+    init_traces( genome, &min_trace, num_tracks );
+    init_traces( genome, &max_trace, num_tracks );
             
     /* build bootstrap samples. Then take the max and min. */
     int i;
     for( i = 0; i < num_samples; i++ )
     {
-        traces_t* sample_trace;
-        init_traces( genome, &sample_trace, trace_dim );
+        struct trace_t* sample_trace;
+        init_traces( genome, &sample_trace, num_tracks );
 
         build_random_starting_trace( 
             sample_trace, rdb, 
@@ -315,19 +320,13 @@ sample_random_traces(
         {
             char buffer[100];
             sprintf( buffer, "%ssample%i.wig", STARTING_SAMPLES_PATH, i+1 );
-            
-            int j;
-            for( j = 0; j < trace_dim; j++ )
-            {
-                char buffer2[100];
-                sprintf( buffer2, "start_sample_%i_track_%i", i+1, j+1 );
 
-                write_wiggle_from_traces( 
-                    sample_trace, j, genome->chr_names, 
-                    buffer2, "start_sample", 1e-2 );
-            }
+            write_wiggle_from_trace(
+                sample_trace, 
+                genome->chr_names, track_names,
+                buffer, 1e-2 );
         }
-
+        
         /* update the mapping */
         update_mapping( 
             rdb, sample_trace, max_num_iterations,
@@ -340,16 +339,10 @@ sample_random_traces(
             char buffer[100];
             sprintf( buffer, "%ssample%i.wig", RELAXED_SAMPLES_PATH, i+1 );
 
-            int j;
-            for( j = 0; j < trace_dim; j++ )
-            {
-                char buffer2[100];
-                sprintf( buffer2, "relaxed_sample_%i_track_%i", i+1, j+1 );
-
-                write_wiggle_from_traces( 
-                    sample_trace, j, genome->chr_names, 
-                    buffer2, "relaxed_sample", 1e-2 );
-            }
+            write_wiggle_from_trace( 
+                sample_trace, 
+                genome->chr_names, track_names,
+                buffer, 1e-2 );
         }
 
         aggregate_over_traces( max_trace, sample_trace, max );
@@ -361,21 +354,19 @@ sample_random_traces(
         printf( "Sample %i\n", i+1 );
     }
 
-    int j;
-    for( j = 0; j < trace_dim; j++ )
-    {
-        char buffer[100];
-        sprintf( buffer, "max_trace_track_%i", j+1 );
-        write_wiggle_from_traces( max_trace, 0, genome->chr_names, 
-                                  "max_trace.wig", buffer, 1e-2 );
+    write_wiggle_from_trace( 
+        max_trace, 
+        genome->chr_names, track_names,
+        "max_trace.wig", 1e-2 );
 
-        sprintf( buffer, "min_trace_track_%i", j+1 );
-        write_wiggle_from_traces( min_trace, 0, genome->chr_names, 
-                                  "min_trace.wig", buffer, 1e-2 );
-        
-    }
-    
     close_traces( max_trace );
+    
+    
+    write_wiggle_from_trace( 
+        min_trace, 
+        genome->chr_names, track_names,
+        "min_trace.wig", 1e-2 );
+    
     close_traces( min_trace );
     
     return 0;
@@ -397,7 +388,7 @@ sample_random_traces(
 
 void 
 update_chipseq_trace_expectation_from_location(
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
@@ -456,7 +447,7 @@ update_chipseq_trace_expectation_from_location(
 }
 
 double 
-update_chipseq_mapped_read_prbs( const traces_t* const traces, 
+update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
                                  const mapped_read* const r  )
 {
     double abs_error = 0;
@@ -541,7 +532,7 @@ update_chipseq_mapped_read_prbs( const traces_t* const traces,
  *****************************************************************************/
 
 void update_CAGE_trace_expectation_from_location(
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
@@ -591,7 +582,7 @@ void update_CAGE_trace_expectation_from_location(
 }
 
 double update_CAGE_mapped_read_prbs( 
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read* const r  )
 {
     double abs_error = 0;
@@ -691,8 +682,8 @@ generic_update_mapping( struct mapped_reads_db* rdb,
                         struct genome_data* genome,
                         enum assay_type_t assay_type      )
 {
-    const int max_num_iterations = 500;
-    const int num_samples = 100;
+    const int max_num_iterations = 50;
+    const int num_samples = 10;
 
     int error = 0;
     
@@ -703,15 +694,17 @@ generic_update_mapping( struct mapped_reads_db* rdb,
      */
 
     void (*update_expectation)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc) 
         = NULL;
     
-    double (*update_reads)( const traces_t* const traces, 
+    double (*update_reads)( const struct trace_t* const traces, 
                             const mapped_read* const r  )
         = NULL;
 
-    
+    #define CAGE_TRACK_NAMES {"fwd_strnd_reads", "rev_strnd_reads"}
+    char* track_names[] = {"fwd_strnd_reads", "rev_strnd_reads"};
+
     int trace_size = -1;
 
     switch( assay_type )
@@ -736,7 +729,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     }
 
     /* initialize the trace that we will store the expectation in */
-    traces_t* uniform_trace;
+    struct trace_t* uniform_trace;
     init_traces( genome, &uniform_trace, trace_size );
 
     error = update_mapping (
@@ -746,22 +739,18 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         update_expectation,
         update_reads
     );
-    
-    int j;
-    for( j = 0; j < trace_size; j++ )
-    {
-        char buffer[100];
-        sprintf( buffer, "expectation_track_%i", j+1 );
+
+    write_wiggle_from_trace( 
+        uniform_trace, 
+        genome->chr_names, track_names,
+        "relaxed_mapping.wig", 1e-2 );
         
-        write_wiggle_from_traces( 
-            uniform_trace, j, genome->chr_names, 
-            "relaxed_mapping.wig", buffer, 1e-2 );
-    }
-    
     close_traces( uniform_trace );
     
     error = sample_random_traces(
-        rdb, genome, trace_size, num_samples, max_num_iterations, 
+        rdb, genome, 
+        trace_size, track_names,
+        num_samples, max_num_iterations, 
         update_expectation, update_reads
     );
 

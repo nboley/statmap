@@ -2,7 +2,7 @@
 #define ITERATIVE_MAPPING_H
 
 #include "config.h"
-#include "genome.h"
+struct genome_data;
 #include "mapped_location.h"
 
 #define HQ_THRESHOLD 0.95
@@ -15,20 +15,20 @@
 
 
 /* Forward declaration for the trace type */
-#include "trace.h"
+struct trace_t;
 
 void
 naive_update_trace_expectation_from_location( 
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc );
 
 
 void
 update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces,
+    struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc)
 );
 
@@ -36,35 +36,35 @@ update_traces_from_mapped_reads(
 double
 update_mapped_reads_from_trace( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces,
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    struct trace_t* traces,
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
 );
 
 int
 update_mapping(
     struct mapped_reads_db* rdb,
-    traces_t* starting_trace,
+    struct trace_t* starting_trace,
     int max_num_iterations,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
     );
 
 void
 build_random_starting_trace( 
-    traces_t* traces, 
+    struct trace_t* traces, 
     struct mapped_reads_db* rdb,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
     );
 
@@ -78,15 +78,18 @@ int
 sample_random_traces( 
     struct mapped_reads_db* rdb, 
     struct genome_data* genome,
-    int trace_dim,
+
+    int num_tracks,
+    char** track_names,
+
     int num_samples,
     int max_num_iterations,
     
     void (* const update_trace_expectation_from_location)(
-        const traces_t* const traces, 
+        const struct trace_t* const traces, 
         const mapped_read_location* const loc),
     
-    double (* const update_mapped_read_prbs)( const traces_t* const traces, 
+    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const mapped_read* const r  )
                           
     );
@@ -99,11 +102,11 @@ sample_random_traces(
 
 void 
 update_chipseq_trace_expectation_from_location(
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc );
 
 double 
-update_chipseq_mapped_read_prbs( const traces_t* const traces, 
+update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
                                  const mapped_read* const r  );
 
 int
@@ -120,11 +123,11 @@ update_chipseq_mapping( struct mapped_reads_db* rdb,
  *****************************************************************************/
 
 void update_CAGE_trace_expectation_from_location(
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read_location* const loc );
 
 double update_CAGE_mapped_read_prbs( 
-    const traces_t* const traces, 
+    const struct trace_t* const traces, 
     const mapped_read* const r  );
 
 int

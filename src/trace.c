@@ -36,11 +36,11 @@ init_trace( size_t size  )
 /* Build mmapped arrays for all of the chrs ***/
 void
 init_traces( struct genome_data* genome,
-             traces_t** traces,
+             struct trace_t** traces,
              int num_traces )
 {
     /* Allocate space for the struct */
-    *traces = malloc( sizeof( traces_t ) );
+    *traces = malloc( sizeof( struct trace_t ) );
     
     /* set the number of traces */
     (*traces)->num_traces = num_traces;
@@ -83,7 +83,7 @@ init_traces( struct genome_data* genome,
 }
 
 void
-close_traces( traces_t* traces )
+close_traces( struct trace_t* traces )
 {
     int i, j, error; 
     for( i = 0; i < traces->num_traces; i++ )
@@ -108,7 +108,7 @@ close_traces( traces_t* traces )
 }
 
 double
-sum_traces( traces_t* traces )
+sum_traces( struct trace_t* traces )
 {
     double sum = 0;
 
@@ -123,7 +123,7 @@ sum_traces( traces_t* traces )
 }
 
 void
-zero_traces( traces_t* traces )
+zero_traces( struct trace_t* traces )
 {
     /* Zero out the trace for the update */
     int i, j;
@@ -140,8 +140,8 @@ zero_traces( traces_t* traces )
 /* traces must be the same dimension */
 /* This function applies an aggregate to every basepair in the traces */
 void
-aggregate_over_traces(  traces_t* update_trace, 
-                        const traces_t* const other_trace,
+aggregate_over_traces(  struct trace_t* update_trace, 
+                        const struct trace_t* const other_trace,
                         TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
                      )
 {
@@ -170,40 +170,41 @@ aggregate_over_traces(  traces_t* update_trace,
 }
 
 
-void
-write_wiggle_from_traces( traces_t* traces,
+extern void
+write_wiggle_from_trace( struct trace_t* traces,
 
-                          /* These are usually chr names */
-                          const char** trace_names,
-                          /* The names of the various tracks */
-                          /* Use null for the indexes */
-                          const char** track_names,
-                          
-                          const char* output_fname,                           
-                          const double filter_threshold )
+                         /* These are usually chr names */
+                         char** scaffold_names,
+                         /* The names of the various tracks */
+                         /* Use null for the indexes */
+                         char** track_names,
+                         
+                         const char* output_fname,                           
+                         const double filter_threshold )
 {    
     FILE* wfp = fopen( output_fname, "w" );
-    /* Print out the header */
-    fprintf( wfp, "track type=wiggle_0 name=%s\n", track_name );
 
     int track_index, j;
     unsigned int k;
     for( track_index = 0; track_index < traces->num_traces; track_index++ )
     {
+        /* Print out the header */
+        fprintf( wfp, "track type=wiggle_0 name=%s\n", track_names[track_index] );
+
         for( j = 0; j < traces->num_chrs; j++ )
         {
             /* Print out the new chr start line */
-            if( trace_names == NULL ) {
+            if( scaffold_names == NULL ) {
                 fprintf( wfp, "variableStep chrom=%i\n", j );
             } else {
-                fprintf( wfp, "variableStep chrom=%s\n", trace_names[j] );
+                fprintf( wfp, "variableStep chrom=%s\n", scaffold_names[j] );
             }
             
             for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
-                if( traces->traces[trace_index][j][k] > filter_threshold )
+                if( traces->traces[track_index][j][k] > filter_threshold )
                     fprintf( wfp, "%i\t%e\n", k+1, 
-                             traces->traces[trace_index][j][k] );
+                             traces->traces[track_index][j][k] );
             }
         }
     }

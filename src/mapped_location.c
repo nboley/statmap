@@ -16,6 +16,7 @@
 
 // this is needed for the wiggle writing code
 #include "iterative_mapping.h"
+#include "trace.h"
 
 /*************************************************************************
  *
@@ -1298,7 +1299,7 @@ cleanup:
 void
 update_traces_from_read_densities( 
     struct mapped_reads_db* reads_db,
-    traces_t* traces
+    struct trace_t* traces
 )
 {    
     int i;
@@ -1362,7 +1363,7 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
     fprintf( wfp, "track type=wiggle_0 name=%s\n", "cage_wig_track" );
 
     /* build and update the chr traces */
-    traces_t* traces;
+    struct trace_t* traces;
     init_traces( genome, &traces, 1 );
 
     update_traces_from_mapped_reads( 

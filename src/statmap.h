@@ -3,7 +3,7 @@
 #ifndef STATMAP_H
 #define STATMAP_H
 
-#include "genome.h"
+struct genome_data;
 
 extern int num_threads;
 extern int min_num_hq_bps;
@@ -20,6 +20,9 @@ enum assay_type_t {
     CAGE = 1,
     CHIP_SEQ = 2
 };
+
+extern int num_trace_tracks;
+extern char** trace_track_names;
 
 
 typedef enum {

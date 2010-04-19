@@ -2,13 +2,13 @@
 
 struct genome_data;
 
-typedef struct {
+struct trace_t {
     int num_traces;
     int num_chrs;
     unsigned int* trace_lengths;
     /* num_tracesXnum_chrs matrix */
     TRACE_TYPE*** traces;
-} traces_t;
+};
 
 /* build an mmapped array to store the density */
 TRACE_TYPE*
@@ -16,33 +16,33 @@ init_trace( size_t size );
 
 void
 init_traces( struct genome_data* genome,
-             traces_t** traces,
+             struct trace_t** traces,
              const int num_traces );
 
 void
-close_traces( traces_t* traces );
+close_traces( struct trace_t* traces );
 
 double
-sum_traces( traces_t* traces );
+sum_traces( struct trace_t* traces );
 
 void
-zero_traces( traces_t* traces );
+zero_traces( struct trace_t* traces );
 
 void
-aggregate_over_traces(  traces_t* update_trace, 
-                        const traces_t* const other_trace,
+aggregate_over_traces(  struct trace_t* update_trace, 
+                        const struct trace_t* const other_trace,
                         TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
     );
 
+extern void
+write_wiggle_from_trace( struct trace_t* traces,
 
-void
-write_wiggle_from_traces( traces_t* traces,
-                          /* the index of the trace to use ( ie, 0 for the fwd trace ) */
-                          int trace_index,
-                          
-                          char** trace_names,
-                          
-                          const char* output_fname, 
-                          const char* track_name,
-                          
-                          const double filter_threshold );
+                         /* These are usually chr names */
+                         char** scaffold_names,
+                         /* The names of the various tracks */
+                         /* Use null for the indexes */
+                         char** track_names,
+                         
+                         const char* output_fname,                           
+                         const double filter_threshold 
+    );
