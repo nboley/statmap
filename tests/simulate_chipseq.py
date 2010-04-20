@@ -338,13 +338,13 @@ def plot_wig_bounds( dir, png_fname):
 
     os.chdir(curr_dir)
 
-    density = parse_wig( "max_trace.wig", genome )
+    density = parse_wig( "./statmap_output/max_trace.wig", genome )
     rpy.r.points( density, type='l', col='blue', main='', xlab='', ylab='', lty=4 )
     
-    density = parse_wig( "min_trace.wig", genome )
+    density = parse_wig( "./statmap_output/min_trace.wig", genome )
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
 
-    density = parse_wig( "relaxed_mapping.wig", genome )
+    density = parse_wig( "./statmap_output/relaxed_mapping.wig", genome )
     rpy.r.points( density, type='l', col='green', main='', xlab='', ylab='', lty=4 )
         
     rpy.r.dev_off()
@@ -354,17 +354,16 @@ def plot_wig_bounds( dir, png_fname):
 if __name__ == '__main__':
     mutations = [] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
-    plot_wig_bounds( "./samples/", "relaxed_samples.png")
-    plot_wig_bounds( "./starting_samples/", "starting_samples.png")
+    plot_wig_bounds( "./statmap_output/samples/", "relaxed_samples.png")
+    plot_wig_bounds( "./statmap_output/starting_samples/", "starting_samples.png")
     sys.exit( -1 )
 
     mutations = [] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
     plot_all_wiggles( mutations )
     if sc.CLEANUP:
-        subprocess.call( "rm *.wig", shell=True )
         subprocess.call( "rm tmp.*", shell=True )
-        subprocess.call( "rm test.mapped_reads_db", shell=True )
+        subprocess.call( "rm ./statmap_output/ -rf", shell=True )
 
 
 

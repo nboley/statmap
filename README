@@ -8,8 +8,16 @@ Contact: Nathan Boley ( nboley (AT) berkeley.edu )
 
 Statmap requires 2 types of input
 
+REFERENCE GENOME:
+
+Currently, statmap only accepts a refernece genome in a single fasta file. cat is 
+you friend.
+
 -g - reference genome - in fasta format
 
+INPUT READS:
+
+Currently, statmap ONLY ACCEPTS FASTQ
 
 -r : fastq input file for single end reads
 

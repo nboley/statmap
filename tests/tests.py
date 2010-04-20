@@ -427,8 +427,6 @@ def test_sequence_finding( read_len, rev_comp = False ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-        os.remove("./tmp.fastq.nonmapping")
-        os.remove("./tmp.fastq.unmappable")
         shutil.rmtree("./statmap_output/")
 
 
@@ -535,10 +533,6 @@ def test_paired_end_reads( read_len ):
         os.remove("./tmp.genome")
         os.remove("./tmp.1.fastq")
         os.remove("./tmp.2.fastq")
-        os.remove("./tmp.1.fastq.nonmapping")
-        os.remove("./tmp.1.fastq.unmappable")
-        os.remove("./tmp.2.fastq.nonmapping")
-        os.remove("./tmp.2.fastq.unmappable")
         shutil.rmtree("./statmap_output/")
 
 def test_paired_end_sequence_finding( ):
@@ -615,8 +609,6 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-        os.remove("./tmp.fastq.nonmapping")
-        os.remove("./tmp.fastq.unmappable")
         shutil.rmtree("./statmap_output/")
 
 def test_repeat_sequence_finding( ):
@@ -682,7 +674,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     sam_fp.seek(0)
 
     # find the unmappable reads
-    unmappable_fp = open( "./tmp.fastq.unmappable" )
+    unmappable_fp = open( "./statmap_output/reads.unpaired.unmappable" )
     num_unmappable_reads = sum( 1 for line in unmappable_fp )/4
     unmappable_fp.seek(0)
     unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
@@ -738,10 +730,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./statmap_output/mapped_reads.sam")
         os.remove("./tmp.fastq")
-        os.remove("./tmp.fastq.nonmapping")
-        os.remove("./tmp.fastq.unmappable")
         shutil.rmtree("./statmap_output/")
 
 def test_mutated_read_finding( ):
@@ -877,8 +866,6 @@ def test_snps( read_len, num_snps = 10 ):
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
-        os.remove("./tmp.fastq.nonmapping")
-        os.remove("./tmp.fastq.unmappable")
         shutil.rmtree("./statmap_output/")
         
 
