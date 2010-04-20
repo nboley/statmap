@@ -12,7 +12,8 @@ extern int min_num_hq_bps;
  * The assay that generated these reads.
  * 
  * This only matters if we want to do 
- * iterative mapping.
+ * iterative mapping, and for the wiggle
+ * output type.
  *
  */
 enum assay_type_t {
@@ -51,21 +52,22 @@ typedef enum {
 
 } input_file_type_t;
 
+struct rawread_db_t rdb;
+
 /* Store parsed options */
 typedef struct {
     char* genome_fname;
-
+    FILE* genome_fp;
+    
     char* unpaired_reads_fnames;
     char* pair1_reads_fnames;
     char* pair2_reads_fnames;
+    struct rawread_db_t* rdb;
 
     char* snpcov_fname;
     FILE* snpcov_fp;
 
-    char* wig_fname;
-    FILE* wig_fp;
-    
-    char* candidate_mappings_prefix;
+    char* output_directory;
 
     char* sam_output_fname;
 
@@ -74,12 +76,12 @@ typedef struct {
 
     float min_match_penalty;
     float max_penalty_spread;
+    int min_num_hq_bps;
 
     int indexed_seq_len;
 
     int num_threads;
-    int min_num_hq_bps;
-    
+        
     input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
 } args_t;

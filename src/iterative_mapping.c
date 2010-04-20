@@ -703,7 +703,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         = NULL;
 
     #define CAGE_TRACK_NAMES {"fwd_strnd_reads", "rev_strnd_reads"}
-    char* track_names[] = {"fwd_strnd_reads", "rev_strnd_reads"};
+    char** track_names = NULL;
 
     int trace_size = -1;
 
@@ -713,12 +713,17 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         update_expectation = update_CAGE_trace_expectation_from_location;
         update_reads = update_CAGE_mapped_read_prbs;
         trace_size = 2;
+        *track_names = malloc( trace_size*sizeof(char*) );
+        track_names[0] = "fwd_strnd_read_density"; 
+        track_names[1] = "rev_strnd_read_density";
         break;
     
     case CHIP_SEQ:
         update_expectation = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
         trace_size = 1;
+        *track_names = malloc( trace_size*sizeof(char*) );
+        track_names[0] = "read_density"; 
         break;
     
     default:

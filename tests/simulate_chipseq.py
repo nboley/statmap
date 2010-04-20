@@ -343,7 +343,10 @@ def plot_wig_bounds( dir, png_fname):
     
     density = parse_wig( "min_trace.wig", genome )
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
-    
+
+    density = parse_wig( "relaxed_mapping.wig", genome )
+    rpy.r.points( density, type='l', col='green', main='', xlab='', ylab='', lty=4 )
+        
     rpy.r.dev_off()
 
 

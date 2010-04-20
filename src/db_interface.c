@@ -73,7 +73,7 @@ init_candidate_mappings_db( candidate_mappings_db* db,
         }            
     } else {
         cmdir_name = candidate_mappings_prefix;
-        int rv = mkdir( cmdir_name, 700 );
+        int rv = mkdir( cmdir_name, 755 );
         if( rv != 0 )
         {
             fprintf( stderr,
@@ -109,6 +109,10 @@ init_candidate_mappings_db( candidate_mappings_db* db,
     db->full_2nd_bkwd_rds = malloc(num_threads*sizeof(FILE*));
     
     error = chdir( cmdir_name );
+    if( error == -1 )
+    {
+        perror( "FATAL       : Cannot chdir into the candidate mappings directory " );
+    }
     assert( error == 0 );
     
     int i = 0;

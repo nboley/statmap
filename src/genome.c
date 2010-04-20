@@ -96,7 +96,7 @@ add_chr_to_genome( char* chr_name,
 
 extern void 
 add_chrs_from_fasta_file( 
-    struct genome_data* gen, char* filename   )
+    struct genome_data* gen, FILE* f   )
 {
     int error;
     
@@ -108,15 +108,6 @@ add_chrs_from_fasta_file(
     /* store the chromosome name - limit it to 255 characters */
     char chr_name[255];
     chr_name[0] = '\0';
-
-    /* open the chromosome file */
-    FILE* f;
-    f = fopen( filename, "r");
-    if( f == NULL ) {
-        fprintf(stderr, "FATAL       :  Unable to open '%s'\n", filename);
-        exit(-1);
-        return;
-    }
 
     char* chr;
     chr = malloc( (allcd_size+1)*sizeof(char) );

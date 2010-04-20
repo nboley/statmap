@@ -53,7 +53,7 @@ extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );
 
 extern void 
-add_chrs_from_fasta_file( struct genome_data* gen, char* filename  );
+add_chrs_from_fasta_file( struct genome_data* gen, FILE* f  );
 
 void
 init_genome( struct genome_data** gen );

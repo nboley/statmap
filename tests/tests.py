@@ -23,7 +23,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -386,8 +386,8 @@ def test_sequence_finding( read_len, rev_comp = False ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq \
-                              -o tmp.sam -p %.2f -m %.2f \
-                              -t 1 " % ( STATMAP_PATH, -10, 2 )
+                             -p %.2f -m %.2f \
+                             -t 1 " % ( STATMAP_PATH, -10, 2 )
     
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -493,7 +493,7 @@ def test_paired_end_reads( read_len ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq  \
-                               -o tmp.sam -p %.2f -m %.2f \
+                               -p %.2f -m %.2f \
                                -t 1 " % ( STATMAP_PATH, -10, 2 )
         
     print >> stdout, re.sub( "\s+", " ", call)
@@ -575,8 +575,8 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq \
-                               -o tmp.sam -p %.2f -m %.2f \
-                               -t %i " % ( STATMAP_PATH, -10, 2, n_threads )
+                             -p %.2f -m %.2f \
+                             -t %i " % ( STATMAP_PATH, -10, 2, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -665,8 +665,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq \
-                               -o tmp.sam -p %.2f -m 20 \
-                               -t %i " % ( STATMAP_PATH, min_penalty, n_threads )
+                             -p %.2f -m 20 \
+                             -t %i " % ( STATMAP_PATH, min_penalty, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -822,8 +822,8 @@ def test_snps( read_len, num_snps = 10 ):
     reads_of.close()
 
     call = "%s -g tmp.genome -r tmp.fastq -n tmp.snpcov \
-                               -o tmp.sam -p %.2f -m %.2f \
-                               -t 1 " % ( STATMAP_PATH, -10.0, 0.50 )
+                             -p %.2f -m %.2f \
+                             -t 1 " % ( STATMAP_PATH, -10.0, 0.50 )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
