@@ -207,8 +207,8 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                           -o tmp.sam -p %.2f -m %.2f -w %s\
-                           " % ( sc.STATMAP_PATH, -10, 2, wig_fname )
+                             -p %.2f -m %.2f \
+                             " % ( sc.STATMAP_PATH, -10, 2 )
     if iterative:
         call += " -a i"
         

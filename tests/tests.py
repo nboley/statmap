@@ -11,6 +11,7 @@ import re
 import array
 
 import os
+import shutil
 import subprocess
 import StringIO
 import tempfile
@@ -23,7 +24,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = True
+P_STATMAP_INPUT = False
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -398,7 +399,7 @@ def test_sequence_finding( read_len, rev_comp = False ):
         
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./tmp.sam" )
+    sam_fp = open( "./statmap_output/mapped_reads.sam" )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
@@ -425,11 +426,11 @@ def test_sequence_finding( read_len, rev_comp = False ):
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./tmp.sam")
         os.remove("./tmp.fastq")
-        os.remove("./test.mapped_reads_db")
         os.remove("./tmp.fastq.nonmapping")
         os.remove("./tmp.fastq.unmappable")
+        shutil.rmtree("./statmap_output/")
+
 
 def test_fivep_sequence_finding( ):
     rls = [ 15, 25, 50, 75  ]
@@ -504,7 +505,7 @@ def test_paired_end_reads( read_len ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./tmp.sam" )
+    sam_fp = open( "./statmap_output/mapped_reads.sam" )
     # we divide by two to account for the double write
     total_num_reads = sum( 1 for line in sam_fp )/2
     sam_fp.seek(0)
@@ -532,14 +533,13 @@ def test_paired_end_reads( read_len ):
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./tmp.sam")
         os.remove("./tmp.1.fastq")
         os.remove("./tmp.2.fastq")
         os.remove("./tmp.1.fastq.nonmapping")
         os.remove("./tmp.1.fastq.unmappable")
         os.remove("./tmp.2.fastq.nonmapping")
         os.remove("./tmp.2.fastq.unmappable")
-        os.remove("./test.mapped_reads_db")
+        shutil.rmtree("./statmap_output/")
 
 def test_paired_end_sequence_finding( ):
     rls = [ 25, 75  ]
@@ -586,7 +586,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./tmp.sam" )
+    sam_fp = open( "./statmap_output/mapped_reads.sam" )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
@@ -609,15 +609,15 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
                 raise ValueError, \
                     "Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
                     % ( loc[0], loc[1]%GENOME_LEN, truth[0], truth[1], truth[2]  )
-    
+    sam_fp.close()
+
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./tmp.sam")
         os.remove("./tmp.fastq")
-        os.remove("./test.mapped_reads_db")
         os.remove("./tmp.fastq.nonmapping")
         os.remove("./tmp.fastq.unmappable")
+        shutil.rmtree("./statmap_output/")
 
 def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
@@ -676,7 +676,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./tmp.sam" )
+    sam_fp = open( "./statmap_output/mapped_reads.sam" )
     mapped_read_ids = set( ( line.split("\t")[0].strip() for line in sam_fp ) )
     total_num_reads = len( mapped_read_ids ) 
     sam_fp.seek(0)
@@ -738,11 +738,11 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./tmp.sam")
+        os.remove("./statmap_output/mapped_reads.sam")
         os.remove("./tmp.fastq")
-        os.remove("./test.mapped_reads_db")
         os.remove("./tmp.fastq.nonmapping")
         os.remove("./tmp.fastq.unmappable")
+        shutil.rmtree("./statmap_output/")
 
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
@@ -834,7 +834,7 @@ def test_snps( read_len, num_snps = 10 ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./tmp.sam" )
+    sam_fp = open( "./statmap_output/mapped_reads.sam" )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
     
@@ -863,7 +863,7 @@ def test_snps( read_len, num_snps = 10 ):
 
     ###### Test the snp file to make sure that each of the snps appears #############
     
-    snp_fp = open( "updated_snp_cnts.snp" )
+    snp_fp = open( "./statmap_output/updated_snp_cnts.snp" )
     lines = list( snp_fp )
     snp_fp.close()
     for line_num, (line, ref_cnt, alt_cnt) in enumerate(zip( lines[1:], ref_snps, alt_snps)):
@@ -875,14 +875,11 @@ def test_snps( read_len, num_snps = 10 ):
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")
-        os.remove("./tmp.sam")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
-        os.remove("./updated_snp_cnts.snp")
-        os.remove("./test.mapped_reads_db")
         os.remove("./tmp.fastq.nonmapping")
         os.remove("./tmp.fastq.unmappable")
-
+        shutil.rmtree("./statmap_output/")
         
 
 def test_snp_finding( ):
@@ -916,14 +913,21 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 if __name__ == '__main__':
-    RUN_SLOW_TESTS = False
+    RUN_SLOW_TESTS = True
 
+    print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
+    print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
+    print "Starting test_paired_end_sequence_finding()"
     test_paired_end_sequence_finding( )
+    print "Starting test_repeat_sequence_finding()"
     test_repeat_sequence_finding()
+    print "Starting test_mutated_read_finding()"
     test_mutated_read_finding()
+    print "Starting test_multithreaded_mapping()"
     test_multithreaded_mapping( )
+    print "Starting test_snp_finding()"
     test_snp_finding()
     
     # We skip this test because statmap can't currently

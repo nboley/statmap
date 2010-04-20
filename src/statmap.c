@@ -354,30 +354,38 @@ parse_arguments( int argc, char** argv )
         exit(-1);            
     }
 
-    /***** initialize the raw reads db */
+    /********* END CHECK REQUIRED ARGUMENTS ************************************/
 
-    init_rawread_db( &(args.rdb) );
+    /* Make the output directory */
+    if( args.output_directory == NULL )
+    {
+        args.output_directory = "statmap_output";
+    } 
+    error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
+    if( -1 == error )
+    {
+        perror( "FATAL       :  Cannot make output directory ");
+        exit( -1 );
+    }
 
+    /***** Copy the reads file into the output directory ****/
     /* If the reads are not paired */
     if( args.unpaired_reads_fnames != NULL )
     {
-        add_single_end_reads_to_rawread_db(
-            args.rdb, args.unpaired_reads_fnames, FASTQ 
-        );
+        /* first, copy the read file(s) into the output directory */
+        char buffer[500];
+        sprintf( buffer, "cp %s %s/reads.unpaired", args.unpaired_reads_fnames, args.output_directory );
+        system( buffer );
     } 
     /* If the reads are paired */
     else {
-        add_paired_end_reads_to_rawread_db(
-            args.rdb, 
-            args.pair1_reads_fnames, 
-            args.pair2_reads_fnames, 
-            FASTQ 
-        );
+        /* first, copy the read file(s) into the output directory */
+        char buffer[500];
+        sprintf( buffer, "cp %s %s/reads.pair1", args.pair1_reads_fnames, args.output_directory );
+        system( buffer );
+        sprintf( buffer, "cp %s %s/reads.pair2", args.pair2_reads_fnames, args.output_directory );
+        system( buffer );
     }
-    /***** END initialize the read db */
-
-
-    /********* END CHECK REQUIRED ARGUMENTS ************************************/
 
     /*
      * Try to determine the type of sequencing error. 
@@ -413,24 +421,56 @@ parse_arguments( int argc, char** argv )
         }
     }
 
-
-    /* Change the working directory */
-    if( args.output_directory == NULL )
-    {
-        args.output_directory = "statmap_output";
-    } 
-    error = mkdir( args.output_directory, 0755 );
-    if( -1 == error )
-    {
-        perror( "FATAL       :  Cannot make output directory ");
-        exit( -1 );
-    }
+    /* change the working directory to the output directory */
     error = chdir( args.output_directory );
     if( -1 == error )
     {
         perror( "FATAL       :  Cannot move into output directory ");
         exit( -1 );
     }
+
+    /* Make sub directories to store wiggle samples */
+    if( SAVE_STARTING_SAMPLES )
+    {
+        error = mkdir( "./starting_samples/", S_IRWXU | S_IRWXG | S_IRWXO );
+        if( -1 == error )
+        {
+            perror( "FATAL       :  Cannot make './starting_samples/' ");
+            exit( -1 );
+        }
+    }
+    
+    if( SAVE_SAMPLES )
+    {
+        error = mkdir( "./samples/", S_IRWXU | S_IRWXG | S_IRWXO );
+        if( -1 == error )
+        {
+            perror( "FATAL       :  Cannot make './samples/' ");
+            exit( -1 );
+        }
+    }
+
+    /***** initialize the raw reads db */
+    init_rawread_db( &(args.rdb) );
+
+    /* If the reads are not paired */
+    if( args.unpaired_reads_fnames != NULL )
+    {
+        add_single_end_reads_to_rawread_db(
+            args.rdb, "reads.unpaired", FASTQ 
+        );
+    } 
+    /* If the reads are paired */
+    else {
+        add_paired_end_reads_to_rawread_db(
+            args.rdb, 
+            "reads.pair1",
+            "reads.pair2",
+            FASTQ 
+        );
+    }
+    /***** END initialize the read db */
+
 
     /* If we didnt set the number of threads, default to 1 */
     if( args.num_threads == -1 )
@@ -533,7 +573,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     
     find_all_candidate_mappings( genome,
                                  args->log_fp,
-                                 raw_rdb,
+                                 args->rdb,
                                  &mappings_db,
                                  args->min_match_penalty,
                                  args->max_penalty_spread,
@@ -576,7 +616,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     
     start = clock();
     write_mapped_reads_to_sam( 
-        raw_rdb, mpd_rds_db, genome, sam_ofp );
+        args->rdb, mpd_rds_db, genome, sam_ofp );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
@@ -591,7 +631,7 @@ cleanup:
     genome->index = NULL;
         
     /* close the raw mappings db */
-    close_rawread_db( raw_rdb );
+    close_rawread_db( args->rdb );
     
     /*  close candidate mappings db */
     /*  This removes the temporary files as well */

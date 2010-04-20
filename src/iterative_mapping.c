@@ -682,8 +682,8 @@ generic_update_mapping( struct mapped_reads_db* rdb,
                         struct genome_data* genome,
                         enum assay_type_t assay_type      )
 {
-    const int max_num_iterations = 50;
-    const int num_samples = 10;
+    const int max_num_iterations = 10;
+    const int num_samples = 3;
 
     int error = 0;
     
@@ -713,7 +713,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         update_expectation = update_CAGE_trace_expectation_from_location;
         update_reads = update_CAGE_mapped_read_prbs;
         trace_size = 2;
-        *track_names = malloc( trace_size*sizeof(char*) );
+        track_names = malloc( trace_size*sizeof(char*) );
         track_names[0] = "fwd_strnd_read_density"; 
         track_names[1] = "rev_strnd_read_density";
         break;
@@ -722,7 +722,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         update_expectation = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
         trace_size = 1;
-        *track_names = malloc( trace_size*sizeof(char*) );
+        track_names = malloc( trace_size*sizeof(char*) );
         track_names[0] = "read_density"; 
         break;
     

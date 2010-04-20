@@ -52,7 +52,8 @@ typedef enum {
 
 } input_file_type_t;
 
-struct rawread_db_t rdb;
+/* fwd declaration for the rawread db type */
+struct rawread_db_t;
 
 /* Store parsed options */
 typedef struct {

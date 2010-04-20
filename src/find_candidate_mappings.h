@@ -13,7 +13,7 @@ struct single_map_thread_data {
     FILE* log_fp;
     pthread_mutex_t* log_fp_mutex;
 
-    rawread_db_t* rdb;
+    struct rawread_db_t* rdb;
     
     unsigned int* mapped_cnt;
     pthread_mutex_t* mapped_cnt_mutex;
@@ -33,7 +33,7 @@ find_candidate_mappings( void* params );
 void
 find_all_candidate_mappings( struct genome_data* genome,
                              FILE* log_fp,
-                             rawread_db_t* rdb,
+                             struct rawread_db_t* rdb,
 
                              candidate_mappings_db* mappings_db,
                              float min_match_penalty,

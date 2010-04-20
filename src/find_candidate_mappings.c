@@ -41,7 +41,7 @@ find_candidate_mappings( void* params )
     unsigned int* mapped_cnt = td->mapped_cnt;
     pthread_mutex_t* mapped_cnt_mutex = td->mapped_cnt_mutex;
 
-    rawread_db_t* rdb = td->rdb;
+    struct rawread_db_t* rdb = td->rdb;
     
     pthread_mutex_t* mappings_db_mutex = td->mappings_db_mutex;
     candidate_mappings_db* mappings_db = td->mappings_db;
@@ -332,7 +332,7 @@ find_candidate_mappings( void* params )
 void
 find_all_candidate_mappings( struct genome_data* genome,
                              FILE* log_fp,
-                             rawread_db_t* rdb,
+                             struct rawread_db_t* rdb,
 
                              candidate_mappings_db* mappings_db,
                              float min_match_penalty,

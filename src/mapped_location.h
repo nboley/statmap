@@ -370,7 +370,7 @@ get_next_read_from_mapped_reads_db(
     mapped_read** rd );
 
 void
-write_mapped_reads_to_sam( rawread_db_t* rdb,
+write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
                            struct genome_data* genome,
                            FILE* sam_ofp );

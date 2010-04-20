@@ -308,9 +308,9 @@ filter_rawread( rawread* r )
 /******* BEGIN raw read DB code ********************************************/
 
 void 
-init_rawread_db( rawread_db_t** rdb )
+init_rawread_db( struct rawread_db_t** rdb )
 {
-    (*rdb) = malloc( sizeof( rawread_db_t ) );
+    (*rdb) = malloc( sizeof( struct rawread_db_t ) );
 
     (*rdb)->readkey = 0;
 
@@ -334,7 +334,7 @@ init_rawread_db( rawread_db_t** rdb )
 }
 
 void 
-close_rawread_db( rawread_db_t* rdb )
+close_rawread_db( struct rawread_db_t* rdb )
 {
     if( rdb->single_end_reads != NULL )
     {
@@ -361,7 +361,7 @@ close_rawread_db( rawread_db_t* rdb )
 
 void
 add_single_end_reads_to_rawread_db( 
-    rawread_db_t* rdb, char* rifname, 
+    struct rawread_db_t* rdb, char* rifname, 
     enum inputfile_type iftype )
 {
     /* Make sure that no files have been added yet */
@@ -392,7 +392,7 @@ add_single_end_reads_to_rawread_db(
 
 void
 add_paired_end_reads_to_rawread_db( 
-    rawread_db_t* rdb,
+    struct rawread_db_t* rdb,
     char* rifname1, char* rifname2,
     enum inputfile_type iftype )
 {
@@ -434,7 +434,7 @@ add_paired_end_reads_to_rawread_db(
 }
 
 void
-rewind_rawread_db( rawread_db_t* rdb )
+rewind_rawread_db( struct rawread_db_t* rdb )
 {
     /* reset the read key */
     rdb->readkey = 0;
@@ -454,7 +454,7 @@ rewind_rawread_db( rawread_db_t* rdb )
 }
 
 enum bool
-rawread_db_is_empty( rawread_db_t* rdb )
+rawread_db_is_empty( struct rawread_db_t* rdb )
 {
     if( rdb->single_end_reads != NULL )
     {
@@ -482,7 +482,7 @@ rawread_db_is_empty( rawread_db_t* rdb )
 
 int 
 get_next_mappable_read_from_rawread_db( 
-    rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, long* readkey,
     rawread** r1, rawread** r2 )
 {
     int rv = -10;
@@ -517,7 +517,7 @@ get_next_mappable_read_from_rawread_db(
 
 int
 get_next_read_from_rawread_db( 
-    rawread_db_t* rdb, long* readkey, 
+    struct rawread_db_t* rdb, long* readkey, 
     rawread** r1, rawread** r2 )
 {
     pthread_mutex_lock( rdb->lock );

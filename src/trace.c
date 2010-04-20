@@ -183,6 +183,12 @@ write_wiggle_from_trace( struct trace_t* traces,
                          const double filter_threshold )
 {    
     FILE* wfp = fopen( output_fname, "w" );
+    if( wfp == NULL )
+    {
+        perror( "FATAL        : Could not open wiggle file for writing " );
+        assert( 0 );
+        exit( -1 );
+    }
 
     int track_index, j;
     unsigned int k;

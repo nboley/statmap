@@ -84,7 +84,7 @@ enum inputfile_type {
     FASTQ = 1
 };
 
-typedef struct {
+struct rawread_db_t {
     /* 
        This 'db' is functioning as both a cursor and a db. Therefore, 
        readkey stores the key of the current read. Calling get_next_read
@@ -108,39 +108,39 @@ typedef struct {
     FILE* non_mapping_paired_end_2_reads;
 
     enum inputfile_type file_type;
-} rawread_db_t;
+};
 
 void 
-init_rawread_db( rawread_db_t** rdb );
+init_rawread_db( struct rawread_db_t** rdb );
 
 void 
-close_rawread_db( rawread_db_t* rdb );
+close_rawread_db( struct rawread_db_t* rdb );
 
 void
 add_single_end_reads_to_rawread_db( 
-    rawread_db_t* rdb, char* rifname, 
+    struct rawread_db_t* rdb, char* rifname, 
     enum inputfile_type iftype );
 
 void
 add_paired_end_reads_to_rawread_db( 
-    rawread_db_t* rdb,
+    struct rawread_db_t* rdb,
     char* rifname1, char* rifname2,
     enum inputfile_type iftype );
 
 void
-rewind_rawread_db( rawread_db_t* rdb );
+rewind_rawread_db( struct rawread_db_t* rdb );
 
 enum bool
-rawread_db_is_empty( rawread_db_t* rdb );
+rawread_db_is_empty( struct rawread_db_t* rdb );
 
 int
 get_next_mappable_read_from_rawread_db( 
-    rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, long* readkey,
     rawread** r1, rawread** r2 );
 
 int
 get_next_read_from_rawread_db( 
-    rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, long* readkey,
     rawread** r1, rawread** r2 );
 
 /**************** END Raw Read DB **********************/

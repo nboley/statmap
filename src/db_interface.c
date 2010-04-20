@@ -73,7 +73,7 @@ init_candidate_mappings_db( candidate_mappings_db* db,
         }            
     } else {
         cmdir_name = candidate_mappings_prefix;
-        int rv = mkdir( cmdir_name, 755 );
+        int rv = mkdir( cmdir_name, S_IRWXU | S_IRWXG | S_IRWXO );
         if( rv != 0 )
         {
             fprintf( stderr,
