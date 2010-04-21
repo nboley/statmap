@@ -79,8 +79,9 @@ typedef struct {
     float max_penalty_spread;
     int min_num_hq_bps;
 
-    int indexed_seq_len;
+    int num_starting_locations;
 
+    int indexed_seq_len;
     int num_threads;
         
     input_file_type_t input_file_type;

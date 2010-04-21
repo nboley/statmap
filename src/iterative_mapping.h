@@ -46,6 +46,7 @@ update_mapping(
     struct mapped_reads_db* rdb,
     struct trace_t* starting_trace,
     int max_num_iterations,
+    float max_prb_change_for_convergence,
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
@@ -84,6 +85,7 @@ sample_random_traces(
 
     int num_samples,
     int max_num_iterations,
+    float max_prb_change_for_convergence,
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
@@ -153,6 +155,9 @@ enum assay_type_t;
 int
 generic_update_mapping( struct mapped_reads_db* rdb, 
                         struct genome_data* genome,
-                        enum assay_type_t       );
+                        enum assay_type_t,
+                        int num_samples,
+                        float max_prb_change_for_convergence);
+
 
 #endif

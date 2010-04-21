@@ -108,7 +108,7 @@ update_mapped_reads_from_trace(
 {    
     /* store the total accumulated error */
     double abs_error = 0;
-
+    
     /* 
      * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
      * variable. I dont understand why, but I am a bit nervous because the spec used to
@@ -118,6 +118,7 @@ update_mapped_reads_from_trace(
      */
     long long k;
     const int chunk = 10000;
+    /* Hand reduce the max */
     #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( num_threads )
     for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
@@ -130,11 +131,10 @@ update_mapped_reads_from_trace(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (mapped_read_location*) read_start;
-
-        abs_error += update_mapped_read_prbs( traces, &r );        
+        
+        abs_error += update_mapped_read_prbs( traces, &r );
     }
-    
-
+        
     return abs_error;
 }
 
@@ -143,7 +143,7 @@ update_mapping(
     struct mapped_reads_db* rdb,
     struct trace_t* starting_trace,
     int max_num_iterations,
-    
+    float max_prb_change_for_convergence,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
         const mapped_read_location* const loc),
@@ -179,7 +179,7 @@ update_mapping(
                  sum_traces( starting_trace )/rdb->num_mmapped_reads
             );
         
-        if( abs_error < 1e-2 )
+        if( abs_error < max_prb_change_for_convergence )
             break;
     }
     
@@ -285,7 +285,8 @@ sample_random_traces(
 
     int num_samples,
     int max_num_iterations,
-    
+    float max_prb_change_for_convergence,
+
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
         const mapped_read_location* const loc),
@@ -324,12 +325,13 @@ sample_random_traces(
             write_wiggle_from_trace(
                 sample_trace, 
                 genome->chr_names, track_names,
-                buffer, 1e-2 );
+                buffer, max_prb_change_for_convergence );
         }
         
         /* update the mapping */
         update_mapping( 
             rdb, sample_trace, max_num_iterations,
+            max_prb_change_for_convergence,
             update_trace_expectation_from_location,
             update_mapped_read_prbs
         );
@@ -342,7 +344,7 @@ sample_random_traces(
             write_wiggle_from_trace( 
                 sample_trace, 
                 genome->chr_names, track_names,
-                buffer, 1e-2 );
+                buffer, max_prb_change_for_convergence );
         }
 
         aggregate_over_traces( max_trace, sample_trace, max );
@@ -357,7 +359,8 @@ sample_random_traces(
     write_wiggle_from_trace( 
         max_trace, 
         genome->chr_names, track_names,
-        "max_trace.wig", 1e-2 );
+        "max_trace.wig", 
+        max_prb_change_for_convergence );
 
     close_traces( max_trace );
     
@@ -365,7 +368,8 @@ sample_random_traces(
     write_wiggle_from_trace( 
         min_trace, 
         genome->chr_names, track_names,
-        "min_trace.wig", 1e-2 );
+        "min_trace.wig", 
+        max_prb_change_for_convergence );
     
     close_traces( min_trace );
     
@@ -581,7 +585,8 @@ void update_CAGE_trace_expectation_from_location(
     return;
 }
 
-double update_CAGE_mapped_read_prbs( 
+inline double 
+update_CAGE_mapped_read_prbs( 
     const struct trace_t* const traces, 
     const mapped_read* const r  )
 {
@@ -680,10 +685,11 @@ double update_CAGE_mapped_read_prbs(
 int
 generic_update_mapping( struct mapped_reads_db* rdb, 
                         struct genome_data* genome,
-                        enum assay_type_t assay_type      )
+                        enum assay_type_t assay_type,
+                        int num_samples,
+                        float max_prb_change_for_convergence)
 {
-    const int max_num_iterations = 10;
-    const int num_samples = 3;
+    const int max_num_iterations = 500;
 
     int error = 0;
     
@@ -741,6 +747,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         rdb, 
         uniform_trace,
         max_num_iterations,
+        max_prb_change_for_convergence,
         update_expectation,
         update_reads
     );
@@ -748,7 +755,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     write_wiggle_from_trace( 
         uniform_trace, 
         genome->chr_names, track_names,
-        "relaxed_mapping.wig", 1e-2 );
+        "relaxed_mapping.wig", max_prb_change_for_convergence );
         
     close_traces( uniform_trace );
     
@@ -756,6 +763,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         rdb, genome, 
         trace_size, track_names,
         num_samples, max_num_iterations, 
+        max_prb_change_for_convergence,
         update_expectation, update_reads
     );
 

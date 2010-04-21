@@ -61,15 +61,21 @@ The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this arg
 is set, then the data will be mapped iteratively. If not, then only the marginal mappings
 will be produced.
 
+-n : the number of samples to take
+
+This is the number of samples to take from the mapping posterior. This defaults to 10 ( there
+is absolutely no basis for that )
+
 -t : Number of threads
 
 Defaults to all available threads.
 
--m : Min number of HQ basepairs
+-q : Min number of HQ basepairs
 
 We require a certain number of HQ ( above 99% prob correct ) before we try and map 
 a read. This ends up being necessary for computational reasons, but there is no 
-limit on how low it can be set. 
+limit on how low it can be set. This defaults to MAX( 12, (8 + indexed_seq_len/2) ),
+which, empirically, gives a reasonable mix of performance and thoroughness.
 
 -f : The fragment length distribution. 
 
@@ -92,7 +98,7 @@ necessarily correct - so be careful.
 
 Arguments that you probably dont want to touch unless you know what you are doing:
 
--s : Indexed sequence length
+-i : Indexed sequence length
 -l : ( DEBUG ) debugging  log file
 -c : ( DEBUG ) candidate mapping db directory
 

@@ -205,6 +205,8 @@ parse_arguments( int argc, char** argv )
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
+    args.num_starting_locations = 10;
+
     args.num_threads = -1;
     args.indexed_seq_len = -1;
     
@@ -248,19 +250,23 @@ parse_arguments( int argc, char** argv )
             assay_name = optarg;
             break;
 
-        case 'n': // snp input file
+        case 's': // snp input file
             args.snpcov_fname = optarg;
             break;
 
-        case 't': // number of threads
-            args.num_threads = atoi( optarg );
-            break;
         case 'q': // min number of HQ basepairs
             args.min_num_hq_bps = atoi( optarg );
             break;
+        case 'n': // number of starting locations
+            args.num_starting_locations = atoi(optarg);
+            break;
+        
+        case 't': // number of threads
+            args.num_threads = atoi( optarg );
+            break;
             
         /* optional arguments ( that you probably dont want ) */
-        case 's': // indexed sequence length
+        case 'i': // indexed sequence length
                   // defaults to the read length of the first read
             args.indexed_seq_len = atoi(optarg);
             break;
@@ -594,7 +600,8 @@ map_marginal( args_t* args, struct genome_data* genome )
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
-    generic_update_mapping( mpd_rds_db, genome, args->assay_type  );
+    generic_update_mapping( mpd_rds_db, genome, args->assay_type,
+                            args->num_starting_locations, 1e-2);
     
     /* Write the mapped reads to file */
     FILE* wig_fp = fopen( "marginal_mapping.wig", "w+" );

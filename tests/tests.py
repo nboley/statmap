@@ -810,7 +810,7 @@ def test_snps( read_len, num_snps = 10 ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -n tmp.snpcov \
+    call = "%s -g tmp.genome -r tmp.fastq -s tmp.snpcov \
                              -p %.2f -m %.2f \
                              -t 1 " % ( STATMAP_PATH, -10.0, 0.50 )
         

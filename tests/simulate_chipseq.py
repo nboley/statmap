@@ -207,7 +207,7 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -p %.2f -m %.2f \
+                             -p %.2f -m %.2f -n 100 \
                              " % ( sc.STATMAP_PATH, -10, 2 )
     if iterative:
         call += " -a i"
@@ -239,7 +239,7 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     raw_input()
 
 def build_all_wiggles( mutations, do_marginal=True ):
-    all_mutations = [ 0, ]
+    all_mutations = [ ]
     all_mutations.extend( mutations )
     for mr in all_mutations:
         if do_marginal:
@@ -318,10 +318,10 @@ def plot_wig_bounds( dir, png_fname):
     region = build_chipseq_region( )
     genome = { 'chr2L': region + region }
 
-    rpy.r.png( png_fname, width=1900, height=750 )
+    curr_dir = os.getcwd()
+    rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750 )
 
     fnames = []
-    curr_dir = os.getcwd()
     os.chdir(dir)
     for file in os.listdir('.'):
         if fnmatch.fnmatch(file, '*.wig'):
@@ -352,10 +352,13 @@ def plot_wig_bounds( dir, png_fname):
 
 
 if __name__ == '__main__':
-    mutations = [] # [ 1, 10, 25, 100, 1000  ]
+    mutations = [2,] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
     plot_wig_bounds( "./statmap_output/samples/", "relaxed_samples.png")
     plot_wig_bounds( "./statmap_output/starting_samples/", "starting_samples.png")
+    if sc.CLEANUP:
+        subprocess.call( "rm tmp.*", shell=True )
+        subprocess.call( "rm ./statmap_output/ -rf", shell=True )
     sys.exit( -1 )
 
     mutations = [] # [ 1, 10, 25, 100, 1000  ]

@@ -20,8 +20,6 @@ cmp_snp( const void* void_snp1, const void* void_snp2 );
 void
 fprintf_snp( FILE* fp, snp_t* snp );
 
-struct snp_db_t;
-
 /********************************************************************************
  * Methods for dealing with the snp database ( for now just a sorted array )
  *
