@@ -5,7 +5,7 @@
 
 #include "genome.h"
 #include "rawread.h"
-#include "db_interface.h" 
+#include "candidate_mapping.h"
 
 struct single_map_thread_data {
     int thread_id;

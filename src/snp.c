@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "snp.h"
+#include "mapped_read.h"
 #include "quality.h"
 #include "index_genome.h"
 
@@ -326,7 +327,7 @@ update_snp_estimates_from_candidate_mappings(
     }
 
     /* update the counts */
-    mapped_read* rd;    
+    struct mapped_read_t* rd;    
     rewind_mapped_reads_db( rdb );
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {

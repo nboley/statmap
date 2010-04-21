@@ -81,7 +81,7 @@ update_traces_from_mapped_reads(
         char* read_start = reads_db->mmapped_reads_starts[i];
 
         /* read a mapping into the struct */
-        mapped_read r;
+        struct mapped_read_t r;
         r.read_id = *((unsigned long*) read_start);
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
@@ -103,7 +103,7 @@ update_mapped_reads_from_trace(
     struct mapped_reads_db* reads_db,
     struct trace_t* traces,
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const mapped_read* const r  )
+                                              const struct mapped_read_t* const r  )
     )
 {    
     /* store the total accumulated error */
@@ -125,7 +125,7 @@ update_mapped_reads_from_trace(
         char* read_start = reads_db->mmapped_reads_starts[k];
 
         /* read a mapping into the struct */
-        mapped_read r;
+        struct mapped_read_t r;
         r.read_id = *((unsigned long*) read_start);
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
@@ -154,7 +154,7 @@ update_mapping(
         const mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const mapped_read* const r  )
+                                              const struct mapped_read_t* const r  )
     )
 {
     clock_t start, stop;
@@ -201,7 +201,7 @@ build_random_starting_trace(
         const mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const mapped_read* const r  )
+                                              const struct mapped_read_t* const r  )
     )
 {
     /* zero traces */
@@ -222,7 +222,7 @@ build_random_starting_trace(
         char* read_start = rdb->mmapped_reads_starts[i];
         
         /* read a mapping into the struct */
-        mapped_read r;
+        struct mapped_read_t r;
         r.read_id = *((unsigned long*) read_start);
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
@@ -297,7 +297,7 @@ sample_random_traces(
         const mapped_read_location* const loc),
     
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const mapped_read* const r  )
+                                              const struct mapped_read_t* const r  )
                           
 )
 {
@@ -457,7 +457,7 @@ update_chipseq_trace_expectation_from_location(
 
 double 
 update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
-                                 const mapped_read* const r  )
+                                 const struct mapped_read_t* const r  )
 {
     double abs_error = 0;
     
@@ -594,7 +594,7 @@ void update_CAGE_trace_expectation_from_location(
 inline double 
 update_CAGE_mapped_read_prbs( 
     const struct trace_t* const traces, 
-    const mapped_read* const r  )
+    const struct mapped_read_t* const r  )
 {
     double abs_error = 0;
     
@@ -711,7 +711,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         = NULL;
     
     double (*update_reads)( const struct trace_t* const traces, 
-                            const mapped_read* const r  )
+                            const struct mapped_read_t* const r  )
         = NULL;
 
     #define CAGE_TRACK_NAMES {"fwd_strnd_reads", "rev_strnd_reads"}

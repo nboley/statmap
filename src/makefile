@@ -1,9 +1,10 @@
 
-compile_options = -O0 -g --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O3 -g --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
-objects = statmap.o db_interface.o genome.o index_genome.o rawread.o sequences_node.o \
+objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
-	  iterative_mapping.o snp.o trace.o
+	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
+	  fragment_length.o
 
 all: statmap
 
@@ -14,7 +15,7 @@ statmap : $(objects)
 	-lm -lpthread --openmp
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
-	index_genome.h db_interface.h quality.h config.h snp.h
+	index_genome.h quality.h config.h snp.h
 	gcc $(compile_options) -c statmap.c
 
 snp.o : snp.c snp.h genome.h config.h
@@ -24,7 +25,7 @@ find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h 
 			    quality.h index_genome.h snp.h
 	gcc $(compile_options) -c find_candidate_mappings.c
 
-find_candidate_mappings.h : genome.h rawread.h db_interface.h
+find_candidate_mappings.h : genome.h rawread.h 
 
 #############################################################################
 #
@@ -56,17 +57,17 @@ rawread.h : config.h
 mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
 	gcc $(compile_options) -c mapped_location.c
 
-mapped_location.h : config.h genome.h rawread.h candidate_mapping.h
+mapped_location.h : 
+
+mapped_read.o : mapped_read.c mapped_read.h trace.h fragment_length.h fragment_length.o iterative_mapping.h 
+	gcc $(compile_options) -c mapped_read.c
+
+mapped_read.h : iterative_mapping.h trace.h
 
 candidate_mapping.o : candidate_mapping.c candidate_mapping.h
 	gcc $(compile_options) -c candidate_mapping.c
 
 candidate_mapping.h : rawread.h
-
-db_interface.o : db_interface.c db_interface.h mapped_location.h
-	gcc $(compile_options) -c db_interface.c
-
-db_interface.h : mapped_location.h
 
 
 #############################################################################
@@ -99,6 +100,12 @@ trace.o: trace.c trace.h
 	gcc $(compile_options) -c trace.c
 
 trace.h:
+
+fragment_length.o: fragment_length.c fragment_length.h
+	gcc $(compile_options) -c fragment_length.c
+
+fragment_length.h: config.h
+
 
 quality.o : config.h quality.h
 	gcc $(compile_options) -c quality.c

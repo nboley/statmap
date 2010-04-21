@@ -17,9 +17,9 @@
 #include "statmap.h"
 #include "find_candidate_mappings.h"
 #include "index_genome.h"
-#include "db_interface.h"
 #include "quality.h"
 #include "iterative_mapping.h"
+#include "candidate_mapping.h"
 
 /* fwd declaration */
 struct snp_db_t;
@@ -195,6 +195,9 @@ parse_arguments( int argc, char** argv )
 
     args.snpcov_fname = NULL;
     args.snpcov_fp = NULL;
+
+    args.frag_len_fname = NULL;
+    args.frag_len_fp = NULL;
     
     args.output_directory = NULL;
     
@@ -585,6 +588,15 @@ map_marginal( args_t* args, struct genome_data* genome )
     
     struct mapped_reads_db* mpd_rds_db;
     init_mapped_reads_db( &mpd_rds_db, "mapped_reads.db" );
+
+    if( args->frag_len_fp != NULL )
+        build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
+    if( NULL != args->unpaired_reads_fnames 
+        && args->assay_type == CHIP_SEQ )
+    {
+        fprintf(stderr, "FATAL       :  Can not map single end chip-seq reads unless a FL dist is provided\n");
+        exit(-1);
+    }
 
     /***** END initialize the mappings dbs */
     

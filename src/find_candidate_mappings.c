@@ -240,51 +240,7 @@ find_candidate_mappings( void* params )
             for( i = 0; i < mappings->length; i++ )
             {
                 /* recheck location */
-
-/* 
-   I dont know if this is correct ( actually, I'm pretty sure that it is not ) 
-   but I dont know where else to put this 
-*/
-#if 0              
-                /* FIXME
-                   For now we assume that there arent too many snps. But, in the 
-                   future we may need to do a full recheck if the number of snps is
-                   greater than MAX_NUM_SNPS
-                */
-                if( (mappings->mappings + i)->recheck == COVERS_SNP )
-                {
-                    int num_snps;
-                    snp_t* snps;
-
-                    find_snps_in_snp_db( 
-                        genome->snp_db, 
-                        (mappings->mappings + i)->chr,
-                        (mappings->mappings + i)->start_bp,
-                        (mappings->mappings + i)->start_bp
-                        + (mappings->mappings + i)->rd_len,
-                        &num_snps,
-                        &snps
-                    );
-
-                    /* TODO optimize this to use a bitshift at each loop */
-                    int snp_index; 
-                    for( snp_index = 0; snp_index < num_snps; snp_index++ )
-                    {                        
-                        /* If the correct bit is set */
-                        /* We cap the min penalties to enable the fast math optimizations */
-                        if( (template_candidate_mapping.snp_bitfield&(1<<snp_index)) > 0 ) 
-                        {
-                            (mappings->mappings + i)->penalty 
-                                += MAX( -1e10, log10(snps[snp_index].alt_frac) );
-                            snps[snp_index].alt_cnt += pow( 10, (mappings->mappings + i)->penalty ) ;
-                        } else {
-                            (mappings->mappings + i)->penalty 
-                                += MAX( -1e10, log10(1-snps[snp_index].alt_frac) );
-                            snps[snp_index].ref_cnt += pow( 10,  (mappings->mappings + i)->penalty ) ;
-                        }
-                    }                    
-                }
-#endif
+                
                 
                 /* recheck penalty */
                 /* 

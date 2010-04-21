@@ -2,13 +2,18 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include "statmap.h"
 #include "candidate_mapping.h"
+#include "mapped_read.h"
+
+struct mapped_read_t;
 
 /*********************************************************************************
  *
@@ -669,7 +674,7 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     long read_key;
     
     candidate_mappings* mappings;
-    mapped_read* mpd_rd;
+    struct mapped_read_t* mpd_rd;
 
     /* Get the first read */
     error = get_next_candidate_mapping_from_cursor( 

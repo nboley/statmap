@@ -3,6 +3,8 @@
 #ifndef READS_HEADER
 #define READS_HEADER
 
+#include <pthread.h>
+
 #include "config.h"
 
 /* 
