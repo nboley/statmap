@@ -1,5 +1,5 @@
 
-compile_options = -O3 --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O0 -g --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o db_interface.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
@@ -26,26 +26,53 @@ find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h 
 
 find_candidate_mappings.h : genome.h rawread.h db_interface.h
 
+#############################################################################
+#
+# Iterative Mapping
+#
+
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h
 	gcc $(compile_options) --openmp -c iterative_mapping.c
 
 iterative_mapping.h : config.h genome.h trace.h
 
-trace.o: trace.c trace.h
-	gcc $(compile_options) -c trace.c
-
-trace.h:
+#############################################################################
+#
+# Data type objects
+#
+# 0) raw_read - the totally unmapped reads
+# 1) mapped_locations - data returned byt the index search methods
+# 2) candidate_mappings - mapped_locations with meta information
+# 3) mapped_read - the joined cnadidate mappings
+#
 
 # utility objects
+
+rawread.o : rawread.c config.h rawread.h quality.h dna_sequence.h
+	gcc $(compile_options) -c rawread.c
+
+rawread.h : config.h
+
+mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
+	gcc $(compile_options) -c mapped_location.c
+
+mapped_location.h : config.h genome.h rawread.h candidate_mapping.h
+
+candidate_mapping.o : candidate_mapping.c candidate_mapping.h
+	gcc $(compile_options) -c candidate_mapping.c
+
+candidate_mapping.h : rawread.h
+
 db_interface.o : db_interface.c db_interface.h mapped_location.h
 	gcc $(compile_options) -c db_interface.c
 
 db_interface.h : mapped_location.h
 
-mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
-	gcc $(compile_options) -c mapped_location.c
 
-mapped_location.h : config.h genome.h rawread.h
+#############################################################################
+#
+# Index ( and related ) Files
+#
 
 index_genome.o : index_genome.c index_genome.h quality.h
 	gcc $(compile_options) -c index_genome.c
@@ -60,10 +87,18 @@ sequences_node.h : config.h mapped_location.h
 genome.o : genome.c genome.h index_genome.h
 	gcc $(compile_options) -c genome.c
 
-rawread.o : rawread.c config.h rawread.h quality.h dna_sequence.h
-	gcc $(compile_options) -c rawread.c
+genome.h : 
 
-rawread.h : config.h
+#############################################################################
+#
+# Utility objects
+#
+
+# Store traces across the gnome ( like wiggles )
+trace.o: trace.c trace.h
+	gcc $(compile_options) -c trace.c
+
+trace.h:
 
 quality.o : config.h quality.h
 	gcc $(compile_options) -c quality.c

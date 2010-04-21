@@ -119,7 +119,7 @@ update_mapped_reads_from_trace(
     long long k;
     const int chunk = 10000;
     /* Hand reduce the max */
-    #pragma omp parallel for schedule(dynamic, chunk) reduction(+:abs_error) num_threads( num_threads )
+#pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
     for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[k];
@@ -131,8 +131,13 @@ update_mapped_reads_from_trace(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (mapped_read_location*) read_start;
-        
-        abs_error += update_mapped_read_prbs( traces, &r );
+
+        double tmp_abs_error= update_mapped_read_prbs( traces, &r );
+        if( tmp_abs_error > abs_error )
+        {
+            #pragma omp critical
+            abs_error = tmp_abs_error;
+        }
     }
         
     return abs_error;
@@ -578,7 +583,8 @@ void update_CAGE_trace_expectation_from_location(
         else {
             trace = traces->traces[1];
         }
-        
+
+        #pragma omp atomic
         trace[ chr_index ][ start ] += cond_prob; 
     }
     

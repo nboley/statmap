@@ -253,7 +253,10 @@ parse_arguments( int argc, char** argv )
         case 's': // snp input file
             args.snpcov_fname = optarg;
             break;
-
+        case 'f': // fragment length file
+            args.frag_len_fname = optarg;
+            break;
+        
         case 'q': // min number of HQ basepairs
             args.min_num_hq_bps = atoi( optarg );
             break;
@@ -423,9 +426,20 @@ parse_arguments( int argc, char** argv )
         if( NULL == args.snpcov_fp )
         {
             fprintf( stderr, "FATAL       :  Failed to open '%s'\n", args.snpcov_fname );
-            exit( 1 );
+            exit( -1 );
         }
     }
+
+    if( args.frag_len_fname != NULL )
+    {
+        args.frag_len_fp = fopen( args.log_fname, "r" );
+        if( NULL == args.frag_len_fp )
+        {
+            fprintf( stderr, "FATAL       :  Failed to open '%s'\n", args.frag_len_fname );
+            exit( -1 );
+        }    
+    }
+
 
     /* change the working directory to the output directory */
     error = chdir( args.output_directory );
@@ -478,7 +492,7 @@ parse_arguments( int argc, char** argv )
     /***** END initialize the read db */
 
 
-    /* If we didnt set the number of threads, default to 1 */
+    /* If we didnt set the number of threads, set it to the maximum available */
     if( args.num_threads == -1 )
     {
         /* try to get the number of available threads from the os */
@@ -515,7 +529,7 @@ parse_arguments( int argc, char** argv )
     /* initialize the log file */
     if( args.log_fname != NULL )
         args.log_fp = fopen( args.log_fname, "a");
-
+    
     /* set the min num hq basepairs if it's unset */
     if( args.min_num_hq_bps == -1 )
     {
@@ -566,11 +580,11 @@ map_marginal( args_t* args, struct genome_data* genome )
     
     /***** initialize the mappings dbs */
     
-    candidate_mappings_db mappings_db;
-    init_candidate_mappings_db( &mappings_db, "candidate_mappings" );
+    candidate_mappings_db candidate_mappings;
+    init_candidate_mappings_db( &candidate_mappings, "candidate_mappings" );
     
     struct mapped_reads_db* mpd_rds_db;
-    init_mapped_reads_db( &mpd_rds_db, "test.mapped_reads_db" );
+    init_mapped_reads_db( &mpd_rds_db, "mapped_reads.db" );
 
     /***** END initialize the mappings dbs */
     
@@ -580,7 +594,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     find_all_candidate_mappings( genome,
                                  args->log_fp,
                                  args->rdb,
-                                 &mappings_db,
+                                 &candidate_mappings,
                                  args->min_match_penalty,
                                  args->max_penalty_spread,
                                  args->indexed_seq_len );
@@ -591,7 +605,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     start = clock();
-    join_all_candidate_mappings( &mappings_db, mpd_rds_db );
+    join_all_candidate_mappings( &candidate_mappings, mpd_rds_db );
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
@@ -642,7 +656,7 @@ cleanup:
     
     /*  close candidate mappings db */
     /*  This removes the temporary files as well */
-    close_candidate_mappings_db( &mappings_db );
+    close_candidate_mappings_db( &candidate_mappings );
 
     /* Close the packed mapped reads db */
     close_mapped_reads_db( mpd_rds_db );

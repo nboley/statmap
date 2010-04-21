@@ -3,9 +3,6 @@
 #ifndef GENOME
 #define GENOME
 
-// #include "index_genome.h"
-// #include "snp.h"
-
 /* 
  * Eventually we may want indexes to pluggable, providing for multiple types ( or
  * for instance, some on disk, etc. ). To this end, we define some generic index

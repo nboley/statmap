@@ -68,6 +68,9 @@ typedef struct {
     char* snpcov_fname;
     FILE* snpcov_fp;
 
+    char* frag_len_fname;
+    FILE* frag_len_fp;
+
     char* output_directory;
 
     char* sam_output_fname;
