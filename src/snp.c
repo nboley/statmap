@@ -334,7 +334,7 @@ update_snp_estimates_from_candidate_mappings(
         int i;
         for( i = 0; i < rd->num_mappings; i++ )
         {
-            mapped_read_location* loc = rd->locations + i;
+            struct mapped_read_location* loc = rd->locations + i;
             if( ( loc->flag & FIRST_READ_COVERS_SNP ) > 0 )
             {
                 int num_snps;

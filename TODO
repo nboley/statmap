@@ -1,9 +1,14 @@
--17) Add max number of iterations options
--16) Use sensible limits for convergence
+X -17) Add max number of iterations options
+M -16) Use sensible limits for convergence
+M ( MOVED TO USING MAX CHANGE )
 -15) Write code to parse and store prior fragment length distribution
 -15b) Write code to infer fragment lengths forom uniquely mapped paired end reads
 -14) write method to reset read conditional prbs
-X -13.9) Split out trace writing code
+-13) use locking, threads for iterative mapping
+-12) write lhd code
+-11) get rif of include rawread.h in candidate_mapping.h, use FWD declaration, 
+X -10) remove include candidate_mapping.h from mapped_read
+X -13) Split out trace writing code
 X -13) FIX BUG that overcounts ( i think ) the number of reads during the mmaped indexing
 X -12) raise error for too short reads
 X -11.5) print out nonmapping reads to fastq.nonmapping

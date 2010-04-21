@@ -38,7 +38,7 @@ max( TRACE_TYPE a, TRACE_TYPE b )
 void
 naive_update_trace_expectation_from_location( 
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc )
+    const struct mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
     unsigned int start = loc->start_pos;
@@ -58,7 +58,7 @@ update_traces_from_mapped_reads(
     struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc)
+        const struct mapped_read_location* const loc)
 )
 {    
     /* zero traces */
@@ -86,7 +86,7 @@ update_traces_from_mapped_reads(
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (mapped_read_location*) read_start;
+        r.locations = (struct mapped_read_location*) read_start;
         
         /* Update the trace from this mapping */
         unsigned int j;
@@ -130,7 +130,7 @@ update_mapped_reads_from_trace(
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (mapped_read_location*) read_start;
+        r.locations = (struct mapped_read_location*) read_start;
 
         double tmp_abs_error= update_mapped_read_prbs( traces, &r );
         if( tmp_abs_error > abs_error )
@@ -151,7 +151,7 @@ update_mapping(
     float max_prb_change_for_convergence,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -198,7 +198,7 @@ build_random_starting_trace(
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -227,7 +227,7 @@ build_random_starting_trace(
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (mapped_read_location*) read_start;
+        r.locations = (struct mapped_read_location*) read_start;
 
         /* reset the read cond prbs under a uniform prior */
         reset_read_cond_probs( &r  );
@@ -294,7 +294,7 @@ sample_random_traces(
 
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
     
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -398,7 +398,7 @@ sample_random_traces(
 void 
 update_chipseq_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc )
+    const struct mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
     unsigned char flag = loc->flag;
@@ -542,7 +542,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
 
 void update_CAGE_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc )
+    const struct mapped_read_location* const loc )
 {
     int chr_index = loc->chr;
     unsigned char flag = loc->flag;
@@ -707,7 +707,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
 
     void (*update_expectation)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc) 
+        const struct mapped_read_location* const loc) 
         = NULL;
     
     double (*update_reads)( const struct trace_t* const traces, 
@@ -739,8 +739,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         break;
     
     default:
-        fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'.\n", assay_type);
-        fprintf( stderr, "WARNING     :      Returning marginal mappings.\n" );
+        fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'. Returning marginal mappings.\n", assay_type);
         return 1;
         break;
     }

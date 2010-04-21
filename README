@@ -203,7 +203,7 @@ list.
 
 OUTPUT THAT YOU PROBABLY DONT CARE ABOUT-
 
-mapped_reads.db -
+mapped_reads.db - 
 
 A binary file with all of the mapped reads. The SAM stores the same information. 
 

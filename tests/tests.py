@@ -24,7 +24,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -923,4 +923,5 @@ if __name__ == '__main__':
     # test_short_sequences()
     
     if RUN_SLOW_TESTS:
+        print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
         test_lots_of_repeat_sequence_finding( )

@@ -686,7 +686,7 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     while( CURSOR_EMPTY != error ) 
     {
         build_mapped_read_from_candidate_mappings( 
-            mappings, &mpd_rd, read_key );
+            mappings, &mpd_rd, mpd_rds_db->fl_dist, read_key );
         
         add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
 

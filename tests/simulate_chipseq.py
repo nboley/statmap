@@ -12,6 +12,9 @@ import subprocess
 
 import tests as sc # for simulation code
 
+NUM_READS = 1000
+NUM_SAMPLES = 100
+
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
 bp_index = { 'A': 0, 'C': 1, 'G': 2, 'T': 3 }
@@ -178,7 +181,7 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     region = build_chipseq_region( )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
-    fragments = build_fragments( region, bind_prbs, 5000 )
+    fragments = build_fragments( region, bind_prbs, NUM_READS )
     
     genome = { 'chr2L': region }
     
@@ -207,8 +210,8 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -p %.2f -m %.2f -n 100 \
-                             " % ( sc.STATMAP_PATH, -10, 2 )
+                             -p %.2f -m %.2f -n %i \
+                             " % ( sc.STATMAP_PATH, -10, 2, NUM_SAMPLES )
     if iterative:
         call += " -a i"
         
@@ -252,7 +255,7 @@ def plot_all_wiggles( mutations ):
     genome = { 'chr2L': region + region }
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
-    fragments = build_fragments( region, bind_prbs, 5000 )
+    fragments = build_fragments( region, bind_prbs, NUM_READS )
 
     true_density = numpy.zeros( 2*len( region ) )
     for chr, start, stop in fragments:
@@ -320,31 +323,28 @@ def plot_wig_bounds( dir, png_fname):
 
     curr_dir = os.getcwd()
     rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750 )
+    
+    density = parse_wig( "./statmap_output/max_trace.wig", genome )
+    density_max = density.max()
+    density = density/density_max
+    rpy.r.plot( density, type='l', col='black', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2) )
 
     fnames = []
     os.chdir(dir)
     for file in os.listdir('.'):
         if fnmatch.fnmatch(file, '*.wig'):
             fnames.append( file )
-    
-    wig_fname = fnames[0]
-    density = parse_wig( wig_fname, genome )
-    max= density.max()
-    rpy.r.plot( density, type='l', col='black', main='', xlab='', ylab='', lty=4, ylim=(0, 4) )
 
-    for fname in fnames[1:]:
-        density = parse_wig( fname, genome )
+    for fname in fnames:
+        density = parse_wig( fname, genome )/density_max
         rpy.r.points( density, type='l', col='black', main='', xlab='', ylab='', lty=4 )
 
     os.chdir(curr_dir)
-
-    density = parse_wig( "./statmap_output/max_trace.wig", genome )
-    rpy.r.points( density, type='l', col='blue', main='', xlab='', ylab='', lty=4 )
     
-    density = parse_wig( "./statmap_output/min_trace.wig", genome )
+    density = parse_wig( "./statmap_output/min_trace.wig", genome )/density_max
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
 
-    density = parse_wig( "./statmap_output/relaxed_mapping.wig", genome )
+    density = parse_wig( "./statmap_output/relaxed_mapping.wig", genome )/density_max
     rpy.r.points( density, type='l', col='green', main='', xlab='', ylab='', lty=4 )
         
     rpy.r.dev_off()

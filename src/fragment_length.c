@@ -58,7 +58,7 @@ init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp )
         int curr_val;
         float curr_density;
         rv = fscanf( fp, "%i\t%f\n", &curr_val, &curr_density );
-        assert( rv == 1 );
+        assert( rv == 2 );
         (*fl_dist)->density[curr_val-min] = curr_density;
     }
   

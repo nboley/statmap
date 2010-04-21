@@ -219,7 +219,7 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:c:o:p:m:s:l:a:w:t:q:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:c:o:p:m:s:f:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -435,10 +435,12 @@ parse_arguments( int argc, char** argv )
 
     if( args.frag_len_fname != NULL )
     {
-        args.frag_len_fp = fopen( args.log_fname, "r" );
+        args.frag_len_fp = fopen( args.frag_len_fname, "r" );
         if( NULL == args.frag_len_fp )
         {
-            fprintf( stderr, "FATAL       :  Failed to open '%s'\n", args.frag_len_fname );
+            char buffer[500];
+            sprintf( buffer, "FATAL       :  Failed to open '%s' ", args.frag_len_fname );
+            perror( buffer );
             exit( -1 );
         }    
     }

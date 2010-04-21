@@ -21,7 +21,7 @@ struct mapped_read_t;
 void
 naive_update_trace_expectation_from_location( 
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc );
+    const struct mapped_read_location* const loc );
 
 
 void
@@ -30,7 +30,7 @@ update_traces_from_mapped_reads(
     struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc)
+        const struct mapped_read_location* const loc)
 );
 
 
@@ -51,7 +51,7 @@ update_mapping(
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -64,7 +64,7 @@ build_random_starting_trace(
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
 
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -90,7 +90,7 @@ sample_random_traces(
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const mapped_read_location* const loc),
+        const struct mapped_read_location* const loc),
     
     double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                               const struct mapped_read_t* const r  )
@@ -106,7 +106,7 @@ sample_random_traces(
 void 
 update_chipseq_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc );
+    const struct mapped_read_location* const loc );
 
 double 
 update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
@@ -127,7 +127,7 @@ update_chipseq_mapping( struct mapped_reads_db* rdb,
 
 void update_CAGE_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const mapped_read_location* const loc );
+    const struct mapped_read_location* const loc );
 
 double update_CAGE_mapped_read_prbs( 
     const struct trace_t* const traces, 
