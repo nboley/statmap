@@ -24,7 +24,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = True
+P_STATMAP_INPUT = False
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -354,9 +354,6 @@ def build_expected_map_locations_from_repeated_genome( \
             read_stops = [ start + i*chr_len for i in xrange(num_repeats) ]
         return set( read_starts ), set( read_stops )
     
-    assert False
-
-
 ###
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
@@ -527,7 +524,7 @@ def test_paired_end_reads( read_len ):
                 % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
-    
+
     ###### Cleanup the created files ###############################################
     if CLEANUP:
         os.remove("./tmp.genome")

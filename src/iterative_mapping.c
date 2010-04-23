@@ -18,6 +18,7 @@
 #include "mapped_location.h"
 #include "snp.h"
 #include "genome.h"
+#include "fragment_length.h"
 
 static TRACE_TYPE 
 min( TRACE_TYPE a, TRACE_TYPE b )
@@ -119,7 +120,7 @@ update_mapped_reads_from_trace(
     long long k;
     const int chunk = 10000;
     /* Hand reduce the max */
-#pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
+    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
     for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[k];
@@ -133,6 +134,7 @@ update_mapped_reads_from_trace(
         r.locations = (struct mapped_read_location*) read_start;
 
         double tmp_abs_error= update_mapped_read_prbs( traces, &r );
+        /* Hand reduce the max */
         if( tmp_abs_error > abs_error )
         {
             #pragma omp critical
@@ -204,9 +206,9 @@ build_random_starting_trace(
                                               const struct mapped_read_t* const r  )
     )
 {
-    /* zero traces */
-    zero_traces( traces );
-    
+    /* int traces to a low consant. This should heavily favor prior reads. */
+    set_trace_to_uniform( traces, 1e-10 );
+
     /* Update the trace from the reads */
     /* 
      * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
@@ -228,17 +230,17 @@ build_random_starting_trace(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
-
+        
         /* reset the read cond prbs under a uniform prior */
-        reset_read_cond_probs( &r  );
+        reset_read_cond_probs( &r );
         
         /* update the read conditional probabilities from the trace */
         update_mapped_read_prbs( traces, &r );        
-
+        
         /* Choose a random location, and use this */
         unsigned int j;
         float random_num = (float)rand()/(float)RAND_MAX;
-        float cum_dist = 0;
+        double cum_dist = 0;
         for( j = 0; j < r.num_mappings; j++ ) 
         {
             cum_dist += r.locations[j].cond_prob;
@@ -254,13 +256,15 @@ build_random_starting_trace(
         
         /* deal with potential rounding errors */
         /* If this happens, no read would have been added */
-        if( random_num > cum_dist )
+        if( cum_dist > FLT_EPSILON
+            && random_num > cum_dist )
         {
-                float tmp_cond_prb = r.locations[r.num_mappings-1].cond_prob;
-                r.locations[r.num_mappings-1].cond_prob = 1.0;
-                update_trace_expectation_from_location( 
-                    traces, r.locations + r.num_mappings - 1 );
-                r.locations[r.num_mappings-1].cond_prob = tmp_cond_prb;
+            printf( "WARNING - RANDOM TOO BIG %e\n", cum_dist);
+            float tmp_cond_prb = r.locations[r.num_mappings-1].cond_prob;
+            r.locations[r.num_mappings-1].cond_prob = 1.0;
+            update_trace_expectation_from_location( 
+                traces, r.locations + r.num_mappings - 1 );
+            r.locations[r.num_mappings-1].cond_prob = tmp_cond_prb;
         }
     }
     
@@ -465,7 +469,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
     
     /* Update the reads from the trace */
-    double density_sum = 0;
+    /* set to flt_min to avoid division by 0 */
+    double density_sum = FLT_MIN;
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
@@ -502,7 +507,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             }
         }
         
-        new_prbs[i] = r->locations[i].seq_error*window_density;
+        new_prbs[i] = r->locations[i].seq_error*r->locations[i].fl_prob*window_density;
         density_sum += new_prbs[i];
     }
     
@@ -602,7 +607,7 @@ update_CAGE_mapped_read_prbs(
     ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
     
     /* Update the reads from the trace */
-    double density_sum = 0;
+    double density_sum = FLT_EPSILON;
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
@@ -645,7 +650,7 @@ update_CAGE_mapped_read_prbs(
             }
         }
         
-        new_prbs[i] = r->locations[i].seq_error*window_density;
+        new_prbs[i] = r->locations[i].seq_error*r->locations[i].fl_prob*window_density;
         density_sum += new_prbs[i];
     }
     
@@ -665,6 +670,7 @@ update_CAGE_mapped_read_prbs(
                               -normalized_density  + r->locations[i].cond_prob);
             
             r->locations[i].cond_prob = normalized_density;
+            assert( r->locations[i].cond_prob>= 0 );
         }
     }      
     
@@ -699,12 +705,6 @@ generic_update_mapping( struct mapped_reads_db* rdb,
 
     int error = 0;
     
-    /* 
-     * dispatch the correct update function. If no 
-     * update code exists, then print a warning
-     * and return without doing anything. 
-     */
-
     void (*update_expectation)(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc) 
@@ -748,6 +748,9 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     struct trace_t* uniform_trace;
     init_traces( genome, &uniform_trace, trace_size );
 
+    /* reset the read cond prbs under a uniform prior */
+    reset_all_read_cond_probs( rdb );
+
     error = update_mapping (
         rdb, 
         uniform_trace,
@@ -762,8 +765,6 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         genome->chr_names, track_names,
         "relaxed_mapping.wig", max_prb_change_for_convergence );
         
-    close_traces( uniform_trace );
-    
     error = sample_random_traces(
         rdb, genome, 
         trace_size, track_names,
@@ -772,6 +773,12 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         update_expectation, update_reads
     );
 
+    goto cleanup;
+
+cleanup:
+
+    close_traces( uniform_trace );
+    
     return 0;
     
 }

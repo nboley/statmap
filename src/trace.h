@@ -29,6 +29,9 @@ void
 zero_traces( struct trace_t* traces );
 
 void
+set_trace_to_uniform( struct trace_t* traces, double value );
+
+void
 aggregate_over_traces(  struct trace_t* update_trace, 
                         const struct trace_t* const other_trace,
                         TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )

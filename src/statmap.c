@@ -20,6 +20,7 @@
 #include "quality.h"
 #include "iterative_mapping.h"
 #include "candidate_mapping.h"
+#include "fragment_length.h"
 
 /* fwd declaration */
 struct snp_db_t;
@@ -200,6 +201,8 @@ parse_arguments( int argc, char** argv )
     args.frag_len_fp = NULL;
     
     args.output_directory = NULL;
+    
+    args.sam_output_fname = NULL;
     
     args.log_fname = NULL;
     args.log_fp = NULL;
@@ -623,11 +626,33 @@ map_marginal( args_t* args, struct genome_data* genome )
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
+
+    /* estimate the fragment length distribution */
+    /* if necessary. and if there are paired reads */
+    if( args->frag_len_fp == NULL 
+        && args->pair1_reads_fnames != NULL )
+        estimate_fl_dist_from_mapped_reads( mpd_rds_db );
+
+
+    /* write the estimated FL distribution to file */
+    if( NULL != mpd_rds_db->fl_dist )
+    {
+        FILE* fp = fopen( "estimated_fl_dist.txt", "w" );
+        if( fp == NULL )
+        {
+            perror( "ERROR       :  Can not open 'estimated_fl_dist.txt' for writing " );
+        } else {
+            fprint_fl_dist( fp, mpd_rds_db->fl_dist );
+            fclose( fp );
+        }
+    }
+
     
     /* Iterative mapping */
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
+    set_all_read_fl_probs( mpd_rds_db );
     generic_update_mapping( mpd_rds_db, genome, args->assay_type,
                             args->num_starting_locations, 1e-2);
     

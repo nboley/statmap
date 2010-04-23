@@ -12,6 +12,8 @@
 void
 init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
 {
+    assert( max_fl >= min_fl );
+
     *fl_dist = malloc(sizeof(struct fragment_length_dist_t));
     (*fl_dist)->min_fl = min_fl;
     (*fl_dist)->max_fl = max_fl;
@@ -19,7 +21,9 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
     (*fl_dist)->density = calloc( max_fl - min_fl + 1, sizeof(float)  );
     if( NULL == (*fl_dist)->density )
     {
-        fprintf( stderr, "FATAL      : Failed to allocate memory for the fragment length dist." );
+        fprintf( stderr, "FATAL       :  Failed to allocate memory for the fragment length dist.\n" );
+        assert( 0 );
+        exit( -1 );
     }
     
     return;
@@ -71,9 +75,14 @@ init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp )
 
 
 void
-estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb,
-                                     struct fragment_length_dist_t** fl_dist )
+estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 {
+    /* TODO 
+     * this next line has no reason to be here - I just made a 
+     * mistake and was too lazy to cleanup. 
+     */
+    struct fragment_length_dist_t** fl_dist = &(rdb->fl_dist);
+
     /* initialize a temporary fl dist */
     int total_num_reads = 0;
     int max_fl = TEMP_FL_ARRAY_GF;
@@ -88,13 +97,15 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb,
     struct mapped_read_t* rd;
     rewind_mapped_reads_db( rdb );
 
-    while( !mapped_reads_db_is_empty( rdb ) )
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {
-        get_next_read_from_mapped_reads_db( rdb, &rd );
-        
         /* If there is exactly one mapping, then we will use it */
         if( 1 == rd->num_mappings )
         {
+            /* skip unpaired reads */
+            if ( ((rd->locations[0].flag)&IS_PAIRED) == 0 )
+                continue;
+            
             int fl = rd->locations[0].stop_pos \
                    - rd->locations[0].start_pos + 1;
             /* add this length to the fl dist */
@@ -103,7 +114,7 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb,
                 /* allocate space for the new data */
                 temp_fls = realloc( temp_fls, sizeof(int)*(fl+1) );
                 /* zero out the new entries */
-                memset( temp_fls + max_fl + 2, 0, sizeof(int)*(fl-max_fl) );
+                memset( temp_fls + max_fl + 1, 0, sizeof(int)*(fl-max_fl) );
                 max_fl = fl;
             }
 
@@ -114,12 +125,21 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb,
         free_mapped_read( rd );
     }
     
+    assert( mapped_reads_db_is_empty( rdb ) );
+
+    if( total_num_reads < MIN_NUM_READS )
+    {
+        fprintf( stderr, "ERROR       :  Too few unique reads to estimate the fl dist.\n" );
+        return;
+    }
+
+    
     /* do a pass over the data to determine the maximum and minimum fls */
     /* 
      *  NOTE THAT WE
      *  trim off the top and bottom 1% of cnts - this will bias the estimate 
      *  a bit, but I dont know what else to do. Really long fragments good
-     *  realy bias the results 
+     *  really bias the results 
      */
 
     int new_max_fl = 0;
@@ -128,15 +148,18 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb,
     int truncated_cnt = 0;
     double mean = 0;
     int fl;
-    for( fl = 0; fl < max_fl; fl++ )
+    for( fl = 0; fl <= max_fl; fl++ )
     {
         if( temp_fls[fl] == 0 )
             continue;
+
+        if( curr_cnt > (int) (UPPER_FL_CUTOFF_QUANTILE*total_num_reads+0.5) )
+            continue;
+        /* We update current here to always allow for the heavy boundaries */
         curr_cnt += temp_fls[fl];
         if( curr_cnt < (int) (LOWER_FL_CUTOFF_QUANTILE*total_num_reads) )
             continue;
-        if( curr_cnt > (int) (UPPER_FL_CUTOFF_QUANTILE*total_num_reads+0.5) )
-            continue;
+        
         mean += fl*temp_fls[fl];
         truncated_cnt += temp_fls[fl];
         
@@ -209,6 +232,9 @@ cleanup:
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl )
 {
+    if( fl_dist == NULL )
+        return 1;
+
     if( fl < fl_dist->min_fl || fl > fl_dist->max_fl )
         return 0;
     
@@ -216,12 +242,12 @@ get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl )
 }
 
 void
-print_fl_dist( struct fragment_length_dist_t* fl_dist )
+fprint_fl_dist( FILE* fp, struct fragment_length_dist_t* fl_dist )
 {
     int i;
     for( i = 0; i <= fl_dist->max_fl - fl_dist->min_fl; i++ )
     {
-        printf( "%i\t%f\n", i+fl_dist->min_fl, fl_dist->density[i] );
+        fprintf( fp, "%i\t%f\n", i+fl_dist->min_fl, fl_dist->density[i] );
     }
     
     return;

@@ -12,8 +12,8 @@ import subprocess
 
 import tests as sc # for simulation code
 
-NUM_READS = 1000
-NUM_SAMPLES = 100
+NUM_READS = 500
+NUM_SAMPLES = 10
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -210,7 +210,7 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -p %.2f -m %.2f -n %i \
+                             -p %.2f -m %.2f -n %i -f ./data/fl_dist.txt\
                              " % ( sc.STATMAP_PATH, -10, 2, NUM_SAMPLES )
     if iterative:
         call += " -a i"
@@ -352,7 +352,7 @@ def plot_wig_bounds( dir, png_fname):
 
 
 if __name__ == '__main__':
-    mutations = [2,] # [ 1, 10, 25, 100, 1000  ]
+    mutations = [0,] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
     plot_wig_bounds( "./statmap_output/samples/", "relaxed_samples.png")
     plot_wig_bounds( "./statmap_output/starting_samples/", "starting_samples.png")

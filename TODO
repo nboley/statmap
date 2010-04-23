@@ -1,8 +1,9 @@
 X -17) Add max number of iterations options
 M -16) Use sensible limits for convergence
 M ( MOVED TO USING MAX CHANGE )
--15) Write code to parse and store prior fragment length distribution
+X -15) Write code to parse and store prior fragment length distribution
 -15b) Write code to infer fragment lengths forom uniquely mapped paired end reads
+-15c) Actually start using the inferred fragment length distribution
 -14) write method to reset read conditional prbs
 -13) use locking, threads for iterative mapping
 -12) write lhd code
@@ -55,6 +56,8 @@ X 2.2) cleanup error codes to make them standard
     remaining. We fix this in the sam printing code by looking at rawreads instead.
     But we should probably reorganize this a bit so that candidate mappings keep
     track of every read.
+3.2) Unify the get next read infrastructure to use the mmapped data when appropriate.
+     remove the hacks in iterative mapping that do this manually.
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
 X 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
@@ -76,3 +79,5 @@ X 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed ra
 15b) Write code to produce a mappings_db from a sam file
 16) Allow reference genomes from multiple files
 17) Write config file parser, and use it
+18) Add optimization to filter impossible paired end reads 
+    ( by FL ) when we dont have to estimate the dist

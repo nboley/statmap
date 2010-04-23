@@ -137,6 +137,25 @@ zero_traces( struct trace_t* traces )
     }
 }
 
+void
+set_trace_to_uniform( struct trace_t* traces, double value )
+{
+    /* Zero out the trace for the update */
+    int i, j;
+    unsigned int k;
+    for( i = 0; i < traces->num_traces; i++ )
+    {
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            for( k = 0; k < traces->trace_lengths[i]; k++ )
+            {
+                traces->traces[i][j][k] = value;
+            }
+        }
+    }
+}
+
+
 /* traces must be the same dimension */
 /* This function applies an aggregate to every basepair in the traces */
 void
