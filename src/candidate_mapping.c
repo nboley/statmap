@@ -431,6 +431,9 @@ add_candidate_mappings_to_db (
     int thread_num )
 {
     int error;
+
+    if( mappings->length == 0  )
+        return;
     
     /* TODO - add proper DB support */
     /* Determine the correct file to write this read to  */        

@@ -560,7 +560,7 @@ get_next_read_from_rawread_db(
             pthread_mutex_unlock( rdb->lock );
             return EOF;
         }
-
+        
         rv = populate_read_from_fastq_file( 
              rdb->paired_end_2_reads, r2 );
         

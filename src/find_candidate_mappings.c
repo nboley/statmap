@@ -151,6 +151,7 @@ find_candidate_mappings( void* params )
                 = init_candidate_mapping_from_template( 
                     r, max_subseq_len, max_penalty_spread 
             );
+            assert( template_candidate_mapping.rd_type != 0 );
 
             /**** TODO - get rid of this requirement */
             /* Assert that subseqs are false */

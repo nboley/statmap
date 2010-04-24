@@ -310,8 +310,11 @@ sample_random_traces(
 
     /* initialize the max and min traces */
     struct trace_t *max_trace, *min_trace;
-    init_traces( genome, &min_trace, num_tracks );
+    /* initialize the max trace to zero, because the first max is always >= */
     init_traces( genome, &max_trace, num_tracks );
+    /* The min we need to initialize, and then set to flt max */
+    init_traces( genome, &min_trace, num_tracks );
+    set_trace_to_uniform( min_trace, FLT_MAX );
             
     /* build bootstrap samples. Then take the max and min. */
     int i;
@@ -495,7 +498,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         } 
         /* If the read is *not* paired */
         else {
-            /* FIXME - hope that we actually have a fragment length */
+            /* BUG - FIXME - hope that we actually have a fragment length */
             /* FIXME get the real fragment length */
             /* FIXME - cleanup the stop condition */
             unsigned int frag_len = 400;
