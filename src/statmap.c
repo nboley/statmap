@@ -390,7 +390,7 @@ parse_arguments( int argc, char** argv )
         /* first, copy the read file(s) into the output directory */
         char buffer[500];
         sprintf( buffer, "cp %s %s/reads.unpaired", args.unpaired_reads_fnames, args.output_directory );
-        fprintf("NOTICE      :  Copying '%s' to the output directory\n"  args.unpaired_reads_fnames );
+        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.unpaired_reads_fnames );
         system( buffer );
     } 
     /* If the reads are paired */
@@ -398,9 +398,9 @@ parse_arguments( int argc, char** argv )
         /* first, copy the read file(s) into the output directory */
         char buffer[500];
         sprintf( buffer, "cp %s %s/reads.pair1", args.pair1_reads_fnames, args.output_directory );
-        fprintf("NOTICE      :  Copying '%s' to the output directory\n"  args.pair1_reads_fnames );
+        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair1_reads_fnames );
         system( buffer );
-        fprintf("NOTICE      :  Copying '%s' to the output directory\n"  args.pair2_reads_fnames );
+        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair2_reads_fnames );
         sprintf( buffer, "cp %s %s/reads.pair2", args.pair2_reads_fnames, args.output_directory );
         system( buffer );
     }
