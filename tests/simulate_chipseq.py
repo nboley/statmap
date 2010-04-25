@@ -9,11 +9,12 @@ import os
 import fnmatch
 import re
 import subprocess
+import gzip
 
 import tests as sc # for simulation code
 
 NUM_READS = 500
-NUM_SAMPLES = 10
+NUM_SAMPLES = 100
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -178,15 +179,26 @@ def parse_wig( fname, genome ):
     return density
 
 def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
+    DIRTY = True
+    
     region = build_chipseq_region( )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
     fragments = build_fragments( region, bind_prbs, NUM_READS )
     
     genome = { 'chr2L': region }
-    
-    reads = sc.build_reads_from_fragments( genome, fragments, paired_end=True )
-    
+
+    if DIRTY:
+        reads = sc.build_reads_from_fragments( 
+            genome, fragments, rev_comp=False, paired_end=True )
+        # mutate the reads by their error strings
+        sample_file = gzip.open( './data/dirty_error_strs.fastq.gz' )
+        error_strs = sc.get_error_strs_from_fastq( sample_file )
+        sample_file.close()
+        mutated_reads = sc.mutate_reads( reads, error_strs )
+    else:
+        reads = sc.build_reads_from_fragments( genome, fragments, paired_end=True )
+
     genome_of = open("tmp.genome", "w")
     # write a second genome
     chr2L = genome['chr2L']
@@ -205,7 +217,10 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     
     reads_of_1 = open('tmp.1.fastq', "w");
     reads_of_2 = open('tmp.2.fastq', "w");
-    fastq = sc.build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
+    if DIRTY:
+        sc.build_paired_end_fastq_from_mutated_reads(mutated_reads,reads_of_1,reads_of_2)
+    else:
+        sc.build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
     reads_of_1.close()
     reads_of_2.close()
 
@@ -352,7 +367,7 @@ def plot_wig_bounds( dir, png_fname):
 
 
 if __name__ == '__main__':
-    mutations = [0,] # [ 1, 10, 25, 100, 1000  ]
+    mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
     plot_wig_bounds( "./statmap_output/samples/", "relaxed_samples.png")
     plot_wig_bounds( "./statmap_output/starting_samples/", "starting_samples.png")

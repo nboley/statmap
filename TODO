@@ -2,9 +2,10 @@ X -17) Add max number of iterations options
 M -16) Use sensible limits for convergence
 M ( MOVED TO USING MAX CHANGE )
 X -15) Write code to parse and store prior fragment length distribution
--15b) Write code to infer fragment lengths forom uniquely mapped paired end reads
--15c) Actually start using the inferred fragment length distribution
--14) write method to reset read conditional prbs
+X -15b) Write code to infer fragment lengths forom uniquely mapped paired end reads
+X -15c) Actually start using the inferred fragment length distribution
+-15d) Fix and write tests for single end chipseq reads
+X -14) write method to reset read conditional prbs
 -13) use locking, threads for iterative mapping
 -12) write lhd code
 -11) get rif of include rawread.h in candidate_mapping.h, use FWD declaration, 
