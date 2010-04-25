@@ -624,6 +624,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
+    fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
     start = clock();
     join_all_candidate_mappings( &candidate_mappings, mpd_rds_db );
     stop = clock();
@@ -634,8 +635,10 @@ map_marginal( args_t* args, struct genome_data* genome )
     /* if necessary. and if there are paired reads */
     if( args->frag_len_fp == NULL 
         && args->pair1_reads_fnames != NULL )
+    {
+        fprintf(stderr, "NOTICE      :  Estimating FL distribution\n" );
         estimate_fl_dist_from_mapped_reads( mpd_rds_db );
-
+    }
 
     /* write the estimated FL distribution to file */
     if( NULL != mpd_rds_db->fl_dist )
@@ -660,6 +663,7 @@ map_marginal( args_t* args, struct genome_data* genome )
                             args->num_starting_locations, 1e-2);
     
     /* Write the mapped reads to file */
+    fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
     FILE* wig_fp = fopen( "marginal_mapping.wig", "w+" );
     write_mapped_reads_to_wiggle( mpd_rds_db, genome, wig_fp );
     fclose( wig_fp );
@@ -670,6 +674,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     /* If appropriate, print out the snp db */
     if( args->snpcov_fp != NULL )
     {
+        fprintf(stderr, "NOTICE      :  Updating SNP count estiamtes.\n" );
         update_snp_estimates_from_candidate_mappings( mpd_rds_db, genome );
         char* snp_fname = "updated_snp_cnts.snp";
         FILE* snp_fp = fopen( snp_fname, "w" );
@@ -678,6 +683,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     }
     
     start = clock();
+    fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
     write_mapped_reads_to_sam( 
         args->rdb, mpd_rds_db, genome, sam_ofp );
     
