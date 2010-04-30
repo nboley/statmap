@@ -151,6 +151,7 @@ add_chrs_from_fasta_file(
                     chr[i] = '\0';    
                     /* shrink the size of chr so that we arent wasting memory */
                     chr = realloc( chr, (i+1)*sizeof(char) );
+                    allcd_size = i;
 
                     assert( chr_name[0] != '\0' );
                     fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
@@ -183,10 +184,6 @@ add_chrs_from_fasta_file(
                 sprintf(chr_name, "Default");
             }
         }
-        
-        assert(isalpha(bp));
-        chr[i] = bp;
-        i++;
 
         if( i == allcd_size ) {
             allcd_size += allcd_size;
@@ -196,7 +193,11 @@ add_chrs_from_fasta_file(
                 assert( 0 );
                 exit(-1);
             }
-        }
+        }        
+
+        assert(isalpha(bp));
+        chr[i] = bp;
+        i++;        
     }
     
     /* put a trailing null in to make it a proper string, and add the chr */
