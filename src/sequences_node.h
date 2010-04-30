@@ -77,9 +77,9 @@ typedef union __attribute__((__packed__)) {
          * in units of sizeof(GENOME_LOC_TYPE) bytes after the end of 
          * the standard genome loc array.
          */
-        signed locs_start :16;
+        signed locs_start :30;
         /* store the size of the array, in units of the number of entries */
-        signed locs_size :16;
+        signed locs_size :18;
     } locs_array ;
 } locs_union;
 
