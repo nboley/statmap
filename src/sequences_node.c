@@ -593,9 +593,7 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
     set_num_used_bytes( seqs, curr_size );
     
     /* this is done explicitly when the bitmap is added to */
-    // loc_start->is_pointer = 0;
-    /* TODO - make this spill over if it is too large */
-    assert( loc.loc <= 245203898 && loc.loc >= 0 );
+    assert( loc.loc <= LOCATION_MAX && loc.loc >= 0 );
     loc_start->loc = loc;
     
     /* make space for the sequence, and initialize it */
@@ -1037,7 +1035,7 @@ print_sequences_node( sequences_node* seqs, int seq_length )
         /* print out the stored sequences and their locations */
         int i, j;
 
-        /* store the beggining of the current sequence that we are on */
+        /* store the beginning of the current sequence that we are on */
         LETTER_TYPE* curr_seq = get_sequences_array_start( seqs, seq_length );
 
         /* get the genome locations for this sequence */

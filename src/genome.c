@@ -85,7 +85,8 @@ add_chr_to_genome( char* chr_name,
     /* put in the chr str len */
     gen->chr_lens = realloc( gen->chr_lens, sizeof(size_t)*(gen->num_chrs) );
     (gen->chr_lens)[gen->num_chrs - 1] = chr_len;
-    
+    assert( chr_len <= LOCATION_MAX );
+
     /* copy the chr string into memory */
     gen->chrs = 
         realloc( gen->chrs, sizeof(char*)*(gen->num_chrs) );

@@ -81,10 +81,11 @@ typedef union __attribute__((__packed__)) {
     } locs_array ;
 } locs_union;
 
-// #define MAX_LOC_ARRAY_START 65535
-// #define MAX_LOC_ARRAY_SIZE 65535
+//#define MAX_LOC_ARRAY_START 24
+//#define MAX_LOC_ARRAY_SIZE 65535
 #define MAX_LOC_ARRAY_SIZE 131071 // 18 bit - signed ( 2**17 - 1 )
 #define MAX_LOC_ARRAY_START 536870911 // 30 bit - signed bit ( 2^29 - 1 )
+
 
 /* 
  * this is a weird data type. It's important to keep all of the sequences 

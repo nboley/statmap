@@ -168,8 +168,8 @@ typedef struct __attribute__((__packed__))
 
 } GENOME_LOC_TYPE;
 
-#define CHR_NUM_MAX 32768 - 1 // 2**16 - 1
-#define LOCATION_MAX 268435456 - 1 // 2**28 = 268435456
+#define CHR_NUM_MAX (32768 - 1) // 2**16 - 1
+#define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
 
 
 /*** Globally useful macros ***/
