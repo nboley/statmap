@@ -10,8 +10,6 @@
 #include "mapped_location.h"
 
 /*** Locations Node Type ********************************************************/
-#define MAX_NUM_LOCATIONS 1000
-
 typedef void locations_node;
 
 void
@@ -85,8 +83,8 @@ typedef union __attribute__((__packed__)) {
 
 // #define MAX_LOC_ARRAY_START 65535
 // #define MAX_LOC_ARRAY_SIZE 65535
-#define MAX_LOC_ARRAY_SIZE 32767
-#define MAX_LOC_ARRAY_START 32767
+#define MAX_LOC_ARRAY_SIZE 131071 // 18 bit - signed ( 2**17 - 1 )
+#define MAX_LOC_ARRAY_START 536870911 // 30 bit - signed bit ( 2^29 - 1 )
 
 /* 
  * this is a weird data type. It's important to keep all of the sequences 
