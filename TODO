@@ -1,3 +1,4 @@
+-18) Make copy traces actually copy traces
 X -17) Add max number of iterations options
 M -16) Use sensible limits for convergence
 M ( MOVED TO USING MAX CHANGE )

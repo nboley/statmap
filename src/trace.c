@@ -82,6 +82,55 @@ init_traces( struct genome_data* genome,
     return;
 }
 
+/* Build mmapped arrays for all of the chrs ***/
+void
+copy_traces( struct trace_t** traces,
+             struct trace_t* original )
+{
+    /* Allocate space for the struct */
+    *traces = malloc( sizeof( struct trace_t ) );
+    
+    /* set the number of traces */
+    (*traces)->num_traces = original->num_traces;
+    (*traces)->traces = malloc(sizeof(TRACE_TYPE**)*original->num_traces);
+    assert( (*traces)->traces != NULL );
+
+    (*traces)->num_chrs = original->num_chrs;
+    (*traces)->trace_lengths = malloc(sizeof(unsigned int)*original->num_chrs);
+    assert( (*traces)->trace_lengths != NULL );
+
+    int i;
+    for( i = 0; i < (*traces)->num_chrs; i++ )
+    {
+        /* initialize the trace length, in bps */
+        (*traces)->trace_lengths[i] = original->trace_lengths[i];
+    }
+
+
+    /* Allocate space for the pointers to the chr's individual traces */
+    for( i = 0; i < original->num_traces; i++ )
+    {
+        /* Store the pointers for the chrs */
+        (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE**) );
+        assert( (*traces)->traces[i] != NULL );
+        
+        /* initialize each chr */
+        int j;
+        for( j = 0; j < (*traces)->num_chrs; j++ )
+        {            
+            /* initialize the forward trace */
+            (*traces)->traces[i][j] = init_trace( (*traces)->trace_lengths[j] );
+            
+            assert( (*traces)->traces[i][j] != NULL );
+            memset( (*traces)->traces[i][j], 0, 
+                    sizeof(TRACE_TYPE)*(*traces)->trace_lengths[j] );
+        }
+    }
+    
+    return;
+}
+
+
 void
 close_traces( struct trace_t* traces )
 {

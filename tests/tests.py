@@ -424,7 +424,7 @@ def test_sequence_finding( read_len, rev_comp = False ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-        shutil.rmtree("./statmap_output/")
+    shutil.rmtree("./statmap_output/")
 
 
 def test_fivep_sequence_finding( ):
@@ -530,7 +530,7 @@ def test_paired_end_reads( read_len ):
         os.remove("./tmp.genome")
         os.remove("./tmp.1.fastq")
         os.remove("./tmp.2.fastq")
-        shutil.rmtree("./statmap_output/")
+    shutil.rmtree("./statmap_output/")
 
 def test_paired_end_sequence_finding( ):
     rls = [ 25, 75  ]
@@ -606,7 +606,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-        shutil.rmtree("./statmap_output/")
+    shutil.rmtree("./statmap_output/")
 
 def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
@@ -728,7 +728,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-        shutil.rmtree("./statmap_output/")
+    shutil.rmtree("./statmap_output/")
 
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
@@ -863,7 +863,7 @@ def test_snps( read_len, num_snps = 10 ):
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
-        shutil.rmtree("./statmap_output/")
+    shutil.rmtree("./statmap_output/")
         
 
 def test_snp_finding( ):

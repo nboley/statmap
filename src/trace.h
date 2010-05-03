@@ -20,6 +20,10 @@ init_traces( struct genome_data* genome,
              const int num_traces );
 
 void
+copy_traces( struct trace_t** traces,
+             struct trace_t* original );
+
+void
 close_traces( struct trace_t* traces );
 
 double

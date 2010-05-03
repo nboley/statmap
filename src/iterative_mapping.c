@@ -36,6 +36,13 @@ max( TRACE_TYPE a, TRACE_TYPE b )
     return b;
 }
 
+static TRACE_TYPE 
+sum( TRACE_TYPE a, TRACE_TYPE b )
+{
+    return a + b;
+}
+
+
 void
 naive_update_trace_expectation_from_location( 
     const struct trace_t* const traces, 
@@ -53,6 +60,85 @@ naive_update_trace_expectation_from_location(
     return;
 }
 
+
+/* 
+ * This is what update_traces_from_mapped_reads calls - it is a function
+ * designed to be called from a thread.
+ * 
+ */ 
+struct update_traces_param {
+    /* 
+     * we lock the read index, so that threads grab the next available read
+     * I like this better than a block of reads approach, because it ensures that 
+     * any io is sequential. Of course, this is at the cost of some lock 
+     * contention, but that should be minor, espcially if ( the mmapped ) rdb
+     * can't fully fit into memory.
+     */
+    pthread_mutex_t* curr_read_index_mutex;
+    unsigned int* curr_read_index;
+    
+    struct mapped_reads_db* reads_db;
+    struct trace_t* traces;
+    void (* update_trace_expectation_from_location)(
+        const struct trace_t* const traces, 
+        const struct mapped_read_location* const loc);
+};
+
+void
+update_traces_from_mapped_reads_worker( void* params )
+{
+    unsigned int* curr_read_index = 
+        ( (struct update_traces_param*) params)->curr_read_index;
+    pthread_mutex_t* curr_read_index_mutex = 
+        ( (struct update_traces_param*) params)->curr_read_index_mutex;
+    
+    struct trace_t* traces = ( (struct update_traces_param*) params)->traces;
+    struct mapped_reads_db* reads_db = 
+        ( (struct update_traces_param*) params)->reads_db;
+    void (* const update_trace_expectation_from_location)(
+        const struct trace_t* const traces, 
+        const struct mapped_read_location* const loc)
+        = ( (struct update_traces_param*) 
+            params)->update_trace_expectation_from_location;
+    
+
+    /* get the first index */
+    pthread_mutex_lock( curr_read_index_mutex );
+    unsigned int i = *curr_read_index;
+    *curr_read_index += 1;
+    pthread_mutex_unlock( curr_read_index_mutex );
+    
+    while( i < reads_db->num_mmapped_reads )
+    {
+        char* read_start = reads_db->mmapped_reads_starts[i];
+
+        /* read a mapping into the struct */
+        
+        struct mapped_read_t r;
+        r.read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        r.num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        r.locations = (struct mapped_read_location*) read_start;
+        
+        
+        /* Update the trace from this mapping */
+        
+        unsigned int j;
+        for( j = 0; j < r.num_mappings; j++ ) {
+            update_trace_expectation_from_location( traces, r.locations + j );
+        }
+
+        /* update the read index */
+        pthread_mutex_lock( curr_read_index_mutex );
+        i = *curr_read_index;
+        *curr_read_index += 1;
+        pthread_mutex_unlock( curr_read_index_mutex );
+    }
+
+    return;
+}
+
 void
 update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
@@ -61,39 +147,103 @@ update_traces_from_mapped_reads(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc)
 )
-{    
-    /* zero traces */
+{        
+    /* First, zero the trace to be summed into */
     zero_traces( traces );
-    
-    /* Update the trace from the reads */
-    /* 
-     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
-     * variable. I dont understand why, but I am a bit nervous because the spec used to
-     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
-     * register space and upcasting all of the unsigned longs to long longs. When 
-     * I move to open mp 3.0, I want to remove this 
-     */
 
-    long long i;
-    const int chunk = 10000;
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+    /* If the number of threads is one, then just do everything in serial */
+    if( num_threads == 1 )
     {
-        char* read_start = reads_db->mmapped_reads_starts[i];
-
-        /* read a mapping into the struct */
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-        
-        /* Update the trace from this mapping */
-        unsigned int j;
-        for( j = 0; j < r.num_mappings; j++ ) {
-            update_trace_expectation_from_location( traces, r.locations + j );
+        /* Update the trace from the reads */
+        long long i;
+        for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+        {
+            char* read_start = reads_db->mmapped_reads_starts[i];
+            
+            /* read a mapping into the struct */
+            struct mapped_read_t r;
+            r.read_id = *((unsigned long*) read_start);
+            read_start += sizeof(unsigned long)/sizeof(char);
+            r.num_mappings = *((unsigned short*) read_start);
+            read_start += sizeof(unsigned short)/sizeof(char);
+            r.locations = (struct mapped_read_location*) read_start;
+            
+            /* Update the trace from this mapping */
+            unsigned int j;
+            for( j = 0; j < r.num_mappings; j++ ) {
+                update_trace_expectation_from_location( traces, r.locations + j );
+            }
         }
+    } 
+    /* otherwise, if we are expecting more than one thread */
+    else {
+        /* initialize the read number mutex */
+        pthread_mutex_t curr_read_index_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+        /* initialize the thread parameters structure */
+        struct update_traces_param params;
+        params.curr_read_index_mutex = &curr_read_index_mutex;
+        unsigned int curr_read_index = 0;
+        params.curr_read_index = &curr_read_index;
+        
+        params.reads_db = reads_db;
+        /* traces isnt shared - we init and join them */
+        params.traces = NULL;
+        params.update_trace_expectation_from_location 
+            = update_trace_expectation_from_location;
+        
+        /* initialize all of the threads */
+        int rc;
+        void* status;
+        pthread_t thread[num_threads];
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+        struct update_traces_param* tds;
+        tds = malloc(num_threads*sizeof(struct update_traces_param));
+        int t;
+        for( t = 0; t < num_threads; t++ )
+        {  
+            memcpy( tds+t,  &params, sizeof(struct update_traces_param) );
+            
+            copy_traces( &(tds[t].traces), traces );
+            
+            rc = pthread_create( &(thread[t]), 
+                                 &attr, 
+                                 update_traces_from_mapped_reads_worker, 
+                                 (void *)(tds + t) 
+                ); 
+            if (rc) {
+                fprintf(stderr, 
+                        "ERROR; return code from pthread_create() is %d\n", 
+                        rc
+                    );
+                exit(-1);
+            }
+        }
+
+        /* wait for the other threads */    
+        for(t=0; t < num_threads; t++) {
+            rc = pthread_join(thread[t], &status);
+            if (rc) {
+                fprintf( stderr, 
+                         "ERROR; return code from pthread_join() is %d\n", 
+                         rc
+                    );
+                exit(-1);
+            }
+        }
+        pthread_attr_destroy(&attr);
+        
+        /* Aggregate the thread traces into the master. */
+        /* Then, free the thread parameter data structures */
+        for( t=0; t < num_threads; t++ )
+        {
+            aggregate_over_traces( traces, tds[t].traces, sum );
+            close_traces( tds[t].traces );
+        }
+        free( tds );
+
     }
     
     return;
@@ -118,9 +268,6 @@ update_mapped_reads_from_trace(
      * I move to open mp 3.0, I want to remove this 
      */
     long long k;
-    const int chunk = 10000;
-    /* Hand reduce the max */
-    #pragma omp parallel for schedule(dynamic, chunk) num_threads( num_threads )
     for( k = 0; k < (long long) reads_db->num_mmapped_reads; k++ )
     {
         char* read_start = reads_db->mmapped_reads_starts[k];
@@ -137,7 +284,6 @@ update_mapped_reads_from_trace(
         /* Hand reduce the max */
         if( tmp_abs_error > abs_error )
         {
-            #pragma omp critical
             abs_error = tmp_abs_error;
         }
     }
@@ -430,7 +576,6 @@ update_chipseq_trace_expectation_from_location(
             assert( chr_index < traces->num_chrs );
             assert( k < traces->trace_lengths[chr_index] );
             
-            #pragma omp atomic
             traces->traces[0][chr_index][k] 
                 += (1.0/(stop-start))*cond_prob;
         }
@@ -445,14 +590,12 @@ update_chipseq_trace_expectation_from_location(
         {
             if( start + k < traces->trace_lengths[chr_index] )
             {
-                #pragma omp atomic
                 traces->traces[0][chr_index][start + k] 
                     += k*cond_prob/( frag_len*frag_len  );
             }
             
             if( stop >= k )
             {
-                #pragma omp atomic
                 traces->traces[0][chr_index][stop - k] 
                     += k*cond_prob/( frag_len*frag_len  );
             }
@@ -592,7 +735,6 @@ void update_CAGE_trace_expectation_from_location(
             trace = traces->traces[1];
         }
 
-        #pragma omp atomic
         trace[ chr_index ][ start ] += cond_prob; 
     }
     

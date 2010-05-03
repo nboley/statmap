@@ -79,7 +79,7 @@ find_candidate_mappings( void* params )
         /* We dont lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
-        if( readkey % 10000 == 0 && readkey > 0 )
+        if( readkey % 100000 == 0 && readkey > 0 )
         {
             fprintf(stderr, "DEBUG       :  Mapped %li reads, %i successfully\n", 
                     readkey, *mapped_cnt);
