@@ -84,7 +84,7 @@ struct update_traces_param {
         const struct mapped_read_location* const loc);
 };
 
-void
+void*
 update_traces_from_mapped_reads_worker( void* params )
 {
     unsigned int* curr_read_index = 
@@ -136,7 +136,7 @@ update_traces_from_mapped_reads_worker( void* params )
         pthread_mutex_unlock( curr_read_index_mutex );
     }
 
-    return;
+    return 0;
 }
 
 void
