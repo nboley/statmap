@@ -13,7 +13,7 @@ import gzip
 
 import tests as sc # for simulation code
 
-NUM_READS = 500
+NUM_READS = 5000
 NUM_SAMPLES = 100
 
 bps = ['A', 'C', 'G', 'T' ]

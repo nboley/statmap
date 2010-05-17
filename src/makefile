@@ -12,7 +12,7 @@ statmap : $(objects)
 	gcc -o statmap \
 	$(objects) \
 	$(compile_options) \
-	-lm -lpthread --openmp
+	-lm -lpthread
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
 	index_genome.h quality.h config.h snp.h fragment_length.h
@@ -33,7 +33,7 @@ find_candidate_mappings.h : genome.h rawread.h
 #
 
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h snp.h genome.h fragment_length.h
-	gcc $(compile_options) --openmp -c iterative_mapping.c
+	gcc $(compile_options) -c iterative_mapping.c
 
 iterative_mapping.h : config.h genome.h trace.h
 
