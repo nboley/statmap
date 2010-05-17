@@ -48,6 +48,7 @@ X 2.1) Make mapped short read location type take a bitfield
 X      to conserve on disk storage space
 X 2.1) fix mapped_location vs mapped_read_location name confusion
 X 2.2) cleanup error codes to make them standard
+2.3) Remove the signed bits in the sequences node UNION ( currently here for debugging )
 3) Add checks for paired end reads to ensure the read names are identical 
    ( except slashes )
 3.1) Finish on disk indexes

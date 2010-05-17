@@ -75,16 +75,16 @@ typedef union __attribute__((__packed__)) {
          * in units of sizeof(GENOME_LOC_TYPE) bytes after the end of 
          * the standard genome loc array.
          */
-        signed locs_start :30;
+        signed locs_start :29;
         /* store the size of the array, in units of the number of entries */
-        signed locs_size :18;
+        signed locs_size :19;
     } locs_array ;
 } locs_union;
 
 //#define MAX_LOC_ARRAY_START 24
 //#define MAX_LOC_ARRAY_SIZE 65535
-#define MAX_LOC_ARRAY_SIZE 131071 // 18 bit - signed ( 2**17 - 1 )
-#define MAX_LOC_ARRAY_START 536870911 // 30 bit - signed bit ( 2^29 - 1 )
+#define MAX_LOC_ARRAY_SIZE 262143 // 19 bit - signed ( 2**18 - 1 )
+#define MAX_LOC_ARRAY_START 268435455 // 29 bit - signed bit ( 2^28 - 1 )
 
 
 /* 

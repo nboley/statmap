@@ -5,8 +5,8 @@ import random
 from itertools import izip
 from operator import itemgetter
 import bisect 
-import gzip
-import collections
+import gzip    
+
 import re
 import array
 
@@ -55,7 +55,42 @@ rev_comp_table = string.maketrans( from_str, to_str  )
 #### Data Types ########
 
 "Store mutated reads "
-mut_read_t = collections.namedtuple( "mutated_read", "mut_seq err_str seq")
+try:
+    import collections
+    mut_read_t = collections.namedtuple( "mutated_read", "mut_seq err_str seq")
+except AttributeError:
+    class mut_read_t(tuple):
+        'mut_read_t(mut_seq err_str, seq)'
+        
+        __slots__ = ()
+        
+        _fields = ('mut_seq', 'err_str', 'seq')
+        
+        def __new__(_cls, x, y, z):
+            return tuple.__new__(_cls, (x, y, z))
+        
+        @classmethod
+        def _make(cls, iterable, new=tuple.__new__, len=len):
+            'Make a new mut_read_t object from a sequence or iterable'
+            result = new(cls, iterable)
+            if len(result) != 3:
+                raise TypeError('Expected 3 arguments, got %d' % len(result))
+            return result
+        
+        def __repr__(self):
+            return 'mut_read_t(mut_seq=%r, err_str=%r, seq=%r)' % self
+        
+        def _asdict(t):
+            'Return a new dict which maps field names to their values'
+            return {'mut_seq': t[0], 'err_str': t[1], 'seq':t[2]}
+        
+        def __getnewargs__(self):
+            return tuple(self)
+        
+        mut_seq = property(itemgetter(0))
+        err_str = property(itemgetter(1))        
+        seq = property(itemgetter(2))
+
 
 ### SAM File parsing code
 
