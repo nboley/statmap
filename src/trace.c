@@ -82,10 +82,10 @@ init_traces( struct genome_data* genome,
     return;
 }
 
-/* Build mmapped arrays for all of the chrs ***/
+/* init a trace that has the same structure as original, but is inited to 0 */
 void
-copy_traces( struct trace_t** traces,
-             struct trace_t* original )
+copy_trace_structure( struct trace_t** traces,
+                      struct trace_t* original )
 {
     /* Allocate space for the struct */
     *traces = malloc( sizeof( struct trace_t ) );

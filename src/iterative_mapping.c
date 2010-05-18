@@ -206,7 +206,7 @@ update_traces_from_mapped_reads(
         {  
             memcpy( tds+t,  &params, sizeof(struct update_traces_param) );
             
-            copy_traces( &(tds[t].traces), traces );
+            copy_trace_structure( &(tds[t].traces), traces );
             
             rc = pthread_create( &(thread[t]), 
                                  &attr, 

@@ -1,4 +1,5 @@
--18) Make copy traces actually copy traces
+M -18) Make copy traces actually copy traces
+M renamed the function to not be wrong - currently we never need to make a copy
 X -17) Add max number of iterations options
 M -16) Use sensible limits for convergence
 M ( MOVED TO USING MAX CHANGE )
@@ -7,7 +8,7 @@ X -15b) Write code to infer fragment lengths forom uniquely mapped paired end re
 X -15c) Actually start using the inferred fragment length distribution
 -15d) Fix and write tests for single end chipseq reads
 X -14) write method to reset read conditional prbs
--13) use locking, threads for iterative mapping
+X -13) use locking, threads for iterative mapping
 -12) write lhd code
 -11) get rif of include rawread.h in candidate_mapping.h, use FWD declaration, 
 X -10) remove include candidate_mapping.h from mapped_read
