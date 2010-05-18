@@ -58,7 +58,7 @@ guess_input_file_type( args_t* args )
     int i, j;
     for( i = 0; i < 1000; i++ )
     {
-        rawread* r;
+        struct rawread* r;
         populate_read_from_fastq_file( fp, &r );
         /* If we have reached and EOF, then break */
         if( r == NULL )
@@ -164,7 +164,7 @@ guess_optimal_indexed_seq_len( args_t* args)
     /* FIXME - stop assuming this is a fastq file */
     /* TODO - read in multiple reads to corroborate read length */
     /* read in the first read, and set the seq length from this read */
-    rawread* r;
+    struct rawread* r;
     populate_read_from_fastq_file( fp, &r );
     seq_len = r->length;
     fprintf( stderr, 

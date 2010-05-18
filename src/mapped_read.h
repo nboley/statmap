@@ -118,8 +118,8 @@ fprintf_mapped_read_to_sam(
     FILE* sam_fp,
     struct mapped_read_t* pkd_rd,
     struct genome_data* genome,
-    rawread* rr1,
-    rawread* rr2
+    struct rawread* rr1,
+    struct rawread* rr2
 );
 
 void

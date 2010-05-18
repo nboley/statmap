@@ -3,7 +3,11 @@
 #ifndef CANDIDATE_MAPPING
 #define CANDIDATE_MAPPING
 
-#include "rawread.h"
+#include "config.h"
+
+/* FWD declaration for rawread */
+// #include "rawread.h"
+struct rawread;
 
 /* block size for newly allocated results memory */
 #define CAND_MAPPING_RESULTS_GROWTH_FACTOR 100
@@ -97,7 +101,7 @@ void
 init_candidate_mappings( candidate_mappings** mappings );
 
 candidate_mapping
-init_candidate_mapping_from_template( rawread* rp, 
+init_candidate_mapping_from_template( struct rawread* rp, 
                                       int indexed_seq_len, 
                                       float max_penalty_spread );
 

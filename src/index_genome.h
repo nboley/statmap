@@ -276,7 +276,7 @@ search_index( index_t* index,
               float max_penalty_spread,
               mapped_locations* results,
 
-              rawread* r,
+              struct rawread* r,
               float* bp_mut_rates
     );
 

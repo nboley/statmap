@@ -27,11 +27,11 @@ open_check_error( char* fname, char* file_mode )
 }
 
 inline void 
-init_rawread( rawread** r,
+init_rawread( struct rawread** r,
               int seq_len,
               size_t readname_len  )
 {
-    *r = malloc( sizeof( rawread ) );
+    *r = malloc( sizeof( struct rawread ) );
 
     /* BUG TODO check for nulls */
     (*r)->length = seq_len;
@@ -41,7 +41,7 @@ init_rawread( rawread** r,
 }
 
 inline void 
-free_rawread( rawread* r )
+free_rawread( struct rawread* r )
 {
     if( r->name != NULL )
         free( r->name );
@@ -56,7 +56,7 @@ free_rawread( rawread* r )
 }
 
 void
-fprintf_rawread( FILE* fp, rawread* r )
+fprintf_rawread( FILE* fp, struct rawread* r )
 {
     fprintf(fp, "%u\n", r->length);
     fprintf(fp, "%s\n", r->name);
@@ -68,7 +68,7 @@ fprintf_rawread( FILE* fp, rawread* r )
 }
 
 void
-fprintf_rawread_to_fastq( FILE* fastq_fp, rawread* r )
+fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
 {
     
     fprintf(fastq_fp, "@%s\n", r->name);
@@ -80,7 +80,7 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, rawread* r )
 #if 0
 
 void
-marshal_rawread( rawread* r, char** buffer, size_t* buffer_size )
+marshal_rawread( struct rawread* r, char** buffer, size_t* buffer_size )
 {
     int seq_len = r->length;
 
@@ -129,7 +129,7 @@ marshal_rawread( rawread* r, char** buffer, size_t* buffer_size )
 
 
 void
-unmarshal_rawread( rawread** r, char* buffer )
+unmarshal_rawread( struct rawread** r, char* buffer )
 {
     /* calculate the sequence length and number of letters */
     int seq_len;
@@ -177,7 +177,7 @@ unmarshal_rawread( rawread** r, char* buffer )
  *
  */
 int
-populate_read_from_fastq_file( FILE* input_file, rawread** r )
+populate_read_from_fastq_file( FILE* input_file, struct rawread** r )
 {
     /* Store the return of the scanf's */
     int return_code;
@@ -269,7 +269,7 @@ populate_read_from_fastq_file( FILE* input_file, rawread** r )
 }
 
 enum bool
-filter_rawread( rawread* r )
+filter_rawread( struct rawread* r )
 {
     /***************************************************************
      * check to make sure this read is mappable
@@ -483,7 +483,7 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
 int 
 get_next_mappable_read_from_rawread_db( 
     struct rawread_db_t* rdb, long* readkey,
-    rawread** r1, rawread** r2 )
+    struct rawread** r1, struct rawread** r2 )
 {
     int rv = -10;
     
@@ -518,7 +518,7 @@ get_next_mappable_read_from_rawread_db(
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, long* readkey, 
-    rawread** r1, rawread** r2 )
+    struct rawread** r1, struct rawread** r2 )
 {
     pthread_mutex_lock( rdb->lock );
 

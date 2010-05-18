@@ -12,6 +12,7 @@
 #include "statmap.h"
 #include "candidate_mapping.h"
 #include "mapped_read.h"
+#include "rawread.h"
 
 struct mapped_read_t;
 
@@ -33,7 +34,7 @@ init_candidate_mappings( candidate_mappings** mappings )
 }
 
 candidate_mapping
-init_candidate_mapping_from_template( rawread* rp, 
+init_candidate_mapping_from_template( struct rawread* rp, 
                                       int indexed_seq_len, 
                                       float max_penalty_spread )
 {

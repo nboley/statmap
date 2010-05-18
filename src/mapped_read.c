@@ -496,8 +496,8 @@ fprintf_mapped_read_to_sam(
     FILE* sam_fp,
     struct mapped_read_t* mpd_rd,
     struct genome_data* genome,
-    rawread* rr1,
-    rawread* rr2
+    struct rawread* rr1,
+    struct rawread* rr2
 )
 {
     int i = 0;
@@ -962,7 +962,7 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
     rewind_rawread_db( rdb );
     rewind_mapped_reads_db( mappings_db );
     
-    rawread *rd1, *rd2;
+    struct rawread *rd1, *rd2;
     struct mapped_read_t* mapped_rd;
 
     error = get_next_read_from_mapped_reads_db( 

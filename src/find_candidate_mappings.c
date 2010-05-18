@@ -66,7 +66,7 @@ find_candidate_mappings( void* params )
 
     /* The current read of interest */
     long readkey;
-    rawread *r1, *r2;
+    struct rawread *r1, *r2;
     /* 
      * While there are still mappable reads in the read DB. All locking is done
      * in the get next read functions 
@@ -87,10 +87,10 @@ find_candidate_mappings( void* params )
         
         /* consider both read pairs */
         int j = 0;
-        rawread* reads[2] = { r1, r2 };
+        struct rawread* reads[2] = { r1, r2 };
         for( j = 0; j < 2 && reads[j] != NULL; j++ )
         {
-            rawread* r = reads[j];
+            struct rawread* r = reads[j];
 
             /* If we are logging, print the read */
             if( log_fp != NULL ) {
