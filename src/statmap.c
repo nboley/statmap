@@ -84,7 +84,16 @@ guess_input_file_type( args_t* args )
     } else {
         // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
-        if( max_qual == 104 ) {
+        if( max_qual > 73 ) {
+            if( max_qual < 104 )
+            {
+                /* If the maximum quality is less than 104 but greater than 73, it's probably the
+                   plus 64 version, but we can't be sure. However, assume that it is and print a 
+                   warning. 
+                */
+                fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
+                fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
+            }
             /*
              * If the shifted min quality is less than 0, then the
              * format is almost certainly the log odds solexa version
@@ -95,9 +104,12 @@ guess_input_file_type( args_t* args )
             }
             // If the min is less than 69, it is still most likely
             // a log odds version, but we emit a warning anyways.
-            else if ( min_qual < 69 ) {
+            else if ( min_qual < 66 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = SOLEXA_LOG_ODDS_FQ;
+                input_file_type = ILLUMINA_v13_FQ;
+            } else if ( min_qual < 70 ) {
+                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+                input_file_type = ILLUMINA_v15_FQ;
             } else if ( min_qual == 104 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
                input_file_type = TEST_SUITE_FORMAT;
