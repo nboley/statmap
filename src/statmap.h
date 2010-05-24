@@ -39,7 +39,19 @@ typedef enum {
     // Solexa version 1.4+
     // Fastq file. Quality scores are PHRED 
     // ( offset 64, log10 prob )
-    SOLEXA_v14p_FQ = 2,
+    SOLEXA_v14_FQ = 2,
+    // Solexa version 1.5+
+    // Fastq file. Quality scores are PHRED 
+    // ( offset 64, log10 prob )
+    // In addition, scores of 0 and 1 are never used
+    // Furthermore, a score of 2 is special: 
+    /* 
+     *  "A quality score of 2, encoded as a "B", is used as a special indicator. A
+     *   quality score of 2 does not imply a specific error rate, but rather implies that
+     *   the marked region of the read should not be used for downstream analysis."
+     *   http://docs.google.com/fileview?id=0B-lLYVUOliJFYjlkNjAwZjgtNDg4ZC00MTIyLTljNjgtMmUzN2M0NTUyNDE3&hl=en&pli=1
+     */
+    ILLUMINA_v15_FQ = 2,
     // Solexa version 1.0
     // Fastq file. Quality scores are 
     // ( offset 64, log10 log odds )
