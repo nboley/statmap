@@ -77,95 +77,6 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
     fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
 }
 
-#if 0
-
-void
-marshal_rawread( struct rawread* r, char** buffer, size_t* buffer_size )
-{
-    int seq_len = r->length;
-
-    int readname_len = strlen( r->name );
-    /* BUG - check for the trailing null earlier */ 
-    assert( readname_len < 200 );
-
-    char* buffer_pntr; 
-    
-    /* determine the buffer size */
-    *buffer_size = sizeof( unsigned char )
-        + sizeof(char)*( readname_len + 1 ) // the readname 
-        + sizeof(char)*2*seq_len            // char seq and error_str
-        + sizeof(char)*( 2 );               // 2 flags
-
-    /* allocate space for the buffer */
-    *buffer = calloc( sizeof(char), *buffer_size );
-    assert( *buffer != NULL );
-    buffer_pntr = *buffer;
-    
-    /* Add the sequence length */
-    *((unsigned char*)buffer_pntr) = seq_len;
-    buffer_pntr += sizeof( char );
-
-    /* Add the read name  */
-    memcpy( buffer_pntr, r->name, sizeof(char)*readname_len );
-    buffer_pntr[readname_len] = '\0';
-    buffer_pntr += sizeof(char)*(readname_len+1);
-
-    /* Add the read char */
-    memcpy( buffer_pntr, r->char_seq, sizeof(char)*seq_len );
-    buffer_pntr += sizeof(char)*(seq_len);
-
-    /* Add the quality char */
-    memcpy( buffer_pntr, r->error_str, sizeof(char)*seq_len );
-    buffer_pntr += sizeof(char)*(seq_len);
-
-    /* Add the read end */
-    *((unsigned char*) buffer_pntr) = (unsigned char) r->end;
-    buffer_pntr += sizeof(unsigned char)/sizeof(char);
-
-    /* Add the strand */        
-    *((unsigned char*) buffer_pntr) = (unsigned char) r->strand;
-    buffer_pntr += sizeof(unsigned char)/sizeof(char);
-}
-
-
-void
-unmarshal_rawread( struct rawread** r, char* buffer )
-{
-    /* calculate the sequence length and number of letters */
-    int seq_len;
-    seq_len= ((unsigned char*) buffer)[0];
-    
-    /* move the buffer pointer to the read name */
-    buffer += ( sizeof(unsigned char)/sizeof(char) );
-
-    /* calc the length of the read name */
-    int readname_len = strlen( buffer );
-    
-    /* init the read memory */
-    init_rawread( r, seq_len, readname_len );
-    
-    /* Add the read name */
-    memcpy( (*r)->name, buffer, sizeof(char)*(readname_len+1) );
-    buffer += sizeof(char)*(readname_len+1);
-
-    /* Add the char seq  */
-    memcpy( (*r)->char_seq, buffer, sizeof(char)*seq_len );
-    buffer += sizeof(char)*seq_len;    
-
-    /* Add the error str  */
-    memcpy( (*r)->error_str, buffer, sizeof(char)*seq_len );
-    buffer += sizeof(char)*seq_len;    
-
-    /* Add the read end */
-    (*r)->end = (enum READ_END) *buffer;
-    buffer += sizeof(unsigned char)*1;
-
-    /* Add the strand */
-    (*r)->strand = (enum STRAND) *buffer;
-}
-
-#endif
-
 /*
  * Populate a rawread object from a file pointer. 
  *
@@ -273,9 +184,8 @@ filter_rawread( struct rawread* r )
 {
     /***************************************************************
      * check to make sure this read is mappable
-     * we consider a read 'mappable' if it has 2 criteria
+     * we consider a read 'mappable' if:
      * 1) The penalties array is not too low
-     * 2) It does not have any long repeats
      *
      */
 

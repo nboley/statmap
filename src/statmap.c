@@ -721,9 +721,8 @@ cleanup:
     /* Close the packed mapped reads db */
     close_mapped_reads_db( mpd_rds_db );
 
-    /* if we opened an output file, close it */
-    if( args->sam_output_fname != NULL )
-        fclose( sam_ofp );    
+    /* Close the sam OF */
+    fclose( sam_ofp );    
     
     return;
 }

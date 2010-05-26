@@ -1291,13 +1291,20 @@ search_index( index_t* index,
     float* inverse_lookuptable_position = malloc(sizeof(float)*r->length);
     float* reverse_lookuptable_position = malloc(sizeof(float)*r->length);
     float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
-    build_lookup_table_from_qualities(
-        r->error_str, 
+    build_lookup_table_from_rawread(
+        r, 
         lookuptable_position, inverse_lookuptable_position,
-        reverse_lookuptable_position, reverse_inverse_lookuptable_position,
-        r->length
+        reverse_lookuptable_position, reverse_inverse_lookuptable_position
     );
     
+    /* Store a copy of the read */
+    /* This read has N's replaced with A's, and might be RC'd */
+    char* tmp_read = calloc(r->length + 1, sizeof(char));
+    assert( tmp_read != NULL );
+    memcpy( tmp_read, r->char_seq, sizeof(char)*(r->length) );
+    /* note that the NULL ending is pre-set from the calloc */
+    replace_ns_inplace( tmp_read, r->length );
+
     /** Deal with the read on the fwd strand */
     /* Store the translated sequences here */
     LETTER_TYPE *fwd_seq;
@@ -1312,9 +1319,9 @@ search_index( index_t* index,
     
     /** Deal with the read on the opposite strand */
     LETTER_TYPE *bkwd_seq;
-    char* reversed_read = calloc(r->length + 1, sizeof(char));
-    rev_complement_read( r->char_seq, reversed_read, r->length );
-    bkwd_seq = translate_seq( reversed_read, r->length, &bkwd_seq );
+    rev_complement_read( r->char_seq, tmp_read, r->length );
+    bkwd_seq = translate_seq( tmp_read, r->length, &bkwd_seq );
+    replace_ns_inplace( tmp_read, r->length );
     assert( bkwd_seq != NULL );
     
     /* map the full read */
@@ -1343,7 +1350,7 @@ search_index( index_t* index,
     /* Free the allocated memory */
     free( fwd_seq );
     free( bkwd_seq );
-    free( reversed_read );
+    free( tmp_read );
 
 cleanup_table:
 

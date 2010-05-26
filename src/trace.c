@@ -148,9 +148,12 @@ close_traces( struct trace_t* traces )
                 exit( -1 );
             }
         }
+
+        free( traces->traces[i] );
     }
 
     free( traces->trace_lengths );
+    free( traces->traces );
     free( traces );
 
     return;

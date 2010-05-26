@@ -12,7 +12,11 @@
  *
  */
 
-inline int calc_num_letters( const int seq_len );
+void
+replace_ns_inplace( char* read, int seq_len );
+
+inline int 
+calc_num_letters( const int seq_len );
 
 LETTER_TYPE*
 copy_first_k_basepairs( 

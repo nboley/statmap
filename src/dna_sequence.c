@@ -7,11 +7,36 @@
 #include "dna_sequence.h"
 
 /*
- * packed_sequence.c
  *
  * Functions and data types for manipulating packed sequences.
  *
  */
+
+/*
+ * Change all N's to A's
+ * 
+ * If we are trying to map sequences that contain N's,
+ * then we do a lowest quality sequence subsitution and
+ * then change the actual basepair to 'A' ( arbitrarily ).
+ * This is equivalent to us knowing nothing about the BP.
+ *
+ */
+void
+replace_ns_inplace( char* read, int seq_len )
+{
+    /* take the read complement */
+    int i;
+    for( i = 0; i < seq_len; i++ )
+    {
+        if( read[i] == 'N' || read[i] == 'n' )
+        {
+            read[i] = 'A';
+        }
+    }
+
+    return;
+}
+
 
 inline int
 calc_num_letters( const int seq_len )
@@ -272,14 +297,12 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
                 case 'N':
                 case 'n':
                     free( *result );
-                    *result = NULL;
                     return NULL;
                 default:          
                     free( *result );
                     fprintf (stderr, "Error in the sequence - read '%c'\n", bp);
                     return NULL;
             }
-            //printf("%.32s\t%c\t%i\t%c\n", seq, bp,  bp_index, current_letter);
             current_letter = current_letter << 2;
             current_letter = (current_letter | trans_val);
         }
@@ -401,4 +424,3 @@ cmp_words(   LETTER_TYPE* seq1,
     return 0;
 
 }
-

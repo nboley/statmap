@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include "quality.h"
+#include "rawread.h"
 
 /*
  *  This determines whether we consider the quality scores to 
@@ -220,42 +221,49 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
 }
 
 void
-build_lookup_table_from_qualities ( char* qual,
-                                           float* lookuptable_position,
-                                           float* inverse_lookuptable_position,
-                                           float* reverse_lookuptable_position,
-                                           float* reverse_inverse_lookuptable_position,
-                                           int seq_len
+build_lookup_table_from_rawread ( struct rawread* rd,
+                                  float* lookuptable_position,
+                                  float* inverse_lookuptable_position,
+                                  float* reverse_lookuptable_position,
+                                  float* reverse_inverse_lookuptable_position
     )
 {
     int i;
-    for( i = 0; i < seq_len; i++ )
+    for( i = 0; i < rd->length; i++ )
     {
-        if( ARE_LOG_ODDS == false )
+        unsigned char quality_char = ((unsigned char) rd->error_str[i]) - QUAL_SHIFT;
+
+        /* check to see if the read is an 'N'. If it is, set the qual to the min */
+        if( rd->char_seq[i] == 'N' || rd->char_seq[i] == 'n' )
         {
-            lookuptable_position[i] = 
-                logodds_lookuptable_score[ 
-                    ((unsigned char) qual[i]) - QUAL_SHIFT ];
+            /* set the probability that this is incorrect to 0.75 */
+            lookuptable_position[i] = -0.1249387;
         } else {
-            lookuptable_position[i] = 
-                logprb_lookuptable_score[ 
-                    ((unsigned char) qual[i]) - QUAL_SHIFT ];
+            if( ARE_LOG_ODDS == false )
+            {
+                lookuptable_position[i] = logodds_lookuptable_score[ quality_char ];
+            } else {
+                lookuptable_position[i] = logprb_lookuptable_score[ quality_char ];
+            }
         }
-        reverse_lookuptable_position[seq_len-1-i] 
-            = lookuptable_position[i];
+        /* set the reverse position */
+        reverse_lookuptable_position[rd->length-1-i] = lookuptable_position[i];
         
-        
-        if( ARE_LOG_ODDS == false ) {
-            inverse_lookuptable_position[i] = 
-                logodds_inverse_lookuptable_score[ 
-                    ((unsigned char) qual[i]) - QUAL_SHIFT ];
-        } else {
-            inverse_lookuptable_position[i] = 
-                logprb_inverse_lookuptable_score[ 
-                    ((unsigned char) qual[i]) - QUAL_SHIFT ];
+        /* check to see if the read is an 'N'. If it is, set the qual to the min */
+        if( rd->char_seq[i] == 'N' || rd->char_seq[i] == 'n' )
+        {
+            /* set the probability that this is incorrect to 0.75 */
+            inverse_lookuptable_position[i] = -0.60206;
+        } else {        
+            if( ARE_LOG_ODDS == false ) {
+                inverse_lookuptable_position[i] = 
+                    logodds_inverse_lookuptable_score[ quality_char ];
+            } else {
+                inverse_lookuptable_position[i] = 
+                    logprb_inverse_lookuptable_score[ quality_char ];
+            }
         }
-        
-        reverse_inverse_lookuptable_position[seq_len-1-i] 
+        reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
     }
 
