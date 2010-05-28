@@ -5,6 +5,8 @@
 
 /****** configuration options                   ******/
 
+#define DEFAULT_MIN_MATCH_PENALTY -7.0
+#define DEFAULT_MAX_PENALTY_SPREAD 2.1
 #define SAVE_STARTING_SAMPLES true
 #define STARTING_SAMPLES_PATH "./starting_samples/"
 #define SAVE_SAMPLES true

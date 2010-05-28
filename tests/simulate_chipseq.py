@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 5000
-NUM_SAMPLES = 100
+NUM_SAMPLES = 10
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -225,8 +225,9 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_2.close()
 
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -p %.2f -m %.2f -n %i -f ./data/fl_dist.txt\
-                             " % ( sc.STATMAP_PATH, -10, 2, NUM_SAMPLES )
+                             -o smo_chipseq_sim \
+                             -n %i -f ./data/fl_dist.txt\
+                             " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     if iterative:
         call += " -a i"
         
@@ -339,7 +340,7 @@ def plot_wig_bounds( dir, png_fname):
     curr_dir = os.getcwd()
     rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750 )
     
-    density = parse_wig( "./statmap_output/max_trace.wig", genome )
+    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
     density_max = density.max()
     density = density/density_max
     rpy.r.plot( density, type='l', col='black', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2) )
@@ -356,10 +357,10 @@ def plot_wig_bounds( dir, png_fname):
 
     os.chdir(curr_dir)
     
-    density = parse_wig( "./statmap_output/min_trace.wig", genome )/density_max
+    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )/density_max
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
 
-    density = parse_wig( "./statmap_output/relaxed_mapping.wig", genome )/density_max
+    density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )/density_max
     rpy.r.points( density, type='l', col='green', main='', xlab='', ylab='', lty=4 )
         
     rpy.r.dev_off()
@@ -369,11 +370,11 @@ def plot_wig_bounds( dir, png_fname):
 if __name__ == '__main__':
     mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
     build_all_wiggles( mutations, False )
-    plot_wig_bounds( "./statmap_output/samples/", "relaxed_samples.png")
-    plot_wig_bounds( "./statmap_output/starting_samples/", "starting_samples.png")
+    plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
+    plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
     if sc.CLEANUP:
         subprocess.call( "rm tmp.*", shell=True )
-        subprocess.call( "rm ./statmap_output/ -rf", shell=True )
+        subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
     sys.exit( -1 )
 
     mutations = [] # [ 1, 10, 25, 100, 1000  ]
@@ -381,7 +382,7 @@ if __name__ == '__main__':
     plot_all_wiggles( mutations )
     if sc.CLEANUP:
         subprocess.call( "rm tmp.*", shell=True )
-        subprocess.call( "rm ./statmap_output/ -rf", shell=True )
+        subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
 
 
 

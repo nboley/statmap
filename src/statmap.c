@@ -13,6 +13,9 @@
 #include <sys/stat.h>
 /* chdir */
 #include <sys/unistd.h>
+/* check for system signals */
+#include <signal.h>
+#include <sys/wait.h>
 
 #include "statmap.h"
 #include "find_candidate_mappings.h"
@@ -325,20 +328,6 @@ parse_arguments( int argc, char** argv )
         exit(-1);
     }
 
-    if( args.min_match_penalty == 1 )
-    {
-        usage();
-        fprintf(stderr, "FATAL       :  -p ( min match penalty ) is required\n");
-        exit( -1 );
-    }
-
-    if( args.max_penalty_spread == -1 )
-    {
-        usage();
-        fprintf(stderr, "FATAL       :  -m ( max penalty spread ) is required\n");
-        exit( -1 );
-    }
-
     if( args.unpaired_reads_fnames == NULL
         && ( args.pair2_reads_fnames == NULL
              || args.pair1_reads_fnames == NULL ) 
@@ -386,15 +375,34 @@ parse_arguments( int argc, char** argv )
     /* Make the output directory */
     if( args.output_directory == NULL )
     {
-        args.output_directory = "statmap_output";
+        time_t rawtime;
+        time ( &rawtime );
+        struct tm * timeinfo;
+        timeinfo = localtime ( &rawtime );        
+        char buffer[200];
+        strftime (buffer, 200, "statmap_output_%Y_%m_%d_%H_%m", timeinfo);
+        args.output_directory = calloc(strlen(buffer)+1, sizeof(char));
+        memcpy( args.output_directory, buffer, (strlen(buffer)+1)*sizeof(char) );
     } 
     error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
     if( -1 == error )
     {
-        perror( "FATAL       :  Cannot make output directory ");
+        perror( "FATAL       :  Cannot make output directory");
         exit( -1 );
     }
-
+    
+    if( args.min_match_penalty == 1 )
+    {
+        args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
+        fprintf(stderr, "NOTICE      :  Setting the min_match_penalty (-p) to %.3f\n", DEFAULT_MIN_MATCH_PENALTY );        
+    }
+    
+    if( args.max_penalty_spread == -1 )
+    {
+        args.max_penalty_spread = DEFAULT_MAX_PENALTY_SPREAD;
+        fprintf(stderr, "NOTICE      :  Setting the max_penalty_spread (-m) to %.3f\n", DEFAULT_MAX_PENALTY_SPREAD );        
+    }
+    
     /***** Copy the reads file into the output directory ****/
     /* If the reads are not paired */
     if( args.unpaired_reads_fnames != NULL )
@@ -403,7 +411,15 @@ parse_arguments( int argc, char** argv )
         char buffer[500];
         sprintf( buffer, "cp %s %s/reads.unpaired", args.unpaired_reads_fnames, args.output_directory );
         fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.unpaired_reads_fnames );
-        system( buffer );
+        error = system( buffer );
+        if (WIFSIGNALED(error) &&
+            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        {
+            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+            perror( "System Call Failure");
+            assert( false );
+            exit( -1 );
+        }
     } 
     /* If the reads are paired */
     else {
@@ -411,10 +427,28 @@ parse_arguments( int argc, char** argv )
         char buffer[500];
         sprintf( buffer, "cp %s %s/reads.pair1", args.pair1_reads_fnames, args.output_directory );
         fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair1_reads_fnames );
-        system( buffer );
+        error = system( buffer );
+        if (WIFSIGNALED(error) &&
+            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        {
+            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+            perror( "System Call Failure");
+            assert( false );
+            exit( -1 );
+        }
+
         fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair2_reads_fnames );
         sprintf( buffer, "cp %s %s/reads.pair2", args.pair2_reads_fnames, args.output_directory );
-        system( buffer );
+        error = system( buffer );
+        if (WIFSIGNALED(error) &&
+            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        {
+            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+            perror( "System Call Failure");
+            assert( false );
+            exit( -1 );
+        }
+
     }
 
     /*

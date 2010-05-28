@@ -205,8 +205,8 @@ def write_genome_to_fasta( genome, fasta_fp, num_repeats=1 ):
         chr_size = len(seq)
 
         for start, stop in izip( \
-            xrange(0,chr_size,FA_LL), \
-            xrange(FA_LL,chr_size+FA_LL+1,FA_LL) \
+                xrange(0,chr_size,FA_LL), \
+                xrange(FA_LL,chr_size+FA_LL+1,FA_LL) \
             ):
             fasta_fp.write( seq[start:stop] )
             fasta_fp.write( "\n" )
@@ -394,6 +394,8 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False ):
+    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
+
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -418,9 +420,8 @@ def test_sequence_finding( read_len, rev_comp = False ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq \
-                             -p %.2f -m %.2f \
-                             -t 1 " % ( STATMAP_PATH, -10, 2 )
+    call = "%s -g tmp.genome -r tmp.fastq -o %s\
+                             -t 1 " % ( STATMAP_PATH, output_directory )
     
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -431,7 +432,7 @@ def test_sequence_finding( read_len, rev_comp = False ):
         
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./statmap_output/mapped_reads.sam" )
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
@@ -459,7 +460,7 @@ def test_sequence_finding( read_len, rev_comp = False ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-    shutil.rmtree("./statmap_output/")
+        shutil.rmtree(output_directory)
 
 
 def test_fivep_sequence_finding( ):
@@ -491,6 +492,8 @@ def test_short_sequences():
 ###
 # Test to make sure that we are correctly finding paired end reads. 
 def test_paired_end_reads( read_len ):
+    output_directory = "smo_test_paired_end_reads_%i" % ( read_len )    
+
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -523,9 +526,8 @@ def test_paired_end_reads( read_len ):
     reads_of_1.close()
     reads_of_2.close()
 
-    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq  \
-                               -p %.2f -m %.2f \
-                               -t 1 " % ( STATMAP_PATH, -10, 2 )
+    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq -o %s \
+                               -t 1 " % ( STATMAP_PATH, output_directory)
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -535,7 +537,7 @@ def test_paired_end_reads( read_len ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./statmap_output/mapped_reads.sam" )
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     # we divide by two to account for the double write
     total_num_reads = sum( 1 for line in sam_fp )/2
     sam_fp.seek(0)
@@ -565,7 +567,7 @@ def test_paired_end_reads( read_len ):
         os.remove("./tmp.genome")
         os.remove("./tmp.1.fastq")
         os.remove("./tmp.2.fastq")
-    shutil.rmtree("./statmap_output/")
+        shutil.rmtree(output_directory)
 
 def test_paired_end_sequence_finding( ):
     rls = [ 25, 75  ]
@@ -575,6 +577,8 @@ def test_paired_end_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
+    output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads )
+    
     rl = read_len
     GENOME_LEN = gen_len
 
@@ -600,9 +604,8 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq \
-                             -p %.2f -m %.2f \
-                             -t %i " % ( STATMAP_PATH, -10, 2, n_threads )
+    call = "%s -g tmp.genome -r tmp.fastq -o %s \
+                             -t %i " % ( STATMAP_PATH, output_directory, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -612,7 +615,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./statmap_output/mapped_reads.sam" )
+    sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
@@ -641,7 +644,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-    shutil.rmtree("./statmap_output/")
+        shutil.rmtree(output_directory)
 
 def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
@@ -659,6 +662,8 @@ def test_lots_of_repeat_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i" % ( read_len, min_penalty, n_threads )
+    
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -688,9 +693,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq \
-                             -p %.2f -m 20 \
-                             -t %i " % ( STATMAP_PATH, min_penalty, n_threads )
+    call = "%s -g tmp.genome -r tmp.fastq -o %s \
+                             -p %e -t %i " % ( STATMAP_PATH, output_directory, min_penalty, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -700,13 +704,13 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./statmap_output/mapped_reads.sam" )
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     mapped_read_ids = set( ( line.split("\t")[0].strip() for line in sam_fp ) )
     total_num_reads = len( mapped_read_ids ) 
     sam_fp.seek(0)
 
     # find the unmappable reads
-    unmappable_fp = open( "./statmap_output/reads.unpaired.unmappable" )
+    unmappable_fp = open( "./%s/reads.unpaired.unmappable" % output_directory )
     num_unmappable_reads = sum( 1 for line in unmappable_fp )/4
     unmappable_fp.seek(0)
     unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
@@ -763,7 +767,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     if CLEANUP:
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
-    shutil.rmtree("./statmap_output/")
+        shutil.rmtree(output_directory)
 
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
@@ -787,6 +791,7 @@ def test_multithreaded_mapping( ):
 ###
 # Test to make sure that we are correctly indexing and finding snps
 def test_snps( read_len, num_snps = 10 ):
+    output_directory = "smo_test_snps_%i_%i" % ( read_len, num_snps )
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -842,9 +847,9 @@ def test_snps( read_len, num_snps = 10 ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -s tmp.snpcov \
+    call = "%s -g tmp.genome -r tmp.fastq -s tmp.snpcov -o %s \
                              -p %.2f -m %.2f \
-                             -t 1 " % ( STATMAP_PATH, -10.0, 0.50 )
+                             -t 1 " % ( STATMAP_PATH, output_directory, -10.0, 0.50 )
         
     print >> stdout, re.sub( "\s+", " ", call)
     
@@ -855,7 +860,7 @@ def test_snps( read_len, num_snps = 10 ):
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./statmap_output/mapped_reads.sam" )
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
     
@@ -884,7 +889,7 @@ def test_snps( read_len, num_snps = 10 ):
 
     ###### Test the snp file to make sure that each of the snps appears #############
     
-    snp_fp = open( "./statmap_output/updated_snp_cnts.snp" )
+    snp_fp = open( "./%s/updated_snp_cnts.snp" % output_directory )
     lines = list( snp_fp )
     snp_fp.close()
     for line_num, (line, ref_cnt, alt_cnt) in enumerate(zip( lines[1:], ref_snps, alt_snps)):
@@ -898,7 +903,7 @@ def test_snps( read_len, num_snps = 10 ):
         os.remove("./tmp.genome")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
-    shutil.rmtree("./statmap_output/")
+        shutil.rmtree(output_directory)
         
 
 def test_snp_finding( ):

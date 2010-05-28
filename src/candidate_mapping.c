@@ -349,8 +349,6 @@ init_candidate_mappings_db( candidate_mappings_db* db,
 void
 close_candidate_mappings_db( candidate_mappings_db* db )
 {  
-    int error;
-
     int i;
     for( i = 0; i < num_threads; i++ )
     {
@@ -368,21 +366,7 @@ close_candidate_mappings_db( candidate_mappings_db* db )
     free( db->full_1st_bkwd_rds );
     free( db->full_2nd_fwd_rds );
     free( db->full_2nd_bkwd_rds );
-
-    /* Remove the cand mapping files */
-    char buffer[255];
-    sprintf( buffer, "rm %s -rf\n", db->data_dir );
-    fprintf( stderr, "NOTICE      :  Removing tmp directory: %s", buffer );
-    error = system( buffer );
-    if( error != 0 )
-    {
-        fprintf(stderr, "FATAL       :  Error removing temp files.\n");
-        fprintf(stderr, "Failed cmd: %s\n", buffer);
-        assert(false);
-        exit( -1 );
-    }
-
-
+    
     free( db->data_dir );
     
     return;
