@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 5000
-NUM_SAMPLES = 10
+NUM_SAMPLES = 100
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -343,7 +343,7 @@ def plot_wig_bounds( dir, png_fname):
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
     density_max = density.max()
     density = density/density_max
-    rpy.r.plot( density, type='l', col='black', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2) )
+    rpy.r.plot( density, type='l', col='blue', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2) )
 
     fnames = []
     os.chdir(dir)
@@ -375,15 +375,16 @@ if __name__ == '__main__':
     if sc.CLEANUP:
         subprocess.call( "rm tmp.*", shell=True )
         subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
-    sys.exit( -1 )
 
-    mutations = [] # [ 1, 10, 25, 100, 1000  ]
+    # BROKEN
+    """
+    mutations = [ 1, 3, 10, 25, 100  ]
     build_all_wiggles( mutations, False )
     plot_all_wiggles( mutations )
     if sc.CLEANUP:
         subprocess.call( "rm tmp.*", shell=True )
         subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
-
+    """
 
 
 

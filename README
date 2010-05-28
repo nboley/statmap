@@ -1,8 +1,14 @@
 Statmap is a mapping utility.
 
-( write intro )
+Statmap is a fast alignment tool designed for mapping short reads to a reference 
+genome under a probability model. The probability model allows statmap to do many 
+things that other mapping tools cannot including 1) Mapping to uncertain reference 
+genome 2) Estimating mapping probabilities for  multi-mappers and then intelligently 
+placing them under an assay specific model 3) Estimating confidence bounds on mapped 
+read density.
 
-Contact: Nathan Boley ( nboley (AT) berkeley.edu )
+Website:      http://encodestatistics.org/statmap/.
+Contact:      Nathan Boley ( nboley (AT) berkeley.edu )
 Mailing List: http://groups.google.com/group/statmap
 
 ===== Input =========================================================================
@@ -150,10 +156,6 @@ since the sampling is random, the results are only truely reproducible with the
 random starting locations ( although, of course, if you are getting different 
 results from different runs, you are not sampling deeply enough. )
 
-starting_samples/sample_meta_info.csv -
-
-Store meta information about each sample. For now, this is only the likelihood.
-
 samples/sample_X.wig -
 
 These are the relaxed mappings for each starting sample. If one is interested in
@@ -162,10 +164,6 @@ is to make inference about each of these samples, and then weight by their respe
 likelihoods. For instance, if one is interested in assessing the variation in 
 called peaks, a good approach might be to run the peak caller on each wiggle file
 and then report confidence as the percentage of times that a given peak was called. 
-
-starting_samples/sample_meta_info.csv -
-
-Store meta information about each sample. For now, this is only the likelihood.
 
 min_read_density.wig - 
 
@@ -248,10 +246,9 @@ Furthermore, there are several functions that can be called to run specific test
 
 simulate_chipseq.py:
 
-This simulates and maps a chipseq experiment to measure the ability of the chipseq
-kernel to distringuish between repeated regions. It runs the experiment for repeats 
-of various qualities, maps back to the region, and then plots the densities to a png,
-which it saves as 'chipseq_sim_output.wig'
+This simulates to explore the variance estimates by simulating a chip-seq experiment, 
+with a paralog and plotting the starting location and updated read densities in the files 
+starting_samples.png and relaxed_samples.png.
 
 
 
