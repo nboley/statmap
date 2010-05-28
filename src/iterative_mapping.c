@@ -255,7 +255,7 @@ update_traces_from_mapped_reads(
  * 
  */ 
 struct update_mapped_reads_param {
-    double abs_error;
+    struct update_mapped_read_rv_t rv;
     
     /* 
      * we lock the read index, so that threads grab the next available read
@@ -269,8 +269,9 @@ struct update_mapped_reads_param {
     
     struct mapped_reads_db* reads_db;
     struct trace_t* traces;
-    double (* update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                        const struct mapped_read_t* const r  );
+    struct update_mapped_read_rv_t 
+        (* update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                     const struct mapped_read_t* const r  );
     
 };
 
@@ -286,8 +287,9 @@ update_mapped_reads_from_trace_worker( void* params )
     struct mapped_reads_db* reads_db = 
         ( (struct update_mapped_reads_param*) params)->reads_db;
 
-    double (* update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                        const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (* update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                     const struct mapped_read_t* const r  )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
 
@@ -312,10 +314,15 @@ update_mapped_reads_from_trace_worker( void* params )
         
         
         /* Update the read */
-        double tmp_abs_error = update_mapped_read_prbs( traces, &r );
+        struct update_mapped_read_rv_t tmp_rv 
+            = update_mapped_read_prbs( traces, &r );
+
         /* Hand reduce the max */
-        if( tmp_abs_error > ( (struct update_mapped_reads_param*) params)->abs_error )
-            ( (struct update_mapped_reads_param*) params)->abs_error = tmp_abs_error;
+        if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
+            ( (struct update_mapped_reads_param*) params)->rv.max_change = tmp_rv.max_change;
+
+        /* Update the lhd */
+        ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
         
         /* update the read index */
         pthread_mutex_lock( curr_read_index_mutex );
@@ -328,16 +335,17 @@ update_mapped_reads_from_trace_worker( void* params )
 }
 
 
-double
+struct update_mapped_read_rv_t
 update_mapped_reads_from_trace( 
     struct mapped_reads_db* reads_db,
     struct trace_t* traces,
-    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
     )
 {    
-    /* store the total accumulated error */
-    double abs_error = 0;
+    /* store the toal accumulated error */
+    struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
@@ -355,10 +363,12 @@ update_mapped_reads_from_trace(
             read_start += sizeof(unsigned short)/sizeof(char);
             r.locations = (struct mapped_read_location*) read_start;
             
-            double tmp_abs_error= update_mapped_read_prbs( traces, &r );
+            struct update_mapped_read_rv_t tmp_rv = 
+                update_mapped_read_prbs( traces, &r );
+            
             /* Hand reduce the max */
-            if( tmp_abs_error > abs_error )
-                abs_error = tmp_abs_error;
+            if( tmp_rv.max_change > rv.max_change )
+                rv.max_change = tmp_rv.max_change;
         }
     } else {
         /* initialize the read number mutex */
@@ -366,7 +376,9 @@ update_mapped_reads_from_trace(
 
         /* initialize the thread parameters structure */
         struct update_mapped_reads_param params;
-        params.abs_error = 0;
+        
+        params.rv.max_change = 0;
+        params.rv.log_lhd = 0;
         
         params.curr_read_index_mutex = &curr_read_index_mutex;
         unsigned int curr_read_index = 0;
@@ -421,12 +433,13 @@ update_mapped_reads_from_trace(
         /* Aggregate over the max in the error difference */
         for( t=0; t < num_threads; t++ )
         {
-            abs_error = MAX( tds[t].abs_error, abs_error );
+            rv.log_lhd += tds[t].rv.log_lhd;
+            rv.max_change = MAX( tds[t].rv.max_change, rv.max_change );
         }
         free( tds );
     }
         
-    return abs_error;
+    return rv;
 }
 
 int
@@ -439,13 +452,15 @@ update_mapping(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
     )
 {
     clock_t start, stop;
     
-    double abs_error = 0;
+    struct update_mapped_read_rv_t rv = { 0, 0 };
+    
     int num_iterations = 0;
     for( num_iterations = 0; 
          num_iterations < max_num_iterations; 
@@ -458,19 +473,19 @@ update_mapping(
             update_trace_expectation_from_location
         );
 
-        abs_error = update_mapped_reads_from_trace(
+        rv = update_mapped_reads_from_trace(
             rdb, starting_trace, 
             update_mapped_read_prbs
         );
         
         stop = clock( );
-        fprintf( stderr, "Iter %i: Error: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
-                 num_iterations, abs_error, 
+        fprintf( stderr, "Iter %i: Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
+                 num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC,
                  sum_traces( starting_trace )/rdb->num_mmapped_reads
             );
         
-        if( abs_error < max_prb_change_for_convergence )
+        if( rv.max_change < max_prb_change_for_convergence )
             break;
     }
     
@@ -486,8 +501,9 @@ build_random_starting_trace(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc),
 
-    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
     )
 {
     /* int traces to a low consant. This should heavily favor prior reads. */
@@ -584,8 +600,9 @@ sample_random_traces(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc),
     
-    double (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
-                                              const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
                           
 )
 {
@@ -743,11 +760,11 @@ update_chipseq_trace_expectation_from_location(
     return;
 }
 
-double 
+struct update_mapped_read_rv_t 
 update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
                                  const struct mapped_read_t* const r  )
 {
-    double abs_error = 0;
+    struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* allocate space to store the temporary values */
     ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
@@ -755,6 +772,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     /* Update the reads from the trace */
     /* set to flt_min to avoid division by 0 */
     double density_sum = FLT_MIN;
+
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
@@ -810,8 +828,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
             
-            abs_error += MAX( normalized_density - r->locations[i].cond_prob,
-                              -normalized_density  + r->locations[i].cond_prob);
+            rv.max_change += MAX( normalized_density - r->locations[i].cond_prob,
+                                  -normalized_density  + r->locations[i].cond_prob);
             
             r->locations[i].cond_prob = normalized_density;
         }
@@ -820,7 +838,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     /* Free the tmp array */
     free( new_prbs );
 
-    return abs_error;
+    return rv;
 }
 
 /*****************************************************************************
@@ -879,12 +897,13 @@ void update_CAGE_trace_expectation_from_location(
     return;
 }
 
-inline double 
+/* Returns the probability of observing the read, conditional on the trace */
+inline struct update_mapped_read_rv_t 
 update_CAGE_mapped_read_prbs( 
     const struct trace_t* const traces, 
     const struct mapped_read_t* const r  )
 {
-    double abs_error = 0;
+    struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* allocate space to store the temporary values */
     ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
@@ -949,8 +968,8 @@ update_CAGE_mapped_read_prbs(
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
             
-            abs_error += MAX( normalized_density - r->locations[i].cond_prob,
-                              -normalized_density  + r->locations[i].cond_prob);
+            rv.max_change += MAX( normalized_density - r->locations[i].cond_prob,
+                                  -normalized_density  + r->locations[i].cond_prob);
             
             r->locations[i].cond_prob = normalized_density;
             assert( r->locations[i].cond_prob>= 0 );
@@ -960,9 +979,8 @@ update_CAGE_mapped_read_prbs(
     /* Free the tmp array */
     free( new_prbs );   
 
-    return abs_error;
+    return rv;
 }
-
 
 /*
  * END Cage Mapping Code
@@ -984,8 +1002,6 @@ generic_update_mapping( struct mapped_reads_db* rdb,
                         int num_samples,
                         float max_prb_change_for_convergence)
 {
-    const int max_num_iterations = 500;
-
     int error = 0;
     
     void (*update_expectation)(
@@ -993,8 +1009,9 @@ generic_update_mapping( struct mapped_reads_db* rdb,
         const struct mapped_read_location* const loc) 
         = NULL;
     
-    double (*update_reads)( const struct trace_t* const traces, 
-                            const struct mapped_read_t* const r  )
+    struct update_mapped_read_rv_t 
+        (*update_reads)( const struct trace_t* const traces, 
+                         const struct mapped_read_t* const r  )
         = NULL;
 
     #define CAGE_TRACK_NAMES {"fwd_strnd_reads", "rev_strnd_reads"}
@@ -1037,7 +1054,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     error = update_mapping (
         rdb, 
         uniform_trace,
-        max_num_iterations,
+        MAX_NUM_EM_ITERATIONS,
         max_prb_change_for_convergence,
         update_expectation,
         update_reads
@@ -1051,7 +1068,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     error = sample_random_traces(
         rdb, genome, 
         trace_size, track_names,
-        num_samples, max_num_iterations, 
+        num_samples, MAX_NUM_EM_ITERATIONS, 
         max_prb_change_for_convergence,
         update_expectation, update_reads
     );

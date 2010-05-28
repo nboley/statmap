@@ -41,8 +41,9 @@ M 0.95) Fix sam printing for threaded apps and paired end reads
 M ( I dont know what I was talking about here - but it seems to work )
 X 0.96) Fix sample wiggle printing code so that it works for other trace types
 X 1) Allow users to specify an output directory ( generic chdir )
+1.01) Finish the recheck code
 1.1) Make srue the read len calc is good for paired end reads
-     That is, we should graba  couple of sequences from both files
+     That is, we should grab a  couple of sequences from both files
 2) Cleanup the rawreaddb interface
    i) create a cursor interface
    X ii) integrate locking and readkey with the cursor/db interface

@@ -5,8 +5,14 @@
 
 /****** configuration options                   ******/
 
+// Candidate Mappings
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
+
+// Iterative Mapping
+#define MAX_NUM_EM_ITERATIONS 500
+
+// Output
 #define SAVE_STARTING_SAMPLES true
 #define STARTING_SAMPLES_PATH "./starting_samples/"
 #define SAVE_SAMPLES true
@@ -112,7 +118,9 @@ enum RECHECK
 };
 
 
-/* 
+/*
+ * THIS SECTION IS OBSOLETE *************************************
+ 
    Store potential junctions
    We just keep track of which strand the gene that could
    have been at this location could have come from.
