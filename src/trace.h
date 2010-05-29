@@ -26,6 +26,9 @@ copy_trace_structure( struct trace_t** traces,
 void
 close_traces( struct trace_t* traces );
 
+void
+normalize_traces( struct trace_t* traces );
+
 double
 sum_traces( struct trace_t* traces );
 

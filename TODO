@@ -38,7 +38,7 @@ X 0.1) use memset in the trace zeroing ( update trace from reads )
 X 0.8) rename mapped_short_read to packed_mapped_read
 X 0.9) Seperate joining and sam printing
 M 0.95) Fix sam printing for threaded apps and paired end reads
-M ( I dont know what I was talking about here - but it seems to work )
+M ( I dont know what I was talking about when I added this TODO - but it seems to work )
 X 0.96) Fix sample wiggle printing code so that it works for other trace types
 X 1) Allow users to specify an output directory ( generic chdir )
 1.01) Finish the recheck code

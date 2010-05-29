@@ -11,12 +11,21 @@
 
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500
+#define MAX_PRB_CHANGE_FOR_CONVERGENCE 1e-3
 
-// Output
+// Wiggle output
+#define MAX_TRACE_FNAME "max_trace.wig"
+#define MIN_TRACE_FNAME "min_trace.wig"
+
+
+// Samples output 
 #define SAVE_STARTING_SAMPLES true
 #define STARTING_SAMPLES_PATH "./starting_samples/"
+#define STARTING_SAMPLES_META_INFO_FNAME "./starting_samples/meta_info.csv"
+
 #define SAVE_SAMPLES true
 #define RELAXED_SAMPLES_PATH "./samples/"
+#define RELAXED_SAMPLES_META_INFO_FNAME "./samples/meta_info.csv"
 
 /**** determine how the letters are packed       ****/
 

@@ -442,6 +442,23 @@ update_mapped_reads_from_trace(
     return rv;
 }
 
+double
+calc_log_lhd( 
+    struct mapped_reads_db* reads_db,
+    struct trace_t* traces,
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
+    )
+{    
+    struct update_mapped_read_rv_t rv;
+    
+    rv = update_mapped_reads_from_trace( 
+        reads_db, traces, update_mapped_read_prbs );
+    
+    return rv.log_lhd;
+}
+
 int
 update_mapping(
     struct mapped_reads_db* rdb,
@@ -459,8 +476,6 @@ update_mapping(
 {
     clock_t start, stop;
     
-    struct update_mapped_read_rv_t rv = { 0, 0 };
-    
     int num_iterations = 0;
     for( num_iterations = 0; 
          num_iterations < max_num_iterations; 
@@ -473,16 +488,19 @@ update_mapping(
             update_trace_expectation_from_location
         );
 
-        rv = update_mapped_reads_from_trace(
+        /* Normalize the trace sum to 1 */
+        /* This makes the trace the current marginal read density estimate */
+        normalize_traces( starting_trace );
+        
+        struct update_mapped_read_rv_t rv = update_mapped_reads_from_trace(
             rdb, starting_trace, 
             update_mapped_read_prbs
         );
         
         stop = clock( );
-        fprintf( stderr, "Iter %i: Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\tTrace Sum: %e\n", 
+        fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
-                 ((double)stop-(double)start)/CLOCKS_PER_SEC,
-                 sum_traces( starting_trace )/rdb->num_mmapped_reads
+                 ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
         
         if( rv.max_change < max_prb_change_for_convergence )
@@ -606,6 +624,10 @@ sample_random_traces(
                           
 )
 {
+    /* Store meta information about the samples and starting samples */
+    FILE* ss_mi;
+    FILE* s_mi;
+
     /* Seed the random number generator */
     srand ( time(NULL) );
 
@@ -616,11 +638,23 @@ sample_random_traces(
     /* The min we need to initialize, and then set to flt max */
     init_traces( genome, &min_trace, num_tracks );
     set_trace_to_uniform( min_trace, FLT_MAX );
-            
+
+    /* Create the meta data csv's */
+    if( SAVE_STARTING_SAMPLES )
+    {
+        ss_mi = fopen(STARTING_SAMPLES_META_INFO_FNAME, "w");
+        fprintf( ss_mi, "sample_number,log_lhd\n" );
+    }
+
+    s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
+    fprintf( s_mi, "sample_number,log_lhd\n" );
+    
     /* build bootstrap samples. Then take the max and min. */
     int i;
     for( i = 0; i < num_samples; i++ )
     {
+        printf( "Starting Sample %i\n", i+1 );
+
         struct trace_t* sample_trace;
         init_traces( genome, &sample_trace, num_tracks );
 
@@ -639,6 +673,10 @@ sample_random_traces(
                 sample_trace, 
                 genome->chr_names, track_names,
                 buffer, max_prb_change_for_convergence );
+            
+            double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+            fprintf( ss_mi, "%i+1,%e\n", i, log_lhd );
+            fflush( ss_mi );
         }
         
         /* update the mapping */
@@ -658,6 +696,10 @@ sample_random_traces(
                 sample_trace, 
                 genome->chr_names, track_names,
                 buffer, max_prb_change_for_convergence );
+            
+            double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+            fprintf( s_mi, "%i+1,%e\n", i, log_lhd );
+            fflush( s_mi );
         }
 
         aggregate_over_traces( max_trace, sample_trace, max );
@@ -665,23 +707,20 @@ sample_random_traces(
         aggregate_over_traces( min_trace, sample_trace, min );
 
         close_traces( sample_trace );
-        
-        printf( "Sample %i\n", i+1 );
     }
 
     write_wiggle_from_trace( 
         max_trace, 
         genome->chr_names, track_names,
-        "max_trace.wig", 
+        MAX_TRACE_FNAME, 
         max_prb_change_for_convergence );
 
     close_traces( max_trace );
-    
-    
+        
     write_wiggle_from_trace( 
         min_trace, 
         genome->chr_names, track_names,
-        "min_trace.wig", 
+        MIN_TRACE_FNAME, 
         max_prb_change_for_convergence );
     
     close_traces( min_trace );
@@ -771,7 +810,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     
     /* Update the reads from the trace */
     /* set to flt_min to avoid division by 0 */
-    double density_sum = FLT_MIN;
+    double prb_sum = FLT_MIN;
 
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
@@ -786,7 +825,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         
         /* If the reads are paired */
         unsigned int j = 0;
-        if( (flag&IS_PAIRED) > 1 )
+        if( (flag&IS_PAIRED) > 0 )
         {
             for( j = start; j <= stop; j++ )
             {
@@ -797,6 +836,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         } 
         /* If the read is *not* paired */
         else {
+            /* This is completely broken */
+            assert( 0 );
             /* BUG - FIXME - hope that we actually have a fragment length */
             /* FIXME get the real fragment length */
             /* FIXME - cleanup the stop condition */
@@ -809,24 +850,22 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             }
         }
         
+        /* 
+         * This is the probability of observing the seqeunce given that it came from 
+         * location i, assuming the chip traces have been normalized to 0. 
+         */
         new_prbs[i] = r->locations[i].seq_error*r->locations[i].fl_prob*window_density;
-        density_sum += new_prbs[i];
+        prb_sum += new_prbs[i];
     }
     
     /* renormalize the read probabilities */
-    /* 
-     * if we skip the density at the mapped bp, it's possible for the sum to 
-     * be zero. If this is the case, ignore the read ( and report at the end )
-     * 
-     *   BUG!!!! FIXME The 'report at the end' ( from above ) is not happening
-     */
-    if( density_sum > 0 )
+    if( prb_sum > 0 )
     {
         for( i = 0; i < r->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
             /* absolute value error */
-            double normalized_density = new_prbs[i]/density_sum; 
+            double normalized_density = new_prbs[i]/prb_sum; 
             
             rv.max_change += MAX( normalized_density - r->locations[i].cond_prob,
                                   -normalized_density  + r->locations[i].cond_prob);
@@ -834,6 +873,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             r->locations[i].cond_prob = normalized_density;
         }
     }      
+    
+    rv.log_lhd = log10( prb_sum );
     
     /* Free the tmp array */
     free( new_prbs );

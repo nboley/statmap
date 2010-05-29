@@ -5,12 +5,6 @@
 struct genome_data;
 #include "mapped_read.h"
 
-#define HQ_THRESHOLD 0.95
-
-#define LOCATIONS_GROWTH_FACTOR 1000
-
-#define SKIP_THIS_BP
-
 #define WINDOW_SIZE 20
 
 struct update_mapped_read_rv_t {
@@ -44,6 +38,15 @@ update_traces_from_mapped_reads(
 
 struct update_mapped_read_rv_t
 update_mapped_reads_from_trace( 
+    struct mapped_reads_db* reads_db,
+    struct trace_t* traces,
+    struct update_mapped_read_rv_t 
+        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+                                           const struct mapped_read_t* const r  )
+);
+
+double
+calc_log_lhd ( 
     struct mapped_reads_db* reads_db,
     struct trace_t* traces,
     struct update_mapped_read_rv_t 

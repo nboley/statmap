@@ -156,6 +156,10 @@ since the sampling is random, the results are only truely reproducible with the
 random starting locations ( although, of course, if you are getting different 
 results from different runs, you are not sampling deeply enough. )
 
+starting_samples/meta_info.csv -
+
+Store meta information about each sample. For now, this is only the likelihood.
+
 samples/sample_X.wig -
 
 These are the relaxed mappings for each starting sample. If one is interested in
@@ -164,6 +168,10 @@ is to make inference about each of these samples, and then weight by their respe
 likelihoods. For instance, if one is interested in assessing the variation in 
 called peaks, a good approach might be to run the peak caller on each wiggle file
 and then report confidence as the percentage of times that a given peak was called. 
+
+samples/meta_info.csv -
+
+Store meta information about each sample. For now, this is only the likelihood.
 
 min_read_density.wig - 
 

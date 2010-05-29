@@ -159,6 +159,21 @@ close_traces( struct trace_t* traces )
     return;
 }
 
+void
+normalize_traces( struct trace_t* traces )
+{
+    double sum = sum_traces( traces );
+
+    int i, j;
+    unsigned int k;
+    for( i = 0; i < traces->num_traces; i++ )
+        for( j = 0; j < traces->num_chrs; j++ )
+            for( k = 0; k < traces->trace_lengths[i]; k++ )
+                traces->traces[i][j][k] /= sum;
+    
+    return;
+}
+
 double
 sum_traces( struct trace_t* traces )
 {

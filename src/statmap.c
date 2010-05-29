@@ -706,7 +706,8 @@ map_marginal( args_t* args, struct genome_data* genome )
     index_mapped_reads_db( mpd_rds_db );
     set_all_read_fl_probs( mpd_rds_db );
     generic_update_mapping( mpd_rds_db, genome, args->assay_type,
-                            args->num_starting_locations, 1e-2);
+                            args->num_starting_locations, 
+                            MAX_PRB_CHANGE_FOR_CONVERGENCE );
     
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
