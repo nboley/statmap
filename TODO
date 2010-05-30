@@ -1,3 +1,4 @@
+-21) Make random number generation actually uniform by stopping  rand()%MODULO usage
 X -20) Make DEFAULT output use timestamp
 X -19) add in MAKE CHECK
 M -18) Make copy traces actually copy traces
@@ -11,7 +12,7 @@ X -15c) Actually start using the inferred fragment length distribution
 -15d) Fix and write tests for single end chipseq reads
 X -14) write method to reset read conditional prbs
 X -13) use locking, threads for iterative mapping
--12) write lhd code
+X -12) write lhd code
 X -11) get rif of include rawread.h in candidate_mapping.h, use FWD declaration, 
 X -10) remove include candidate_mapping.h from mapped_read
 X -13) Split out trace writing code
@@ -88,3 +89,4 @@ X    seperate files.
 17) Write config file parser, and use it
 18) Add optimization to filter impossible paired end reads 
     ( by FL ) when we dont have to estimate the dist
+19) Paralelize bootstrap Code ( Or, actually make it the parametric bootstrap )

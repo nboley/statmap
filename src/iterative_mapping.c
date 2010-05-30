@@ -139,6 +139,77 @@ update_traces_from_mapped_reads_worker( void* params )
     return 0;
 }
 
+/*
+ * This is technically a non-parametric bootstrap
+ * but since the reads are conditionally independent 
+ * with multinomial reads densities, this is identical
+ * to the parametric bootstrap without needing a bisection
+ * step. The algorithm is
+ * Repeat the following n_read times
+ *     1) Choose a random read uniformily
+ *     2) Choose a random location, weighted by it's probability
+ *     3) update the trace
+ */
+void
+bootstrap_traces_from_mapped_reads( 
+    struct mapped_reads_db* reads_db,
+    struct trace_t* traces,
+    void (* const update_trace_expectation_from_location)(
+        const struct trace_t* const traces, 
+        const struct mapped_read_location* const loc)
+)
+{        
+    /* First, zero the trace to be summed into */
+    zero_traces( traces );
+
+    if( RAND_MAX < reads_db->num_mmapped_reads )
+    {
+        fprintf( stderr, "ERROR     : cannont bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
+        return;
+    }
+    
+    /* Update the trace from reads chosen randomly, with replacement */
+    unsigned int i;
+    for( i = 0; i < reads_db->num_mmapped_reads; i++ )
+    {
+        unsigned int read_index = rand()%(reads_db->num_mmapped_reads);
+        assert( read_index < reads_db->num_mmapped_reads );
+        char* read_start = reads_db->mmapped_reads_starts[ read_index ];
+             
+        
+        /* read a mapping into the struct */
+        struct mapped_read_t r;
+        r.read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        r.num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        r.locations = (struct mapped_read_location*) read_start;
+
+        /* If there are no mappings, then this is pointless */
+        if( r.num_mappings > 0 )
+        {
+            /* Choose a random location, proportional to the normalized probabilities */
+            unsigned int j;
+            float random_num = (float)rand()/(float)RAND_MAX;
+            double cum_dist = 0;
+            for( j = 0; j < r.num_mappings; j++ ) 
+            {
+                cum_dist += r.locations[j].cond_prob;
+                if( random_num <= cum_dist )
+                    break;
+            }
+            
+            /* Add this location to the trace, with prb 1 */
+            /* We do this by temp changing cond_prb, and then changing it back */
+            float tmp_cond_prb = r.locations[j].cond_prob;
+            r.locations[j].cond_prob = 1.0;
+            update_trace_expectation_from_location( traces, r.locations + j );
+            r.locations[j].cond_prob = tmp_cond_prb;
+        }
+    }
+    return;
+}
+
 void
 update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
@@ -528,16 +599,8 @@ build_random_starting_trace(
     set_trace_to_uniform( traces, 1e-10 );
 
     /* Update the trace from the reads */
-    /* 
-     * FIXME - openmp ( for some reason ) throws a warning on an unsigned iteration 
-     * variable. I dont understand why, but I am a bit nervous because the spec used to
-     * be that iteration variable *had* to be unsigned so, I am wasting a ton of 
-     * register space and upcasting all of the unsigned longs to long longs. When 
-     * I move to open mp 3.0, I want to remove this 
-     */
-
-    long long i;
-    for( i = 0; i < (long long) rdb->num_mmapped_reads; i++ )
+    unsigned int i;
+    for( i = 0; i < rdb->num_mmapped_reads; i++ )
     {
         char* read_start = rdb->mmapped_reads_starts[i];
         
@@ -639,6 +702,16 @@ sample_random_traces(
     init_traces( genome, &min_trace, num_tracks );
     set_trace_to_uniform( min_trace, FLT_MAX );
 
+    /* initialize the boostrap max and min traces */
+    struct trace_t *bs_max_trace, *bs_min_trace;
+    if( NUM_BOOTSTRAP_SAMPLES > 0 )
+    {
+        /* initialize the max trace to zero, because the first max is always >= */
+        init_traces( genome, &bs_max_trace, num_tracks );
+        /* The min we need to initialize, and then set to flt max */
+        init_traces( genome, &bs_min_trace, num_tracks );
+    }
+
     /* Create the meta data csv's */
     if( SAVE_STARTING_SAMPLES )
     {
@@ -679,7 +752,7 @@ sample_random_traces(
             fflush( ss_mi );
         }
         
-        /* update the mapping */
+        /* maximize the likelihood */
         update_mapping( 
             rdb, sample_trace, max_num_iterations,
             max_prb_change_for_convergence,
@@ -702,10 +775,71 @@ sample_random_traces(
             fflush( s_mi );
         }
 
+        /* Update the min and max traces to include the most recent trace */
         aggregate_over_traces( max_trace, sample_trace, max );
-
         aggregate_over_traces( min_trace, sample_trace, min );
 
+        if( NUM_BOOTSTRAP_SAMPLES > 0 )
+        {
+            fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
+
+            /* Reset the boostrap aggregate traces */
+            set_trace_to_uniform( bs_min_trace, FLT_MAX );
+            set_trace_to_uniform( bs_max_trace, -FLT_MAX );
+            int j;
+            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+            {                
+                
+                if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
+                    fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
+
+                /* actually perform the bootstrap */
+                bootstrap_traces_from_mapped_reads( 
+                    rdb, sample_trace, update_trace_expectation_from_location );
+                
+                if( SAVE_BOOTSTRAP_SAMPLES )
+                {
+                    char buffer[200];
+                    sprintf( buffer, "%ssample%i_bssample%i.wig", 
+                             BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
+                    
+                    write_wiggle_from_trace( 
+                        sample_trace, 
+                        genome->chr_names, track_names,
+                        buffer, max_prb_change_for_convergence );
+                }    
+                
+                /* Aggregate the min and the max traces to include the bootstrapped traces */
+                aggregate_over_traces( bs_max_trace, sample_trace, max );
+                aggregate_over_traces( bs_min_trace, sample_trace, min );
+                if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
+                {
+                    char buffer[100];
+                    sprintf( buffer, "%sbsmax_sample%i.wig", BOOTSTRAP_SAMPLES_MAX_PATH, i+1 );
+                    
+                    write_wiggle_from_trace( 
+                        bs_max_trace, 
+                        genome->chr_names, track_names,
+                        buffer, max_prb_change_for_convergence );
+                    
+                    sprintf( buffer, "%sbsmin_sample%i.wig", BOOTSTRAP_SAMPLES_MIN_PATH, i+1 );
+                    
+                    write_wiggle_from_trace( 
+                        bs_min_trace, 
+                        genome->chr_names, track_names,
+                        buffer, max_prb_change_for_convergence );
+
+                }
+            }
+            fprintf( stderr, " 100%%\n");
+
+            /* Aggregate the min and the max traces to include the bootstrapped max and min traces */
+            aggregate_over_traces( max_trace, bs_max_trace, max );
+            aggregate_over_traces( min_trace, bs_min_trace, min );
+
+            /* write the bootstrapped max and min traces to disk */
+        }
+        
         close_traces( sample_trace );
     }
 

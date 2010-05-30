@@ -17,8 +17,17 @@
 #define MAX_TRACE_FNAME "max_trace.wig"
 #define MIN_TRACE_FNAME "min_trace.wig"
 
-
 // Samples output 
+// Bootstrap 
+#define SAVE_BOOTSTRAP_SAMPLES true
+#define SAVE_AGGREGATED_BOOTSTRAP_SAMPLES (true && SAVE_BOOTSTRAP_SAMPLES)
+#define NUM_BOOTSTRAP_SAMPLES 25
+#define BOOTSTRAP_SAMPLES_PATH "./bootstrap_samples/"
+#define BOOTSTRAP_SAMPLES_MAX_PATH "./bootstrap_samples/max_traces/"
+#define BOOTSTRAP_SAMPLES_MIN_PATH "./bootstrap_samples/min_traces/"
+#define BOOTSTRAP_SAMPLES_ALL_PATH "./bootstrap_samples/all_traces/"
+
+
 #define SAVE_STARTING_SAMPLES true
 #define STARTING_SAMPLES_PATH "./starting_samples/"
 #define STARTING_SAMPLES_META_INFO_FNAME "./starting_samples/meta_info.csv"

@@ -45,6 +45,15 @@ update_mapped_reads_from_trace(
                                            const struct mapped_read_t* const r  )
 );
 
+void
+bootstrap_traces_from_mapped_reads( 
+    struct mapped_reads_db* reads_db,
+    struct trace_t* traces,
+    void (* const update_trace_expectation_from_location)(
+        const struct trace_t* const traces, 
+        const struct mapped_read_location* const loc)
+    );
+
 double
 calc_log_lhd ( 
     struct mapped_reads_db* reads_db,

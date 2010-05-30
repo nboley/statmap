@@ -40,6 +40,18 @@ void usage()
     fprintf(stderr, "      (optional)  [ -o output_directory  -a assay_type -n snp_cov -f fragment_lengths ] \n\n" );
 }
 
+void
+safe_mkdir(char* dir)
+{
+    int error = mkdir( dir, S_IRWXU | S_IRWXG | S_IRWXO );
+    char buffer[200];
+    sprintf( buffer, "FATAL       :  Cannot make %s ", dir );
+    if( -1 == error )
+    {
+        perror( buffer );
+        exit( -1 );
+    }
+}
 
 input_file_type_t
 guess_input_file_type( args_t* args )
@@ -508,23 +520,17 @@ parse_arguments( int argc, char** argv )
 
     /* Make sub directories to store wiggle samples */
     if( SAVE_STARTING_SAMPLES )
-    {
-        error = mkdir( "./starting_samples/", S_IRWXU | S_IRWXG | S_IRWXO );
-        if( -1 == error )
-        {
-            perror( "FATAL       :  Cannot make './starting_samples/' ");
-            exit( -1 );
-        }
-    }
+        safe_mkdir( STARTING_SAMPLES_PATH );
     
     if( SAVE_SAMPLES )
+        safe_mkdir( RELAXED_SAMPLES_PATH );
+
+    if( SAVE_BOOTSTRAP_SAMPLES )
     {
-        error = mkdir( "./samples/", S_IRWXU | S_IRWXG | S_IRWXO );
-        if( -1 == error )
-        {
-            perror( "FATAL       :  Cannot make './samples/' ");
-            exit( -1 );
-        }
+        safe_mkdir( BOOTSTRAP_SAMPLES_PATH );
+        safe_mkdir( BOOTSTRAP_SAMPLES_MAX_PATH );
+        safe_mkdir( BOOTSTRAP_SAMPLES_MIN_PATH );
+        safe_mkdir( BOOTSTRAP_SAMPLES_ALL_PATH );
     }
 
     /***** initialize the raw reads db */
