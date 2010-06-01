@@ -673,6 +673,7 @@ map_marginal( args_t* args, struct genome_data* genome )
 
     /* Free the genome index */
     /* we may need the memory later */
+    fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_tree( genome->index );
     genome->index = NULL;
         

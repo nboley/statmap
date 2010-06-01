@@ -1158,7 +1158,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     {
         fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
         for( j = 0; j < traces->trace_lengths[i]; j++ )
-            if( traces->traces[0][i][j] >= filter_threshold )
+            if( traces->traces[1][i][j] >= filter_threshold )
                 fprintf( bkwd_wfp, "%i\t%e\n", j+1, traces->traces[1][i][j] );
     }
     
