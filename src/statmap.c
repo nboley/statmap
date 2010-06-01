@@ -719,9 +719,12 @@ map_marginal( args_t* args, struct genome_data* genome )
 
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
-    FILE* wig_fp = fopen( "marginal_mapping.wig", "w+" );
-    write_mapped_reads_to_wiggle( mpd_rds_db, genome, wig_fp );
-    fclose( wig_fp );
+    FILE* fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w+" );
+    FILE* bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w+" );
+    write_marginal_mapped_reads_to_stranded_wiggles( 
+        mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
+    fclose( fwd_wig_fp );
+    fclose( bkwd_wig_fp );
 
     /* Do the iterative mapping */
     generic_update_mapping( mpd_rds_db, genome, args->assay_type,

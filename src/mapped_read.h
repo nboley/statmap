@@ -222,9 +222,10 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
  */
 
 void
-write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
-                              struct genome_data* genome,
-                              FILE* wfp );
+write_marginal_mapped_reads_to_stranded_wiggles( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    FILE* fwd_wfp, FILE* bkwd_wfp );
 
 void
 mmap_mapped_reads_db( struct mapped_reads_db* rdb );

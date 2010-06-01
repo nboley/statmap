@@ -85,7 +85,7 @@ reset_read_cond_probs( struct mapped_read_t* rd  )
         prb_sum += loc->cond_prob;
     }
 
-    assert( rd->num_mappings == 0 || prb_sum > 1e-6 );
+    assert( rd->num_mappings == 0 || prb_sum > FLT_MIN );
 
     for( i = 0; i < rd->num_mappings; i++ )
     {
@@ -1119,19 +1119,21 @@ update_traces_from_read_densities(
 
 
 void
-write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb, 
-                              struct genome_data* genome,
-                              FILE* wfp )
+write_marginal_mapped_reads_to_stranded_wiggles( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    FILE* fwd_wfp, FILE* bkwd_wfp )
 {
     const double filter_threshold = 1e-6;
 
     /* Print out the header */
-    fprintf( wfp, "track type=wiggle_0 name=%s\n", "cage_wig_track" );
-
+    fprintf( fwd_wfp, "track type=wiggle_0 name=%s\n", "fwd_strnd" );
+    fprintf( bkwd_wfp, "track type=wiggle_0 name=%s\n", "bkwd_strnd" );
+    
     /* build and update the chr traces */
     struct trace_t* traces;
-    init_traces( genome, &traces, 1 );
-
+    init_traces( genome, &traces, 2 );
+    
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );
     
@@ -1142,16 +1144,22 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
     
     int i;
     unsigned int j;
+    /* fwd stranded reads */
     for( i = 0; i < traces->num_chrs; i++ )
     {
-        fprintf( wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
+        fprintf( fwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
         for( j = 0; j < traces->trace_lengths[i]; j++ )
-        {
             if( traces->traces[0][i][j] >= filter_threshold )
-            {
-                fprintf( wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
-            }
-        }
+                fprintf( fwd_wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
+    }
+
+    /* rev stranded reads ( actually, reads whereas the rev comp of the first read mapped */
+    for( i = 0; i < traces->num_chrs; i++ )
+    {
+        fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
+        for( j = 0; j < traces->trace_lengths[i]; j++ )
+            if( traces->traces[0][i][j] >= filter_threshold )
+                fprintf( bkwd_wfp, "%i\t%e\n", j+1, traces->traces[1][i][j] );
     }
     
     close_traces( traces );

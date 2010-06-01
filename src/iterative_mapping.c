@@ -48,15 +48,21 @@ naive_update_trace_expectation_from_location(
     const struct trace_t* const traces, 
     const struct mapped_read_location* const loc )
 {
-    int chr_index = loc->chr;
-    unsigned int start = loc->start_pos;
-    unsigned int stop = loc->stop_pos;
-    ML_PRB_TYPE cond_prob = loc->cond_prob;
+    const int chr_index = loc->chr;
+    const unsigned char flag = loc->flag; 
+    const unsigned int start = loc->start_pos;
+    const unsigned int stop = loc->stop_pos;
+    const ML_PRB_TYPE cond_prob = loc->cond_prob;
 
     unsigned int i;
     for( i = start; i <= stop; i++ )
     {
-        traces->traces[0][chr_index][i] += cond_prob;
+        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        {
+            traces->traces[1][chr_index][i] += cond_prob;
+        } else {
+            traces->traces[0][chr_index][i] += cond_prob;
+        }
     }
     return;
 }

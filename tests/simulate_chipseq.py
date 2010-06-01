@@ -448,14 +448,14 @@ def plot_wig_bounds( dir, png_fname):
 
 
 if __name__ == '__main__':
-    if True:
+    if False:
         test_cage_region( 3, "relaxed_%i_marginal.wig" % 3, iterative=False )
         if sc.CLEANUP:
             #subprocess.call( "rm tmp.*", shell=True )
             #subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
             pass
 
-    if False:
+    if True:
         mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
         build_all_wiggles( mutations, False )
         plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
