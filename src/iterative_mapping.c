@@ -55,8 +55,9 @@ naive_update_trace_expectation_from_location(
 
     unsigned int i;
     for( i = start; i <= stop; i++ )
+    {
         traces->traces[0][chr_index][i] += cond_prob;
-
+    }
     return;
 }
 
@@ -121,9 +122,7 @@ update_traces_from_mapped_reads_worker( void* params )
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
         
-        
-        /* Update the trace from this mapping */
-        
+        /* Update the trace from this mapping */        
         unsigned int j;
         for( j = 0; j < r.num_mappings; j++ ) {
             update_trace_expectation_from_location( traces, r.locations + j );
@@ -175,8 +174,7 @@ bootstrap_traces_from_mapped_reads(
         unsigned int read_index = rand()%(reads_db->num_mmapped_reads);
         assert( read_index < reads_db->num_mmapped_reads );
         char* read_start = reads_db->mmapped_reads_starts[ read_index ];
-             
-        
+                
         /* read a mapping into the struct */
         struct mapped_read_t r;
         r.read_id = *((unsigned long*) read_start);
@@ -189,16 +187,33 @@ bootstrap_traces_from_mapped_reads(
         if( r.num_mappings > 0 )
         {
             /* Choose a random location, proportional to the normalized probabilities */
-            unsigned int j;
-            float random_num = (float)rand()/(float)RAND_MAX;
-            double cum_dist = 0;
-            for( j = 0; j < r.num_mappings; j++ ) 
+            unsigned int j = 0;
+            /* if there is exactly 1 mapping, then the randomness is pointless */
+            if( r.num_mappings > 1 )
             {
-                cum_dist += r.locations[j].cond_prob;
-                if( random_num <= cum_dist )
-                    break;
+                float random_num = (float)rand()/(float)RAND_MAX;
+                double cum_dist = 0;
+                for( j = 0; j < r.num_mappings; j++ ) 
+                {
+                    cum_dist += r.locations[j].cond_prob;
+                    if( random_num <= cum_dist )
+                        break;
+                }
+
+                /* 
+                 * rounding error makes it possible for j == r.num_mappings. If this is 
+                 * the case, then make sure the differnece isn't too big, and then chnage 
+                 * it. We could save a few cycles by taking this into account earlier, but
+                 * for now we're going to leave the sanity check.
+                 */
+                assert( j <= r.num_mappings );
+                if( j == r.num_mappings )
+                {
+                    j = r.num_mappings - 1;
+                    assert( cum_dist > 0.999 );
+                }
             }
-            
+                        
             /* Add this location to the trace, with prb 1 */
             /* We do this by temp changing cond_prb, and then changing it back */
             float tmp_cond_prb = r.locations[j].cond_prob;
@@ -569,10 +584,13 @@ update_mapping(
         );
         
         stop = clock( );
-        fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
+        if( num_iterations%25 == 0 )
+        {
+            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
+        }
         
         if( rv.max_change < max_prb_change_for_convergence )
             break;
@@ -618,34 +636,43 @@ build_random_starting_trace(
         /* update the read conditional probabilities from the trace */
         update_mapped_read_prbs( traces, &r );        
         
-        /* Choose a random location, and use this */
-        unsigned int j;
-        float random_num = (float)rand()/(float)RAND_MAX;
-        double cum_dist = 0;
-        for( j = 0; j < r.num_mappings; j++ ) 
+        if( r.num_mappings > 0 )
         {
-            cum_dist += r.locations[j].cond_prob;
-            if( random_num <= cum_dist )
+            /* Choose a random location, proportional to the normalized probabilities */
+            unsigned int j = 0;
+            /* if there is exactly 1 mapping, then the randomness is pointless */
+            if( r.num_mappings > 1 )
             {
-                float tmp_cond_prb = r.locations[j].cond_prob;
-                r.locations[j].cond_prob = 1.0;
-                update_trace_expectation_from_location( traces, r.locations + j );
-                r.locations[j].cond_prob = tmp_cond_prb;
-                break;
+                float random_num = (float)rand()/(float)RAND_MAX;
+                double cum_dist = 0;
+                for( j = 0; j < r.num_mappings; j++ ) 
+                {
+                    cum_dist += r.locations[j].cond_prob;
+                    if( random_num <= cum_dist )
+                        break;
+                }
+
+                /* 
+                 * rounding error makes it possible for j == r.num_mappings. If this is 
+                 * the case, then make sure the differnece isn't too big, and then chnage 
+                 * it. We could save a few cycles by taking this into account earlier, but
+                 * for now we're going to leave the sanity check.
+                 */
+                assert( j <= r.num_mappings );
+                if( j == r.num_mappings )
+                {
+                    printf( "WARNING - rounding error! %e\n", cum_dist );
+                    j = r.num_mappings - 1;
+                    assert( cum_dist > 0.999 );
+                }
             }
-        }
-        
-        /* deal with potential rounding errors */
-        /* If this happens, no read would have been added */
-        if( cum_dist > FLT_EPSILON
-            && random_num > cum_dist )
-        {
-            printf( "WARNING - RANDOM TOO BIG %e\n", cum_dist);
-            float tmp_cond_prb = r.locations[r.num_mappings-1].cond_prob;
-            r.locations[r.num_mappings-1].cond_prob = 1.0;
-            update_trace_expectation_from_location( 
-                traces, r.locations + r.num_mappings - 1 );
-            r.locations[r.num_mappings-1].cond_prob = tmp_cond_prb;
+                        
+            /* Add this location to the trace, with prb 1 */
+            /* We do this by temp changing cond_prb, and then changing it back */
+            float tmp_cond_prb = r.locations[j].cond_prob;
+            r.locations[j].cond_prob = 1.0;
+            update_trace_expectation_from_location( traces, r.locations + j );
+            r.locations[j].cond_prob = tmp_cond_prb;
         }
     }
     
@@ -1036,13 +1063,10 @@ void update_CAGE_trace_expectation_from_location(
     assert( stop >= start );
     
     /* Make sure the reference genome is correct */            
-    assert( chr_index < traces->num_traces );
+    assert( chr_index < traces->num_chrs );
     assert( traces->trace_lengths[chr_index] >= stop );
 
     assert( cond_prob >= -0.0001 );
-    
-    /* Make sure the reference genome is correct */            
-    assert( chr_index < traces->num_traces );
     
     /* update the trace */
     /* If the reads are paired */
@@ -1084,7 +1108,7 @@ update_CAGE_mapped_read_prbs(
     ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
     
     /* Update the reads from the trace */
-    double density_sum = FLT_EPSILON;
+    double density_sum = 0;
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
@@ -1100,7 +1124,7 @@ update_CAGE_mapped_read_prbs(
         unsigned int j = 0;
         if( (flag&IS_PAIRED) > 0 )
         {
-            fprintf( stderr, "FATAL: paired cage reads are not supported" );
+            fprintf( stderr, "FATAL: paired cage reads are not supported\n" );
             exit( -1 );
         } 
         /* If the read is *not* paired */
@@ -1127,13 +1151,15 @@ update_CAGE_mapped_read_prbs(
             }
         }
         
-        new_prbs[i] = r->locations[i].seq_error*r->locations[i].fl_prob*window_density;
+        new_prbs[i] = r->locations[i].seq_error*window_density;
         density_sum += new_prbs[i];
     }
     
     /* renormalize the read probabilities */
-    if( density_sum > 0 )
+    if( r->num_mappings > 0 )
     {
+        assert( density_sum > 0 );
+        
         for( i = 0; i < r->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
@@ -1147,7 +1173,7 @@ update_CAGE_mapped_read_prbs(
                                   -normalized_density  + r->locations[i].cond_prob);
             
             r->locations[i].cond_prob = normalized_density;
-            assert( r->locations[i].cond_prob>= 0 );
+            assert( r->locations[i].cond_prob >= 0 );
         }
     }      
     
@@ -1189,7 +1215,6 @@ generic_update_mapping( struct mapped_reads_db* rdb,
                          const struct mapped_read_t* const r  )
         = NULL;
 
-    #define CAGE_TRACK_NAMES {"fwd_strnd_reads", "rev_strnd_reads"}
     char** track_names = NULL;
 
     int trace_size = -1;

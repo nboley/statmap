@@ -297,9 +297,11 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
                 case 'N':
                 case 'n':
                     free( *result );
+                    *result = NULL;
                     return NULL;
                 default:          
                     free( *result );
+                    *result = NULL;
                     fprintf (stderr, "Error in the sequence - read '%c'\n", bp);
                     return NULL;
             }

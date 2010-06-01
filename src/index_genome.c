@@ -678,11 +678,13 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                 int j;
                 for(j = 0; j < loc.locs_array.locs_size; j++ )
                 {
+                    GENOME_LOC_TYPE loc = gen_locs[j];
+
                     *child_seqs = add_sequence_to_sequences_node(   
                         *child_seqs, 
                         sequences + i*num_letters + 1, 
                         num_letters-1, 
-                        gen_locs[j]
+                        loc
                     );
                 }
             }

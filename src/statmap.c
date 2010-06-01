@@ -392,7 +392,7 @@ parse_arguments( int argc, char** argv )
         struct tm * timeinfo;
         timeinfo = localtime ( &rawtime );        
         char buffer[200];
-        strftime (buffer, 200, "statmap_output_%Y_%m_%d_%H_%m", timeinfo);
+        strftime(buffer, 200, "statmap_output_%Y_%m_%d_%H_%M_%S", timeinfo);
         args.output_directory = calloc(strlen(buffer)+1, sizeof(char));
         memcpy( args.output_directory, buffer, (strlen(buffer)+1)*sizeof(char) );
     } 
@@ -670,7 +670,12 @@ map_marginal( args_t* args, struct genome_data* genome )
                                  args->min_match_penalty,
                                  args->max_penalty_spread,
                                  args->indexed_seq_len );
-    
+
+    /* Free the genome index */
+    /* we may need the memory later */
+    free_tree( genome->index );
+    genome->index = NULL;
+        
     /* Determine the output stream */
     FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
     
@@ -711,16 +716,18 @@ map_marginal( args_t* args, struct genome_data* genome )
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
     set_all_read_fl_probs( mpd_rds_db );
-    generic_update_mapping( mpd_rds_db, genome, args->assay_type,
-                            args->num_starting_locations, 
-                            MAX_PRB_CHANGE_FOR_CONVERGENCE );
-    
+
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
     FILE* wig_fp = fopen( "marginal_mapping.wig", "w+" );
     write_mapped_reads_to_wiggle( mpd_rds_db, genome, wig_fp );
     fclose( wig_fp );
-    
+
+    /* Do the iterative mapping */
+    generic_update_mapping( mpd_rds_db, genome, args->assay_type,
+                            args->num_starting_locations, 
+                            MAX_PRB_CHANGE_FOR_CONVERGENCE );
+        
     /* TODO - move this to cleanup? */
     munmap_mapped_reads_db( mpd_rds_db );
 
@@ -748,10 +755,6 @@ map_marginal( args_t* args, struct genome_data* genome )
     goto cleanup;
 
 cleanup:
-    /* Free the genome index */
-    free_tree( genome->index );
-    genome->index = NULL;
-        
     /* close the raw mappings db */
     close_rawread_db( args->rdb );
     

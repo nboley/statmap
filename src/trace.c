@@ -20,17 +20,14 @@
 TRACE_TYPE*
 init_trace( size_t size  )
 {
-    void* chr_trace
-        = mmap( NULL, sizeof(TRACE_TYPE)*size, 
-                PROT_READ|PROT_WRITE, MAP_ANON|MAP_POPULATE|MAP_PRIVATE, 0, 0 );
-    
-    if( NULL == chr_trace || chr_trace == (void*) -1 )
+    TRACE_TYPE* chr_trace = malloc(sizeof(TRACE_TYPE)*size);
+    if( NULL == chr_trace )
     {
-        fprintf(stderr, "Can not anonymous mmap of size '%zu'\n", size );
+        fprintf(stderr, "Can not allocate '%zu' bytes for a trace,\n", sizeof(TRACE_TYPE)*size );
         exit( -1 );
     }
     
-    return (TRACE_TYPE*) chr_trace;
+    return chr_trace;
 }
 
 /* Build mmapped arrays for all of the chrs ***/
@@ -134,23 +131,10 @@ copy_trace_structure( struct trace_t** traces,
 void
 close_traces( struct trace_t* traces )
 {
-    int i, j, error; 
+    int i, j; 
     for( i = 0; i < traces->num_traces; i++ )
-    {
         for( j = 0; j < traces->num_chrs; j++ )
-        {
-            error = munmap( traces->traces[i][j], 
-                            sizeof(TRACE_TYPE)*traces->trace_lengths[j] );
-            if( error == -1 )
-            {
-                perror( "Problem closing mmaped trace" );
-                assert( false );
-                exit( -1 );
-            }
-        }
-
-        free( traces->traces[i] );
-    }
+            free( traces->traces[i][j] );                          
 
     free( traces->trace_lengths );
     free( traces->traces );
@@ -163,12 +147,13 @@ void
 normalize_traces( struct trace_t* traces )
 {
     double sum = sum_traces( traces );
+    assert( sum > 0 );
 
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
         for( j = 0; j < traces->num_chrs; j++ )
-            for( k = 0; k < traces->trace_lengths[i]; k++ )
+            for( k = 0; k < traces->trace_lengths[j]; k++ )
                 traces->traces[i][j][k] /= sum;
     
     return;
@@ -183,7 +168,7 @@ sum_traces( struct trace_t* traces )
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
         for( j = 0; j < traces->num_chrs; j++ )
-            for( k = 0; k < traces->trace_lengths[i]; k++ )
+            for( k = 0; k < traces->trace_lengths[j]; k++ )
                 sum += traces->traces[i][j][k];
     
     return sum;
@@ -199,7 +184,7 @@ zero_traces( struct trace_t* traces )
         for( j = 0; j < traces->num_chrs; j++ )
         {
             memset( traces->traces[i][j], 0, 
-                    sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
+                    sizeof(TRACE_TYPE)*(traces->trace_lengths[j]) );
         }
     }
 }
@@ -214,7 +199,7 @@ set_trace_to_uniform( struct trace_t* traces, double value )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->trace_lengths[i]; k++ )
+            for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
                 traces->traces[i][j][k] = value;
             }

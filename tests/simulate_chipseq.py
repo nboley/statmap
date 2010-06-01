@@ -178,6 +178,86 @@ def parse_wig( fname, genome ):
     fp.close()
     return density
 
+def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
+    DIRTY = True
+    
+    region = build_chipseq_region( )
+    bind_site_scores = score_binding_sites( region, bcd_motif )
+    bind_prbs = assign_bind_prbs( bind_site_scores )
+    fragments = build_fragments( region, bind_prbs, NUM_READS )
+    
+    genome = { 'chr2L': region }
+
+    if DIRTY:
+        reads = sc.build_reads_from_fragments( 
+            genome, fragments, rev_comp=False, paired_end=False )
+        # mutate the reads by their error strings
+        sample_file = gzip.open( './data/dirty_error_strs.fastq.gz' )
+        error_strs = sc.get_error_strs_from_fastq( sample_file )
+        sample_file.close()
+        mutated_reads = sc.mutate_reads( reads, error_strs )
+    else:
+        reads = sc.build_reads_from_fragments( genome, fragments, paired_end=False )
+
+    genome_of = open("tmp.genome", "w")
+    # write a second genome
+    chr2L = genome['chr2L']
+    mutated_chr2L = array.array( 'c', chr2L )
+
+    # mutated num_mutations random indexes
+    rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
+    for rand_index in rand_indexes:
+        curr_bp = mutated_chr2L[ rand_index ]
+        valid_bps = [ bp for bp in bps if bp != curr_bp ]
+        mutated_chr2L[rand_index] = random.choice( valid_bps )
+    
+    genome['chr2L'] = chr2L + mutated_chr2L.tostring()
+    sc.write_genome_to_fasta( genome, genome_of, 1 )
+    genome_of.close()
+    
+    reads_of = open('tmp.fastq', "w");
+    if DIRTY:
+        sc.build_single_end_fastq_from_mutated_reads(mutated_reads,reads_of)
+    else:
+        sc.build_single_end_fastq_from_seqs( reads, reads_of )
+    reads_of.close()
+
+    return
+
+    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
+                             -o smo_chipseq_sim \
+                             -n %i -f ./data/fl_dist.txt\
+                             " % ( sc.STATMAP_PATH, NUM_SAMPLES )
+    if iterative:
+        call += " -a i"
+        
+    print re.sub( "\s+", " ", call)
+
+    ret_code = subprocess.call( call, shell=True )
+    # ret_code = ( os.system( call ) >> 8 )
+    if ret_code != 0:
+        print "TEST FAILED - statmap call returned error code ", ret_code
+        sys.exit( -1 )
+        
+    ## Plot everything
+
+    return
+
+    true_density = numpy.zeros( len( region ) )
+    for chr, start, stop in fragments:
+        true_density[start:stop] += 1
+    true_density = true_density/true_density.sum()
+    
+    density = parse_wig( wig_fname, genome )
+    density = density/density.sum()
+    
+    rpy.r.plot( density, col='green', ylim=(0,true_density.max()), \
+                type='l', main='', ylab='', xlab='' )
+    rpy.r.points( true_density, type='l' )
+    rpy.r.points( density.max()*numpy.array(bind_prbs), type='l', col='red' )
+    raw_input()
+
+
 def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     DIRTY = True
     
@@ -368,13 +448,21 @@ def plot_wig_bounds( dir, png_fname):
 
 
 if __name__ == '__main__':
-    mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
-    build_all_wiggles( mutations, False )
-    plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
-    plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
-    if sc.CLEANUP:
-        subprocess.call( "rm tmp.*", shell=True )
-        subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
+    if True:
+        test_cage_region( 3, "relaxed_%i_marginal.wig" % 3, iterative=False )
+        if sc.CLEANUP:
+            #subprocess.call( "rm tmp.*", shell=True )
+            #subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
+            pass
+
+    if False:
+        mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
+        build_all_wiggles( mutations, False )
+        plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
+        plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
+        if sc.CLEANUP:
+            subprocess.call( "rm tmp.*", shell=True )
+            subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
 
     # BROKEN
     """

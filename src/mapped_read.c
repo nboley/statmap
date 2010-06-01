@@ -85,6 +85,8 @@ reset_read_cond_probs( struct mapped_read_t* rd  )
         prb_sum += loc->cond_prob;
     }
 
+    assert( rd->num_mappings == 0 || prb_sum > 1e-6 );
+
     for( i = 0; i < rd->num_mappings; i++ )
     {
         rd->locations[i].cond_prob /= prb_sum;
@@ -101,9 +103,15 @@ set_read_fl_probs( struct mapped_read_t* rd,
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
-        int fl = loc->stop_pos - loc->start_pos + 1;
-        float fl_prb = get_fl_prb( fl_dist, fl );
-        loc->fl_prob = fl_prb;
+        if( ((loc->flag)&IS_PAIRED) > 0 )
+        {
+            int fl = loc->stop_pos - loc->start_pos + 1;
+            float fl_prb = get_fl_prb( fl_dist, fl );
+            loc->fl_prob = fl_prb;
+        } else {
+            /* set the fl prb to 1 for unpaired reads */
+            loc->fl_prob = 1.0;
+        }
     }
     
     return;
@@ -607,8 +615,10 @@ build_mapped_read_from_candidate_mappings(
 
         loc.chr = (mappings->mappings)[i].chr;
         loc.start_pos = (mappings->mappings)[i].start_bp;;
-        loc.stop_pos = loc.start_pos + (mappings->mappings)[i].rd_len;;
+        loc.stop_pos = loc.start_pos + (mappings->mappings)[i].rd_len;
         loc.seq_error = pow( 10, (mappings->mappings)[i].penalty );
+        /* since we know nothing about the fragment length dist, we do nothing */
+        loc.fl_prob = 1.0;
         prob_sum += loc.seq_error;
         loc.cond_prob = -1;
 
@@ -1122,6 +1132,9 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
     struct trace_t* traces;
     init_traces( genome, &traces, 1 );
 
+    /* reset the read cond prbs under a uniform prior */
+    reset_all_read_cond_probs( rdb );
+    
     update_traces_from_mapped_reads( 
         rdb, traces,
         naive_update_trace_expectation_from_location
@@ -1132,11 +1145,12 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
     for( i = 0; i < traces->num_chrs; i++ )
     {
         fprintf( wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
-        
         for( j = 0; j < traces->trace_lengths[i]; j++ )
         {
             if( traces->traces[0][i][j] >= filter_threshold )
+            {
                 fprintf( wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
+            }
         }
     }
     
