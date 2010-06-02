@@ -65,11 +65,11 @@ init_traces( struct genome_data* genome,
         (*traces)->trace_lengths[i] = genome->chr_lens[i];
     }
 
-    /* allocate space for the mutexes */
-    (*traces)->mutexes = malloc(sizeof(pthread_mutex_t**)*num_traces);
-    assert( (*traces)->mutexes != NULL );
+    /* allocate space for the spinlocks */
+    (*traces)->spinlocks = malloc(sizeof(pthread_mutex_t**)*num_traces);
+    assert( (*traces)->spinlocks != NULL );
     
-    /* Allocate space for the pointers to the chr's individual traces and the mutexes */
+    /* Allocate space for the pointers to the chr's individual traces and the spinlocks */
     for( i = 0; i < num_traces; i++ )
     {
         /* Store the pointers for the chrs */
@@ -77,8 +77,8 @@ init_traces( struct genome_data* genome,
         assert( (*traces)->traces[i] != NULL );
 
         /* Store the trace mutex pointers */
-        (*traces)->mutexes[i] = malloc( (*traces)->num_chrs*sizeof(pthread_mutex_t*) );
-        assert( (*traces)->mutexes[i] != NULL );
+        (*traces)->spinlocks[i] = malloc( (*traces)->num_chrs*sizeof(pthread_mutex_t*) );
+        assert( (*traces)->spinlocks[i] != NULL );
         
         /* initialize each chr */
         int j;
@@ -91,16 +91,16 @@ init_traces( struct genome_data* genome,
             memset( (*traces)->traces[i][j], 0, 
                     sizeof(TRACE_TYPE)*(*traces)->trace_lengths[j] );
             
-            /* initialize the mutexes */
-            int mutexes_len = (*traces)->trace_lengths[j]/TM_GRAN;
+            /* initialize the spinlocks */
+            int spinlocks_len = (*traces)->trace_lengths[j]/TM_GRAN;
             if( (*traces)->trace_lengths[j] % TM_GRAN > 0 )
-                mutexes_len += 1;
+                spinlocks_len += 1;
 
-            (*traces)->mutexes[i][j] = malloc( mutexes_len*sizeof(pthread_mutex_t) );
+            (*traces)->spinlocks[i][j] = malloc( spinlocks_len*sizeof(pthread_mutex_t) );
             int k;
-            for( k = 0; k < mutexes_len; k++ )
+            for( k = 0; k < spinlocks_len; k++ )
             {
-                int error = pthread_mutex_init( (*traces)->mutexes[i][j] + k, NULL );
+                int error = pthread_spin_init( (*traces)->spinlocks[i][j] + k, 0 );
                 if( error != 0 )
                 {
                     perror( "Failed to initialize mutex in init_trace" );
@@ -299,7 +299,7 @@ write_wiggle_from_trace( struct trace_t* traces,
         assert( 0 );
         exit( -1 );
     }
-
+    
     int track_index, j;
     unsigned int k;
     for( track_index = 0; track_index < traces->num_traces; track_index++ )

@@ -60,27 +60,27 @@ naive_update_trace_expectation_from_location(
 
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
-        /* lock the mutexes */
+        /* lock the spinlocks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_mutex_lock( traces->mutexes[1][ chr_index ] + i );
+            pthread_spin_lock( traces->spinlocks[1][ chr_index ] + i );
 
         for( i = start; i <= stop; i++ )
             traces->traces[1][chr_index][i] += cond_prob;
 
-        /* unlock the mutexes */
+        /* unlock the spinlocks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_mutex_unlock( traces->mutexes[1][ chr_index ] + i );
+            pthread_spin_unlock( traces->spinlocks[1][ chr_index ] + i );
     } else {
-        /* lock the mutexes */
+        /* lock the spinlocks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_mutex_lock( traces->mutexes[0][ chr_index ] + i );
+            pthread_spin_lock( traces->spinlocks[0][ chr_index ] + i );
 
         for( i = start; i <= stop; i++ )
             traces->traces[0][chr_index][i] += cond_prob;
 
-        /* unlock the mutexes */
+        /* unlock the spinlocks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_mutex_unlock( traces->mutexes[0][ chr_index ] + i );        
+            pthread_spin_unlock( traces->spinlocks[0][ chr_index ] + i );        
     }
     
     return;
@@ -100,7 +100,7 @@ struct update_traces_param {
      * contention, but that should be minor, espcially if ( the mmapped ) rdb
      * can't fully fit into memory.
      */
-    pthread_mutex_t* curr_read_index_mutex;
+    pthread_spinlock_t* curr_read_index_spinlock;
     unsigned int* curr_read_index;
     
     struct mapped_reads_db* reads_db;
@@ -115,8 +115,8 @@ update_traces_from_mapped_reads_worker( void* params )
 {
     unsigned int* curr_read_index = 
         ( (struct update_traces_param*) params)->curr_read_index;
-    pthread_mutex_t* curr_read_index_mutex = 
-        ( (struct update_traces_param*) params)->curr_read_index_mutex;
+    pthread_spinlock_t* curr_read_index_spinlock = 
+        ( (struct update_traces_param*) params)->curr_read_index_spinlock;
     
     struct trace_t* traces = ( (struct update_traces_param*) params)->traces;
     struct mapped_reads_db* reads_db = 
@@ -129,10 +129,10 @@ update_traces_from_mapped_reads_worker( void* params )
     
 
     /* get the first index */
-    pthread_mutex_lock( curr_read_index_mutex );
+    pthread_spin_lock( curr_read_index_spinlock );
     unsigned int i = *curr_read_index;
     *curr_read_index += 1;
-    pthread_mutex_unlock( curr_read_index_mutex );
+    pthread_spin_unlock( curr_read_index_spinlock );
     
     while( i < reads_db->num_mmapped_reads )
     {
@@ -154,10 +154,10 @@ update_traces_from_mapped_reads_worker( void* params )
         }
 
         /* update the read index */
-        pthread_mutex_lock( curr_read_index_mutex );
+        pthread_spin_lock( curr_read_index_spinlock );
         i = *curr_read_index;
         *curr_read_index += 1;
-        pthread_mutex_unlock( curr_read_index_mutex );
+        pthread_spin_unlock( curr_read_index_spinlock );
     }
 
     return 0;
@@ -288,12 +288,13 @@ update_traces_from_mapped_reads(
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
-        /* initialize the read number mutex */
-        pthread_mutex_t curr_read_index_mutex = PTHREAD_MUTEX_INITIALIZER;
-
+        /* initialize the read number spinlock */
+        pthread_spinlock_t curr_read_index_spinlock;
+        pthread_spin_init( &curr_read_index_spinlock, 0 );
+        
         /* initialize the thread parameters structure */
         struct update_traces_param params;
-        params.curr_read_index_mutex = &curr_read_index_mutex;
+        params.curr_read_index_spinlock = &curr_read_index_spinlock;
         unsigned int curr_read_index = 0;
         params.curr_read_index = &curr_read_index;
         
@@ -364,7 +365,7 @@ struct update_mapped_reads_param {
      * contention, but that should be minor, espcially if ( the mmapped ) rdb
      * can't fully fit into memory.
      */
-    pthread_mutex_t* curr_read_index_mutex;
+    pthread_spinlock_t* curr_read_index_spinlock;
     unsigned int* curr_read_index;
     
     struct mapped_reads_db* reads_db;
@@ -380,8 +381,8 @@ update_mapped_reads_from_trace_worker( void* params )
 {
     unsigned int* curr_read_index = 
         ( (struct update_mapped_reads_param*) params)->curr_read_index;
-    pthread_mutex_t* curr_read_index_mutex = 
-        ( (struct update_mapped_reads_param*) params)->curr_read_index_mutex;
+    pthread_spinlock_t* curr_read_index_spinlock = 
+        ( (struct update_mapped_reads_param*) params)->curr_read_index_spinlock;
     
     struct trace_t* traces = ( (struct update_mapped_reads_param*) params)->traces;
     struct mapped_reads_db* reads_db = 
@@ -394,10 +395,10 @@ update_mapped_reads_from_trace_worker( void* params )
             params)->update_mapped_read_prbs;
 
     /* get the first index */
-    pthread_mutex_lock( curr_read_index_mutex );
+    pthread_spin_lock( curr_read_index_spinlock );
     unsigned int i = *curr_read_index;
     *curr_read_index += 1;
-    pthread_mutex_unlock( curr_read_index_mutex );
+    pthread_spin_unlock( curr_read_index_spinlock );
     
     while( i < reads_db->num_mmapped_reads )
     {
@@ -425,10 +426,10 @@ update_mapped_reads_from_trace_worker( void* params )
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
         
         /* update the read index */
-        pthread_mutex_lock( curr_read_index_mutex );
+        pthread_spin_lock( curr_read_index_spinlock );
         i = *curr_read_index;
         *curr_read_index += 1;
-        pthread_mutex_unlock( curr_read_index_mutex );
+        pthread_spin_unlock( curr_read_index_spinlock );
     }
 
     return 0;
@@ -471,16 +472,17 @@ update_mapped_reads_from_trace(
                 rv.max_change = tmp_rv.max_change;
         }
     } else {
-        /* initialize the read number mutex */
-        pthread_mutex_t curr_read_index_mutex = PTHREAD_MUTEX_INITIALIZER;
-
+        /* initialize the read number spinlock */
+        pthread_spinlock_t curr_read_index_spinlock;
+        pthread_spin_init( &curr_read_index_spinlock, 0 );
+        
         /* initialize the thread parameters structure */
         struct update_mapped_reads_param params;
         
         params.rv.max_change = 0;
         params.rv.log_lhd = 0;
         
-        params.curr_read_index_mutex = &curr_read_index_mutex;
+        params.curr_read_index_spinlock = &curr_read_index_spinlock;
         unsigned int curr_read_index = 0;
         params.curr_read_index = &curr_read_index;
         
@@ -617,6 +619,12 @@ update_mapping(
             );
         }        
     }
+
+    /*
+    update_traces_from_mapped_reads( 
+        rdb, starting_trace, 
+        update_trace_expectation_from_location
+    );*/
     
     return 0;
 }
@@ -797,7 +805,7 @@ sample_random_traces(
                 buffer, max_prb_change_for_convergence );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
-            fprintf( ss_mi, "%i+1,%e\n", i, log_lhd );
+            fprintf( ss_mi, "%i,%e\n", i+1, log_lhd );
             fflush( ss_mi );
         }
         
@@ -817,10 +825,10 @@ sample_random_traces(
             write_wiggle_from_trace( 
                 sample_trace, 
                 genome->chr_names, track_names,
-                buffer, max_prb_change_for_convergence );
+                buffer, 0 ); // max_prb_change_for_convergence );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
-            fprintf( s_mi, "%i+1,%e\n", i, log_lhd );
+            fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
             fflush( s_mi );
         }
 
@@ -948,9 +956,9 @@ update_chipseq_trace_expectation_from_location(
     unsigned int k = 0;
     if( (flag&IS_PAIRED) != 0 )
     {
-        /* lock the mutexes */
+        /* lock the spinlocks */
         for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
-            pthread_mutex_lock( traces->mutexes[0][ chr_index ] + k );
+            pthread_spin_lock( traces->spinlocks[0][ chr_index ] + k );
         
         for( k = start; k <= stop; k++ )
         {
@@ -961,9 +969,9 @@ update_chipseq_trace_expectation_from_location(
                 += (1.0/(stop-start))*cond_prob;
         }
 
-        /* unlock the mutexes */
+        /* unlock the spinlocks */
         for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
-            pthread_mutex_unlock( traces->mutexes[0][ chr_index ] + k );
+            pthread_spin_unlock( traces->spinlocks[0][ chr_index ] + k );
 
     } 
     /* If the read is *not* paired */
@@ -1121,10 +1129,10 @@ void update_CAGE_trace_expectation_from_location(
             trace_index = 1;
         }
 
-        /* lock the mutex */
-        pthread_mutex_lock( traces->mutexes[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        /* lock the spinlock */
+        pthread_spin_lock( traces->spinlocks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
         traces->traces[ trace_index ][ chr_index ][ start ] += cond_prob; 
-        pthread_mutex_unlock( traces->mutexes[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_spin_unlock( traces->spinlocks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
     }
     
     return;

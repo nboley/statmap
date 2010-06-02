@@ -1,8 +1,8 @@
 #define TRACE_TYPE float
 
-/* Trace mutex granularity */
-/* How many basepairs are grouped together for a single mutex */
-/* Always just call lock_mutex - this should never be used directly */
+/* Trace spinlock granularity */
+/* How many basepairs are grouped together for a single spinlock */
+/* Always just call lock_spinlock - this should never be used directly */
 #define TM_GRAN 100
 
 struct genome_data;
@@ -13,7 +13,7 @@ struct trace_t {
     unsigned int* trace_lengths;
     /* num_tracesXnum_chrs matrix */
     TRACE_TYPE*** traces;
-    pthread_mutex_t*** mutexes;
+    pthread_spinlock_t*** spinlocks;
 };
 
 /* build an mmapped array to store the density */

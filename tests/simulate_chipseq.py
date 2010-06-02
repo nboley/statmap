@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 5000
-NUM_SAMPLES = 100
+NUM_SAMPLES = 10
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -168,7 +168,7 @@ def build_fragments( region, bind_prbs, num ):
 
 def parse_wig( fname, genome ):
     fp = open( fname )
-    density = numpy.zeros(len(genome.values()[0]))
+    density = numpy.zeros(len(genome.values()[0])+1)
     for line in fp:
         if line.startswith('track') or line.startswith('variable'):
             continue
@@ -462,7 +462,7 @@ if __name__ == '__main__':
         plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
         if sc.CLEANUP:
             subprocess.call( "rm tmp.*", shell=True )
-            subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
+            # subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
 
     # BROKEN
     """
