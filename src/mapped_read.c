@@ -614,7 +614,7 @@ build_mapped_read_from_candidate_mappings(
         }
 
         loc.chr = (mappings->mappings)[i].chr;
-        loc.start_pos = (mappings->mappings)[i].start_bp;;
+        loc.start_pos = (mappings->mappings)[i].start_bp;
         loc.stop_pos = loc.start_pos + (mappings->mappings)[i].rd_len;
         loc.seq_error = pow( 10, (mappings->mappings)[i].penalty );
         /* since we know nothing about the fragment length dist, we do nothing */

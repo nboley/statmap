@@ -75,6 +75,7 @@ struct mapped_read_location {
     unsigned snps_bm_r2 :MAX_NUM_SNPS;
     unsigned char chr;
     unsigned int start_pos;
+    /* THIS IS EXCLUSIVE, ie NOT including stop */
     unsigned int stop_pos;
     ML_PRB_TYPE seq_error;
     /* the probability of observing this fragment length */

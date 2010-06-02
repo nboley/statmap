@@ -3,9 +3,13 @@
 /* Trace spinlock granularity */
 /* How many basepairs are grouped together for a single spinlock */
 /* Always just call lock_spinlock - this should never be used directly */
-#define TM_GRAN 100
+#define TM_GRAN 200
 
 struct genome_data;
+
+// define this to use mutexes, otherwise use spinlocks
+#define USE_MUTEX
+// #define USE_SPINLOCK
 
 struct trace_t {
     int num_traces;
@@ -13,7 +17,12 @@ struct trace_t {
     unsigned int* trace_lengths;
     /* num_tracesXnum_chrs matrix */
     TRACE_TYPE*** traces;
-    pthread_spinlock_t*** spinlocks;
+
+    #ifdef USE_MUTEX
+    pthread_mutex_t*** locks;
+    #else
+    pthread_spinlock_t*** locks;
+    #endif
 };
 
 /* build an mmapped array to store the density */

@@ -60,27 +60,51 @@ naive_update_trace_expectation_from_location(
 
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
-        /* lock the spinlocks */
+        /* lock the locks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_spin_lock( traces->spinlocks[1][ chr_index ] + i );
-
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
+        
         for( i = start; i <= stop; i++ )
             traces->traces[1][chr_index][i] += cond_prob;
 
-        /* unlock the spinlocks */
+        /* unlock the locks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_spin_unlock( traces->spinlocks[1][ chr_index ] + i );
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
     } else {
-        /* lock the spinlocks */
+        /* lock the locks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_spin_lock( traces->spinlocks[0][ chr_index ] + i );
-
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
+        
         for( i = start; i <= stop; i++ )
             traces->traces[0][chr_index][i] += cond_prob;
 
-        /* unlock the spinlocks */
+        /* unlock the locks */
         for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-            pthread_spin_unlock( traces->spinlocks[0][ chr_index ] + i );        
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
     }
     
     return;
@@ -578,6 +602,8 @@ update_mapping(
 {
     clock_t start, stop;
     
+    struct update_mapped_read_rv_t rv;
+    
     int num_iterations = 0;
     for( num_iterations = 0; 
          num_iterations < max_num_iterations; 
@@ -585,47 +611,37 @@ update_mapping(
     {
         start = clock();
 
+        /* Normalize the trace sum to 1 */
+        /* This makes the trace the current marginal read density estimate */
+        normalize_traces( starting_trace );
+        
+        rv = update_mapped_reads_from_trace(
+            rdb, starting_trace, 
+            update_mapped_read_prbs
+        );
+        
         update_traces_from_mapped_reads( 
             rdb, starting_trace, 
             update_trace_expectation_from_location
         );
 
-        /* Normalize the trace sum to 1 */
-        /* This makes the trace the current marginal read density estimate */
-        normalize_traces( starting_trace );
-        
-        struct update_mapped_read_rv_t rv = update_mapped_reads_from_trace(
-            rdb, starting_trace, 
-            update_mapped_read_prbs
-        );
-        
         stop = clock( );
 
-        if( rv.max_change < max_prb_change_for_convergence )
+        if( num_iterations%25 == 0
+            || rv.max_change < max_prb_change_for_convergence )
         {
             fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
             
-            break;
-        }
-
-        if( num_iterations%25 == 0 )
-        {
-            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
-                 num_iterations, rv.max_change, rv.log_lhd,
-                 ((double)stop-(double)start)/CLOCKS_PER_SEC
-            );
+            if( num_iterations > 0 
+                && rv.max_change < max_prb_change_for_convergence )
+                break;
         }        
-    }
 
-    /*
-    update_traces_from_mapped_reads( 
-        rdb, starting_trace, 
-        update_trace_expectation_from_location
-    );*/
-    
+    }
+        
     return 0;
 }
 
@@ -951,16 +967,24 @@ update_chipseq_trace_expectation_from_location(
     assert( chr_index < traces->num_traces );
     assert( traces->trace_lengths[chr_index] >= stop );
     
+    /* iteration variable */
+    unsigned int k;
+
     /* update the trace */
     /* If the reads are paired */
-    unsigned int k = 0;
     if( (flag&IS_PAIRED) != 0 )
     {
         /* lock the spinlocks */
-        for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
-            pthread_spin_lock( traces->spinlocks[0][ chr_index ] + k );
+        for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
+            #else
+            pthread_spin_lock( traces->locks[0][ chr_index ] + k );
+            #endif
+        }
         
-        for( k = start; k <= stop; k++ )
+        for( k = start; k < stop; k++ )
         {
             assert( chr_index < traces->num_chrs );
             assert( k < traces->trace_lengths[chr_index] );
@@ -970,9 +994,14 @@ update_chipseq_trace_expectation_from_location(
         }
 
         /* unlock the spinlocks */
-        for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
-            pthread_spin_unlock( traces->spinlocks[0][ chr_index ] + k );
-
+        for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
+            #else
+            pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+            #endif
+        }
     } 
     /* If the read is *not* paired */
     else {
@@ -1130,9 +1159,17 @@ void update_CAGE_trace_expectation_from_location(
         }
 
         /* lock the spinlock */
-        pthread_spin_lock( traces->spinlocks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #ifdef USE_MUTEX
+        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #else
+        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #endif        
         traces->traces[ trace_index ][ chr_index ][ start ] += cond_prob; 
-        pthread_spin_unlock( traces->spinlocks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #ifdef USE_MUTEX
+        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #else
+        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        #endif
     }
     
     return;
@@ -1289,6 +1326,7 @@ generic_update_mapping( struct mapped_reads_db* rdb,
     /* initialize the trace that we will store the expectation in */
     struct trace_t* uniform_trace;
     init_traces( genome, &uniform_trace, trace_size );
+    set_trace_to_uniform( uniform_trace, 1 );
 
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );
