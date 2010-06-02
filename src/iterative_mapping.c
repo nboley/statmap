@@ -36,34 +36,53 @@ max( TRACE_TYPE a, TRACE_TYPE b )
     return b;
 }
 
+#if 0
+/* GET RID OF THE 'UNUSED' COMPILER WARNING */
 static TRACE_TYPE 
 sum( TRACE_TYPE a, TRACE_TYPE b )
 {
     return a + b;
 }
-
+#endif
 
 void
 naive_update_trace_expectation_from_location( 
     const struct trace_t* const traces, 
     const struct mapped_read_location* const loc )
 {
+    unsigned int i;
+    
     const int chr_index = loc->chr;
     const unsigned char flag = loc->flag; 
     const unsigned int start = loc->start_pos;
     const unsigned int stop = loc->stop_pos;
     const ML_PRB_TYPE cond_prob = loc->cond_prob;
 
-    unsigned int i;
-    for( i = start; i <= stop; i++ )
+    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
-        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
-        {
+        /* lock the mutexes */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+            pthread_mutex_lock( traces->mutexes[1][ chr_index ] + i );
+
+        for( i = start; i <= stop; i++ )
             traces->traces[1][chr_index][i] += cond_prob;
-        } else {
+
+        /* unlock the mutexes */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+            pthread_mutex_unlock( traces->mutexes[1][ chr_index ] + i );
+    } else {
+        /* lock the mutexes */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+            pthread_mutex_lock( traces->mutexes[0][ chr_index ] + i );
+
+        for( i = start; i <= stop; i++ )
             traces->traces[0][chr_index][i] += cond_prob;
-        }
+
+        /* unlock the mutexes */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+            pthread_mutex_unlock( traces->mutexes[0][ chr_index ] + i );        
     }
+    
     return;
 }
 
@@ -169,7 +188,7 @@ bootstrap_traces_from_mapped_reads(
 
     if( RAND_MAX < reads_db->num_mmapped_reads )
     {
-        fprintf( stderr, "ERROR     : cannont bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
+        fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
         return;
     }
     
@@ -279,8 +298,7 @@ update_traces_from_mapped_reads(
         params.curr_read_index = &curr_read_index;
         
         params.reads_db = reads_db;
-        /* traces isnt shared - we init and join them */
-        params.traces = NULL;
+        params.traces = traces;
         params.update_trace_expectation_from_location 
             = update_trace_expectation_from_location;
         
@@ -297,8 +315,6 @@ update_traces_from_mapped_reads(
         for( t = 0; t < num_threads; t++ )
         {  
             memcpy( tds+t,  &params, sizeof(struct update_traces_param) );
-            
-            copy_trace_structure( &(tds[t].traces), traces );
             
             rc = pthread_create( &(thread[t]), 
                                  &attr, 
@@ -327,15 +343,7 @@ update_traces_from_mapped_reads(
         }
         pthread_attr_destroy(&attr);
         
-        /* Aggregate the thread traces into the master. */
-        /* Then, free the thread parameter data structures */
-        for( t=0; t < num_threads; t++ )
-        {
-            aggregate_over_traces( traces, tds[t].traces, sum );
-            close_traces( tds[t].traces );
-        }
         free( tds );
-
     }
     
     return;
@@ -590,16 +598,24 @@ update_mapping(
         );
         
         stop = clock( );
+
+        if( rv.max_change < max_prb_change_for_convergence )
+        {
+            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
+                 num_iterations, rv.max_change, rv.log_lhd,
+                 ((double)stop-(double)start)/CLOCKS_PER_SEC
+            );
+            
+            break;
+        }
+
         if( num_iterations%25 == 0 )
         {
             fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
-        }
-        
-        if( rv.max_change < max_prb_change_for_convergence )
-            break;
+        }        
     }
     
     return 0;
@@ -620,7 +636,7 @@ build_random_starting_trace(
     )
 {
     /* int traces to a low consant. This should heavily favor prior reads. */
-    set_trace_to_uniform( traces, 1e-10 );
+    set_trace_to_uniform( traces, EXPLORATION_PRIOR );
 
     /* Update the trace from the reads */
     unsigned int i;
@@ -932,7 +948,11 @@ update_chipseq_trace_expectation_from_location(
     unsigned int k = 0;
     if( (flag&IS_PAIRED) != 0 )
     {
-        for( k = start; k < stop; k++ )
+        /* lock the mutexes */
+        for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
+            pthread_mutex_lock( traces->mutexes[0][ chr_index ] + k );
+        
+        for( k = start; k <= stop; k++ )
         {
             assert( chr_index < traces->num_chrs );
             assert( k < traces->trace_lengths[chr_index] );
@@ -940,9 +960,15 @@ update_chipseq_trace_expectation_from_location(
             traces->traces[0][chr_index][k] 
                 += (1.0/(stop-start))*cond_prob;
         }
+
+        /* unlock the mutexes */
+        for( k = start/TM_GRAN; k <= stop/TM_GRAN; k++ )
+            pthread_mutex_unlock( traces->mutexes[0][ chr_index ] + k );
+
     } 
     /* If the read is *not* paired */
     else {
+        assert( false );
         /* FIXME - hope that we actually have a fragment length */
         /* FIXME get the real fragment length */
         /* FIXME - cleanup the stop condition */
@@ -1083,20 +1109,22 @@ void update_CAGE_trace_expectation_from_location(
     } 
     /* If the read is *not* paired */
     else {
-        /* store the trace that we care about */
-        TRACE_TYPE** trace;
-        
+        int trace_index;
+
         /* If this is in the fwd strnanded transcriptome */
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
-            trace = traces->traces[0];
+            trace_index = 0;
         } 
         /* We are in the 3' ( negative ) transcriptome */
         else {
-            trace = traces->traces[1];
+            trace_index = 1;
         }
 
-        trace[ chr_index ][ start ] += cond_prob; 
+        /* lock the mutex */
+        pthread_mutex_lock( traces->mutexes[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        traces->traces[ trace_index ][ chr_index ][ start ] += cond_prob; 
+        pthread_mutex_unlock( traces->mutexes[ trace_index ][ chr_index ] + (start/TM_GRAN) );
     }
     
     return;

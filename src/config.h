@@ -11,7 +11,8 @@
 
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500
-#define MAX_PRB_CHANGE_FOR_CONVERGENCE 1e-3
+#define MAX_PRB_CHANGE_FOR_CONVERGENCE 1e-2
+#define EXPLORATION_PRIOR 1e-10
 
 // Wiggle output
 #define MAX_TRACE_FNAME "max_trace.wig"

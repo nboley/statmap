@@ -11,10 +11,19 @@
 #include <omp.h>
 #include <errno.h>
 #include <float.h>
+#include <pthread.h>
 
 #include "config.h"
 #include "trace.h"
 #include "genome.h"
+
+/* get the correct mutex index to access the specified position */
+/* this is slow - it should probably be done as a macro in hot areas */
+int
+get_mutex_index( unsigned int bp)
+{
+    return bp/TM_GRAN;
+}
 
 /* build an mmapped array to store the density */
 TRACE_TYPE*
@@ -44,6 +53,7 @@ init_traces( struct genome_data* genome,
     (*traces)->traces = malloc(sizeof(TRACE_TYPE**)*num_traces);
     assert( (*traces)->traces != NULL );
 
+    /* set the number of chrs */
     (*traces)->num_chrs = genome->num_chrs;
     (*traces)->trace_lengths = malloc(sizeof(unsigned int)*genome->num_chrs);
     assert( (*traces)->trace_lengths != NULL );
@@ -55,13 +65,20 @@ init_traces( struct genome_data* genome,
         (*traces)->trace_lengths[i] = genome->chr_lens[i];
     }
 
-
-    /* Allocate space for the pointers to the chr's individual traces */
+    /* allocate space for the mutexes */
+    (*traces)->mutexes = malloc(sizeof(pthread_mutex_t**)*num_traces);
+    assert( (*traces)->mutexes != NULL );
+    
+    /* Allocate space for the pointers to the chr's individual traces and the mutexes */
     for( i = 0; i < num_traces; i++ )
     {
         /* Store the pointers for the chrs */
-        (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE**) );
+        (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE*) );
         assert( (*traces)->traces[i] != NULL );
+
+        /* Store the trace mutex pointers */
+        (*traces)->mutexes[i] = malloc( (*traces)->num_chrs*sizeof(pthread_mutex_t*) );
+        assert( (*traces)->mutexes[i] != NULL );
         
         /* initialize each chr */
         int j;
@@ -73,6 +90,23 @@ init_traces( struct genome_data* genome,
             assert( (*traces)->traces[i][j] != NULL );
             memset( (*traces)->traces[i][j], 0, 
                     sizeof(TRACE_TYPE)*(*traces)->trace_lengths[j] );
+            
+            /* initialize the mutexes */
+            int mutexes_len = (*traces)->trace_lengths[j]/TM_GRAN;
+            if( (*traces)->trace_lengths[j] % TM_GRAN > 0 )
+                mutexes_len += 1;
+
+            (*traces)->mutexes[i][j] = malloc( mutexes_len*sizeof(pthread_mutex_t) );
+            int k;
+            for( k = 0; k < mutexes_len; k++ )
+            {
+                int error = pthread_mutex_init( (*traces)->mutexes[i][j] + k, NULL );
+                if( error != 0 )
+                {
+                    perror( "Failed to initialize mutex in init_trace" );
+                    exit( -1 );
+                }
+            }
         }
     }
     
@@ -84,6 +118,11 @@ void
 copy_trace_structure( struct trace_t** traces,
                       struct trace_t* original )
 {
+    /* we havnt fixed this to use the locking mechanisms, but Im not 
+       sure this function is useful anymore */
+    
+    assert( false );
+
     /* Allocate space for the struct */
     *traces = malloc( sizeof( struct trace_t ) );
     
