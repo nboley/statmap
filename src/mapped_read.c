@@ -804,6 +804,10 @@ close_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     munmap_mapped_reads_db( rdb );
     fclose( rdb->fp );
+
+    if( rdb->fl_dist != NULL )
+        free_fl_dist( rdb->fl_dist );
+    
     free( rdb );
     return;
 }

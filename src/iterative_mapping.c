@@ -1340,7 +1340,7 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     {
         /* iteratively map from a uniform prior */
         start = clock();
-        fprintf(stderr, "NOTICE      :  Starting itertative mapping.\n" );
+        fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
         
         /* initialize the trace that we will store the expectation in */
         init_traces( genome, &uniform_trace, trace_size );

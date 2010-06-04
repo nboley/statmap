@@ -192,11 +192,19 @@ close_traces( struct trace_t* traces )
 {
     int i, j; 
     for( i = 0; i < traces->num_traces; i++ )
+    {
         for( j = 0; j < traces->num_chrs; j++ )
+        {
             free( traces->traces[i][j] );                          
+            free( traces->locks[i][j] );
+        }
+        free( traces->traces[i] );                          
+        free( traces->locks[i] );
+    }
 
     free( traces->trace_lengths );
     free( traces->traces );
+    free( traces->locks );
     free( traces );
 
     return;
