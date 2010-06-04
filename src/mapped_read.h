@@ -162,6 +162,8 @@ struct mapped_reads_db {
     unsigned long num_mmapped_reads;
 
     struct fragment_length_dist_t* fl_dist;
+
+    unsigned long current_read;
 };
 
 typedef struct {

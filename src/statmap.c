@@ -676,10 +676,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_tree( genome->index );
     genome->index = NULL;
-        
-    /* Determine the output stream */
-    FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
-    
+            
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
@@ -728,7 +725,7 @@ map_marginal( args_t* args, struct genome_data* genome )
     fclose( bkwd_wig_fp );
 
     /* Do the iterative mapping */
-    generic_update_mapping( mpd_rds_db, genome, args->assay_type,
+    generic_update_mapping( args->rdb, mpd_rds_db, genome, args->assay_type,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
         
@@ -745,16 +742,6 @@ map_marginal( args_t* args, struct genome_data* genome )
         write_snps_to_file( snp_fp, genome );
         fclose( snp_fp );
     }
-    
-    start = clock();
-    fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-    write_mapped_reads_to_sam( 
-        args->rdb, mpd_rds_db, genome, sam_ofp );
-    
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
-
 
     goto cleanup;
 
@@ -768,9 +755,6 @@ cleanup:
 
     /* Close the packed mapped reads db */
     close_mapped_reads_db( mpd_rds_db );
-
-    /* Close the sam OF */
-    fclose( sam_ofp );    
     
     return;
 }

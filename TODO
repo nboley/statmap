@@ -28,6 +28,8 @@ X -10) Fix the marginal vs cond prb calculations in print to sam
     Currently, this is correct but it is just using the naive N^2 algorithm.
     At the very least, it needs to be N^2 in chromosome and matched read pairs
 -3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
+-2) In get_next_read_from_mapped_reads_db, we have an unnecessary memcopy to 
+    clean up the memory usage. Get rid of this. 
 X -3) Finish location node type
 X -2) Fix segfault on file bad input names
 X -2) Add options for different sequencing error types ( in fastq )

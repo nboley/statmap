@@ -179,7 +179,8 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
 enum assay_type_t;
 
 int
-generic_update_mapping( struct mapped_reads_db* rdb, 
+generic_update_mapping( struct rawread_db_t* rawread_db,
+                        struct mapped_reads_db* rdb, 
                         struct genome_data* genome,
                         enum assay_type_t,
                         int num_samples,

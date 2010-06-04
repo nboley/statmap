@@ -835,19 +835,16 @@ add_read_to_mapped_reads_db(
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
-    if ( true == rdb->locked )
-    {
-        fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot rewind.\n");
-        /* TODO - be able to recover from this */
-        exit( -1 );
-    }
+    /* if rdb is mmapped */
+    rdb->current_read = 0;
 
+    /* if it is not mmapped */
     assert( rdb->fp != NULL );
     /* make sure the fp is open */
     assert( ftell( rdb->fp ) >= 0 );
     fflush( rdb->fp );
     fseek( rdb->fp, 0L , SEEK_SET );
-    // rewind( rdb->fp );
+
     return;
 }
 
@@ -865,54 +862,78 @@ get_next_read_from_mapped_reads_db(
     struct mapped_reads_db* rdb, 
     struct mapped_read_t** rd )
 {
-    if ( true == rdb->locked )
-    {
-        fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot get next read.\n");
-        /* TODO - be able to recover from this */
-        exit( -1 );
-    }
-
     size_t rv;
 
     init_mapped_read( rd );
-    
-    /* Read in the read id */
-    rv = fread( 
-        &((*rd)->read_id), sizeof((*rd)->read_id), 1, rdb->fp );
-    if( 1 != rv )
-    {
-        assert( feof( rdb->fp ) );
-        free_mapped_read( *rd );
-        *rd = NULL;
-        return EOF;
-    }
-    
-    /* Read in the number of mappings */
-    rv = fread(
-        &((*rd)->num_mappings), sizeof((*rd)->num_mappings), 1, rdb->fp );
-    if( 1 != rv )
-    {
-        fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
-        assert( false );
-        exit( -1 );
-    }
 
-    /* read in the locations */
-    (*rd)->locations = malloc( 
-        (*rd)->num_mappings*sizeof(struct mapped_read_location) );
-    
-    rv = fread( (*rd)->locations, 
-                sizeof(struct mapped_read_location), 
-                (*rd)->num_mappings, 
-                rdb->fp );
-    
-    if( (*rd)->num_mappings != rv )
+    /* if the read db has been mmapped */
+    if ( true == rdb->locked )
     {
-        fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
-        assert( false );
-        exit( -1 );
-    }
+        /* if we have read every read */
+        if( rdb->current_read == rdb->num_mmapped_reads )
+            return EOF;
+            
+        assert( rdb->current_read < rdb->num_mmapped_reads );
+        // assert( rdb->current_read >= 0 );
+        
+        /* get a pointer to the current read */
+        char* read_start = rdb->mmapped_reads_starts[rdb->current_read];
+        /* move to the next read */
+        rdb->current_read += 1;
 
+        /* read a mapping into the struct */
+        (*rd)->read_id = *((unsigned long*) read_start);
+        read_start += sizeof(unsigned long)/sizeof(char);
+        (*rd)->num_mappings = *((unsigned short*) read_start);
+        read_start += sizeof(unsigned short)/sizeof(char);
+        (*rd)->locations = malloc( 
+            (*rd)->num_mappings*sizeof(struct mapped_read_location) );
+        memcpy( (*rd)->locations, read_start, (*rd)->num_mappings*sizeof(struct mapped_read_location) );
+        // TODO get rid of this memcpy, and use the next line
+        // (*rd)->locations = (struct mapped_read_location*) read_start;
+        
+        //fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot get next read.\n");
+        /* TODO - be able to recover from this */
+        //exit( -1 );
+    } else {
+        /* Read in the read id */
+        rv = fread( 
+            &((*rd)->read_id), sizeof((*rd)->read_id), 1, rdb->fp );
+        if( 1 != rv )
+        {
+            assert( feof( rdb->fp ) );
+            free_mapped_read( *rd );
+            *rd = NULL;
+            return EOF;
+        }
+        
+        /* Read in the number of mappings */
+        rv = fread(
+            &((*rd)->num_mappings), sizeof((*rd)->num_mappings), 1, rdb->fp );
+        if( 1 != rv )
+        {
+            fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
+            assert( false );
+            exit( -1 );
+        }
+        
+        /* read in the locations */
+        (*rd)->locations = malloc( 
+            (*rd)->num_mappings*sizeof(struct mapped_read_location) );
+        
+        rv = fread( (*rd)->locations, 
+                    sizeof(struct mapped_read_location), 
+                    (*rd)->num_mappings, 
+                    rdb->fp );
+        
+        if( (*rd)->num_mappings != rv )
+        {
+            fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
+            assert( false );
+            exit( -1 );
+        }
+    }
+    
     return 0;
 }
 
