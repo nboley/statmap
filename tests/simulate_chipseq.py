@@ -13,8 +13,8 @@ import gzip
 
 import tests as sc # for simulation code
 
-NUM_READS = 5000
-NUM_SAMPLES = 1
+NUM_READS = 1000
+NUM_SAMPLES = 25
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -178,6 +178,18 @@ def parse_wig( fname, genome ):
     fp.close()
     return density
 
+def parse_bwtout( fname, genome ):
+    fp = open( fname )
+    density = numpy.zeros(len(genome.values()[0])+1)
+    while True:
+        line = fp.readline()
+        if line == '': break
+        loc1 = int( line.strip().split("\t")[3] )
+        loc2 = int( fp.readline().strip().split("\t")[3] )
+        density[loc1:loc2] += 0.5/(loc2 - loc1)
+    fp.close()
+    return density
+
 def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     DIRTY = True
     
@@ -258,9 +270,7 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     raw_input()
 
 
-def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
-    DIRTY = True
-    
+def build_random_chipseq_reads( num_mutations, DIRTY=True ):
     region = build_chipseq_region( )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
@@ -304,6 +314,7 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     reads_of_1.close()
     reads_of_2.close()
 
+def map_with_statmap( iterative=True ):
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
                              -o smo_chipseq_sim \
                              -n %i -f ./data/fl_dist.txt\
@@ -312,39 +323,26 @@ def test_chipseq_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
         call += " -a i"
         
     print re.sub( "\s+", " ", call)
-
+    
     ret_code = subprocess.call( call, shell=True )
-    # ret_code = ( os.system( call ) >> 8 )
+    
     if ret_code != 0:
         print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
-        
-    ## Plot everything
-
+    
     return
 
-    true_density = numpy.zeros( len( region ) )
-    for chr, start, stop in fragments:
-        true_density[start:stop] += 1
-    true_density = true_density/true_density.sum()
-    
-    density = parse_wig( wig_fname, genome )
-    density = density/density.sum()
-    
-    rpy.r.plot( density, col='green', ylim=(0,true_density.max()), \
-                type='l', main='', ylab='', xlab='' )
-    rpy.r.points( true_density, type='l' )
-    rpy.r.points( density.max()*numpy.array(bind_prbs), type='l', col='red' )
-    raw_input()
 
-def build_all_wiggles( mutations, do_marginal=True ):
-    all_mutations = [ ]
-    all_mutations.extend( mutations )
-    for mr in all_mutations:
-        if do_marginal:
-            test_chipseq_region( mr, "relaxed_%i_marginal.wig" % mr, iterative=False  )
-        test_chipseq_region( mr, "relaxed_%i_relaxed.wig" % mr, iterative=True  )
-
+def map_with_bowtie( ):
+    # build the index
+    # pie out to null to ignore output
+    cmd = "bowtie-build -f tmp.genome tmp.ebwt > /dev/null"
+    subprocess.call( cmd, shell=True )
+    # map the reads with bowtie
+    cmd = "bowtie -a --tryhard -X 2500 --fr --phred64-quals tmp.ebwt \
+           -1 tmp.1.fastq -2 tmp.2.fastq mapped_reads.bwtout"
+    subprocess.call( cmd, shell=True )
+    
 def plot_all_wiggles( mutations ):
     # build and plot the true density
     region = build_chipseq_region( )
@@ -413,7 +411,7 @@ def plot_all_wiggles( mutations ):
     
     rpy.r.dev_off()
 
-def plot_wig_bounds( dir, png_fname):
+def plot_wig_bounds( dir, png_fname ):
     region = build_chipseq_region( )
     genome = { 'chr2L': region + region }
 
@@ -445,6 +443,61 @@ def plot_wig_bounds( dir, png_fname):
         
     rpy.r.dev_off()
 
+def plot_bootstrap_bounds( png_fname ):
+    region = build_chipseq_region( )
+    genome = { 'chr2L': region + region }
+
+    curr_dir = os.getcwd()
+    rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750, units='px' )
+    
+    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
+    density_max = density.max()
+    rpy.r.plot( density/density_max, type='l', col='blue', main='Inferred Read Coverage Density', \
+                xlab='', ylab='', lty=1, ylim=(0, 1.05) )
+    
+    def plot_wiggles( dir, color  ):
+        fnames = []
+        os.chdir(dir)
+        for file in os.listdir("./"):
+            if fnmatch.fnmatch(file, '*.wig'):
+                fnames.append( file )
+                
+        for fname in fnames:
+            density = parse_wig( fname, genome )/density_max
+            rpy.r.points( density, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+        os.chdir(curr_dir)
+
+    # parse bowtie out
+    density = parse_bwtout( "mapped_reads.bwtout", genome )
+    rpy.r.points( density, type='l', col='green', lwd=6, main='', xlab='', ylab='', lty=3 )
+    
+    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
+    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
+    plot_wiggles( "./smo_chipseq_sim/samples/", 'black' )
+    
+    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )/density_max
+    rpy.r.points( density, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    
+    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )/density_max
+    rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=1 )
+    
+    density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )/density_max
+    rpy.r.points( density, type='l', col='green', lwd=3, main='', xlab='', ylab='', lty=1 )
+
+    # BUG!!!
+    true_density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )/density_max
+    true_density[5000:] = 0
+    rpy.r.points( true_density, type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=6 )
+        
+    rpy.r("""legend( x=8000, y=1.0,
+             legend=c("Statmap Upper Bound", "Statmap Lower Bound", "Statmap Expectation", 
+                      "Statmap Local Maxima", "Statmap Bootstrap Upper Bounds", 
+                      "Statmap Bootstrap Lower Bounds",
+                      "Bowtie -a --tryhard", "True Read Coverage"),
+             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black"),
+             lwd=c(1,1,3,1,1,1,6,6), lty=c(1,1,1,1,1,1,3,3) )""" )
+    
+    rpy.r.dev_off()
 
 
 if __name__ == '__main__':
@@ -456,11 +509,13 @@ if __name__ == '__main__':
             pass
 
     if True:
-        mutations = [3,] # [ 1, 10, 25, 100, 1000  ]
-        build_all_wiggles( mutations, False )
-        plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
-        plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
-        if sc.CLEANUP:
+        build_random_chipseq_reads( 3 )
+        map_with_bowtie( )
+        map_with_statmap( )
+        plot_bootstrap_bounds( "bootstrap_bnds.png" )
+        # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
+        # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
+        if False and sc.CLEANUP:
             subprocess.call( "rm tmp.*", shell=True )
             # subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
 

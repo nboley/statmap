@@ -1,4 +1,4 @@
-compile_options = -O0 -g  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O3  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
@@ -12,6 +12,7 @@ statmap : $(objects)
 	$(objects) \
 	$(compile_options) \
 	-lm -lpthread
+	cp statmap ../bin/
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
 	index_genome.h quality.h config.h snp.h fragment_length.h

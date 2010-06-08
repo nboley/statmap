@@ -282,19 +282,15 @@ def build_reads_from_fragments( \
         if paired_end:
             read_1 = genome[chr][start:(start+read_len)]
             read_2 = genome[chr][(stop-read_len):stop]
-            if random.random() > 0.5:
-                read_1 = read_1.translate( rev_comp_table )[::-1]
-            else:
-                read_2 = read_2.translate( rev_comp_table )[::-1]
+            read_2 = read_2.translate( rev_comp_table )[::-1]
             reads.append( ( read_1, read_2 ) )
         else:
             if random.random() > 0.5 or not rev_comp:
                 read = genome[chr][start:(start+read_len)]
             elif rev_comp:
                 read = genome[chr][(stop-read_len):(stop)]
-            
-            if rev_comp and random.random() > 0.5:
                 read = read.translate( rev_comp_table )[::-1]
+            
             reads.append( read )
     return reads
 

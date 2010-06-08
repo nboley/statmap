@@ -674,9 +674,11 @@ map_marginal( args_t* args, struct genome_data* genome )
     /* Free the genome index */
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
+            (unsigned long) sizeof_tree( genome->index ) );
     free_tree( genome->index );
     genome->index = NULL;
-            
+    
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
