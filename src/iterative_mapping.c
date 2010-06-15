@@ -1059,7 +1059,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         {
             for( j = start; j <= stop; j++ )
             {
-                assert( j > 0 && j < traces->trace_lengths[chr_index] );
+                assert( j >= 0 && j < traces->trace_lengths[chr_index] );
                 
                 window_density += traces->traces[0][chr_index][j];
             }
