@@ -204,7 +204,7 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
         reads = sc.build_reads_from_fragments( 
             genome, fragments, rev_comp=False, paired_end=False )
         # mutate the reads by their error strings
-        sample_file = gzip.open( './data/dirty_error_strs.fastq.gz' )
+        sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
         sample_file.close()
         mutated_reads = sc.mutate_reads( reads, error_strs )
@@ -276,13 +276,24 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True ):
     bind_prbs = assign_bind_prbs( bind_site_scores )
     fragments = build_fragments( region, bind_prbs, NUM_READS )
     
+    density = numpy.zeros(len(region))
+    for chr, start, stop in fragments:
+        density[start:stop] += 1.0/(stop-start)
+    fp = open( "true_read_coverage.wig", "w" )
+    fp.write("track type=wiggle_0 name=true_read_coverage\n")
+    fp.write("variableStep chrom=chr2L\n")
+    for pos, value in enumerate(density):
+        if value > 0:
+            fp.write( "%i\t%e\n" % (pos+1, value) )
+    fp.close()
+    
     genome = { 'chr2L': region }
 
     if DIRTY:
         reads = sc.build_reads_from_fragments( 
             genome, fragments, rev_comp=False, paired_end=True )
         # mutate the reads by their error strings
-        sample_file = gzip.open( './data/dirty_error_strs.fastq.gz' )
+        sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
         sample_file.close()
         mutated_reads = sc.mutate_reads( reads, error_strs )
@@ -294,7 +305,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True ):
     chr2L = genome['chr2L']
     mutated_chr2L = array.array( 'c', chr2L )
 
-    # mutated num_mutations random indexes
+    # mutate num_mutations random indexes
     rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
     for rand_index in rand_indexes:
         curr_bp = mutated_chr2L[ rand_index ]
@@ -313,10 +324,12 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True ):
         sc.build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
     reads_of_1.close()
     reads_of_2.close()
+    
+    return rand_indexes
 
 def map_with_statmap( iterative=True ):
     call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -o smo_chipseq_sim \
+                             -o smo_chipseq_sim -q 0 \
                              -n %i -f ./data/fl_dist.txt\
                              " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     if iterative:
@@ -339,7 +352,7 @@ def map_with_bowtie( ):
     cmd = "bowtie-build -f tmp.genome tmp.ebwt > /dev/null"
     subprocess.call( cmd, shell=True )
     # map the reads with bowtie
-    cmd = "bowtie -a --tryhard -X 2500 --fr --phred64-quals tmp.ebwt \
+    cmd = "bowtie -a --tryhard -X 2500 --fr tmp.ebwt \
            -1 tmp.1.fastq -2 tmp.2.fastq mapped_reads.bwtout"
     subprocess.call( cmd, shell=True )
     
@@ -417,11 +430,12 @@ def plot_wig_bounds( dir, png_fname ):
 
     curr_dir = os.getcwd()
     rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750 )
+    rpy.r("par(cex=0.2, mai=c(0.5,0.4,0.4,0.2))")
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
     density_max = density.max()
     density = density/density_max
-    rpy.r.plot( density, type='l', col='blue', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2) )
+    rpy.r.plot( density, type='l', col='blue', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2), cex=0.2, mai=(0.5,0.4,0.4,0.2) )
 
     fnames = []
     os.chdir(dir)
@@ -443,15 +457,16 @@ def plot_wig_bounds( dir, png_fname ):
         
     rpy.r.dev_off()
 
-def plot_bootstrap_bounds( png_fname ):
+def plot_bootstrap_bounds( png_fname, mut_indexes=[] ):
     region = build_chipseq_region( )
     genome = { 'chr2L': region + region }
 
     curr_dir = os.getcwd()
-    rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750, units='px' )
+    rpy.r.png( os.path.join(curr_dir, png_fname), width=7.5, height=3.5, units='in', res=300 )
+    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5)")
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
-    density_max = density.max()
+    density_max = 1.0 # density.max()
     rpy.r.plot( density/density_max, type='l', col='blue', main='Inferred Read Coverage Density', \
                 xlab='', ylab='', lty=1, ylim=(0, 1.05) )
     
@@ -469,7 +484,7 @@ def plot_bootstrap_bounds( png_fname ):
 
     # parse bowtie out
     density = parse_bwtout( "mapped_reads.bwtout", genome )
-    rpy.r.points( density, type='l', col='green', lwd=6, main='', xlab='', ylab='', lty=3 )
+    rpy.r.points( density, type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
@@ -482,20 +497,21 @@ def plot_bootstrap_bounds( png_fname ):
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=1 )
     
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )/density_max
-    rpy.r.points( density, type='l', col='green', lwd=3, main='', xlab='', ylab='', lty=1 )
-
-    # BUG!!!
-    true_density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )/density_max
-    true_density[5000:] = 0
-    rpy.r.points( true_density, type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=6 )
-        
-    rpy.r("""legend( x=8000, y=1.0,
+    rpy.r.points( density, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    
+    true_density = parse_wig( "true_read_coverage.wig", genome )
+    rpy.r.points( true_density, type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    
+    for bp_index in mut_indexes:
+        rpy.r.abline( v=bp_index, col='red', lty=2  )
+    
+    rpy.r("""legend( x=7700, y=1.0,
              legend=c("Statmap Upper Bound", "Statmap Lower Bound", "Statmap Expectation", 
                       "Statmap Local Maxima", "Statmap Bootstrap Upper Bounds", 
                       "Statmap Bootstrap Lower Bounds",
-                      "Bowtie -a --tryhard", "True Read Coverage"),
-             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black"),
-             lwd=c(1,1,3,1,1,1,6,6), lty=c(1,1,1,1,1,1,3,3) )""" )
+                      "Bowtie", "True Read Coverage", "Mutations"),
+             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black", "Red"),
+             lwd=c(0.5,0.5,1.5,0.5,0.5,0.5,2,2,0.5), lty=c(1,1,1,1,1,1,3,3,2) )""" )
     
     rpy.r.dev_off()
 
@@ -509,10 +525,10 @@ if __name__ == '__main__':
             pass
 
     if True:
-        build_random_chipseq_reads( 3 )
+        mut_indexes = build_random_chipseq_reads( 3 )
         map_with_bowtie( )
         map_with_statmap( )
-        plot_bootstrap_bounds( "bootstrap_bnds.png" )
+        plot_bootstrap_bounds( "bootstrap_bnds.png", mut_indexes )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
         if False and sc.CLEANUP:
