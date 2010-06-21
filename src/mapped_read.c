@@ -1010,6 +1010,8 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
 
     while( rd1 != NULL ) 
     {         
+        // printf("Writing read to sam\n");
+
         /* 
          * TODO - clean this up - this is kind of a weird place to put this. 
          *

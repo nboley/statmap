@@ -3,7 +3,7 @@ compile_options = -O3  --unroll-loops --fast-math -Wall -Wextra --short-enums -D
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
-	  fragment_length.o
+	  fragment_length.o wiggle.o
 
 all: statmap
 
@@ -94,6 +94,11 @@ genome.h :
 #
 # Utility objects
 #
+
+wiggle.o: wiggle.c wiggle.h
+	gcc $(compile_options) -c wiggle.c
+
+wiggle.h: trace.h
 
 # Store traces across the gnome ( like wiggles )
 trace.o: trace.c trace.h

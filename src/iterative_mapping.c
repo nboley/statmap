@@ -1,3 +1,5 @@
+/* Copyright (c) 2009-2010, Nathan Boley */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -15,6 +17,7 @@
 #include "statmap.h"
 #include "iterative_mapping.h"
 #include "trace.h"
+#include "wiggle.h"
 #include "mapped_location.h"
 #include "snp.h"
 #include "genome.h"
@@ -841,7 +844,7 @@ sample_random_traces(
             write_wiggle_from_trace( 
                 sample_trace, 
                 genome->chr_names, track_names,
-                buffer, 0 ); // max_prb_change_for_convergence );
+                buffer, max_prb_change_for_convergence );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
             fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
@@ -1059,8 +1062,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         {
             for( j = start; j <= stop; j++ )
             {
-                assert( j >= 0 && j < traces->trace_lengths[chr_index] );
-                
+                assert( j < traces->trace_lengths[chr_index] );
                 window_density += traces->traces[0][chr_index][j];
             }
         } 

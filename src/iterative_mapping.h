@@ -5,6 +5,15 @@
 struct genome_data;
 #include "mapped_read.h"
 
+/*
+ * Global arguments that are available to all of the 
+ * iterative mapping functions. I should probably 
+ * pass these through the calling chain, but that
+ * seems like a pain so I just declare them global.
+ *
+ */
+static const void* iterative_mapping_args; 
+
 #define WINDOW_SIZE 20
 
 struct update_mapped_read_rv_t {
@@ -32,7 +41,7 @@ update_traces_from_mapped_reads(
     struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc)
+        const struct mapped_read_location* const loc )
 );
 
 

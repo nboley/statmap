@@ -1,3 +1,7 @@
+#ifndef TRACE_H
+#define TRACE_H
+
+
 #define TRACE_TYPE float
 
 /* Trace spinlock granularity */
@@ -59,15 +63,4 @@ aggregate_over_traces(  struct trace_t* update_trace,
                         TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
     );
 
-extern void
-write_wiggle_from_trace( struct trace_t* traces,
-
-                         /* These are usually chr names */
-                         char** scaffold_names,
-                         /* The names of the various tracks */
-                         /* Use null for the indexes */
-                         char** track_names,
-                         
-                         const char* output_fname,                           
-                         const double filter_threshold 
-    );
+#endif // #define TRACE_H
