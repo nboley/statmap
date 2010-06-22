@@ -21,7 +21,7 @@
 // Samples output 
 // Bootstrap 
 #define SAVE_BOOTSTRAP_SAMPLES true
-#define SAVE_AGGREGATED_BOOTSTRAP_SAMPLES (true && SAVE_BOOTSTRAP_SAMPLES)
+#define SAVE_AGGREGATED_BOOTSTRAP_SAMPLES (false && SAVE_BOOTSTRAP_SAMPLES)
 #define NUM_BOOTSTRAP_SAMPLES 25
 #define BOOTSTRAP_SAMPLES_PATH "./bootstrap_samples/"
 #define BOOTSTRAP_SAMPLES_MAX_PATH "./bootstrap_samples/max_traces/"

@@ -852,18 +852,15 @@ sample_random_traces(
             fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
             fflush( s_mi );
         }
-
-        /* Update the min and max traces to include the most recent trace */
-        aggregate_over_traces( max_trace, sample_trace, max );
-        aggregate_over_traces( min_trace, sample_trace, min );
-
+        
         if( NUM_BOOTSTRAP_SAMPLES > 0 )
         {
             fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
-
-            /* Reset the boostrap aggregate traces */
-            set_trace_to_uniform( bs_min_trace, FLT_MAX );
-            set_trace_to_uniform( bs_max_trace, -FLT_MAX );
+            char buffer[200];
+            sprintf( buffer, "mkdir %ssample%i/",
+                     BOOTSTRAP_SAMPLES_ALL_PATH, i+1 );
+            system( buffer );
+            
             int j;
             for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
             {                
@@ -877,8 +874,7 @@ sample_random_traces(
                 
                 if( SAVE_BOOTSTRAP_SAMPLES )
                 {
-                    char buffer[200];
-                    sprintf( buffer, "%ssample%i_bssample%i.wig", 
+                    sprintf( buffer, "%ssample%i/bssample%i.wig", 
                              BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
                     
                     write_wiggle_from_trace( 
@@ -886,56 +882,84 @@ sample_random_traces(
                         genome->chr_names, track_names,
                         buffer, max_prb_change_for_convergence );
                 }    
-                
-                /* Aggregate the min and the max traces to include the bootstrapped traces */
-                aggregate_over_traces( bs_max_trace, sample_trace, max );
-                aggregate_over_traces( bs_min_trace, sample_trace, min );
-                if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
-                {
-                    char buffer[100];
-                    sprintf( buffer, "%sbsmax_sample%i.wig", BOOTSTRAP_SAMPLES_MAX_PATH, i+1 );
-                    
-                    write_wiggle_from_trace( 
-                        bs_max_trace, 
-                        genome->chr_names, track_names,
-                        buffer, max_prb_change_for_convergence );
-                    
-                    sprintf( buffer, "%sbsmin_sample%i.wig", BOOTSTRAP_SAMPLES_MIN_PATH, i+1 );
-                    
-                    write_wiggle_from_trace( 
-                        bs_min_trace, 
-                        genome->chr_names, track_names,
-                        buffer, max_prb_change_for_convergence );
-
-                }
             }
             fprintf( stderr, " 100%%\n");
+        }
+        
+        if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
+        {
+            char buffer[200];
+            FILE** fps = malloc(sizeof(FILE*)*NUM_BOOTSTRAP_SAMPLES);
+            
+            int j;
+            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+            {
+                sprintf( buffer, "%ssample%i/bssample%i.wig", 
+                         BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
+                fps[j] = fopen( buffer, "r" );
+            }
 
-            /* Aggregate the min and the max traces to include the bootstrapped max and min traces */
-            aggregate_over_traces( max_trace, bs_max_trace, max );
-            aggregate_over_traces( min_trace, bs_min_trace, min );
-
-            /* write the bootstrapped max and min traces to disk */
+            /* make the MIN aggregates */
+            sprintf( buffer, "%ssample%i.wig", 
+                     BOOTSTRAP_SAMPLES_MIN_PATH, i+1 );
+            FILE* ofp = fopen( buffer, "w" );
+            aggregate_over_wiggles( 
+                fps, NUM_BOOTSTRAP_SAMPLES, ofp, wig_lines_min  );
+            fclose( ofp );
+            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+                fseek( fps[j], 0, SEEK_SET );
+            
+            /* make the MAX aggregates */
+            sprintf( buffer, "%ssample%i.wig", 
+                     BOOTSTRAP_SAMPLES_MAX_PATH, i+1 );
+            ofp = fopen( buffer, "w" );
+            aggregate_over_wiggles( 
+                fps, NUM_BOOTSTRAP_SAMPLES, ofp, wig_lines_max  );
+            fclose( ofp );
+            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+                fclose( fps[j] );
+            
+            free( fps );
         }
         
         close_traces( sample_trace );
     }
 
-    write_wiggle_from_trace( 
-        max_trace, 
-        genome->chr_names, track_names,
-        MAX_TRACE_FNAME, 
-        max_prb_change_for_convergence );
-
-    close_traces( max_trace );
+    if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
+    {
+        char buffer[200];
+        FILE** fps = malloc(sizeof(FILE*)*num_samples);
         
-    write_wiggle_from_trace( 
-        min_trace, 
-        genome->chr_names, track_names,
-        MIN_TRACE_FNAME, 
-        max_prb_change_for_convergence );
-    
-    close_traces( min_trace );
+        int j;
+
+        /* make the MIN aggregates */
+        for( j = 0; j < num_samples; j++ )
+        {
+            sprintf( buffer, "%ssample%i.wig", BOOTSTRAP_SAMPLES_MIN_PATH, j+1 );
+            fps[j] = fopen( buffer, "r" );
+            assert( fps[j] != NULL );
+        }
+        FILE* ofp = fopen( MIN_TRACE_FNAME, "w" );
+        aggregate_over_wiggles( fps, num_samples, ofp, wig_lines_min  );
+        fclose( ofp );
+        for( j = 0; j < num_samples; j++ )
+            fclose( fps[j] );
+        
+        /* make the MAX aggregates */
+        for( j = 0; j < num_samples; j++ )
+        {
+            sprintf( buffer, "%ssample%i.wig", BOOTSTRAP_SAMPLES_MAX_PATH, j+1 );
+            fps[j] = fopen( buffer, "r" );
+            assert( fps[j] != NULL );
+        }
+        ofp = fopen( MAX_TRACE_FNAME, "w" );
+        aggregate_over_wiggles( fps, num_samples, ofp, wig_lines_max  );
+        fclose( ofp );
+        for( j = 0; j < num_samples; j++ )
+            fclose( fps[j] );
+        
+        free( fps );
+    }
     
     return 0;
 }

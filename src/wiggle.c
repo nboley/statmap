@@ -167,7 +167,8 @@ aggregate_over_wiggles(
     /* loop over num wigs */
     int i;
 
-    char** chr_names = malloc(sizeof(char*)*num_wigs);
+    /* BUG!!! HORRIBLE HACK */
+    char** chr_names = malloc(sizeof(char*)*100);
     
     /* we implement this as a merge sort. 
        First, we read lines from each until we have a chr and position.
