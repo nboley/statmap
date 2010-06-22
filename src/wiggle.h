@@ -12,13 +12,13 @@ struct wig_line_info {
 };
 
 float 
-min( const struct wig_line_info* lines, const int ub  );
+wig_lines_min( const struct wig_line_info* lines, const int ub  );
 
 float 
-max( const struct wig_line_info* lines, const int ub  );
+wig_lines_max( const struct wig_line_info* lines, const int ub  );
 
 float 
-sum( const struct wig_line_info* lines, const int ub  );
+wig_lines_sum( const struct wig_line_info* lines, const int ub  );
 
 extern void
 aggregate_over_wiggles(

@@ -10,7 +10,7 @@
 #include "wiggle.h"
 
 float 
-min( const struct wig_line_info* lines, const int ub  )
+wig_lines_min( const struct wig_line_info* lines, const int ub  )
 {
     float min = lines[0].value;
     int i;
@@ -26,7 +26,7 @@ min( const struct wig_line_info* lines, const int ub  )
 }
 
 float 
-max( const struct wig_line_info* lines, const int ub  )
+wig_lines_max( const struct wig_line_info* lines, const int ub  )
 {
     float max = lines[0].value;
     int i;
@@ -42,7 +42,7 @@ max( const struct wig_line_info* lines, const int ub  )
 }
 
 float 
-sum( const struct wig_line_info* lines, const int ub  )
+wig_lines_sum( const struct wig_line_info* lines, const int ub  )
 {
     float sum = 0;
     int i;

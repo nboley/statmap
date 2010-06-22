@@ -25,11 +25,11 @@ main( int argc, char** argv )
 
     if( 0 == strcmp("max", argv[1] ) )
     {
-        agg_fn = max;
+        agg_fn = wig_lines_max;
     } else if( 0 == strcmp("min", argv[1] ) ) {
-        agg_fn = min;
+        agg_fn = wig_lines_min;
     } else if( 0 == strcmp("sum", argv[1] ) ) {
-        agg_fn = sum;
+        agg_fn = wig_lines_sum;
     } else {
         fprintf( stderr, "FATAL     : Unrecognized aggregate '%s'\n", argv[1] );
         exit( -1 );
@@ -48,7 +48,7 @@ main( int argc, char** argv )
         }
     }
 
-    aggregate_over_wiggles( wigs, argc-2, stdout, sum );
+    aggregate_over_wiggles( wigs, argc-2, stdout, agg_fn );
     
     for( i = 0; i < argc-2; i++ )
         fclose( wigs[i] );

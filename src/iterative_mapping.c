@@ -23,6 +23,7 @@
 #include "genome.h"
 #include "fragment_length.h"
 
+/*
 static TRACE_TYPE 
 min( TRACE_TYPE a, TRACE_TYPE b )
 {
@@ -40,13 +41,14 @@ max( TRACE_TYPE a, TRACE_TYPE b )
 }
 
 #if 0
-/* GET RID OF THE 'UNUSED' COMPILER WARNING */
+// GET RID OF THE 'UNUSED' COMPILER WARNING
 static TRACE_TYPE 
 sum( TRACE_TYPE a, TRACE_TYPE b )
 {
     return a + b;
 }
 #endif
+*/
 
 void
 naive_update_trace_expectation_from_location( 
