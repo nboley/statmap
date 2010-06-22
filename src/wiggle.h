@@ -4,11 +4,28 @@
 
 #include "trace.h"
 
+struct wig_line_info {
+    FILE* fp;
+    int chr_index;
+    unsigned int position;
+    float value;
+};
+
+float 
+min( const struct wig_line_info* lines, const int ub  );
+
+float 
+max( const struct wig_line_info* lines, const int ub  );
+
+float 
+sum( const struct wig_line_info* lines, const int ub  );
+
 extern void
 aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
-    FILE* ofp
+    FILE* ofp,
+    float agg_fn( const struct wig_line_info*, const int  )
 );
 
 #if 0

@@ -1,30 +1,46 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../src/wiggle.h"
 
 void usage()
 {
-    fprintf(stderr, "Usage: ./aggregate_over_wiggles files.wig > output.wig\n");
+    fprintf(stderr, "Usage: ./aggregate_over_wiggles (min|max|sum) file(s).wig > output.wig\n");
 }
 
 
 int 
 main( int argc, char** argv )
 {
-    if( argc <= 1 )
+    if( argc <= 2 )
     {
         usage();
         exit( -1 );
     }
 
-    /* open the wiggles */
-    FILE** wigs = calloc(argc-1, sizeof(FILE*));
-    int i;
-    for( i = 1; i < argc; i++ )
+    /* determine the aggregate type */
+    float (*agg_fn)( const struct wig_line_info*, const int ) = NULL;
+
+    if( 0 == strcmp("max", argv[1] ) )
     {
-        wigs[i] = fopen( argv[i], "r" );
+        agg_fn = max;
+    } else if( 0 == strcmp("min", argv[1] ) ) {
+        agg_fn = min;
+    } else if( 0 == strcmp("sum", argv[1] ) ) {
+        agg_fn = sum;
+    } else {
+        fprintf( stderr, "FATAL     : Unrecognized aggregate '%s'\n", argv[1] );
+        exit( -1 );
+    }
+
+    /* open the wiggles */
+    FILE** wigs = calloc(argc-2, sizeof(FILE*));
+    int i;
+    for( i = 0; i < argc-2; i++ )
+    {
+        wigs[i] = fopen( argv[i+2], "r" );
         if( NULL == wigs[i] )
         {
             perror( "FATAL     : Could not open wiggle file for reading" );
@@ -32,12 +48,14 @@ main( int argc, char** argv )
         }
     }
 
-    aggregate_over_wiggles( wigs, argc-1, stdout );
+    aggregate_over_wiggles( wigs, argc-2, stdout, sum );
     
-    for( i = 1; i < argc; i++ )
+    for( i = 0; i < argc-2; i++ )
         fclose( wigs[i] );
     
     free( wigs );
+
+    return 0;
 }
 
 

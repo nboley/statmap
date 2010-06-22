@@ -9,6 +9,49 @@
 
 #include "wiggle.h"
 
+float 
+min( const struct wig_line_info* lines, const int ub  )
+{
+    float min = lines[0].value;
+    int i;
+    for( i = 1; i <= ub; i++ )
+    {
+        if( lines[0].value < min )
+        {
+            min = lines[i].value;
+        }
+    }
+    
+    return min;
+}
+
+float 
+max( const struct wig_line_info* lines, const int ub  )
+{
+    float max = lines[0].value;
+    int i;
+    for( i = 1; i <= ub; i++ )
+    {
+        if( lines[0].value > max )
+        {
+            max = lines[i].value;
+        }
+    }
+    
+    return max;
+}
+
+float 
+sum( const struct wig_line_info* lines, const int ub  )
+{
+    float sum = 0;
+    int i;
+    for( i = 1; i <= ub; i++ )
+        sum += lines[i].value;
+    
+    return sum;
+}
+
 
 /* 
  *  This makes tons of assumptions about the 
@@ -17,21 +60,109 @@
  *  but it is fine to be used on files generated 
  *  by statmap 
  */
-struct wig_line_info {
-    FILE* fp;
-    int chr_index;
-    unsigned int position;
-    float value;
-};
+
+static int 
+cmp_wig_line_info( const void* a, const void* b)
+{
+    /* compare on the file pointer. if it is null, the file is empty, 
+       and it is always smaller */
+    if( ((struct wig_line_info*) a)->fp == NULL )
+    {
+        if( ((struct wig_line_info*) b)->fp == NULL )
+        {
+            return 0;
+        } else {
+            return -1;
+        }
+    }
+    if( ((struct wig_line_info*) b)->fp == NULL )
+    {
+        return 1;
+    }
+
+    /* compare on chr index */
+    if( ((struct wig_line_info*) b)->chr_index != ((struct wig_line_info*) a)->chr_index )
+    {
+        return ((struct wig_line_info*) a)->chr_index - ((struct wig_line_info*) b)->chr_index;
+    }
+    
+    return ((struct wig_line_info*) a)->position - ((struct wig_line_info*) b)->position;
+}
+
+static void
+parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
+{
+    char* rv;
+    char buffer[500];
+
+    /* loop until we get a valid line */
+    while( 1 )
+    {
+        rv = fgets( buffer, 500, lines[index].fp );
+        if( rv == NULL ) 
+        {
+            /*BUG - remove htis */
+            perror( "ERROR     : Could not read line from wiggle file" );
+            lines[index].fp = NULL;
+            return;
+        }
+        if( buffer[0] == 'f' )
+        {
+            fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
+            assert( 0 );
+            exit( -1 );
+        } else if ( buffer[0] == 'v') {
+            /* increment the chr index */
+            lines[index].chr_index += 1;
+            /* get the chr name */
+            char* chr_name = strstr( buffer, "chrom=" );
+            chr_name += 6;
+            /* set the chr name */
+            if( chr_names[lines[index].chr_index] != NULL )
+            {
+                if( 0 != strncmp( chr_name, chr_names[lines[index].chr_index], strlen( chr_names[lines[index].chr_index] ) ) )
+                {
+                    fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
+                             (int)strlen(chr_names[lines[index].chr_index]), chr_name, chr_names[lines[index].chr_index] );
+                    assert( 0 );
+                }
+            } else {
+                /* remoive the trailing newline */
+                int chr_name_len = strlen(chr_name)-1;
+                chr_names[lines[index].chr_index] = calloc( chr_name_len+1, sizeof(char)  );
+                memcpy( chr_names[lines[index].chr_index], chr_name, chr_name_len );
+                chr_names[lines[index].chr_index][ chr_name_len ] = '\0';
+            }
+        /* Assuming this is a variable step numeric line */
+        } else {
+            int rv = fscanf( lines[index].fp, "%i\t%e\n", 
+                             &(lines[index].position), &(lines[index].value)  );
+            if( rv != 2 )
+            {
+                assert( rv == EOF );
+                lines[index].fp = NULL;
+            }
+
+            return;
+        }
+    }
+    
+    /* this should never happen */
+    assert( 0 );
+    return;
+}
 
 extern void
 aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
-    FILE* ofp
+    FILE* ofp,
+    float agg_fn( const struct wig_line_info*, const int  )
 )
 {
     char* rv;
+
+    int curr_chr_index = -1;
 
     /* loop over num wigs */
     int i;
@@ -49,6 +180,7 @@ aggregate_over_wiggles(
     for( i = 0; i < num_wigs; i++ )
     {
         lines[i].fp = wig_fps[i];
+        lines[i].chr_index = -1;
         rv = fgets( buffer, 500, lines[i].fp );
         if( rv == NULL )
         {
@@ -69,54 +201,37 @@ aggregate_over_wiggles(
     /* initialize the data arrays */
     for( i = 0; i < num_wigs; i++ )
     {
-        rv = fgets( buffer, 500, lines[i].fp );
-        if( rv == NULL ) 
-        {
-            perror( "ERROR     : Could not read line from wiggle file" );
-            lines[i].fp = NULL;
+        parse_next_line( lines, chr_names, i );
+    }
+    
+    qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    while( NULL != lines[0].fp )
+    {
+        if( lines[0].chr_index > curr_chr_index )
+        {    
+            fprintf( ofp, "variableStep chrom=%s\n", chr_names[lines[0].chr_index] );
+            curr_chr_index = lines[0].chr_index;
         }
-
-        if( buffer[0] == 'f' )
+        
+        unsigned int position = lines[0].position;
+        int chr_index = lines[0].chr_index;
+        int ub = 0;
+        i = 0;
+        while( position == lines[i].position 
+               && chr_index == lines[i].chr_index
+               && lines[i].fp != NULL
+               && i < num_wigs )
         {
-            fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
-            assert( 0 );
-            exit( -1 );
-        } else if ( buffer[0] == 'w') {
-            /* increment the chr index */
-            lines[i].chr_index += 1;
-            /* get the chr name */
-            char* chr_name = strstr( buffer, "chrom=" );
-            chr_name += 6;
-            /* set the chr name */
-            if( chr_names[i] != NULL )
-            {
-                if( 0 != strncmp( chr_name, chr_names[i], strlen( chr_names[i] ) ) )
-                {
-                    fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
-                             (int)strlen(chr_names[i]), chr_name, chr_names[i] );
-                    assert( 0 );
-                }
-            } else {
-                chr_names[i] = calloc( 500, sizeof(char)  );
-                sscanf( chr_name, "%s", chr_names[i] );
-                chr_names = realloc( chr_names, sizeof(char)*strlen(chr_names[i]) );
-            }
-            
-            /* move to the next line */
-            i -= 1;
-            continue;
-        /* Assuming this is a variable step numeric line */
-        } else {
-            int rv = fscanf( lines[i].fp, "%i\t%e\n", 
-                             &(lines[i].position), &(lines[i].value)  );
-            if( rv != 2 )
-            {
-                assert( rv == EOF );
-                lines[i].fp = NULL;
-            }
-            
-            printf( "%i\t%e\n", lines[i].position, lines[i].value );
+            ub += 1;
+            i++;
         }
+        
+        fprintf( ofp, "%i\t%e\n", position, agg_fn( lines, ub )  );
+        
+        for( i = 0; i <= ub; i++ )
+            parse_next_line( lines, chr_names, i );
+        
+        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
     
     return;
