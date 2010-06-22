@@ -13,8 +13,6 @@ void usage()
 int 
 main( int argc, char** argv )
 {
-    printf( "%i\n", argc );
-    
     if( argc <= 1 )
     {
         usage();

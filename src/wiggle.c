@@ -31,6 +31,8 @@ aggregate_over_wiggles(
     FILE* ofp
 )
 {
+    char* rv;
+
     /* loop over num wigs */
     int i;
 
@@ -47,7 +49,12 @@ aggregate_over_wiggles(
     for( i = 0; i < num_wigs; i++ )
     {
         lines[i].fp = wig_fps[i];
-        fgets( buffer, 500, lines[i].fp );
+        rv = fgets( buffer, 500, lines[i].fp );
+        if( rv == NULL )
+        {
+            perror( "FATAL    : Could not read line from wiggle file" );
+            exit( -1 );
+        }
     }
     /* make sure that the header is not too long */
     if( strlen( buffer ) > 495 )
@@ -62,7 +69,13 @@ aggregate_over_wiggles(
     /* initialize the data arrays */
     for( i = 0; i < num_wigs; i++ )
     {
-        fgets( buffer, 500, &(lines[i].fp[i]) );
+        rv = fgets( buffer, 500, lines[i].fp );
+        if( rv == NULL ) 
+        {
+            perror( "ERROR     : Could not read line from wiggle file" );
+            lines[i].fp = NULL;
+        }
+
         if( buffer[0] == 'f' )
         {
             fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
