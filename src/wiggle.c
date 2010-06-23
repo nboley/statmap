@@ -4,46 +4,64 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <float.h>
 
 #include "trace.h"
 
 #include "wiggle.h"
 
 float 
-wig_lines_min( const struct wig_line_info* lines, const int ub  )
+wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wigs  )
 {
+    assert( num_wigs > 0 );
+    
+    if( ub == 0 )
+        return 0;
+
     float min = lines[0].value;
     int i;
     for( i = 1; i <= ub; i++ )
     {
         if( lines[0].value < min )
-        {
             min = lines[i].value;
-        }
     }
     
+    if( ub < num_wigs && min > 0 )
+        min = 0;
+
     return min;
 }
 
 float 
-wig_lines_max( const struct wig_line_info* lines, const int ub  )
+wig_lines_max( const struct wig_line_info* lines, const int ub, const int num_wigs  )
 {
+    assert( num_wigs > 0 );
+    
+    if( ub == 0 )
+        return 0;
+
     float max = lines[0].value;
     int i;
     for( i = 1; i <= ub; i++ )
     {
         if( lines[0].value > max )
-        {
             max = lines[i].value;
-        }
     }
+
+    if( ub < num_wigs && max < 0 )
+        max = 0;
     
     return max;
 }
 
 float 
-wig_lines_sum( const struct wig_line_info* lines, const int ub  )
+wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wigs  )
 {
+    assert( num_wigs > 0 );
+
+    if( ub == 0 )
+        return 0;
+
     float sum = 0;
     int i;
     for( i = 1; i <= ub; i++ )
@@ -101,8 +119,6 @@ parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
         rv = fgets( buffer, 500, lines[index].fp );
         if( rv == NULL ) 
         {
-            /*BUG - remove htis */
-            perror( "ERROR     : Could not read line from wiggle file" );
             lines[index].fp = NULL;
             return;
         }
@@ -157,7 +173,7 @@ aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
     FILE* ofp,
-    float agg_fn( const struct wig_line_info*, const int  )
+    float agg_fn( const struct wig_line_info*, const int, const int  )
 )
 {
     char* rv;
@@ -226,8 +242,10 @@ aggregate_over_wiggles(
             ub += 1;
             i++;
         }
-        
-        fprintf( ofp, "%i\t%e\n", position, agg_fn( lines, ub )  );
+
+        float value = agg_fn( lines, ub, num_wigs );
+        if( value > FLT_EPSILON )
+            fprintf( ofp, "%i\t%e\n", position, value  );
         
         for( i = 0; i <= ub; i++ )
             parse_next_line( lines, chr_names, i );

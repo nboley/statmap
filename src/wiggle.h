@@ -12,20 +12,20 @@ struct wig_line_info {
 };
 
 float 
-wig_lines_min( const struct wig_line_info* lines, const int ub  );
+wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wigs  );
 
 float 
-wig_lines_max( const struct wig_line_info* lines, const int ub  );
+wig_lines_max( const struct wig_line_info* lines, const int ub, const int num_wigs  );
 
 float 
-wig_lines_sum( const struct wig_line_info* lines, const int ub  );
+wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wigs  );
 
 extern void
 aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
     FILE* ofp,
-    float agg_fn( const struct wig_line_info*, const int  )
+    float agg_fn( const struct wig_line_info*, const int, const int  )
 );
 
 #if 0
