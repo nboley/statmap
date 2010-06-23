@@ -209,6 +209,7 @@ void
 write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
                            struct genome_data* genome,
+                           enum bool reset_cond_read_prbs,
                            FILE* sam_ofp );
 
 /*

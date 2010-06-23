@@ -132,8 +132,20 @@ guess_optimal_indexed_seq_len( args_t* args);
 args_t
 parse_arguments( int argc, char** argv );
 
+struct mapped_reads_db;
+
 void
-map_marginal( args_t* args, struct genome_data* genome );
+map_marginal( args_t* args, 
+              struct genome_data* genome,
+              struct mapped_reads_db** mpd_rds_db );
+
+void
+build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db );
+
+void
+iterative_mapping( args_t* args, 
+                   struct genome_data* genome,
+                   struct mapped_reads_db* mpd_rds_db );
 
 int 
 main( int argc, char** argv );

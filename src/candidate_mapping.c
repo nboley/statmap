@@ -264,6 +264,9 @@ init_candidate_mappings_db( candidate_mappings_db* db,
     char* cmdir_name;
     if( candidate_mappings_prefix == NULL )
     {
+        /* check if this branch is used - I dont think that it is */
+        assert( 0 );
+
         char dir_name_template[100] = "cand_mappings_XXXXXX";
         cmdir_name =  mkdtemp(dir_name_template);
         if( cmdir_name == NULL )

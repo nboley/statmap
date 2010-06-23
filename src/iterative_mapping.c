@@ -1356,77 +1356,72 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     default:
         fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'. Returning marginal mappings.\n", assay_type);
         can_iteratively_map = false;
-        break;
+        return 0;
     }
+
+    // THIS IS YES - else we would have returned
+    // if( can_iteratively_map )
 
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );
-
+    
     struct trace_t* uniform_trace;
-
-    if( can_iteratively_map )
-    {
-        /* iteratively map from a uniform prior */
-        start = clock();
-        fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
-        
-        /* initialize the trace that we will store the expectation in */
-        init_traces( genome, &uniform_trace, trace_size );
-        set_trace_to_uniform( uniform_trace, 1 );
-        
-        error = update_mapping (
-            rdb, 
-            uniform_trace,
-            MAX_NUM_EM_ITERATIONS,
-            max_prb_change_for_convergence,
-            update_expectation,
-            update_reads
-            );
-        
-        write_wiggle_from_trace( 
-            uniform_trace, 
-            genome->chr_names, track_names,
-            "relaxed_mapping.wig", max_prb_change_for_convergence );
-        
-        stop = clock();
-        fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
-                ((float)(stop-start))/CLOCKS_PER_SEC );
-    }
+    
+    /* iteratively map from a uniform prior */
+    start = clock();
+    fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
+    
+    /* initialize the trace that we will store the expectation in */
+    init_traces( genome, &uniform_trace, trace_size );
+    set_trace_to_uniform( uniform_trace, 1 );
+    
+    error = update_mapping (
+        rdb, 
+        uniform_trace,
+        MAX_NUM_EM_ITERATIONS,
+        max_prb_change_for_convergence,
+        update_expectation,
+        update_reads
+    );
+    
+    write_wiggle_from_trace( 
+        uniform_trace, 
+        genome->chr_names, track_names,
+        "relaxed_mapping.wig", max_prb_change_for_convergence );
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
+            ((float)(stop-start))/CLOCKS_PER_SEC );
     
     /* write the mapped reads to SAM */
     start = clock();
-    fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-
-    FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
+    fprintf(stderr, "NOTICE      :  Writing relaxed mapped reads to SAM file.\n" );
+    
+    FILE* sam_ofp = fopen( "mapped_reads_relaxed.sam", "w+" );
     write_mapped_reads_to_sam( 
-        rawread_db, rdb, genome, sam_ofp );
+        rawread_db, rdb, genome, false, sam_ofp );
     fclose( sam_ofp );    
     
     stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
-
-    if( can_iteratively_map )
-    {
-        error = sample_random_traces(
-            rdb, genome, 
-            trace_size, track_names,
-            num_samples, MAX_NUM_EM_ITERATIONS, 
-            max_prb_change_for_convergence,
-            update_expectation, update_reads
-            );
-    }
+    fprintf(stderr, 
+            "PERFORMANCE :  Wrote relaxed mapped reads to sam in %.2lf seconds\n", 
+            ((float)(stop-start))/CLOCKS_PER_SEC );
+    
+    error = sample_random_traces(
+        rdb, genome, 
+        trace_size, track_names,
+        num_samples, MAX_NUM_EM_ITERATIONS, 
+        max_prb_change_for_convergence,
+        update_expectation, update_reads
+    );
     
     goto cleanup;
 
 cleanup:
 
-    if( can_iteratively_map )
-    {
-        close_traces( uniform_trace );
-    }
-    return 0;
+    close_traces( uniform_trace );
     
+    return 0;    
 }
 
 

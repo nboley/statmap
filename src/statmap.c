@@ -620,7 +620,9 @@ parse_arguments( int argc, char** argv )
 
 
 void
-map_marginal( args_t* args, struct genome_data* genome )
+map_marginal( args_t* args, 
+              struct genome_data* genome, 
+              struct mapped_reads_db** mpd_rds_db )
 {
     /* store clock times - useful for benchmarking */
     clock_t start, stop;
@@ -646,21 +648,13 @@ map_marginal( args_t* args, struct genome_data* genome )
     candidate_mappings_db candidate_mappings;
     init_candidate_mappings_db( &candidate_mappings, "candidate_mappings" );
     
-    struct mapped_reads_db* mpd_rds_db;
-    init_mapped_reads_db( &mpd_rds_db, "mapped_reads.db" );
+    init_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
 
     if( args->frag_len_fp != NULL )
-        build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
-    if( NULL != args->unpaired_reads_fnames 
-        && args->assay_type == CHIP_SEQ )
-    {
-        fprintf(stderr, "FATAL       :  Can not map single end chip-seq reads unless a FL dist is provided\n");
-        exit(-1);
-    }
+        build_fl_dist_from_file( *mpd_rds_db, args->frag_len_fp );
 
     /***** END initialize the mappings dbs */
     
-
     start = clock();
     
     find_all_candidate_mappings( genome,
@@ -670,7 +664,7 @@ map_marginal( args_t* args, struct genome_data* genome )
                                  args->min_match_penalty,
                                  args->max_penalty_spread,
                                  args->indexed_seq_len );
-
+    
     /* Free the genome index */
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
@@ -683,11 +677,42 @@ map_marginal( args_t* args, struct genome_data* genome )
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
     start = clock();
-    join_all_candidate_mappings( &candidate_mappings, mpd_rds_db );
+    join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db );
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
 
+    /*  close candidate mappings db */
+    close_candidate_mappings_db( &candidate_mappings );
+
+    /* Write the mapped reads to file */
+    fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
+    FILE* fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w+" );
+    FILE* bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w+" );
+    write_marginal_mapped_reads_to_stranded_wiggles( 
+        *mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
+    fclose( fwd_wig_fp );
+    fclose( bkwd_wig_fp );
+
+    /* write the mapped reads to SAM */
+    start = clock();
+    fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
+    
+    FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
+    write_mapped_reads_to_sam( 
+        args->rdb, *mpd_rds_db, genome, false, sam_ofp );
+    fclose( sam_ofp );    
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+    
+    return;
+}
+
+void
+build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db )
+{
     /* estimate the fragment length distribution */
     /* if necessary. and if there are paired reads */
     if( args->frag_len_fp == NULL 
@@ -709,54 +734,34 @@ map_marginal( args_t* args, struct genome_data* genome )
             fclose( fp );
         }
     }
-
     
+    return;
+}
+
+void
+iterative_mapping( args_t* args, 
+                   struct genome_data* genome, 
+                   struct mapped_reads_db* mpd_rds_db )
+{   
+    if( NULL != args->unpaired_reads_fnames 
+        && args->assay_type == CHIP_SEQ )
+    {
+        fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
+        exit(-1);
+    }
+ 
     /* Iterative mapping */
     /* mmap and index the necessary data */
     mmap_mapped_reads_db( mpd_rds_db );
     index_mapped_reads_db( mpd_rds_db );
     set_all_read_fl_probs( mpd_rds_db );
-
-    /* Write the mapped reads to file */
-    fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
-    FILE* fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w+" );
-    FILE* bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w+" );
-    write_marginal_mapped_reads_to_stranded_wiggles( 
-        mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
-    fclose( fwd_wig_fp );
-    fclose( bkwd_wig_fp );
-
+    
     /* Do the iterative mapping */
     generic_update_mapping( args->rdb, mpd_rds_db, genome, args->assay_type,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
         
-    /* TODO - move this to cleanup? */
     munmap_mapped_reads_db( mpd_rds_db );
-
-    /* If appropriate, print out the snp db */
-    if( args->snpcov_fp != NULL )
-    {
-        fprintf(stderr, "NOTICE      :  Updating SNP count estiamtes.\n" );
-        update_snp_estimates_from_candidate_mappings( mpd_rds_db, genome );
-        char* snp_fname = "updated_snp_cnts.snp";
-        FILE* snp_fp = fopen( snp_fname, "w" );
-        write_snps_to_file( snp_fp, genome );
-        fclose( snp_fp );
-    }
-
-    goto cleanup;
-
-cleanup:
-    /* close the raw mappings db */
-    close_rawread_db( args->rdb );
-    
-    /*  close candidate mappings db */
-    /*  This removes the temporary files as well */
-    close_candidate_mappings_db( &candidate_mappings );
-
-    /* Close the packed mapped reads db */
-    close_mapped_reads_db( mpd_rds_db );
     
     return;
 }
@@ -775,16 +780,26 @@ main( int argc, char** argv )
     /* parse the snps */
     if( args.snpcov_fp != NULL )
         build_snp_db_from_snpcov_file( args.snpcov_fp, genome );
+
+    struct mapped_reads_db* mpd_rds_db;
            
-    /* Map the marginal reads and output them into a sam */
-    /* 
-     * Actually, this not only maps the marginal's but 
-     * calls the iterative mapping functions also. I should
-     * probably split that out into main, but for now I dont 
-     * really think that it matters too much 
-     *
-     */
-    map_marginal( &args, genome );
+    /* Map the marginal reads and output them into a read density wiggle */
+    map_marginal( &args, genome, &mpd_rds_db );
+
+    build_fl_dist( &args, mpd_rds_db );
+
+    iterative_mapping( &args, genome, mpd_rds_db );
+
+    /* If appropriate, print out the snp db */
+    if( args.snpcov_fp != NULL )
+    {
+        fprintf(stderr, "NOTICE      :  Updating SNP count estiamtes.\n" );
+        update_snp_estimates_from_candidate_mappings( mpd_rds_db, genome );
+        char* snp_fname = "updated_snp_cnts.snp";
+        FILE* snp_fp = fopen( snp_fname, "w" );
+        write_snps_to_file( snp_fp, genome );
+        fclose( snp_fp );
+    }
     
     goto cleanup;
     

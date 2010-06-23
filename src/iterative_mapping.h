@@ -12,7 +12,8 @@ struct genome_data;
  * seems like a pain so I just declare them global.
  *
  */
-static const void* iterative_mapping_args; 
+// BUG
+// static const void* iterative_mapping_args; 
 
 #define WINDOW_SIZE 20
 

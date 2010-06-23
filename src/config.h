@@ -37,6 +37,8 @@
 #define RELAXED_SAMPLES_PATH "./samples/"
 #define RELAXED_SAMPLES_META_INFO_FNAME "./samples/meta_info.csv"
 
+#define MAPPED_READS_DB_FNAME "mapped_reads.db"
+
 /**** determine how the letters are packed       ****/
 
 typedef unsigned char LEVEL_TYPE;

@@ -779,18 +779,51 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
         exit(-1);
     }
 
+    /* whether or not the DB is mmapped */
     (*rdb)->locked = false;
-    
+
+    /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
     (*rdb)->mmapped_data_size = 0;
 
+    /* index */
     (*rdb)->mmapped_reads_starts = NULL;
     (*rdb)->num_mmapped_reads = 0;
  
+    /* fl dist */
     (*rdb)->fl_dist = NULL;
    
     return;
 }
+
+void
+open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
+{
+    *rdb = malloc(sizeof(struct mapped_reads_db));
+    (*rdb)->fp = fopen( fname, "r+" );
+    if( (*rdb)->fp == NULL )
+    {
+        perror("FATAL       :  Could not open mapped reads file");
+        exit(-1);
+    }
+
+    /* whether or not the DB is mmapped */
+    (*rdb)->locked = false;
+
+    /* mmapped data */
+    (*rdb)->mmapped_data = NULL;    
+    (*rdb)->mmapped_data_size = 0;
+
+    /* index */
+    (*rdb)->mmapped_reads_starts = NULL;
+    (*rdb)->num_mmapped_reads = 0;
+ 
+    /* fl dist */
+    (*rdb)->fl_dist = NULL;
+   
+    return;
+}
+
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
@@ -896,9 +929,6 @@ get_next_read_from_mapped_reads_db(
         // TODO get rid of this memcpy, and use the next line
         // (*rd)->locations = (struct mapped_read_location*) read_start;
         
-        //fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot get next read.\n");
-        /* TODO - be able to recover from this */
-        //exit( -1 );
     } else {
         /* Read in the read id */
         rv = fread( 
@@ -986,6 +1016,7 @@ void
 write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
                            struct genome_data* genome,
+                           enum bool reset_cond_read_prbs,
                            FILE* sam_ofp )
 {
     int error;
@@ -1054,6 +1085,9 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
             }
         /* otherwise, print it out to the sam file */
         } else {
+            if( reset_cond_read_prbs )
+                reset_read_cond_probs( mapped_rd );
+
             fprintf_mapped_read_to_sam( 
                 sam_ofp, mapped_rd, genome, rd1, rd2 );
         }
@@ -1161,13 +1195,24 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     struct trace_t* traces;
     init_traces( genome, &traces, 2 );
     
-    /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( rdb );
-    
-    update_traces_from_mapped_reads( 
-        rdb, traces,
-        naive_update_trace_expectation_from_location
-    );
+    struct mapped_read_t* rd;
+
+    /* reset the file pointers in the mapped reads db */
+    rewind_mapped_reads_db( rdb );
+
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd  ) )
+    {
+        set_read_fl_probs( rd, rdb->fl_dist );
+        reset_read_cond_probs( rd );
+
+        /* Update the trace from this mapping */
+        unsigned int j;
+        for( j = 0; j < rd->num_mappings; j++ ) {
+            naive_update_trace_expectation_from_location( 
+                traces, rd->locations + j );
+        }
+        
+    }
     
     int i;
     unsigned int j;
@@ -1180,7 +1225,8 @@ write_marginal_mapped_reads_to_stranded_wiggles(
                 fprintf( fwd_wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
     }
 
-    /* rev stranded reads ( actually, reads whereas the rev comp of the first read mapped */
+    /* rev stranded reads ( technically, reads whereas the rev comp of the first
+       read mapped ) */
     for( i = 0; i < traces->num_chrs; i++ )
     {
         fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
