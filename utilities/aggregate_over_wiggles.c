@@ -21,7 +21,7 @@ main( int argc, char** argv )
     }
 
     /* determine the aggregate type */
-    float (*agg_fn)( const struct wig_line_info*, const int ) = NULL;
+    float (*agg_fn)( const struct wig_line_info*, const int, const int ) = NULL;
 
     if( 0 == strcmp("max", argv[1] ) )
     {
