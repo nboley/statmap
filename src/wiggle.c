@@ -15,18 +15,15 @@ wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wi
 {
     assert( num_wigs > 0 );
     
-    if( ub == 0 )
-        return 0;
-
     float min = lines[0].value;
     int i;
     for( i = 1; i <= ub; i++ )
     {
-        if( lines[0].value < min )
+        if( lines[i].value < min )
             min = lines[i].value;
     }
     
-    if( ub < num_wigs && min > 0 )
+    if( (ub < num_wigs-1) && (min > 0) )
         min = 0;
 
     return min;
@@ -37,18 +34,15 @@ wig_lines_max( const struct wig_line_info* lines, const int ub, const int num_wi
 {
     assert( num_wigs > 0 );
     
-    if( ub == 0 )
-        return 0;
-
     float max = lines[0].value;
     int i;
     for( i = 1; i <= ub; i++ )
     {
-        if( lines[0].value > max )
+        if( lines[i].value > max )
             max = lines[i].value;
     }
 
-    if( ub < num_wigs && max < 0 )
+    if( (ub < num_wigs-1) && (max < 0) )
         max = 0;
     
     return max;
@@ -58,13 +52,10 @@ float
 wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wigs  )
 {
     assert( num_wigs > 0 );
-
-    if( ub == 0 )
-        return 0;
-
+    
     float sum = 0;
     int i;
-    for( i = 1; i <= ub; i++ )
+    for( i = 0; i <= ub; i++ )
         sum += lines[i].value;
     
     return sum;
@@ -151,7 +142,7 @@ parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
             }
         /* Assuming this is a variable step numeric line */
         } else {
-            int rv = fscanf( lines[index].fp, "%i\t%e\n", 
+            int rv = sscanf( buffer, "%i\t%e\n", 
                              &(lines[index].position), &(lines[index].value)  );
             if( rv != 2 )
             {
@@ -233,13 +224,13 @@ aggregate_over_wiggles(
         unsigned int position = lines[0].position;
         int chr_index = lines[0].chr_index;
         int ub = 0;
-        i = 0;
+        i = 1;
         while( position == lines[i].position 
                && chr_index == lines[i].chr_index
-               && lines[i].fp != NULL
+               && NULL != lines[i].fp
                && i < num_wigs )
         {
-            ub += 1;
+            ub++;
             i++;
         }
 

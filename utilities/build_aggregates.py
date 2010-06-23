@@ -32,10 +32,10 @@ def aggregate_over_wigs_in_dir( directory, output_fname, aggregate_type ):
 
 def aggregate_over_bs_samples(  ):
     base = "./bootstrap_samples/all_traces/"
-    bs_dirs = [ os.path.join(base, dir_name) for dir_name in os.listdir( base ) ]
+    bs_dirs = [ os.path.join(base, os.path.split(dir_name)[-1]) for dir_name in os.listdir( base ) ]
     for bs_dir in bs_dirs:
         # find the number of this sample
-        sample_num = int( bs_dir.split("sample")[-1] )
+        sample_num = int( bs_dir.split("sample")[-1].split(".")[0] )
         for agg_type in ("min", "max"):
             output_fname = "./bootstrap_samples/%s_traces/sample%i.wig" % ( agg_type, sample_num) 
             wiggles = aggregate_over_wigs_in_dir( bs_dir, output_fname, agg_type  )
@@ -58,5 +58,5 @@ if __name__ == "__main__":
     # aggregate over the bootstrap samples
     aggregate_over_bs_samples( )
     # aggregate over the aggregated bootstrap samples
-    aggregate_over_wigs_in_dir( "./bootstrap_samples/min_traces/", "min_traces.wig", "min")
-    aggregate_over_wigs_in_dir( "./bootstrap_samples/max_traces/", "max_traces.wig", "max")
+    aggregate_over_wigs_in_dir( "./bootstrap_samples/min_traces/", "min_trace.wig", "min")
+    aggregate_over_wigs_in_dir( "./bootstrap_samples/max_traces/", "max_trace.wig", "max")

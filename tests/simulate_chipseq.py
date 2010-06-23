@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 25
+NUM_SAMPLES = 10
 
 bps = ['A', 'C', 'G', 'T' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
@@ -335,14 +335,19 @@ def map_with_statmap( iterative=True ):
     if iterative:
         call += " -a i"
         
-    print re.sub( "\s+", " ", call)
-    
-    ret_code = subprocess.call( call, shell=True )
-    
+    # run statmap
+    print re.sub( "\s+", " ", call)    
+    ret_code = subprocess.call( call, shell=True )    
     if ret_code != 0:
         print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
     
+    # run the aggregation generation code
+    ret_code = subprocess.call( [ "../utilities/build_aggregates.py", "smo_chipseq_sim" ]  )
+    if ret_code != 0:
+        print "TEST FAILED - aggregation call returned error code ", ret_code
+        sys.exit( -1 )
+        
     return
 
 
