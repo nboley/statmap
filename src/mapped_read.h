@@ -112,6 +112,10 @@ void
 reset_read_cond_probs( struct mapped_read_t* rd  );
 
 void
+set_read_fl_probs( struct mapped_read_t* rd, 
+                   struct fragment_length_dist_t* fl_dist  );
+
+void
 fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
 void

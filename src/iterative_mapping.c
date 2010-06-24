@@ -5,6 +5,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h> /* mmap() is defined in this header */
+#include <signal.h>
+#include <sys/wait.h>
+
+
 #include <fcntl.h>
 #include <time.h>
 #include <assert.h>
@@ -768,7 +772,15 @@ sample_random_traces(
             char buffer[200];
             sprintf( buffer, "mkdir %ssample%i/",
                      BOOTSTRAP_SAMPLES_ALL_PATH, i+1 );
-            system( buffer );
+            int error = system( buffer );
+            if (WIFSIGNALED(error) &&
+                (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+            {
+                fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+                perror( "System Call Failure");
+                assert( false );
+                exit( -1 );
+            }
             
             int j;
             for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )

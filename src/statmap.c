@@ -75,7 +75,7 @@ guess_input_file_type( args_t* args )
     for( i = 0; i < 1000; i++ )
     {
         struct rawread* r;
-        populate_read_from_fastq_file( fp, &r );
+        populate_read_from_fastq_file( fp, &r, UNKNOWN );
         /* If we have reached and EOF, then break */
         if( r == NULL )
             break;
@@ -193,7 +193,7 @@ guess_optimal_indexed_seq_len( args_t* args)
     /* TODO - read in multiple reads to corroborate read length */
     /* read in the first read, and set the seq length from this read */
     struct rawread* r;
-    populate_read_from_fastq_file( fp, &r );
+    populate_read_from_fastq_file( fp, &r, UNKNOWN );
     seq_len = r->length;
     fprintf( stderr, 
              "NOTICE      :  Setting Indexed Read Length to '%i' BPS\n", 
@@ -696,13 +696,19 @@ map_marginal( args_t* args,
 
     /* write the mapped reads to SAM */
     start = clock();
+    fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
+    write_nonmapping_reads_to_fastq( args->rdb, *mpd_rds_db );
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+
+    /* write the mapped reads to SAM */
+    start = clock();
     fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-    
     FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
     write_mapped_reads_to_sam( 
         args->rdb, *mpd_rds_db, genome, false, sam_ofp );
     fclose( sam_ofp );    
-    
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
@@ -791,7 +797,8 @@ main( int argc, char** argv )
 
     build_fl_dist( &args, mpd_rds_db );
 
-    iterative_mapping( &args, genome, mpd_rds_db );
+    if( args.assay_type != UNKNOWN )
+        iterative_mapping( &args, genome, mpd_rds_db );
 
     /* If appropriate, print out the snp db */
     if( args.snpcov_fp != NULL )

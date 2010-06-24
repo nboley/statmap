@@ -55,7 +55,7 @@ unmarshal_rawread( struct rawread** r, char* buffer );
 /* Populate a read from the next read in a fastq file */
 
 int
-populate_read_from_fastq_file( FILE* f, struct rawread** r );
+populate_read_from_fastq_file( FILE* f, struct rawread** r, enum READ_END end );
 
 /* determine whether reads are mappable */
 enum bool

@@ -17,6 +17,12 @@ fprintf_mapped_read_to_sam(
 );
 
 void
+write_nonmapping_reads_to_fastq( 
+    struct rawread_db_t* rdb,
+    struct mapped_reads_db* mappings_db
+    );
+
+void
 write_mapped_reads_to_sam( 
     struct rawread_db_t* rdb,
     struct mapped_reads_db* mappings_db,

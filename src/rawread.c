@@ -88,13 +88,11 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
  *
  */
 int
-populate_read_from_fastq_file( FILE* input_file, struct rawread** r )
+populate_read_from_fastq_file( 
+    FILE* input_file, struct rawread** r, enum READ_END end )
 {
     /* Store the return of the scanf's */
     int return_code;
-
-    /* store scanned data */
-    enum READ_END end = 0;
     
     char readname[200];
     char read[200];
@@ -113,38 +111,56 @@ populate_read_from_fastq_file( FILE* input_file, struct rawread** r )
         return EOF;
     }
     
-    /** Determine the read end **/
-    /* find the final / */
-    char* fwd_slash_pntr = 
-        strrchr ( readname, '/' );
-    
-    /* if there is no slash, assume its not a paired end read */
-    if( fwd_slash_pntr == NULL )
+    /* If the read end is known, eliminate the slash */
+    if( end == FIRST || end == SECOND )
     {
-        end = NORMAL;
-    } else {
-        /* Determine the read end from integer following the slash */
-        switch( atoi( fwd_slash_pntr + 1 ) )
-        {
-        case 1:
-            end = FIRST;
-            break;
-        case 2:
-            end = SECOND;
-            break;
-        default:
-            fprintf(stderr, 
-                    "Unrecognized read end '%i'\n", 
-                    atoi( fwd_slash_pntr + 1 ) );
-            exit( -1 );
-        }
-        
+        /* find the final / */
+        char* fwd_slash_pntr = 
+            strrchr ( readname, '/' );
+
        /* set the slash to '\0', to eliminate it from the read name */
-        *fwd_slash_pntr = '\0';
+        if( NULL != fwd_slash_pntr )
+            *fwd_slash_pntr = '\0';
     }
+    
+    /** If necessary, Determine the read end **/
+    if( end == UNKNOWN )
+    {
+        /* find the final / */
+        char* fwd_slash_pntr = 
+            strrchr ( readname, '/' );
+
+        /* if there is no slash, assume its not a paired end read */
+        if( fwd_slash_pntr == NULL )
+        {
+            end = NORMAL;
+        } else {
+            /* Determine the read end from integer following the slash */
+            switch( atoi( fwd_slash_pntr + 1 ) )
+            {
+            case 1:
+                end = FIRST;
+                break;
+            case 2:
+                end = SECOND;
+                break;
+            default:
+                fprintf(stderr, 
+                        "Unrecognized read end '%i'\n", 
+                        atoi( fwd_slash_pntr + 1 ) );
+                exit( -1 );
+            }
+
+       /* set the slash to '\0', to eliminate it from the read name */
+        if( NULL != fwd_slash_pntr )
+            *fwd_slash_pntr = '\0';
+            
+        }
+    }
+    
     /* calculate the length of the readname */
     int readname_len = strlen( readname );
-
+    
     /*** get the actual read */
     return_code = fscanf( input_file, "%s\n", read );
     int read_len = strlen( read );
@@ -445,7 +461,7 @@ get_next_read_from_rawread_db(
         *r2 = NULL;
         
         rv = populate_read_from_fastq_file( 
-            rdb->single_end_reads, r1 );
+            rdb->single_end_reads, r1, NORMAL );
         if( rv == EOF )
         {
             *r1 = NULL;
@@ -459,7 +475,7 @@ get_next_read_from_rawread_db(
         assert( rdb->paired_end_2_reads != NULL );
         
         rv = populate_read_from_fastq_file( 
-             rdb->paired_end_1_reads, r1 );
+            rdb->paired_end_1_reads, r1, FIRST );
         if ( rv == EOF )
         {
             /* Make sure the mate is empty as well */
@@ -472,7 +488,7 @@ get_next_read_from_rawread_db(
         }
         
         rv = populate_read_from_fastq_file( 
-             rdb->paired_end_2_reads, r2 );
+            rdb->paired_end_2_reads, r2, SECOND );
         
         /* if returned an EOF, then it should have been returned for r1 */
         assert( rv == 0 );
