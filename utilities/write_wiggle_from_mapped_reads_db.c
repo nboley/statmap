@@ -40,7 +40,6 @@ int main( int argc, char** argv )
         exit(1);
     }
 
-    /* load the genome */
     /* Load the genome */
     struct genome_data* genome;
     init_genome( &genome );

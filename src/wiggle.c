@@ -395,10 +395,6 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     
     const double filter_threshold = 1e-6;
 
-    /* Print out the header */
-    fprintf( fwd_wfp, "track type=wiggle_0 name=%s\n", "fwd_strnd" );
-    fprintf( bkwd_wfp, "track type=wiggle_0 name=%s\n", "bkwd_strnd" );
-    
     /* build and update the chr traces */
     struct trace_t* traces;
     init_traces( genome, &traces, 2 );
@@ -432,6 +428,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     int i;
     unsigned int j;
     /* fwd stranded reads */
+    fprintf( fwd_wfp, "track type=wiggle_0 name=%s\n", "fwd_strnd" );
     for( i = 0; i < traces->num_chrs; i++ )
     {
         fprintf( fwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
@@ -442,6 +439,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
 
     /* rev stranded reads ( technically, reads whereas the rev comp of the first
        read mapped ) */
+    fprintf( bkwd_wfp, "track type=wiggle_0 name=%s\n", "bkwd_strnd" );
     for( i = 0; i < traces->num_chrs; i++ )
     {
         fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
