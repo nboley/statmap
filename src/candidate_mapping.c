@@ -676,6 +676,9 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     
     while( CURSOR_EMPTY != error ) 
     {
+        if( readkey > 0 && readkey%1000000 == 0 )
+            fprintf( stderr, "NOTICE       : Written %li reads to sam\n", readkey );
+        
         build_mapped_read_from_candidate_mappings( 
             mappings, &mpd_rd, read_key );
         

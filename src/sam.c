@@ -471,7 +471,7 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
 
     while( rd1 != NULL ) 
     {    
-        if( readkey > 0 && readkey%100000 == 0 )
+        if( readkey > 0 && readkey%1000000 == 0 )
             fprintf( stderr, "NOTICE       : Written %li reads to sam\n", readkey );
         
         /* We test for mapped read NULL in case the last read was unmappable */
