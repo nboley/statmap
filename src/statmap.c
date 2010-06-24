@@ -682,7 +682,6 @@ map_marginal( args_t* args,
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
-
     /*  close candidate mappings db */
     close_candidate_mappings_db( &candidate_mappings );
 
@@ -753,8 +752,11 @@ iterative_mapping( args_t* args,
  
     /* Iterative mapping */
     /* mmap and index the necessary data */
+    fprintf(stderr, "NOTICE      :  mmapping mapped reads DB.\n" );
     mmap_mapped_reads_db( mpd_rds_db );
+    fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
     index_mapped_reads_db( mpd_rds_db );
+    fprintf(stderr, "NOTICE      :  resetting FL probabilities.\n" );
     set_all_read_fl_probs( mpd_rds_db );
     
     /* Do the iterative mapping */

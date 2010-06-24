@@ -798,8 +798,6 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
 void
 index_mapped_reads_db( struct mapped_reads_db* rdb )
 {
-    
-
     const int REALLOC_BLOCK_SIZE = 1000000;
 
     /* allocate space for the reads start */
@@ -811,7 +809,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     /* Copy the reads data pointer */
     char* read_start = rdb->mmapped_data;
 
-    /* Loop therough all of the reads */
+    /* Loop through all of the reads */
     while( ((size_t)read_start - (size_t)rdb->mmapped_data) 
            < rdb->mmapped_data_size )
     {
