@@ -6,9 +6,78 @@
 #include <assert.h>
 #include <float.h>
 
+#include "wiggle.h"
 #include "trace.h"
 
-#include "wiggle.h"
+#include "genome.h"
+#include "mapped_read.h"
+
+// move this 
+void
+naive_update_trace_expectation_from_location( 
+    const struct trace_t* const traces, 
+    const struct mapped_read_location* const loc )
+{
+    unsigned int i;
+    
+    const int chr_index = loc->chr;
+    const unsigned char flag = loc->flag; 
+    const unsigned int start = loc->start_pos;
+    const unsigned int stop = loc->stop_pos;
+    const ML_PRB_TYPE cond_prob = loc->cond_prob;
+
+    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+    {
+        /* lock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
+        
+        for( i = start; i <= stop; i++ )
+            traces->traces[1][chr_index][i] += cond_prob;
+
+        /* unlock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
+    } else {
+        /* lock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
+        
+        for( i = start; i <= stop; i++ )
+            traces->traces[0][chr_index][i] += cond_prob;
+
+        /* unlock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
+    }
+    
+    return;
+}
+
 
 float 
 wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wigs  )
@@ -314,3 +383,65 @@ write_wiggle_from_trace( struct trace_t* traces,
     
     fclose( wfp );
 }
+
+
+void
+write_marginal_mapped_reads_to_stranded_wiggles( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    FILE* fwd_wfp, FILE* bkwd_wfp )
+{
+    const double filter_threshold = 1e-6;
+
+    /* Print out the header */
+    fprintf( fwd_wfp, "track type=wiggle_0 name=%s\n", "fwd_strnd" );
+    fprintf( bkwd_wfp, "track type=wiggle_0 name=%s\n", "bkwd_strnd" );
+    
+    /* build and update the chr traces */
+    struct trace_t* traces;
+    init_traces( genome, &traces, 2 );
+    
+    struct mapped_read_t* rd;
+
+    /* reset the file pointers in the mapped reads db */
+    rewind_mapped_reads_db( rdb );
+
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd  ) )
+    {
+        // BUG - is this ok to be commented out?
+        // set_read_fl_probs( rd, rdb->fl_dist );
+        reset_read_cond_probs( rd );
+
+        /* Update the trace from this mapping */
+        unsigned int j;
+        for( j = 0; j < rd->num_mappings; j++ ) {
+            naive_update_trace_expectation_from_location( 
+                traces, rd->locations + j );
+        }
+        
+    }
+    
+    int i;
+    unsigned int j;
+    /* fwd stranded reads */
+    for( i = 0; i < traces->num_chrs; i++ )
+    {
+        fprintf( fwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
+        for( j = 0; j < traces->trace_lengths[i]; j++ )
+            if( traces->traces[0][i][j] >= filter_threshold )
+                fprintf( fwd_wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
+    }
+
+    /* rev stranded reads ( technically, reads whereas the rev comp of the first
+       read mapped ) */
+    for( i = 0; i < traces->num_chrs; i++ )
+    {
+        fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
+        for( j = 0; j < traces->trace_lengths[i]; j++ )
+            if( traces->traces[1][i][j] >= filter_threshold )
+                fprintf( bkwd_wfp, "%i\t%e\n", j+1, traces->traces[1][i][j] );
+    }
+    
+    close_traces( traces );
+}
+
