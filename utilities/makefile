@@ -14,7 +14,7 @@ mapped_reads_into_sam :
 
 mapped_reads_into_wiggle : 
 	gcc -O0 -g -o mapped_reads_into_wiggle write_wiggle_from_mapped_reads_db.c \
-	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o ../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o ../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
 	-lm
 
 #wiggle.o : ../src/wiggle.c
