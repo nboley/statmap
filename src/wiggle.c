@@ -391,6 +391,8 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     struct genome_data* genome,
     FILE* fwd_wfp, FILE* bkwd_wfp )
 {
+    unsigned int read_num = 1;
+    
     const double filter_threshold = 1e-6;
 
     /* Print out the header */
@@ -408,6 +410,9 @@ write_marginal_mapped_reads_to_stranded_wiggles(
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd  ) )
     {
+        if( read_num%100000 == 0 )
+            fprintf( stderr, "NOTICE       : Aggregated %ui reads to trace\n", read_num );
+
         // BUG - is this ok to be commented out?
         // set_read_fl_probs( rd, rdb->fl_dist );
         reset_read_cond_probs( rd );
@@ -419,6 +424,9 @@ write_marginal_mapped_reads_to_stranded_wiggles(
                 traces, rd->locations + j );
         }
         
+        free_mapped_read( rd );
+        
+        read_num++;
     }
     
     int i;
