@@ -411,7 +411,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd  ) )
     {
         if( read_num%100000 == 0 )
-            fprintf( stderr, "NOTICE       : Aggregated %ui reads to trace\n", read_num );
+            fprintf( stderr, "NOTICE       : Aggregated %u reads into trace\n", read_num );
 
         // BUG - is this ok to be commented out?
         // set_read_fl_probs( rd, rdb->fl_dist );
