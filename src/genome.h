@@ -46,9 +46,6 @@ add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  struct 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
 
-extern void
-index_genome( struct genome_data* genome, int indexed_seq_len );
-
 extern void 
 add_chrs_from_fasta_file( struct genome_data* gen, FILE* f  );
 

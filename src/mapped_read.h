@@ -115,15 +115,6 @@ void
 fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
 void
-fprintf_mapped_read_to_sam( 
-    FILE* sam_fp,
-    struct mapped_read_t* pkd_rd,
-    struct genome_data* genome,
-    struct rawread* rr1,
-    struct rawread* rr2
-);
-
-void
 build_mapped_read_from_candidate_mappings( 
     candidate_mappings* mappings, 
     struct mapped_read_t** mpd_rd,
@@ -204,13 +195,6 @@ set_all_read_fl_probs( struct mapped_reads_db* rdb );
 
 void
 reset_all_read_cond_probs( struct mapped_reads_db* rdb );
-
-void
-write_mapped_reads_to_sam( struct rawread_db_t* rdb,
-                           struct mapped_reads_db* mappings_db,
-                           struct genome_data* genome,
-                           enum bool reset_cond_read_prbs,
-                           FILE* sam_ofp );
 
 /*
  * this requires code from iterative mapping to write out the

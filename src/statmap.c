@@ -24,6 +24,7 @@
 #include "iterative_mapping.h"
 #include "candidate_mapping.h"
 #include "fragment_length.h"
+#include "sam.h"
 
 /* fwd declaration */
 struct snp_db_t;

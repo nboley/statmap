@@ -24,7 +24,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -32,7 +32,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -778,7 +778,7 @@ def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
     for rl in rls:
         try: 
-            test_dirty_reads( rl ) 
+            test_dirty_reads( rl, n_threads=2 ) 
         except:
             print "FAIL: Multi-Threaded Read Mapping %i BP Test Failed." % rl
             raise
