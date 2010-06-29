@@ -11,39 +11,46 @@
 void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
-    struct mapped_read_location* pkd_rd,
+    struct mapped_read_location* loc,
     struct genome_data* genome,
     char* key, 
     char* seq,
     char* phred_qualities
 )
 {
-    int rd_len = MAX( pkd_rd->start_pos, pkd_rd->stop_pos )
-                  - MIN( pkd_rd->start_pos, pkd_rd->stop_pos );
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const float seq_error = get_seq_error_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+    
+    int rd_len = MAX( start, stop )
+                  - MIN( start, stop );
 
     /* print the query name */
     fprintf( sam_fp, "%s\t", key );
 
     /* build and print the flag */
     unsigned short flag = 0;    
-    if( pkd_rd->start_pos > pkd_rd->stop_pos  )
+    if( start > stop  )
         flag |= BAM_FREVERSE;
     fprintf( sam_fp, "%hu\t", flag );
     
     /* print the refernce seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[pkd_rd->chr] );
+    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
     
     /* print the genome location */
     /* note that sam expects this in the 5' genome, but we 
        keep it relative to the read strand */
-    fprintf( sam_fp, "%u\t", MIN( pkd_rd->start_pos, pkd_rd->stop_pos ) );
+    fprintf( sam_fp, "%u\t", MIN( start, stop ) );
     
     /* print the phred quality score */
     /* this is the ( quoting samtools ) 
          'phred scaled posterior probability that the mapping position of this
           read is incorrect'
     */
-    fprintf( sam_fp, "%u\t", (unsigned int) MIN( 254, (-10*log10( 1 - pkd_rd->cond_prob)) ) );
+    fprintf( sam_fp, "%u\t", 
+             (unsigned int) MIN( 254, (-10*log10( 1 - cond_prob)) ) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", rd_len );
@@ -73,9 +80,9 @@ fprintf_nonpaired_mapped_read_as_sam(
        XP - the probability that the read came from this location,
             given that it came from somewhere on the genome
     */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN( 254, (-10*log10(1 - pkd_rd->seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
+    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN(254, (-10*log10(1-seq_error))));
+    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
 
     return;
 }
@@ -83,8 +90,9 @@ fprintf_nonpaired_mapped_read_as_sam(
 void
 fprintf_paired_mapped_read_as_sam( 
     FILE* sam_fp,
-    struct mapped_read_location* pkd_rd,
+    struct mapped_read_location* loc,
     struct genome_data* genome,
+    
     char* r1_key, 
     char* r1_seq,
     char* r1_phred_qualities,
@@ -96,18 +104,25 @@ fprintf_paired_mapped_read_as_sam(
     int r2_len
 )
 {
-    assert( pkd_rd->start_pos < pkd_rd->stop_pos );
+    const unsigned char mrl_flag = get_flag_from_mapped_read_location( loc  );
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const float seq_error = get_seq_error_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+
+    assert( start < stop );
 
     /* Print out the read 1 sam line */
     
     int r1_start, r2_start;
-    if( (pkd_rd->flag&FIRST_PAIR_IS_FIRST_IN_GENOME) > 0 ) 
+    if( (mrl_flag&FIRST_PAIR_IS_FIRST_IN_GENOME) > 0 ) 
     {
-        r1_start = pkd_rd->start_pos;
-        r2_start = pkd_rd->stop_pos - r2_len;
+        r1_start = start;
+        r2_start = stop - r2_len;
     } else {
-        r1_start = pkd_rd->stop_pos - r1_len;
-        r2_start = pkd_rd->start_pos;
+        r1_start = stop - r1_len;
+        r2_start = start;
     }
 
     /* print the query name */
@@ -126,7 +141,7 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%hu\t", flag );
     
     /* print the refernce seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[pkd_rd->chr] );
+    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
     
     /* print the genome location */
     /* note that sam expects this in the 5' genome, but we 
@@ -139,7 +154,7 @@ fprintf_paired_mapped_read_as_sam(
           read is incorrect'
     */
     fprintf( sam_fp, "%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
+             MIN( 254, (-10*log10(1 - cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r1_len );
@@ -190,22 +205,22 @@ fprintf_paired_mapped_read_as_sam(
             given that it came from somewhere on the genome
     */
     fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1-pkd_rd->seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
+             MIN( 254, (-10*log10(1-seq_error))) );
+    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
    
     /*************************************************************/
     /*************************************************************/
     /*************************************************************/
     /** Print the read's second SAM line */
     
-    if( (pkd_rd->flag&FIRST_PAIR_IS_FIRST_IN_GENOME) == 0 ) 
+    if( (mrl_flag&FIRST_PAIR_IS_FIRST_IN_GENOME) == 0 ) 
     {
-        r1_start = pkd_rd->start_pos;
-        r2_start = pkd_rd->stop_pos - r2_len;
+        r1_start = start;
+        r2_start = stop - r2_len;
     } else {
-        r1_start = pkd_rd->stop_pos - r1_len;
-        r2_start = pkd_rd->start_pos;
+        r1_start = stop - r1_len;
+        r2_start = start;
     }
 
     /* print the query name */
@@ -224,7 +239,7 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%hu\t", flag );
     
     /* print the refernce seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[pkd_rd->chr] );
+    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
     
     /* print the genome location */
     /* note that sam expects this in the 5' genome, but we 
@@ -237,7 +252,7 @@ fprintf_paired_mapped_read_as_sam(
           read is incorrect'
     */
     fprintf( sam_fp, "%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1 - pkd_rd->cond_prob))) );
+             MIN( 254, (-10*log10(1 - cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r2_len );
@@ -288,9 +303,9 @@ fprintf_paired_mapped_read_as_sam(
             given that it came from somewhere on the genome
     */
     fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(pkd_rd->seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", pkd_rd->seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", pkd_rd->cond_prob);
+             MIN( 254, (-10*log10(seq_error))) );
+    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
+    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
 
     return;
 }

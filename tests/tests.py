@@ -948,7 +948,7 @@ if __name__ == '__main__':
     print "Starting test_multithreaded_mapping()"
     test_multithreaded_mapping( )
     print "Starting test_snp_finding()"
-    test_snp_finding()
+    # test_snp_finding()
     
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 

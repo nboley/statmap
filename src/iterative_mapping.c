@@ -20,6 +20,7 @@
 
 #include "statmap.h"
 #include "iterative_mapping.h"
+#include "mapped_read.h"
 #include "trace.h"
 #include "wiggle.h"
 #include "mapped_location.h"
@@ -28,6 +29,7 @@
 #include "fragment_length.h"
 #include "sam.h"
 
+struct fragment_length_dist_t* global_fl_dist;
 
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
@@ -42,9 +44,6 @@ struct update_traces_param {
      * contention, but that should be minor, espcially if ( the mmapped ) rdb
      * can't fully fit into memory.
      */
-    pthread_spinlock_t* curr_read_index_spinlock;
-    unsigned int* curr_read_index;
-    
     struct mapped_reads_db* reads_db;
     struct trace_t* traces;
     void (* update_trace_expectation_from_location)(
@@ -55,13 +54,8 @@ struct update_traces_param {
 void*
 update_traces_from_mapped_reads_worker( void* params )
 {
-    unsigned int* curr_read_index = 
-        ( (struct update_traces_param*) params)->curr_read_index;
-    pthread_spinlock_t* curr_read_index_spinlock = 
-        ( (struct update_traces_param*) params)->curr_read_index_spinlock;
-    
     struct trace_t* traces = ( (struct update_traces_param*) params)->traces;
-    struct mapped_reads_db* reads_db = 
+    struct mapped_reads_db* rdb = 
         ( (struct update_traces_param*) params)->reads_db;
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
@@ -70,36 +64,15 @@ update_traces_from_mapped_reads_worker( void* params )
             params)->update_trace_expectation_from_location;
     
 
-    /* get the first index */
-    pthread_spin_lock( curr_read_index_spinlock );
-    unsigned int i = *curr_read_index;
-    *curr_read_index += 1;
-    pthread_spin_unlock( curr_read_index_spinlock );
-    
-    while( i < reads_db->num_mmapped_reads )
-    {
-        char* read_start = reads_db->mmapped_reads_starts[i];
+    struct mapped_read_t* r;
 
-        /* read a mapping into the struct */
-        
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-        
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
+    {
         /* Update the trace from this mapping */        
         unsigned int j;
-        for( j = 0; j < r.num_mappings; j++ ) {
-            update_trace_expectation_from_location( traces, r.locations + j );
+        for( j = 0; j < r->num_mappings; j++ ) {
+            update_trace_expectation_from_location( traces, r->locations + j );
         }
-
-        /* update the read index */
-        pthread_spin_lock( curr_read_index_spinlock );
-        i = *curr_read_index;
-        *curr_read_index += 1;
-        pthread_spin_unlock( curr_read_index_spinlock );
     }
 
     return 0;
@@ -162,7 +135,8 @@ bootstrap_traces_from_mapped_reads(
                 double cum_dist = 0;
                 for( j = 0; j < r.num_mappings; j++ ) 
                 {
-                    cum_dist += r.locations[j].cond_prob;
+                    cum_dist += 
+                        get_cond_prob_from_mapped_read_location( r.locations + j );
                     if( random_num <= cum_dist )
                         break;
                 }
@@ -183,10 +157,13 @@ bootstrap_traces_from_mapped_reads(
                         
             /* Add this location to the trace, with prb 1 */
             /* We do this by temp changing cond_prb, and then changing it back */
-            float tmp_cond_prb = r.locations[j].cond_prob;
-            r.locations[j].cond_prob = 1.0;
+            float tmp_cond_prb = 
+                get_cond_prob_from_mapped_read_location( r.locations + j );
+            set_cond_prob_in_mapped_read_location( 
+                r.locations + j, 1.0  );
             update_trace_expectation_from_location( traces, r.locations + j );
-            r.locations[j].cond_prob = tmp_cond_prb;
+            set_cond_prob_in_mapped_read_location( 
+                r.locations + j, tmp_cond_prb  );
         }
     }
     return;
@@ -204,41 +181,27 @@ update_traces_from_mapped_reads(
     /* First, zero the trace to be summed into */
     zero_traces( traces );
 
+    /* Move the database ( this should be a cursor ) back to the first read */
+    rewind_mapped_reads_db( reads_db );
+
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
     {
-        /* Update the trace from the reads */
-        long long i;
-        for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
+        struct mapped_read_t* r;
+        
+        while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
-            char* read_start = reads_db->mmapped_reads_starts[i];
-            
-            /* read a mapping into the struct */
-            struct mapped_read_t r;
-            r.read_id = *((unsigned long*) read_start);
-            read_start += sizeof(unsigned long)/sizeof(char);
-            r.num_mappings = *((unsigned short*) read_start);
-            read_start += sizeof(unsigned short)/sizeof(char);
-            r.locations = (struct mapped_read_location*) read_start;
-            
-            /* Update the trace from this mapping */
+            /* Update the trace from this mapping */        
             unsigned int j;
-            for( j = 0; j < r.num_mappings; j++ ) {
-                update_trace_expectation_from_location( traces, r.locations + j );
+            for( j = 0; j < r->num_mappings; j++ ) {
+                update_trace_expectation_from_location( traces, r->locations + j );
             }
         }
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
-        /* initialize the read number spinlock */
-        pthread_spinlock_t curr_read_index_spinlock;
-        pthread_spin_init( &curr_read_index_spinlock, 0 );
-        
         /* initialize the thread parameters structure */
         struct update_traces_param params;
-        params.curr_read_index_spinlock = &curr_read_index_spinlock;
-        unsigned int curr_read_index = 0;
-        params.curr_read_index = &curr_read_index;
         
         params.reads_db = reads_db;
         params.traces = traces;
@@ -321,11 +284,6 @@ struct update_mapped_reads_param {
 void*
 update_mapped_reads_from_trace_worker( void* params )
 {
-    unsigned int* curr_read_index = 
-        ( (struct update_mapped_reads_param*) params)->curr_read_index;
-    pthread_spinlock_t* curr_read_index_spinlock = 
-        ( (struct update_mapped_reads_param*) params)->curr_read_index_spinlock;
-    
     struct trace_t* traces = ( (struct update_mapped_reads_param*) params)->traces;
     struct mapped_reads_db* reads_db = 
         ( (struct update_mapped_reads_param*) params)->reads_db;
@@ -336,29 +294,14 @@ update_mapped_reads_from_trace_worker( void* params )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
 
-    /* get the first index */
-    pthread_spin_lock( curr_read_index_spinlock );
-    unsigned int i = *curr_read_index;
-    *curr_read_index += 1;
-    pthread_spin_unlock( curr_read_index_spinlock );
-    
-    while( i < reads_db->num_mmapped_reads )
-    {
-        char* read_start = reads_db->mmapped_reads_starts[i];
 
-        /* read a mapping into the struct */
-        
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-        
-        
+    struct mapped_read_t* r;
+
+    while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
+    {
         /* Update the read */
         struct update_mapped_read_rv_t tmp_rv 
-            = update_mapped_read_prbs( traces, &r );
+            = update_mapped_read_prbs( traces, r );
 
         /* Hand reduce the max */
         if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
@@ -366,12 +309,6 @@ update_mapped_reads_from_trace_worker( void* params )
 
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
-        
-        /* update the read index */
-        pthread_spin_lock( curr_read_index_spinlock );
-        i = *curr_read_index;
-        *curr_read_index += 1;
-        pthread_spin_unlock( curr_read_index_spinlock );
     }
 
     return 0;
@@ -388,46 +325,39 @@ update_mapped_reads_from_trace(
     )
 {    
     /* store the toal accumulated error */
-    struct update_mapped_read_rv_t rv = { 0, 0 };
+    struct update_mapped_read_rv_t rv = { 0, 0.0 };
     
+    /* reset the cursor */
+    rewind_mapped_reads_db( reads_db );
+
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
     {
-        unsigned int k;
-        for( k = 0; k < reads_db->num_mmapped_reads; k++ )
+        struct mapped_read_t* r;
+        
+        while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
         {
-            char* read_start = reads_db->mmapped_reads_starts[k];
-            
-            /* read a mapping into the struct */
-            struct mapped_read_t r;
-            r.read_id = *((unsigned long*) read_start);
-            read_start += sizeof(unsigned long)/sizeof(char);
-            r.num_mappings = *((unsigned short*) read_start);
-            read_start += sizeof(unsigned short)/sizeof(char);
-            r.locations = (struct mapped_read_location*) read_start;
-            
-            struct update_mapped_read_rv_t tmp_rv = 
-                update_mapped_read_prbs( traces, &r );
+            /* Update the read */
+            struct update_mapped_read_rv_t tmp_rv 
+                = update_mapped_read_prbs( traces, r );
             
             /* Hand reduce the max */
             if( tmp_rv.max_change > rv.max_change )
+            {
                 rv.max_change = tmp_rv.max_change;
+            }
+            
+            /* Update the lhd */
+            rv.log_lhd += tmp_rv.log_lhd;
         }
+
     } else {
-        /* initialize the read number spinlock */
-        pthread_spinlock_t curr_read_index_spinlock;
-        pthread_spin_init( &curr_read_index_spinlock, 0 );
-        
         /* initialize the thread parameters structure */
         struct update_mapped_reads_param params;
         
         params.rv.max_change = 0;
         params.rv.log_lhd = 0;
-        
-        params.curr_read_index_spinlock = &curr_read_index_spinlock;
-        unsigned int curr_read_index = 0;
-        params.curr_read_index = &curr_read_index;
-        
+                
         params.reads_db = reads_db;
         /* traces should be read only, so they are shared */
         params.traces = traces;
@@ -437,9 +367,10 @@ update_mapped_reads_from_trace(
         int rc;
         void* status;
         pthread_t thread[num_threads];
-        pthread_attr_t attr;
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+        pthread_attr_t* attrs;
+        attrs = malloc(sizeof(pthread_attr_t)*num_threads);
+        
         struct update_mapped_reads_param* tds;
         tds = malloc(num_threads*sizeof(struct update_mapped_reads_param));
         int t;
@@ -447,8 +378,11 @@ update_mapped_reads_from_trace(
         {  
             memcpy( tds+t,  &params, sizeof(struct update_mapped_reads_param) );
             
-            rc = pthread_create( &(thread[t]), 
-                                 &attr, 
+            pthread_attr_init(attrs+t);
+            pthread_attr_setdetachstate(attrs+t, PTHREAD_CREATE_JOINABLE);
+            
+            rc = pthread_create( thread + t, 
+                                 attrs + t, 
                                  update_mapped_reads_from_trace_worker, 
                                  (void *)(tds + t) 
                 ); 
@@ -464,6 +398,8 @@ update_mapped_reads_from_trace(
         /* wait for the other threads */    
         for(t=0; t < num_threads; t++) {
             rc = pthread_join(thread[t], &status);
+            pthread_attr_destroy( attrs + t );
+            
             if (rc) {
                 fprintf( stderr, 
                          "ERROR; return code from pthread_join() is %d\n", 
@@ -472,7 +408,7 @@ update_mapped_reads_from_trace(
                 exit(-1);
             }
         }
-        pthread_attr_destroy(&attr);
+        
         
         /* Aggregate over the max in the error difference */
         for( t=0; t < num_threads; t++ )
@@ -480,9 +416,11 @@ update_mapped_reads_from_trace(
             rv.log_lhd += tds[t].rv.log_lhd;
             rv.max_change = MAX( tds[t].rv.max_change, rv.max_change );
         }
-        free( tds );
-    }
         
+        free( tds );
+        free( attrs );
+    }
+    
     return rv;
 }
 
@@ -580,38 +518,30 @@ build_random_starting_trace(
     /* int traces to a low consant. This should heavily favor prior reads. */
     set_trace_to_uniform( traces, EXPLORATION_PRIOR );
 
-    /* Update the trace from the reads */
-    unsigned int i;
-    for( i = 0; i < rdb->num_mmapped_reads; i++ )
-    {
-        char* read_start = rdb->mmapped_reads_starts[i];
-        
-        /* read a mapping into the struct */
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-        
+    rewind_mapped_reads_db( rdb );
+    struct mapped_read_t* r;
+
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
+    {        
         /* reset the read cond prbs under a uniform prior */
-        reset_read_cond_probs( &r );
+        reset_read_cond_probs( r );
         
         /* update the read conditional probabilities from the trace */
-        update_mapped_read_prbs( traces, &r );        
+        update_mapped_read_prbs( traces, r );        
         
-        if( r.num_mappings > 0 )
+        if( r->num_mappings > 0 )
         {
-            /* Choose a random location, proportional to the normalized probabilities */
+            /* Choose a random loc, proportional to the normalized probabilities */
             unsigned int j = 0;
             /* if there is exactly 1 mapping, then the randomness is pointless */
-            if( r.num_mappings > 1 )
+            if( r->num_mappings > 1 )
             {
                 float random_num = (float)rand()/(float)RAND_MAX;
                 double cum_dist = 0;
-                for( j = 0; j < r.num_mappings; j++ ) 
+                for( j = 0; j < r->num_mappings; j++ ) 
                 {
-                    cum_dist += r.locations[j].cond_prob;
+                    cum_dist += 
+                        get_cond_prob_from_mapped_read_location( r->locations + j );
                     if( random_num <= cum_dist )
                         break;
                 }
@@ -622,21 +552,22 @@ build_random_starting_trace(
                  * it. We could save a few cycles by taking this into account earlier, but
                  * for now we're going to leave the sanity check.
                  */
-                assert( j <= r.num_mappings );
-                if( j == r.num_mappings )
+                assert( j <= r->num_mappings );
+                if( j == r->num_mappings )
                 {
                     printf( "WARNING - rounding error! %e\n", cum_dist );
-                    j = r.num_mappings - 1;
+                    j = r->num_mappings - 1;
                     assert( cum_dist > 0.999 );
                 }
             }
                         
             /* Add this location to the trace, with prb 1 */
             /* We do this by temp changing cond_prb, and then changing it back */
-            float tmp_cond_prb = r.locations[j].cond_prob;
-            r.locations[j].cond_prob = 1.0;
-            update_trace_expectation_from_location( traces, r.locations + j );
-            r.locations[j].cond_prob = tmp_cond_prb;
+            float tmp_cond_prb = 
+                get_cond_prob_from_mapped_read_location( r->locations + j );
+            set_cond_prob_in_mapped_read_location( r->locations + j, 1.0 );
+            update_trace_expectation_from_location( traces, r->locations + j );
+            set_cond_prob_in_mapped_read_location( r->locations + j, tmp_cond_prb );
         }
     }
     
@@ -904,13 +835,13 @@ update_chipseq_trace_expectation_from_location(
     const struct trace_t* const traces, 
     const struct mapped_read_location* const loc )
 {
-    int chr_index = loc->chr;
-    unsigned char flag = loc->flag;
-    unsigned int start = loc->start_pos;
-    unsigned int stop = loc->stop_pos;
-    ML_PRB_TYPE cond_prob = loc->cond_prob;
+    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
-    assert( cond_prob >= -0.0001 );
+    assert( cond_prob >= 0.0 );
     assert( stop >= start );
     
     /* Make sure the reference genome is correct */            
@@ -933,6 +864,8 @@ update_chipseq_trace_expectation_from_location(
             pthread_spin_lock( traces->locks[0][ chr_index ] + k );
             #endif
         }
+
+        const float scale = (1.0/(stop-start));
         
         for( k = start; k < stop; k++ )
         {
@@ -940,7 +873,7 @@ update_chipseq_trace_expectation_from_location(
             assert( k < traces->trace_lengths[chr_index] );
             
             traces->traces[0][chr_index][k] 
-                += (1.0/(stop-start))*cond_prob;
+                += scale*cond_prob;
         }
 
         /* unlock the spinlocks */
@@ -986,22 +919,22 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* allocate space to store the temporary values */
-    ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
+    float* new_prbs = malloc( sizeof(float)*(r->num_mappings) );
     
     /* Update the reads from the trace */
     /* set to flt_min to avoid division by 0 */
-    double prb_sum = FLT_MIN;
+    double prb_sum = ML_PRB_MIN;
 
     unsigned int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
         /* calculate the mean density */
         double window_density = 0;
-        
-        int chr_index = r->locations[i].chr;
-        unsigned char flag = r->locations[i].flag;
-        unsigned int start = r->locations[i].start_pos;
-        unsigned int stop = r->locations[i].stop_pos;
+
+        int chr_index = get_chr_from_mapped_read_location( r->locations + i  );
+        unsigned char flag = get_flag_from_mapped_read_location( r->locations + i );
+        unsigned int start = get_start_from_mapped_read_location( r->locations + i );
+        unsigned int stop = get_stop_from_mapped_read_location( r->locations + i );
         
         /* If the reads are paired */
         unsigned int j = 0;
@@ -1033,7 +966,14 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
          * This is the probability of observing the seqeunce given that it came from 
          * location i, assuming the chip traces have been normalized to 0. 
          */
-        new_prbs[i] = r->locations[i].seq_error*r->locations[i].fl_prob*window_density;
+        float fl_prb = get_fl_prb( 
+            global_fl_dist, 
+            get_fl_from_mapped_read_location( r->locations + i ) 
+        );
+        
+        new_prbs[i] = 
+            get_seq_error_from_mapped_read_location( r->locations + i )
+            *fl_prb*window_density;
         prb_sum += new_prbs[i];
     }
     
@@ -1046,10 +986,15 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* absolute value error */
             double normalized_density = new_prbs[i]/prb_sum; 
             
-            rv.max_change += MAX( normalized_density - r->locations[i].cond_prob,
-                                  -normalized_density  + r->locations[i].cond_prob);
+            rv.max_change += MAX( 
+                normalized_density 
+                    - get_cond_prob_from_mapped_read_location( r->locations + i ),
+                get_cond_prob_from_mapped_read_location( r->locations + i ) 
+                    - normalized_density 
+            );
             
-            r->locations[i].cond_prob = normalized_density;
+            set_cond_prob_in_mapped_read_location( 
+                r->locations + i, normalized_density );
         }
     }      
     
@@ -1071,20 +1016,20 @@ void update_CAGE_trace_expectation_from_location(
     const struct trace_t* const traces, 
     const struct mapped_read_location* const loc )
 {
-    int chr_index = loc->chr;
-    unsigned char flag = loc->flag;
-    unsigned int start = loc->start_pos;
-    unsigned int stop = loc->stop_pos;
-    ML_PRB_TYPE cond_prob = loc->cond_prob;
+    int chr_index = get_chr_from_mapped_read_location( loc  );
+    unsigned char flag = get_flag_from_mapped_read_location( loc  );
+    unsigned int start = get_start_from_mapped_read_location( loc  );
+    unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
-    assert( cond_prob >= -0.0001 );
+    assert( cond_prob >= 0.0 );
     assert( stop >= start );
     
     /* Make sure the reference genome is correct */            
     assert( chr_index < traces->num_chrs );
     assert( traces->trace_lengths[chr_index] >= stop );
 
-    assert( cond_prob >= -0.0001 );
+    assert( cond_prob >= 0.0 );
     
     /* update the trace */
     /* If the reads are paired */
@@ -1133,7 +1078,7 @@ update_CAGE_mapped_read_prbs(
     struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* allocate space to store the temporary values */
-    ML_PRB_TYPE* new_prbs = malloc( sizeof(double)*(r->num_mappings) );
+    float* new_prbs = malloc( sizeof(float)*(r->num_mappings) );
     
     /* Update the reads from the trace */
     double density_sum = 0;
@@ -1143,10 +1088,10 @@ update_CAGE_mapped_read_prbs(
         /* calculate the mean density */
         /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
         double window_density = 2*DBL_EPSILON;
-        
-        int chr_index = r->locations[i].chr;
-        unsigned char flag = r->locations[i].flag;
-        unsigned int start = r->locations[i].start_pos;
+
+        int chr_index = get_chr_from_mapped_read_location( r->locations + i  );
+        unsigned char flag = get_flag_from_mapped_read_location( r->locations + i );
+        unsigned int start = get_start_from_mapped_read_location( r->locations + i );
         
         /* If the reads are paired */
         unsigned int j = 0;
@@ -1179,7 +1124,10 @@ update_CAGE_mapped_read_prbs(
             }
         }
         
-        new_prbs[i] = r->locations[i].seq_error*window_density;
+        new_prbs[i] = 
+            get_seq_error_from_mapped_read_location( r->locations + i )
+                *window_density;
+        
         density_sum += new_prbs[i];
     }
     
@@ -1196,12 +1144,18 @@ update_CAGE_mapped_read_prbs(
             //                 - r.locations[i].cond_prob, 2 ) ;
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
+
+            rv.max_change += MAX( 
+                normalized_density 
+                - get_cond_prob_from_mapped_read_location( r->locations + i ),
+                -normalized_density 
+                + get_cond_prob_from_mapped_read_location( r->locations + i ) 
+            );
             
-            rv.max_change += MAX( normalized_density - r->locations[i].cond_prob,
-                                  -normalized_density  + r->locations[i].cond_prob);
+            set_cond_prob_in_mapped_read_location( 
+                r->locations + i, normalized_density );
             
-            r->locations[i].cond_prob = normalized_density;
-            assert( r->locations[i].cond_prob >= 0 );
+            assert( get_cond_prob_from_mapped_read_location( r->locations + i ) >= 0 );
         }
     }      
     
@@ -1279,10 +1233,12 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
         can_iteratively_map = false;
         return 0;
     }
+    
+    /* BUG!!! */
+    /* Set the global fl dist */
+    global_fl_dist = rdb->fl_dist;
 
-    // THIS IS YES - else we would have returned
-    // if( can_iteratively_map )
-
+    
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );
     

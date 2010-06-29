@@ -18,6 +18,7 @@
 #include <sys/wait.h>
 
 #include "statmap.h"
+#include "mapped_read.h"
 #include "find_candidate_mappings.h"
 #include "index_genome.h"
 #include "quality.h"
@@ -658,13 +659,14 @@ map_marginal( args_t* args,
     
     start = clock();
     
-    find_all_candidate_mappings( genome,
-                                 args->log_fp,
-                                 args->rdb,
-                                 &candidate_mappings,
-                                 args->min_match_penalty,
-                                 args->max_penalty_spread,
-                                 args->indexed_seq_len );
+    find_all_candidate_mappings( 
+        genome,
+        args->log_fp,
+        args->rdb,
+        &candidate_mappings,
+        args->min_match_penalty,
+        args->max_penalty_spread,
+        args->indexed_seq_len );
     
     /* Free the genome index */
     /* we may need the memory later */
@@ -762,11 +764,12 @@ iterative_mapping( args_t* args,
     mmap_mapped_reads_db( mpd_rds_db );
     fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
     index_mapped_reads_db( mpd_rds_db );
-    fprintf(stderr, "NOTICE      :  resetting FL probabilities.\n" );
-    set_all_read_fl_probs( mpd_rds_db );
     
     /* Do the iterative mapping */
-    generic_update_mapping( args->rdb, mpd_rds_db, genome, args->assay_type,
+    generic_update_mapping( args->rdb, 
+                            mpd_rds_db,
+                            genome, 
+                            args->assay_type,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
         

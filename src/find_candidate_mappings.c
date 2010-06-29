@@ -337,20 +337,25 @@ find_all_candidate_mappings( struct genome_data* genome,
     int rc;
     void* status;
     pthread_t thread[num_threads];
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-    struct single_map_thread_data* tds;
-    tds = malloc(num_threads*sizeof(td_template));
+
+    pthread_attr_t attrs[num_threads];
+    
+    struct single_map_thread_data tds[num_threads];
+    
     for( t = 0; t < num_threads; t++ )
     {  
-        memcpy( tds +t,  &td_template, sizeof(td_template) );
+        memcpy( tds+t,  &td_template, sizeof(td_template) );
         tds[t].thread_id = t;
-        rc = pthread_create( &(thread[t]), 
-                             &attr, 
+        
+        pthread_attr_init(attrs + t);
+        pthread_attr_setdetachstate(attrs + t, PTHREAD_CREATE_JOINABLE);
+        
+        rc = pthread_create( thread + t, 
+                             attrs + t, 
                              find_candidate_mappings, 
                              (void *)(tds + t) 
             ); 
+        
         if (rc) {
             fprintf(stderr, 
                     "ERROR; return code from pthread_create() is %d\n", 
@@ -362,9 +367,9 @@ find_all_candidate_mappings( struct genome_data* genome,
     
     /* Free attribute and wait for the other threads */    
     size_t num_reads2 = 0;
-    pthread_attr_destroy(&attr);
     for(t=0; t < num_threads; t++) {
         rc = pthread_join(thread[t], &status);
+        pthread_attr_destroy(attrs+t);
         if (rc) {
             fprintf( stderr, 
                      "ERROR; return code from pthread_join() is %d\n", 
@@ -375,9 +380,6 @@ find_all_candidate_mappings( struct genome_data* genome,
         num_reads2 += (size_t) status;
     }
     
-    /* Free the thread parameter data structures */
-    free( tds );
-    
     /* Find all of the candidate mappings */    
     clock_t stop = clock();
     fprintf(stderr, "PERFORMANCE :  Mapped (%i/%li) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
@@ -385,5 +387,4 @@ find_all_candidate_mappings( struct genome_data* genome,
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)mapped_cnt)*CLOCKS_PER_SEC*3600)/(stop-start)
         );
-
 }

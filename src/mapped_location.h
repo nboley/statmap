@@ -10,9 +10,6 @@
 #include "rawread.h"
 #include "candidate_mapping.h"
 
-/* The mapped location probability type */
-#define ML_PRB_TYPE float
-
 /* block size for newly allocated results memory */
 #define RESULTS_GROWTH_FACTOR 100
 

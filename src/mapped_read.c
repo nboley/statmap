@@ -33,6 +33,8 @@ init_mapped_read( struct mapped_read_t** rd )
     (*rd) = malloc(sizeof(struct mapped_read_t));
     (*rd)->read_id = 0;
     (*rd)->num_mappings = 0;
+    (*rd)->rdb = NULL;
+    (*rd)->free_locations = false;
     (*rd)->locations = NULL;
     return;
 }
@@ -42,8 +44,11 @@ free_mapped_read( struct mapped_read_t* rd )
 {
     if( rd == NULL )
         return;
-    free( rd->locations );
-    rd->locations = NULL;
+    
+    if( true == rd->free_locations ) {
+        free( rd->locations );
+        rd->locations = NULL;
+    }
     free( rd );
     return;
 }
@@ -71,50 +76,40 @@ add_location_to_mapped_read(
 
 
 void
-reset_read_cond_probs( struct mapped_read_t* rd  )
+reset_read_cond_probs( struct mapped_read_t* rd )
 {
+    struct fragment_length_dist_t* fl_dist = NULL;
+    if( rd->rdb != NULL )
+        fl_dist = rd->rdb->fl_dist;
+
     /* prevent divide by zero */
-    double prb_sum = FLT_MIN;
+    double prb_sum = ML_PRB_MIN;
     int i;
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
-        loc->cond_prob = loc->seq_error*loc->fl_prob;
-        prb_sum += loc->cond_prob;
+        
+        const float cond_prob =             
+            get_seq_error_from_mapped_read_location( loc )
+            *get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
+        
+        set_cond_prob_in_mapped_read_location( loc, cond_prob );
+        prb_sum += cond_prob;
     }
 
-    assert( rd->num_mappings == 0 || prb_sum > FLT_MIN );
+    assert( rd->num_mappings == 0 || prb_sum > ML_PRB_MIN );
 
     for( i = 0; i < rd->num_mappings; i++ )
     {
-        rd->locations[i].cond_prob /= prb_sum;
+        set_cond_prob_in_mapped_read_location( 
+            rd->locations + i,
+            get_cond_prob_from_mapped_read_location(rd->locations + i)
+               /prb_sum 
+        );
     }
 
     return;
 };
-
-void
-set_read_fl_probs( struct mapped_read_t* rd, 
-                   struct fragment_length_dist_t* fl_dist  )
-{
-    int i;
-    for( i = 0; i < rd->num_mappings; i++ )
-    {
-        struct mapped_read_location* loc = rd->locations + i;
-        if( ((loc->flag)&IS_PAIRED) > 0 )
-        {
-            int fl = loc->stop_pos - loc->start_pos + 1;
-            float fl_prb = get_fl_prb( fl_dist, fl );
-            loc->fl_prob = fl_prb;
-        } else {
-            /* set the fl prb to 1 for unpaired reads */
-            loc->fl_prob = 1.0;
-        }
-    }
-    
-    return;
-};
-
 
 void
 re_weight_read_cond_prb_by_fl( struct mapped_read_t* r,
@@ -139,51 +134,40 @@ re_weight_read_cond_prb_by_fl( struct mapped_read_t* r,
     for( i = 0; i < r->num_mappings; i++ )
     {
         /* ignore single ended reads */
-        if( !((r->locations[i].flag)&IS_PAIRED) )
+        if( !(get_flag_from_mapped_read_location(r->locations + i)&IS_PAIRED) )
             continue;
         
-        sum_paired_weight += r->locations[i].cond_prob;
+        sum_paired_weight += 
+            get_cond_prob_from_mapped_read_location( r->locations + i );
         /* we know this is safe because each thread has it's own read */
-        double fl_prb = get_fl_prb(  
-            fl_dist, r->locations[i].stop_pos - r->locations[i].start_pos + 1  );
+        const double fl_prb = get_fl_prb(  
+            fl_dist, get_fl_from_mapped_read_location( r->locations + i ) );
         
-        r->locations[i].cond_prob *= fl_prb;
+        set_cond_prob_in_mapped_read_location( 
+            r->locations + i,
+            get_cond_prob_from_mapped_read_location( r->locations + i)*fl_prb
+        );
         
-        fl_weights_sum += r->locations[i].cond_prob;                
+        fl_weights_sum += get_cond_prob_from_mapped_read_location( r->locations + i);
     }
     
     /* For pass two, renormalize the weights */
     for( i = 0; i < r->num_mappings; i++ )
     {
         /* ignore single ended reads */
-        if( !((r->locations[i].flag)&IS_PAIRED) )
+        if( !(get_flag_from_mapped_read_location(r->locations + i)&IS_PAIRED) )
             continue;
         
-        r->locations[i].cond_prob /= (fl_weights_sum*sum_paired_weight);
+        set_cond_prob_in_mapped_read_location(
+            r->locations + i,
+            get_cond_prob_from_mapped_read_location( r->locations + i )
+               *fl_weights_sum*sum_paired_weight
+        );
         
-        assert( r->locations[i].cond_prob >= -0.0001 );
+        assert( get_cond_prob_from_mapped_read_location(r->locations + i) >= -0.0001 );
     }            
 
 };
-
-void
-fprintf_mapped_read( FILE* fp, struct mapped_read_t* r )
-{
-    int i;
-    fprintf( fp, "Read ID: %lu\n", r->read_id);
-    for( i = 0; i < r->num_mappings; i++ )
-    {
-        fprintf( fp, "\t%u\t%u\t%u\t%u\t%e\t%e\n",
-                 (r->locations[i]).chr,  
-                 (r->locations[i]).flag,  
-                 (r->locations[i]).start_pos,
-                 (r->locations[i]).stop_pos,
-                 (r->locations[i]).seq_error,
-                 (r->locations[i]).cond_prob
-            );
-    }
-    fprintf( fp, "\n" );
-}
 
 int 
 write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
@@ -240,6 +224,7 @@ build_mapped_read_from_candidate_mappings(
     init_mapped_read( mpd_rd );
 
     (*mpd_rd)->read_id = read_id;
+    (*mpd_rd)->rdb = NULL;
 
     /* store the sum of the marginal probabilities */
     double prob_sum = 0;
@@ -258,7 +243,7 @@ build_mapped_read_from_candidate_mappings(
     
     while( i < mappings->length
            && mappings->mappings[i].rd_type == SINGLE_END )
-    {
+    {        
         /* if the mapping hasnt been determined to be valid, ignore it */
         if( (mappings->mappings)[i].recheck != VALID )
         {
@@ -268,24 +253,38 @@ build_mapped_read_from_candidate_mappings(
         
         /* Add the location */
         /* Ensure all of the flags are turned off */
-        loc.flag = 0;
+        MRL_FLAG_TYPE flag = 0;
         if( BKWD == (mappings->mappings)[i].rd_strnd )
-            loc.flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
+            flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
         
         if( (mappings->mappings)[i].does_cover_snp )
         {
-            loc.flag |= FIRST_READ_COVERS_SNP;
+            flag |= FIRST_READ_COVERS_SNP;
             loc.snps_bm_r1 = (mappings->mappings)[i].snp_bitfield;
         }
-
-        loc.chr = (mappings->mappings)[i].chr;
-        loc.start_pos = (mappings->mappings)[i].start_bp;
-        loc.stop_pos = loc.start_pos + (mappings->mappings)[i].rd_len;
-        loc.seq_error = pow( 10, (mappings->mappings)[i].penalty );
-        /* since we know nothing about the fragment length dist, we do nothing */
-        loc.fl_prob = 1.0;
-        prob_sum += loc.seq_error;
-        loc.cond_prob = -1;
+        
+        set_chr_in_mapped_read_location( &loc, (mappings->mappings)[i].chr );
+        
+        set_start_and_stop_in_mapped_read_location (
+            &loc,
+            (mappings->mappings)[i].start_bp,
+            (mappings->mappings)[i].start_bp + (mappings->mappings)[i].rd_len
+        );
+        
+        /*
+        set_start_in_mapped_read_location( &loc, (mappings->mappings)[i].start_bp );
+        set_stop_in_mapped_read_location( 
+            &loc, 
+            get_start_from_mapped_read_location( &loc ) 
+                + (mappings->mappings)[i].rd_len 
+        );
+        */
+        
+        set_seq_error_in_mapped_read_location( 
+            &loc, pow( 10, (mappings->mappings)[i].penalty ) );
+        prob_sum += get_seq_error_from_mapped_read_location( &loc );
+        set_cond_prob_in_mapped_read_location( &loc, -1.0 );
+        set_flag_in_mapped_read_location( &loc, flag  );
 
         add_location_to_mapped_read( *mpd_rd, &loc );
         
@@ -347,7 +346,7 @@ build_mapped_read_from_candidate_mappings(
             )
         {
             /* Ensure all of the flags are turned off */
-            loc.flag = IS_PAIRED;
+            MRL_FLAG_TYPE flag = IS_PAIRED;
             
             /* Determine which of the candidate mappings corresponds 
                with the first pair */
@@ -364,48 +363,54 @@ build_mapped_read_from_candidate_mappings(
 
             /* Set the appropriate flags */
             if( first_read->start_bp < second_read->start_bp )
-                loc.flag |= FIRST_PAIR_IS_FIRST_IN_GENOME;
+                flag |= FIRST_PAIR_IS_FIRST_IN_GENOME;
                         
             if( FWD == first_read->rd_strnd )
-                loc.flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
+                flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
 
             if( first_read->does_cover_snp )
             {
-                loc.flag |= FIRST_READ_COVERS_SNP;
+                flag |= FIRST_READ_COVERS_SNP;
                 loc.snps_bm_r1 = first_read->snp_bitfield;
             }
 
             if( second_read->does_cover_snp )
             {
-                loc.flag |= SECOND_READ_COVERS_SNP;
+                flag |= SECOND_READ_COVERS_SNP;
                 loc.snps_bm_r2 = second_read->snp_bitfield;
             }            
             
             /* Set the chr */
-            loc.chr = first_read->chr;
+            set_chr_in_mapped_read_location( &loc, first_read->chr );
             assert( first_read->chr == second_read->chr);
 
             if( first_read->start_bp < second_read->start_bp )
             {
-                loc.start_pos = first_read->start_bp;
-                loc.stop_pos = second_read->start_bp + second_read->rd_len;
+                set_start_and_stop_in_mapped_read_location (
+                    &loc,
+                    first_read->start_bp,
+                    second_read->start_bp + second_read->rd_len
+                );
             } else {
-                loc.start_pos = second_read->start_bp;
-                loc.stop_pos = first_read->start_bp + first_read->rd_len;
+                set_start_and_stop_in_mapped_read_location (
+                    &loc,
+                    second_read->start_bp,
+                    first_read->start_bp + first_read->rd_len
+                );
             }
             
-            loc.seq_error = pow( 10, first_read->penalty );
-            loc.seq_error *= pow( 10, second_read->penalty );
+            set_seq_error_in_mapped_read_location( 
+                &loc, pow( 10, first_read->penalty + second_read->penalty ) );
             
-            prob_sum += loc.seq_error;
-            loc.cond_prob = -1;
+            prob_sum += get_seq_error_from_mapped_read_location( &loc );
+            set_cond_prob_in_mapped_read_location( &loc, -1.0);
+
+            set_flag_in_mapped_read_location( &loc, flag );
 
             /* ignore reads with zero probability ( possible with FL dist ) */
-            if( loc.seq_error > 2*FLT_MIN )
-            {
+            if( get_seq_error_from_mapped_read_location( &loc ) > 2*FLT_MIN )
                 add_location_to_mapped_read( *mpd_rd, &loc );
-            }
-
+            
             j++;
         };
                 
@@ -417,9 +422,11 @@ renormalize_probabilities:
     /* set the conditional probabilites - just renormalize */
     for( i = 0; i < (*mpd_rd)->num_mappings; i++ )
     {
-        (*mpd_rd)->locations[i].cond_prob 
-            = (*mpd_rd)->locations[i].seq_error/prob_sum;
-
+        set_cond_prob_in_mapped_read_location( 
+            (*mpd_rd)->locations + i,    
+            get_seq_error_from_mapped_read_location( (*mpd_rd)->locations + i )
+               /prob_sum
+        );
     }
 
 }
@@ -445,7 +452,9 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
     }
 
     /* whether or not the DB is mmapped */
-    (*rdb)->locked = false;
+    (*rdb)->write_locked = false;
+    
+    pthread_spin_init( &((*rdb)->access_lock), PTHREAD_PROCESS_PRIVATE ); 
 
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
@@ -473,7 +482,7 @@ open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
     }
 
     /* whether or not the DB is mmapped */
-    (*rdb)->locked = false;
+    (*rdb)->write_locked = false;
 
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
@@ -515,7 +524,7 @@ add_read_to_mapped_reads_db(
     struct mapped_reads_db* rdb,
     struct mapped_read_t* rd)
 {
-    if ( true == rdb->locked )
+    if ( true == rdb->write_locked )
     {
         fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot add read.\n");
         /* TODO - be able to recover from this */
@@ -523,6 +532,8 @@ add_read_to_mapped_reads_db(
     }
 
     int error;
+
+    rd->rdb = rdb;
     
     error = write_mapped_read_to_file( rd, rdb->fp );
     if( error < 0 )
@@ -539,7 +550,7 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     /* if rdb is mmapped */
     rdb->current_read = 0;
-
+    
     /* if it is not mmapped */
     assert( rdb->fp != NULL );
     /* make sure the fp is open */
@@ -561,45 +572,55 @@ mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
 
 int
 get_next_read_from_mapped_reads_db( 
-    struct mapped_reads_db* rdb, 
+    struct mapped_reads_db* const rdb, 
     struct mapped_read_t** rd )
 {
     size_t rv;
 
     init_mapped_read( rd );
+    (*rd)->rdb = rdb;
 
     /* if the read db has been mmapped */
-    if ( true == rdb->locked )
+    if ( true == rdb->write_locked )
     {
+        /** Get the next read **/
+        pthread_spin_lock( &(rdb->access_lock) );
         /* if we have read every read */
         if( rdb->current_read == rdb->num_mmapped_reads )
+        {
+            pthread_spin_unlock( &(rdb->access_lock) );
             return EOF;
-            
-        assert( rdb->current_read < rdb->num_mmapped_reads );
-        // assert( rdb->current_read >= 0 );
+        }
+        
+        unsigned int current_read_id = rdb->current_read;
+        rdb->current_read += 1;
+        pthread_spin_unlock( &(rdb->access_lock) );
+
+        assert( current_read_id < rdb->num_mmapped_reads );
         
         /* get a pointer to the current read */
-        char* read_start = rdb->mmapped_reads_starts[rdb->current_read];
-        /* move to the next read */
-        rdb->current_read += 1;
-
+        char* read_start = rdb->mmapped_reads_starts[current_read_id];
+        
         /* read a mapping into the struct */
         (*rd)->read_id = *((unsigned long*) read_start);
+
         read_start += sizeof(unsigned long)/sizeof(char);
         (*rd)->num_mappings = *((unsigned short*) read_start);
+
         read_start += sizeof(unsigned short)/sizeof(char);
-        (*rd)->locations = malloc( 
-            (*rd)->num_mappings*sizeof(struct mapped_read_location) );
-        memcpy( (*rd)->locations, read_start, (*rd)->num_mappings*sizeof(struct mapped_read_location) );
-        // TODO get rid of this memcpy, and use the next line
-        // (*rd)->locations = (struct mapped_read_location*) read_start;
+
+        (*rd)->locations = (struct mapped_read_location*) read_start;
+        (*rd)->free_locations = false;
         
     } else {
+        pthread_spin_lock( &(rdb->access_lock) );
+        
         /* Read in the read id */
         rv = fread( 
             &((*rd)->read_id), sizeof((*rd)->read_id), 1, rdb->fp );
         if( 1 != rv )
         {
+            pthread_spin_unlock( &(rdb->access_lock) );
             assert( feof( rdb->fp ) );
             free_mapped_read( *rd );
             *rd = NULL;
@@ -611,6 +632,7 @@ get_next_read_from_mapped_reads_db(
             &((*rd)->num_mappings), sizeof((*rd)->num_mappings), 1, rdb->fp );
         if( 1 != rv )
         {
+            pthread_spin_unlock( &(rdb->access_lock) );
             fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
             assert( false );
             exit( -1 );
@@ -619,12 +641,15 @@ get_next_read_from_mapped_reads_db(
         /* read in the locations */
         (*rd)->locations = malloc( 
             (*rd)->num_mappings*sizeof(struct mapped_read_location) );
-        
+        (*rd)->free_locations = true;
+
         rv = fread( (*rd)->locations, 
                     sizeof(struct mapped_read_location), 
                     (*rd)->num_mappings, 
                     rdb->fp );
-        
+
+        pthread_spin_unlock( &(rdb->access_lock) );
+   
         if( (*rd)->num_mappings != rv )
         {
             fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
@@ -636,44 +661,16 @@ get_next_read_from_mapped_reads_db(
     return 0;
 }
 
-void
-set_all_read_fl_probs( struct mapped_reads_db* rdb )
-{
-    long long i;
-    for( i = 0; i < (long long) rdb->num_mmapped_reads; i++ )
-    {
-        char* read_start = rdb->mmapped_reads_starts[i];
-        
-        /* read a mapping into the struct */
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-
-        set_read_fl_probs( &r, rdb->fl_dist );
-    }
-}
 
 void
 reset_all_read_cond_probs( struct mapped_reads_db* rdb )
+                           
 {
-    long long i;
-    for( i = 0; i < (long long) rdb->num_mmapped_reads; i++ )
-    {
-        char* read_start = rdb->mmapped_reads_starts[i];
-        
-        /* read a mapping into the struct */
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
+    rewind_mapped_reads_db( rdb );
+    struct mapped_read_t* r;
 
-        reset_read_cond_probs( &r );
-    }
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
+        reset_read_cond_probs( r );
 }
 
 
@@ -681,39 +678,28 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb )
 /* use this for wiggles */
 void
 update_traces_from_read_densities( 
-    struct mapped_reads_db* reads_db,
+    struct mapped_reads_db* rdb,
     struct trace_t* traces
 )
 {    
-    int i;
-    for( i = 0; i < traces->num_chrs; i++ )
-    {
-        memset( traces->traces[0] + i, 0, 
-                sizeof(TRACE_TYPE)*(traces->trace_lengths[i]) );
-    }
-    
-    /* Update the trace from the reads */
-    for( i = 0; i < (long long) reads_db->num_mmapped_reads; i++ )
-    {
-        char* read_start = reads_db->mmapped_reads_starts[i];
+    zero_traces( traces );
 
-        /* read a mapping into the struct */
-        struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
-        read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
-        r.locations = (struct mapped_read_location*) read_start;
-        
-        /* Update the trace from this mapping */
+    struct mapped_read_t* r;
+
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
+    {
+            /* Update the trace from this mapping */
         unsigned int j;
         double cond_prob_sum = 0;
-        for( j = 0; j < r.num_mappings; j++ )
+        for( j = 0; j < r->num_mappings; j++ )
         {
-            int chr_index = r.locations[j].chr;
-            unsigned int start = r.locations[j].start_pos;
-            unsigned int stop = r.locations[j].stop_pos;
-            ML_PRB_TYPE cond_prob = r.locations[j].cond_prob;
+            int chr_index = get_chr_from_mapped_read_location( r->locations + j );
+            unsigned int start = 
+                get_start_from_mapped_read_location( r->locations + j );
+            unsigned int stop = 
+                get_stop_from_mapped_read_location( r->locations + j );
+            float cond_prob = 
+                get_cond_prob_from_mapped_read_location( r->locations + j );
             cond_prob_sum += cond_prob;
             
             assert( cond_prob >= -0.0001 );
@@ -741,7 +727,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     int fdin = fileno( rdb->fp );
     
     /* Lock the db to prevent writes */
-    rdb->locked = true;
+    rdb->write_locked = true;
     
     /* make sure the entire file has been written to disk */
     fflush( rdb->fp );
@@ -785,7 +771,7 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
     }
     rdb->mmapped_data = NULL;
 
-    rdb->locked = false;
+    rdb->write_locked = false;
     rdb->mmapped_data_size = 0;
 
     free( rdb->mmapped_reads_starts );

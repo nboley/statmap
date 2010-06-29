@@ -2,8 +2,10 @@
 #define ITERATIVE_MAPPING_H
 
 #include "config.h"
+struct mapped_read_t;
+struct mapped_read_location;
 struct genome_data;
-#include "mapped_read.h"
+
 
 /*
  * Global arguments that are available to all of the 
@@ -28,7 +30,7 @@ struct update_mapped_read_rv_t {
 
 /* Forward declaration for the trace type */
 struct trace_t;
-struct mapped_read_t;
+//struct mapped_read_t;
 
 void
 naive_update_trace_expectation_from_location( 

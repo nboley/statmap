@@ -103,11 +103,13 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
         if( 1 == rd->num_mappings )
         {
             /* skip unpaired reads */
-            if ( ((rd->locations[0].flag)&IS_PAIRED) == 0 )
+            if ( (get_flag_from_mapped_read_location(rd->locations + 0)
+                  &IS_PAIRED) == 0 )
                 continue;
             
-            int fl = rd->locations[0].stop_pos \
-                   - rd->locations[0].start_pos + 1;
+            int fl = 1 + get_stop_from_mapped_read_location( rd->locations + 0 )
+                     - get_start_from_mapped_read_location( rd->locations + 0 );
+
             /* add this length to the fl dist */
             if( fl > max_fl )
             {
@@ -129,7 +131,8 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 
     if( total_num_reads < MIN_NUM_READS )
     {
-        fprintf( stderr, "ERROR       :  Too few unique reads to estimate the fl dist.\n" );
+        fprintf( stderr, 
+                 "ERROR       :  Too few unique reads to estimate the fl dist.\n" );
         return;
     }
 

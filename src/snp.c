@@ -335,16 +335,17 @@ update_snp_estimates_from_candidate_mappings(
         for( i = 0; i < rd->num_mappings; i++ )
         {
             struct mapped_read_location* loc = rd->locations + i;
-            if( ( loc->flag & FIRST_READ_COVERS_SNP ) > 0 )
+            if( ( get_flag_from_mapped_read_location( loc ) 
+                  & FIRST_READ_COVERS_SNP ) > 0 )
             {
                 int num_snps;
                 snp_t* snps;
                 
                 find_snps_in_snp_db( 
                     genome->snp_db, 
-                    (rd->locations + i)->chr,
-                    (rd->locations + i)->start_pos,
-                    (rd->locations + i)->stop_pos,
+                    get_chr_from_mapped_read_location( rd->locations + i ),
+                    get_start_from_mapped_read_location( rd->locations + i ),
+                    get_stop_from_mapped_read_location( rd->locations + i ),
                     &num_snps,
                     &snps
                 );
@@ -356,9 +357,13 @@ update_snp_estimates_from_candidate_mappings(
                     /* We cap the min penalties to enable the fast math optimizations */
                     if( ( (loc->snps_bm_r1)&(1<<snp_index) ) > 0 ) 
                     {
-                        snps[snp_index].alt_cnt += (rd->locations + i)->cond_prob;
+                        snps[snp_index].alt_cnt += 
+                            get_cond_prob_from_mapped_read_location(
+                                rd->locations + i);
                     } else {
-                        snps[snp_index].ref_cnt += (rd->locations + i)->cond_prob;
+                        snps[snp_index].ref_cnt += 
+                            get_cond_prob_from_mapped_read_location(
+                                rd->locations + i);
                     }
                 }                    
             }

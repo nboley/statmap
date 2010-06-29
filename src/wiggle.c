@@ -19,13 +19,13 @@ naive_update_trace_expectation_from_location(
     const struct mapped_read_location* const loc )
 {
     unsigned int i;
-    
-    const int chr_index = loc->chr;
-    const unsigned char flag = loc->flag; 
-    const unsigned int start = loc->start_pos;
-    const unsigned int stop = loc->stop_pos;
-    const ML_PRB_TYPE cond_prob = loc->cond_prob;
 
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+    
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
         /* lock the locks */
@@ -409,7 +409,6 @@ write_marginal_mapped_reads_to_stranded_wiggles(
         if( read_num%1000000 == 0 )
             fprintf( stderr, "NOTICE       : Added %u reads into trace\n", read_num );
         
-        set_read_fl_probs( rd, rdb->fl_dist );
         reset_read_cond_probs( rd );
         
         /* Update the trace from this mapping */

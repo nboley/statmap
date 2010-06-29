@@ -354,10 +354,10 @@ def map_with_statmap( iterative=True ):
 def map_with_bowtie( ):
     # build the index
     # pie out to null to ignore output
-    cmd = "bowtie-build -f tmp.genome tmp.ebwt > /dev/null"
+    cmd = "bowtie-build -f tmp.genome bowtie_index/tmp.ebwt > /dev/null"
     subprocess.call( cmd, shell=True )
     # map the reads with bowtie
-    cmd = "bowtie -a --tryhard -X 2500 --fr tmp.ebwt \
+    cmd = "bowtie -a --tryhard -X 2500 --fr bowtie_index/tmp.ebwt \
            -1 tmp.1.fastq -2 tmp.2.fastq mapped_reads.bwtout"
     subprocess.call( cmd, shell=True )
     

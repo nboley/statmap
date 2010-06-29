@@ -175,7 +175,15 @@ enum RECHECK
     then observing GGCCAA corresponds with observing a - strand gene 
     from a + read. So, we would add GGC here as a potential gene *end*
     for a *- strand gene* and CAA as a gene *start*
-*/   
+*/
+#define CHR_BITS 15
+#define CHR_NUM_MAX (32768 - 2) // 2**15 - 1
+#define PSEDUO_LOC_CHR_INDEX 32767
+#define LOCATION_BITS 28
+#define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
+#define FRAGMENT_LENGTH_BITS 20
+#define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
+#define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
 #define MAX_NUM_SNPS 3
 typedef struct __attribute__((__packed__))
 {
@@ -187,7 +195,7 @@ typedef struct __attribute__((__packed__))
     unsigned read_type      :1;
 
     /* the chr that the read came from */
-    unsigned chr            :15;
+    unsigned chr            :CHR_BITS;
 
     /* 
      * Start of the sequence in the 5' direction - 
@@ -195,13 +203,9 @@ typedef struct __attribute__((__packed__))
      * bps (loc, loc+1, ..., loc+L-1)
      * MAX GENOME POSITION IS 33x10^6
      */
-    unsigned loc            :28; // 32 - 4
+    unsigned loc            :LOCATION_BITS; // 32 - 4
 
 } GENOME_LOC_TYPE;
-
-#define CHR_NUM_MAX (32768 - 1) // 2**16 - 1
-#define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
-
 
 /*** Globally useful macros ***/
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
