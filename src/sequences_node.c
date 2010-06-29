@@ -96,6 +96,13 @@ set_bit( byte* bitmap, int index )
     bitmap[index/CHAR_BIT] |= ( 1 << (CHAR_BIT-1-index%CHAR_BIT));
 }
 
+void
+clear_bit( byte* bitmap, int index )
+{
+    assert( ((bitmap[index/CHAR_BIT]) & ( 1 << (CHAR_BIT-1-index%CHAR_BIT) )) );
+    bitmap[index/CHAR_BIT] &= (~( 1 << (CHAR_BIT-1-index%CHAR_BIT)));
+}
+
 void 
 print_bitmap( byte* bitmap, int size )
 {
@@ -528,16 +535,31 @@ find_insert_location( sequences_node* seqs,
     assert( low >= 0 );
 
     insert_location rv;
-    rv.location = low;
+    rv.location = low;    
+    
     /* check to see if there is a match at this point */
-    if(  ( get_num_sequence_types(seqs) > 0 )
-         && ( low < get_num_sequence_types(seqs) )
-         && ( cmp_words( seqs_array+low*seq_len, new_seq, seq_len ) == 0 ) )
-    {
-        rv.is_duplicate = 1;
+    if( 0 < get_num_sequence_types( seqs )
+        && low < get_num_sequence_types(seqs)
+        && 0 == cmp_words( seqs_array+low*seq_len, new_seq, seq_len ) )
+    { 
+        rv.is_duplicate = true;
+        if( !check_sequence_type_ptr( seqs, low )
+            && ( get_genome_locations_array_start( seqs, seq_len )
+                 + rv.location )->loc.chr == PSEDUO_LOC_CHR_INDEX )
+        { 
+            rv.is_pseudo = true; 
+            printf( "CHR: %i\tLOC: %i\n", 
+                    ( get_genome_locations_array_start( seqs, seq_len )
+                      + rv.location )->loc.chr,
+                    ( get_genome_locations_array_start( seqs, seq_len )
+                      + rv.location )->loc.loc );
+
+        }
+        else { rv.is_pseudo = false; };
     } else {
-        rv.is_duplicate = 0;
-    }
+        rv.is_duplicate = false;
+        rv.is_pseudo = false;
+    } 
 
     return rv;
 }
@@ -729,74 +751,146 @@ add_duplicate_sequence_to_sequences_node(
         assert( loc->locs_array.locs_size >= 0 ); 
         assert( loc->locs_array.locs_start >= 0 ); 
 
-        /* we add memory for the new genome location */
-        size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
-
-        if( new_size > get_num_allocated_bytes(seqs) )
-        {
-            /* allocate space for the extended genome locations array */
-            seqs = realloc( seqs, new_size );
-            assert( seqs != NULL );
-            /* set the new allocated space size */
-            set_num_allocated_bytes( seqs, new_size );
-            /* update the pointer to the genomic locations array, if necessary */
-            loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
-        }
-
-        /* the start of the new overflow locations - note that we havnt updated
-           the used size yet. */
-        GENOME_LOC_TYPE* of_locs = 
-            get_overflow_genome_locations_array_start( seqs, seq_len )
-            + loc->locs_array.locs_start;
-        
-        /* move memory to make space for the new location */
-        insert_memory( seqs, of_locs, sizeof(GENOME_LOC_TYPE), false );
-
-        /* set the new value */
-        of_locs[0] = new_loc;
-
-        /* now that the space is being used, set the new used size of seqs */
-        set_num_used_bytes( seqs, new_size );
-
-        assert( get_num_used_bytes(seqs) == get_num_allocated_bytes(seqs) );
-
-        /* Make sure that we havn't grown beyond what the array can hold */
-        // assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
-
-        /* update the number of sequence */
-        assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
-        loc->locs_array.locs_size += 1;        
-
         /* 
-         * Because we just inserted memory in the middle of this array, 
-         * we need to move the start pointers forward for every position 
-         * after this. This is a bit confusing - the array of gen locs
-         * is ordered by sequence, not by the extended array. So, we need
-         * to look at every genome location and if, it is a pointer and
-         * it starts after the array we just modified, increment the start 
-         * location.
+         * If this sequence has enough locations to warrant having
+         * a pseudo location, then split it out
          */
-        locs_union* locs_start = 
-            get_genome_locations_array_start( seqs, seq_len );
-        
-        /* TODO - move this declaration earlier */
-        int new_start = loc->locs_array.locs_start;
-        int i;
-        for( i = 0; i < get_num_sequence_types(seqs); i++ )
+        if( PSEUDO_LOC_MIN_SIZE - 1 == loc->locs_array.locs_size )
         {
-            if( check_sequence_type_ptr( seqs, i )
-                && locs_start[i].locs_array.locs_start > new_start  )
+            fprintf( stderr, 
+                     "PSEDUO LOCATION FOUND - NOT ADDING Chr %u Loc %u\n",  
+                     new_loc.chr, new_loc.loc 
+            );
+            
+            /*** add a pseudo location to the pseudo location DB */
+            /* find the start */
+            GENOME_LOC_TYPE* of_locs = 
+                get_overflow_genome_locations_array_start( seqs, seq_len )
+                + loc->locs_array.locs_start;
+            
+            int i;
+            for( i = 0; i < loc->locs_array.locs_size; i++ )
             {
-                /* Make sure that the data still fits */
-                assert( locs_start[i].locs_array.locs_start 
-                        < MAX_LOC_ARRAY_START );
-                locs_start[i].locs_array.locs_start++;
+                printf("%i: Chr %i\tLoc: %u\n", i, of_locs[i].chr, of_locs[i].loc);
+            }
+            
+            /* remove the array memory */
+            /* 1) shift the other memory forward */
+            size_t bytes_to_move = bytes_after( 
+                seqs, of_locs + PSEUDO_LOC_MIN_SIZE - 1 ); 
+            memmove( of_locs, of_locs + PSEUDO_LOC_MIN_SIZE - 1, bytes_to_move );
+            /* 2) realloc to shrink used memory */
+            size_t new_size = 
+                get_num_used_bytes(seqs) 
+                - (PSEUDO_LOC_MIN_SIZE-1)*sizeof(GENOME_LOC_TYPE);
+            seqs = realloc( seqs, new_size );
+            set_num_allocated_bytes( seqs, new_size );
+            set_num_used_bytes( seqs, new_size );
+            loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
+
+            /* 
+             * Because we just removed memory in the middle of this array, 
+             * we need to move the start pointers forward for every position 
+             * after this. This is a bit confusing - the array of gen locs
+             * is ordered by sequence, not by the extended array. So, we need
+             * to look at every genome location and if it is a pointer and
+             * it starts after the array we just modified, increment the start 
+             * location.
+             */
+            locs_union* locs_start = 
+                get_genome_locations_array_start( seqs, seq_len );
+            
+            int new_start = loc->locs_array.locs_start;
+            for( i = 0; i < get_num_sequence_types(seqs); i++ )
+            {
+                if( check_sequence_type_ptr( seqs, i )
+                    && locs_start[i].locs_array.locs_start > new_start  )
+                {
+                    /* Make sure that the data still fits */
+                    assert( locs_start[i].locs_array.locs_start 
+                            < MAX_LOC_ARRAY_START );
+                    locs_start[i].locs_array.locs_start 
+                        -= ( PSEUDO_LOC_MIN_SIZE - 1 );
+                }
+            }
+            
+            /* unset the array bit */
+            clear_bit( get_bitmap_start( seqs ), insert_loc );
+            
+            /* add the pseudo location */
+            loc->loc.covers_snp = 0;
+            loc->loc.snp_coverage = 0;
+            loc->loc.read_type = 0;
+            loc->loc.chr = PSEDUO_LOC_CHR_INDEX;
+            loc->loc.loc = 0; // BUG
+        } else {
+            /* we add memory for the new genome location */
+            size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
+            
+            if( new_size > get_num_allocated_bytes(seqs) )
+            {
+                /* allocate space for the extended genome locations array */
+                seqs = realloc( seqs, new_size );
+                assert( seqs != NULL );
+                /* set the new allocated space size */
+                set_num_allocated_bytes( seqs, new_size );
+                /* update the pointer to the genomic locations array, if necessary */
+                loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
+            }
+            
+            /* the start of the new overflow locations - note that we havnt updated
+               the used size yet. */
+            GENOME_LOC_TYPE* of_locs = 
+                get_overflow_genome_locations_array_start( seqs, seq_len )
+                + loc->locs_array.locs_start;
+            
+            /* move memory to make space for the new location */
+            insert_memory( seqs, of_locs, sizeof(GENOME_LOC_TYPE), false );
+            
+            /* set the new value */
+            of_locs[0] = new_loc;
+            
+            /* now that the space is being used, set the new used size of seqs */
+            set_num_used_bytes( seqs, new_size );
+            
+            assert( get_num_used_bytes(seqs) == get_num_allocated_bytes(seqs) );
+            
+            /* Make sure that we havn't grown beyond what the array can hold */
+            // assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
+            
+            /* update the number of sequence */
+            assert( loc->locs_array.locs_size < MAX_LOC_ARRAY_SIZE );
+            loc->locs_array.locs_size += 1;        
+            
+            /* 
+             * Because we just inserted memory in the middle of this array, 
+             * we need to move the start pointers forward for every position 
+             * after this. This is a bit confusing - the array of gen locs
+             * is ordered by sequence, not by the extended array. So, we need
+             * to look at every genome location and if it is a pointer and
+             * it starts after the array we just modified, increment the start 
+             * location.
+             */
+            locs_union* locs_start = 
+                get_genome_locations_array_start( seqs, seq_len );
+            
+            /* TODO - move this declaration earlier */
+            int new_start = loc->locs_array.locs_start;
+            int i;
+            for( i = 0; i < get_num_sequence_types(seqs); i++ )
+            {
+                if( check_sequence_type_ptr( seqs, i )
+                    && locs_start[i].locs_array.locs_start > new_start  )
+                {
+                    /* Make sure that the data still fits */
+                    assert( locs_start[i].locs_array.locs_start 
+                            < MAX_LOC_ARRAY_START );
+                    locs_start[i].locs_array.locs_start++;
+                }
             }
         }
-        
-    }
-    
-    return seqs;
+    }     
+   return seqs;
 }
 
 sequences_node*
@@ -809,8 +903,16 @@ add_sequence_to_sequences_node(     sequences_node* seqs,
     insert_location il = 
         find_insert_location( seqs, new_seq, num_letters );
     
-    /* insert it */
-    if( il.is_duplicate == 1 )
+    /* 
+     * if this is a pseudo location, then all we need to do is add
+     * this real location to the pseudo locations DB 
+     */
+    if( il.is_pseudo == true )
+    {
+        fprintf( stderr, "FOUND PSEUDO LOCATION \n" );
+        return seqs;
+    } 
+    else if( il.is_duplicate == true )
     {
         /* debugging */
         /* Make sure that the sequence actually is a duplicate */

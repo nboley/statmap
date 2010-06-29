@@ -845,7 +845,7 @@ update_chipseq_trace_expectation_from_location(
     assert( stop >= start );
     
     /* Make sure the reference genome is correct */            
-    assert( chr_index < traces->num_traces );
+    assert( chr_index < traces->num_chrs );
     assert( traces->trace_lengths[chr_index] >= stop );
     
     /* iteration variable */

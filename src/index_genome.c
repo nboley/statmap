@@ -449,7 +449,7 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
      * Iterate through each indexable sequence in the genome. If the 
      * sequence covers snps, then add them.
      */
-    for( chr_index = 0; chr_index < genome->num_chrs; chr_index++ )
+    for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
     {
         if( genome->chr_lens[chr_index] > LOCATION_MAX )
         {

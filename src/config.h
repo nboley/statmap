@@ -41,6 +41,8 @@
 
 /**** determine how the letters are packed       ****/
 
+#define PSEUDO_LOC_MIN_SIZE 50000
+
 typedef unsigned char LEVEL_TYPE;
 typedef unsigned char READ_POSITION;
 
@@ -177,8 +179,8 @@ enum RECHECK
     for a *- strand gene* and CAA as a gene *start*
 */
 #define CHR_BITS 15
-#define CHR_NUM_MAX (32768 - 2) // 2**15 - 1
-#define PSEDUO_LOC_CHR_INDEX 32767
+#define CHR_NUM_MAX (32768 - 1) // 2**15 - 1
+#define PSEDUO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 28
 #define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
 #define FRAGMENT_LENGTH_BITS 20
@@ -201,9 +203,8 @@ typedef struct __attribute__((__packed__))
      * Start of the sequence in the 5' direction - 
      * so a read of length L that maps here covers
      * bps (loc, loc+1, ..., loc+L-1)
-     * MAX GENOME POSITION IS 33x10^6
      */
-    unsigned loc            :LOCATION_BITS; // 32 - 4
+    unsigned loc            :LOCATION_BITS;
 
 } GENOME_LOC_TYPE;
 

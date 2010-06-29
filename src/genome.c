@@ -21,6 +21,9 @@ init_genome( struct genome_data** gen )
     (*gen)->chrs = NULL;
     (*gen)->chr_lens = NULL;
     (*gen)->snp_db = NULL;
+    
+    /* Add the pseduo chromosome */
+    add_chr_to_genome( "Pseudo", "", 0, *gen );
 }
 
 void
@@ -30,14 +33,15 @@ free_genome( struct genome_data* gen )
     
     if( gen->index != NULL )
         free_tree( gen->index );
-
+    
     for( i = 0; i < gen->num_chrs; i++ )
     {
-        free( (gen->chrs)[i] );
+        if( (gen->chr_lens)[i] > 0 )
+            free( (gen->chrs)[i] );
+
         free( (gen->chr_names)[i] );
     }
     free( gen->chr_names );
-
     
     free( gen->chrs );
     free( gen->chr_lens );
@@ -91,7 +95,10 @@ add_chr_to_genome( char* chr_name,
     gen->chrs = 
         realloc( gen->chrs, sizeof(char*)*(gen->num_chrs) );
     (gen->chrs)[gen->num_chrs - 1] = malloc( sizeof(char)*(chr_len+1) );
-    memcpy( (gen->chrs)[gen->num_chrs - 1], chr_str, sizeof(char)*chr_len );
+    
+    if( chr_len > 0 ) 
+        memcpy( (gen->chrs)[gen->num_chrs - 1], chr_str, sizeof(char)*chr_len );
+
     (gen->chrs)[gen->num_chrs - 1][chr_len] = '\0';
 }
 
@@ -101,7 +108,7 @@ add_chrs_from_fasta_file(
 {
     int error;
     
-    /* FIXME - ge rid of this via mmap */
+    /* FIXME - get rid of this via mmap */
     // int max_num_bytes = MAX_GENOME_LOC;
     unsigned int allcd_size = 300000;
 
@@ -119,13 +126,14 @@ add_chrs_from_fasta_file(
     }
     
     /* store the index of the current chr */
-    int chr_index = -1;
+    /* we set it to 0 to skip the pseudo chr */
+    int chr_index = 0;
 
     unsigned int i = 0;
     while( !feof(f) )
     {
         char bp = (char) fgetc(f);
-        if( !isalpha(bp) || (chr_index == -1 && i==0) ) 
+        if( !isalpha(bp) || (chr_index == 0 && i==0) ) 
         {
             /* 
              *  if we read a new line, then the next line could be a label. 
@@ -142,8 +150,8 @@ add_chrs_from_fasta_file(
             
             if( bp == '>' )
             {
-                /* if we are past the first chr, add the previous chr */
-                if ( chr_index >= 0 )
+                /* if we are past the first non pseudo chr, add the previous chr */
+                if ( chr_index > 0 )
                 {
                     /* 
                      * put a trailing null in to make it a proper string, 
@@ -178,7 +186,7 @@ add_chrs_from_fasta_file(
                 } else {
                     bp = (char) fgetc(f);
                 }                    
-            } else if ( i == 0 && chr_index == -1 )
+            } else if ( i == 0 && chr_index == 0 )
             {
                 /* move to the next chr index */
                 chr_index++;

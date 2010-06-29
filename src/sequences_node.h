@@ -58,7 +58,8 @@ typedef unsigned int MEMORY_SEGMENT_SIZE;
 /*** Sequence Node Specific Data Types *******************************************/
 
 typedef struct {
-    unsigned char is_duplicate;
+    enum bool is_duplicate;
+    enum bool is_pseudo;
     int location;
 } insert_location;
 
@@ -178,6 +179,9 @@ check_bit( byte* bitmap, int index );
 void 
 set_bit( byte* bitmap, int index );
 
+void
+clear_bit( byte* bitmap, int index );
+
 void 
 print_bitmap( byte* bitmap, int size );
 
@@ -251,7 +255,7 @@ MEMORY_SEGMENT_SIZE
 bytes_after( sequences_node* seqs, void* ptr );
 
 /* 
- * make emtpy space of size size at pointer. Ie, if the memory is 
+ * make empty space of size size at pointer. Ie, if the memory is 
  * 11111 ( in bytes ) then insert_empty_space( 2, 2  ) makes 1100111
  */
 void
@@ -272,7 +276,6 @@ raw_print_sequences_node( sequences_node* seqs );
 
 void print_sequences_node( sequences_node* seqs, int seq_length );
 
-/* TODO - optimize this - we are using the naive implementation  */
 inline float
 find_sequences_in_sequences_node(   const sequences_node* const seqs,
                                     float curr_penalty,
