@@ -89,8 +89,8 @@ typedef struct __attribute__((packed))__{
 
 #define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
 typedef struct {
-    unsigned int allocated_length;
-    unsigned int length;
+    int allocated_length;
+    int length;
     candidate_mapping* mappings;
 } candidate_mappings;
 

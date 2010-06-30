@@ -41,7 +41,7 @@
 
 /**** determine how the letters are packed       ****/
 
-#define PSEUDO_LOC_MIN_SIZE 3
+#define PSEUDO_LOC_MIN_SIZE 5000
 
 typedef unsigned char LEVEL_TYPE;
 typedef unsigned char READ_POSITION;

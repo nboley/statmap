@@ -709,7 +709,7 @@ map_marginal( args_t* args,
     fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
     FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
     write_mapped_reads_to_sam( 
-        args->rdb, *mpd_rds_db, genome, false, true, sam_ofp );
+        args->rdb, *mpd_rds_db, genome, false, false, sam_ofp );
     fclose( sam_ofp );    
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 

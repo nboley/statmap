@@ -154,7 +154,7 @@ print_candidate_mapping( candidate_mapping* mapping )
 void
 print_candidate_mappings( candidate_mappings* mappings )
 {
-    unsigned int i;
+    int i;
     for( i = 0; i < mappings->length; i++ )
     {
         print_candidate_mapping( mappings->mappings + i );
@@ -436,7 +436,7 @@ add_candidate_mappings_to_db (
     /* Add the tab so that we can use unix sort */
     error = fputc( '\t', fp );
     
-    unsigned int i;
+    int i;
     for( i = 0; i < mappings->length; i++ )
     {
         /* Move to the correct candidate mapping */

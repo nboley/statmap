@@ -238,7 +238,8 @@ find_candidate_mappings( void* params )
              * ( This is possible if the path search went awry, and we found 
              *   a low quality read before a high quality read )
              */
-            for( i = 0; i < mappings->length; i++ )
+            int j;
+            for( j = 0; j < mappings->length; j++ )
             {
                 /* recheck location */
                 
@@ -254,12 +255,12 @@ find_candidate_mappings( void* params )
                 /* I set the safe bit to 1e-6, which is correct for a float */
                 if(  max_penalty_spread > -0.00001 
                      &&
-                     ( (mappings->mappings + i)->penalty 
+                     ( (mappings->mappings + j)->penalty 
                        < ( max_penalty - max_penalty_spread ) ) )
                 {
-                    (mappings->mappings + i)->recheck = INVALID;
+                    (mappings->mappings + j)->recheck = INVALID;
                 } else {
-                    (mappings->mappings + i)->recheck = VALID;
+                    (mappings->mappings + j)->recheck = VALID;
                 }
             }
 

@@ -322,7 +322,7 @@ fprintf_mapped_read_to_sam(
     enum bool expand_pseudo_locations
 )
 {
-    assert( expand_pseudo_locations = false );
+    assert( expand_pseudo_locations == false );
 
     int i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
@@ -474,6 +474,8 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                            enum bool expand_pseudo_locations,
                            FILE* sam_ofp )
 {
+    assert( expand_pseudo_locations == false );
+
     int error;
 
     long readkey;
