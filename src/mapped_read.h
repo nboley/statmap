@@ -139,6 +139,9 @@ ML_PRB_TYPE_from_float( float value  )
 #define FIRST_READ_COVERS_SNP 8
 /* set if the second read covers a snp */
 #define SECOND_READ_COVERS_SNP 16
+/* set if this is a pseudo read */
+#define FIRST_READ_IS_PSEUDO 32
+#define SECOND_READ_IS_PSEUDO 64
 
 /* ACCESS THIS THROUGH THE BELOW FUNCTIONS */
 

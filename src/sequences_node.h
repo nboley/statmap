@@ -6,7 +6,6 @@
 #include <stdio.h>
 
 #include "config.h"
-// #include "dna_sequence.h"
 #include "mapped_location.h"
 
 /*** Locations Node Type ********************************************************/
@@ -173,19 +172,19 @@ struct mapped_locations;
 
 /**** BITMAP functions ********************************************************/
 
-int 
+inline int 
 check_bit( byte* bitmap, int index );
 
-void 
+inline void 
 set_bit( byte* bitmap, int index );
 
-void
+inline void
 clear_bit( byte* bitmap, int index );
 
-void 
+inline void 
 print_bitmap( byte* bitmap, int size );
 
-size_t
+inline size_t
 bitmap_size( int num_seqs );
 
 /**** attribute access methods for sequence node ******************************/
@@ -197,68 +196,68 @@ bitmap_size( int num_seqs );
  *
  */
 
-NUM_SEQ_IN_SEQ_NODE_TYPE
+inline NUM_SEQ_IN_SEQ_NODE_TYPE
 get_num_sequence_types( const sequences_node* const seqs );
 
-void
+inline void
 set_num_sequence_types( sequences_node* seqs, 
                         NUM_SEQ_IN_SEQ_NODE_TYPE value );
 
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 get_num_used_bytes( sequences_node* seqs );
 
-void
+inline void
 set_num_used_bytes( sequences_node* seqs,
                     MEMORY_SEGMENT_SIZE value  );
 
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 get_num_allocated_bytes( sequences_node* seqs );
 
-void
+inline void
 set_num_allocated_bytes( sequences_node* seqs,
                          MEMORY_SEGMENT_SIZE value  );
 
-byte* 
+inline byte* 
 get_bitmap_start( const sequences_node* const seqs );
 
-sequences_node* 
+inline sequences_node* 
 insert_bit_into_bitmap( sequences_node* seqs, int insert_position );
 
 /* return true if the genome_location at the given index is a ptr ( vs loc ) */
-int
+inline int
 check_sequence_type_ptr( const sequences_node* const seqs, 
                          int index );
 
-void
+inline void
 set_sequence_type_to_ptr( sequences_node* seqs, int index );
 
-LETTER_TYPE* 
+inline LETTER_TYPE* 
 get_sequences_array_start( const sequences_node* const seqs, 
                            LEVEL_TYPE seq_length );
 
-locs_union* 
+inline locs_union* 
 get_genome_locations_array_start( const sequences_node* const seqs, 
                                   LEVEL_TYPE seq_num_letters );
 
-GENOME_LOC_TYPE* 
+inline GENOME_LOC_TYPE* 
 get_overflow_genome_locations_array_start( 
     const sequences_node* const seqs, 
     LEVEL_TYPE seq_num_letters
 );
 
 /* return the number of bytes between the start of seqs and ptr */
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 bytes_before( sequences_node* seqs, void* ptr );
 
 /* return the number of bytes between the start of ptr and the end of seqs */
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 bytes_after( sequences_node* seqs, void* ptr );
 
 /* 
  * make empty space of size size at pointer. Ie, if the memory is 
  * 11111 ( in bytes ) then insert_empty_space( 2, 2  ) makes 1100111
  */
-void
+inline void
 insert_memory ( sequences_node* seqs, 
                 void* start,
                 MEMORY_SEGMENT_SIZE size, 
@@ -294,11 +293,15 @@ find_sequences_in_sequences_node(   const sequences_node* const seqs,
                                     const float* const lookuptable_bp
 );
 
+/* FWD declaration */
+struct pseudo_locations_t;
 sequences_node*
-add_sequence_to_sequences_node(     sequences_node* seqs, 
-                                    LETTER_TYPE* new_seq,
-                                    LEVEL_TYPE num_letters,
-                                    GENOME_LOC_TYPE location );
+add_sequence_to_sequences_node(     
+    struct pseudo_locations_t* ps_locs,
+    sequences_node* seqs, 
+    LETTER_TYPE* new_seq,
+    LEVEL_TYPE num_letters,
+    GENOME_LOC_TYPE location );
 
 /**** END SEQUENCES functions *************************************************/
 

@@ -7,6 +7,7 @@
 #include "genome.h"
 #include "rawread.h"
 #include "mapped_read.h"
+#include "pseudo_location.h"
 
 void
 fprintf_nonpaired_mapped_read_as_sam( 
@@ -317,14 +318,19 @@ fprintf_mapped_read_to_sam(
     struct mapped_read_t* mpd_rd,
     struct genome_data* genome,
     struct rawread* rr1,
-    struct rawread* rr2
+    struct rawread* rr2,
+    enum bool expand_pseudo_locations
 )
 {
+    assert( expand_pseudo_locations = false );
+
     int i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
+        /* if this is a paired end read */
         if( rr2 != NULL )
         {
+            /* make sure the flag agrees */
             assert( rr1->end == FIRST  );
 
             fprintf_paired_mapped_read_as_sam( 
@@ -343,11 +349,11 @@ fprintf_mapped_read_to_sam(
                 rr2->length
             );
         } else {
-           fprintf_nonpaired_mapped_read_as_sam( 
+            fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd->locations + i,
                 genome,
-
+                
                 rr1->name,
                 rr1->char_seq,
                 rr1->error_str
@@ -462,6 +468,10 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                            struct mapped_reads_db* mappings_db,
                            struct genome_data* genome,
                            enum bool reset_cond_read_prbs,
+                           /* whether or not to print out pseudo locations
+                              as real locations, or to print out each real loc
+                              that makes ups the pseudo location */
+                           enum bool expand_pseudo_locations,
                            FILE* sam_ofp )
 {
     int error;
@@ -497,7 +507,7 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
                 reset_read_cond_probs( mapped_rd );
 
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, genome, rd1, rd2 );
+                sam_ofp, mapped_rd, genome, rd1, rd2, expand_pseudo_locations );
         }
         
         free_mapped_read( mapped_rd );
@@ -515,7 +525,7 @@ write_mapped_reads_to_sam( struct rawread_db_t* rdb,
         get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2 );
     }
-
+    
     goto cleanup;
 
 cleanup:

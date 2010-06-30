@@ -1276,7 +1276,7 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     
     FILE* sam_ofp = fopen( "mapped_reads_relaxed.sam", "w+" );
     write_mapped_reads_to_sam( 
-        rawread_db, rdb, genome, false, sam_ofp );
+        rawread_db, rdb, genome, false, false, sam_ofp );
     fclose( sam_ofp );    
     
     stop = clock();

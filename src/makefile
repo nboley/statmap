@@ -1,9 +1,9 @@
-compile_options = -O3  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O0 -g  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
-	  fragment_length.o wiggle.o sam.o
+	  fragment_length.o wiggle.o sam.o pseudo_location.o
 
 all: statmap
 
@@ -79,15 +79,20 @@ index_genome.o : index_genome.c index_genome.h quality.h
 
 index_genome.h : config.h genome.h sequences_node.h mapped_location.h
 
-sequences_node.o : sequences_node.c sequences_node.h quality.h
+sequences_node.o : sequences_node.c sequences_node.h quality.h pseudo_location.h
 	gcc $(compile_options) -c sequences_node.c
 
 sequences_node.h : config.h mapped_location.h
 
-genome.o : genome.c genome.h index_genome.h
+genome.o : genome.c genome.h index_genome.h pseudo_location.h
 	gcc $(compile_options) -c genome.c
 
 genome.h : 
+
+pseudo_location.o : pseudo_location.c pseudo_location.h
+	gcc $(compile_options) -c pseudo_location.c
+
+pseudo_location.h : config.h
 
 #############################################################################
 #

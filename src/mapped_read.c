@@ -192,6 +192,14 @@ write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
     return 0;
 }
 
+void
+build_mapped_read_from_unpaired_candidate_mappings( 
+    candidate_mappings* mappings,
+    /* assume this has already been initialized */
+    struct mapped_read_t* mpd_rd )
+{
+    return;
+}
 
 
 void
@@ -233,6 +241,10 @@ build_mapped_read_from_candidate_mappings(
     struct mapped_read_location loc;
     
     unsigned int i = 0, j = 0, p1_start = -1, p2_start = -1;
+
+/* replace block this with a simple assert, since it should never happen */
+    assert( mappings->mappings[i].rd_type != UNKNOWN );
+#if 0
     /* Take care of all of the unknown read types ( this should never happen ) */
     while( i < mappings->length
            && mappings->mappings[i].rd_type == UNKNOWN )
@@ -240,6 +252,7 @@ build_mapped_read_from_candidate_mappings(
         assert( false );
         i++;
     }
+#endif
     
     while( i < mappings->length
            && mappings->mappings[i].rd_type == SINGLE_END )
@@ -257,28 +270,25 @@ build_mapped_read_from_candidate_mappings(
         if( BKWD == (mappings->mappings)[i].rd_strnd )
             flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
         
+        /* deal with the alternate locations that come from covering snps */
         if( (mappings->mappings)[i].does_cover_snp )
         {
             flag |= FIRST_READ_COVERS_SNP;
             loc.snps_bm_r1 = (mappings->mappings)[i].snp_bitfield;
         }
         
+        /* deal with pseudo location */
         set_chr_in_mapped_read_location( &loc, (mappings->mappings)[i].chr );
+        if( PSEUDO_LOC_CHR_INDEX == (mappings->mappings)[i].chr )
+        {
+            flag |= FIRST_READ_IS_PSEUDO;
+        }
         
         set_start_and_stop_in_mapped_read_location (
             &loc,
             (mappings->mappings)[i].start_bp,
             (mappings->mappings)[i].start_bp + (mappings->mappings)[i].rd_len
         );
-        
-        /*
-        set_start_in_mapped_read_location( &loc, (mappings->mappings)[i].start_bp );
-        set_stop_in_mapped_read_location( 
-            &loc, 
-            get_start_from_mapped_read_location( &loc ) 
-                + (mappings->mappings)[i].rd_len 
-        );
-        */
         
         set_seq_error_in_mapped_read_location( 
             &loc, pow( 10, (mappings->mappings)[i].penalty ) );
@@ -298,6 +308,11 @@ build_mapped_read_from_candidate_mappings(
         goto renormalize_probabilities;
     }
 
+/* 
+ *  I'm pretty sure non of this code is ever used, so I eliminate it with
+ *  an ifdef. However, I may have missed situations, so I leave it 
+ */
+#if 0 
     /* Skip pass the paired ends of indeterminate end */
     /* For now, I can not think of a reason for this to happen, so I forbid it */
     while( i < mappings->length
@@ -317,6 +332,8 @@ build_mapped_read_from_candidate_mappings(
     while( i < mappings->length
            && mappings->mappings[i].rd_type == PAIRED_END_1 )
     {
+        /* we should always be there, so I forbid this */
+        assert( false );
         i++;
     }
     
@@ -325,6 +342,7 @@ build_mapped_read_from_candidate_mappings(
     if( i == mappings->length ) {
         goto renormalize_probabilities;
     }
+#endif 
 
     /* Make sure that we are at the beggining of the first paired ends */
     assert( mappings->mappings[i].rd_type == PAIRED_END_2 );
@@ -341,8 +359,7 @@ build_mapped_read_from_candidate_mappings(
         
         /* while the read matches are still possible */
         while( j < mappings->length 
-               && mappings->mappings[i].chr 
-                  == mappings->mappings[j].chr 
+               && mappings->mappings[i].chr == mappings->mappings[j].chr 
             )
         {
             /* Ensure all of the flags are turned off */
@@ -368,6 +385,12 @@ build_mapped_read_from_candidate_mappings(
             if( FWD == first_read->rd_strnd )
                 flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
 
+            if( PSEUDO_LOC_CHR_INDEX == first_read->chr )
+                flag |= FIRST_READ_IS_PSEUDO;
+            
+            if( PSEUDO_LOC_CHR_INDEX == second_read->chr )
+                flag |= SECOND_READ_IS_PSEUDO;
+            
             if( first_read->does_cover_snp )
             {
                 flag |= FIRST_READ_COVERS_SNP;
@@ -401,15 +424,16 @@ build_mapped_read_from_candidate_mappings(
             
             set_seq_error_in_mapped_read_location( 
                 &loc, pow( 10, first_read->penalty + second_read->penalty ) );
-            
-            prob_sum += get_seq_error_from_mapped_read_location( &loc );
             set_cond_prob_in_mapped_read_location( &loc, -1.0);
 
             set_flag_in_mapped_read_location( &loc, flag );
 
             /* ignore reads with zero probability ( possible with FL dist ) */
-            if( get_seq_error_from_mapped_read_location( &loc ) > 2*FLT_MIN )
+            if( get_seq_error_from_mapped_read_location( &loc ) > 2*ML_PRB_MIN )
+            {
                 add_location_to_mapped_read( *mpd_rd, &loc );
+                prob_sum += get_seq_error_from_mapped_read_location( &loc );
+            }
             
             j++;
         };

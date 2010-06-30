@@ -10,6 +10,7 @@
 #include <float.h>
 
 #include "sequences_node.h"
+#include "pseudo_location.h"
 #include "quality.h"
 
 /**** Locations Node **********************************************************/
@@ -83,27 +84,27 @@ get_locations_from_locations_node( const locations_node* const node,
 
 /**** BITMAP functions ********************************************************/
 
-int 
+inline int 
 check_bit( byte* bitmap, int index )
 {
     return ((bitmap[index/CHAR_BIT])&( 1 << (CHAR_BIT-1-(index%CHAR_BIT))));
 }
 
-void
+inline void
 set_bit( byte* bitmap, int index )
 {
     assert( !((bitmap[index/CHAR_BIT]) & ( 1 << (CHAR_BIT-1-index%CHAR_BIT) )) );
     bitmap[index/CHAR_BIT] |= ( 1 << (CHAR_BIT-1-index%CHAR_BIT));
 }
 
-void
+inline void
 clear_bit( byte* bitmap, int index )
 {
     assert( ((bitmap[index/CHAR_BIT]) & ( 1 << (CHAR_BIT-1-index%CHAR_BIT) )) );
     bitmap[index/CHAR_BIT] &= (~( 1 << (CHAR_BIT-1-index%CHAR_BIT)));
 }
 
-void 
+inline void 
 print_bitmap( byte* bitmap, int size )
 {
     int i;
@@ -119,7 +120,7 @@ print_bitmap( byte* bitmap, int size )
 }
 
 /* determine the size of the bitmap in bytes */
-size_t
+inline size_t
 bitmap_size( int num_seqs )
 {
     if( num_seqs % CHAR_BIT == 0 )
@@ -130,13 +131,13 @@ bitmap_size( int num_seqs )
 
 /**** END bitmap functions ************************************************/
 
-NUM_SEQ_IN_SEQ_NODE_TYPE
+inline NUM_SEQ_IN_SEQ_NODE_TYPE
 get_num_sequence_types( const sequences_node* const seqs )
 {
     return *((NUM_SEQ_IN_SEQ_NODE_TYPE*) seqs);
 }
 
-void
+inline void
 set_num_sequence_types( sequences_node* seqs, 
                         NUM_SEQ_IN_SEQ_NODE_TYPE value )
 {
@@ -145,7 +146,7 @@ set_num_sequence_types( sequences_node* seqs,
     return;
 }
 
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 get_num_used_bytes( sequences_node* seqs )
 {
     return *( (MEMORY_SEGMENT_SIZE*) ( seqs 
@@ -153,7 +154,7 @@ get_num_used_bytes( sequences_node* seqs )
     ));
 }
 
-void
+inline void
 set_num_used_bytes( sequences_node* seqs,
                     MEMORY_SEGMENT_SIZE value  )
 {
@@ -165,7 +166,7 @@ set_num_used_bytes( sequences_node* seqs,
     return;
 }
 
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 get_num_allocated_bytes( sequences_node* seqs )
 {
     return *( (MEMORY_SEGMENT_SIZE*) ( seqs 
@@ -174,7 +175,7 @@ get_num_allocated_bytes( sequences_node* seqs )
     ));
 }
 
-void
+inline void
 set_num_allocated_bytes( sequences_node* seqs,
                          MEMORY_SEGMENT_SIZE value  )
 {
@@ -187,7 +188,7 @@ set_num_allocated_bytes( sequences_node* seqs,
     return;
 }
 
-byte* 
+inline byte* 
 get_bitmap_start( const sequences_node* const seqs )
 {
     return (byte*) ( seqs 
@@ -196,9 +197,8 @@ get_bitmap_start( const sequences_node* const seqs )
     );
 }
 
-sequences_node* 
+inline sequences_node* 
 insert_bit_into_bitmap( sequences_node* seqs, int insert_position )
-// OLD PARAMS ( byte* bitmap, int old_size, int insert_position )
 {
    /* 
     * shift the bits down in the bytes below the bit of interest. 
@@ -315,7 +315,7 @@ insert_bit_into_bitmap( sequences_node* seqs, int insert_position )
     return seqs;
 }
 
-int
+inline int
 check_sequence_type_ptr( const sequences_node* const seqs, 
                          const int index )
 {
@@ -333,7 +333,7 @@ check_sequence_type_ptr( const sequences_node* const seqs,
     return check_bit( bitmap, index );
 }
 
-void
+inline void
 set_sequence_type_to_ptr( sequences_node* seqs, int index )
 {
    /* 
@@ -353,7 +353,7 @@ set_sequence_type_to_ptr( sequences_node* seqs, int index )
 }
 
 
-LETTER_TYPE* 
+inline LETTER_TYPE* 
 get_sequences_array_start( const sequences_node* 
                            const seqs, 
                            const LEVEL_TYPE seq_num_letters )
@@ -387,7 +387,7 @@ get_sequences_array_start( const sequences_node*
     return loc;
 }
 
-locs_union* 
+inline locs_union* 
 get_genome_locations_array_start( const sequences_node* const seqs, 
                                   const LEVEL_TYPE seq_num_letters )
 {
@@ -403,7 +403,7 @@ get_genome_locations_array_start( const sequences_node* const seqs,
     );
 }
 
-GENOME_LOC_TYPE* 
+inline GENOME_LOC_TYPE* 
 get_overflow_genome_locations_array_start( 
     const sequences_node* const seqs, LEVEL_TYPE seq_num_letters
 )
@@ -417,14 +417,14 @@ get_overflow_genome_locations_array_start(
 }
 
 /* return the number of bytes between the start of seqs and ptr */
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 bytes_before( sequences_node* seqs, void* ptr )
 {
     return (MEMORY_SEGMENT_SIZE) ( ptr - (void*)seqs );
 }
 
 /* return the number of bytes between the start of ptr and the end of seqs */
-MEMORY_SEGMENT_SIZE
+inline MEMORY_SEGMENT_SIZE
 bytes_after( sequences_node* seqs, void* ptr )
 {
     return (MEMORY_SEGMENT_SIZE) ( 
@@ -437,7 +437,7 @@ bytes_after( sequences_node* seqs, void* ptr )
  * make emtpy space of size size at pointer. Ie, if the memory is 
  * 11111 ( in bytes ) then insert_empty_space( 2, 2  ) makes 1100111
  */
-void
+inline void
 insert_memory ( sequences_node* seqs, 
                 void* start,
                 MEMORY_SEGMENT_SIZE size, 
@@ -501,7 +501,7 @@ free_seqs( sequences_node* seqs )
  * inserting into the middle position would correspond to an insert
  * location of 1 ( not 2 ).
  */
-insert_location
+inline insert_location
 find_insert_location( sequences_node* seqs, 
                       LETTER_TYPE* new_seq, 
                       LEVEL_TYPE seq_len )
@@ -543,17 +543,12 @@ find_insert_location( sequences_node* seqs,
         && 0 == cmp_words( seqs_array+low*seq_len, new_seq, seq_len ) )
     { 
         rv.is_duplicate = true;
+        
         if( !check_sequence_type_ptr( seqs, low )
             && ( get_genome_locations_array_start( seqs, seq_len )
-                 + rv.location )->loc.chr == PSEDUO_LOC_CHR_INDEX )
+                 + rv.location )->loc.chr == PSEUDO_LOC_CHR_INDEX )
         { 
             rv.is_pseudo = true; 
-            printf( "CHR: %i\tLOC: %i\n", 
-                    ( get_genome_locations_array_start( seqs, seq_len )
-                      + rv.location )->loc.chr,
-                    ( get_genome_locations_array_start( seqs, seq_len )
-                      + rv.location )->loc.loc );
-
         }
         else { rv.is_pseudo = false; };
     } else {
@@ -569,7 +564,7 @@ find_insert_location( sequences_node* seqs,
  * that we dont need to deal with the extended GENOME_LOC array - FIXME, we may
  * still need to add if the sequence cant fit into 31 bits.
  */
-sequences_node*
+static inline sequences_node*
 add_new_sequence_to_sequences_node( sequences_node* seqs, 
                                     /* where in the seqs array this belongs */
                                     int insert_loc,
@@ -650,8 +645,10 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
  * list, or we need to just update the pointer, add an entry to the extended list
  * and update the previous entries.
  */
-sequences_node*
-add_duplicate_sequence_to_sequences_node( 
+static inline sequences_node*
+add_duplicate_sequence_to_sequences_node(
+    /* this is necessary when we need to add pseudo locations */
+    struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     /* where in the seqs array this belongs, in seq_len units */
     int insert_loc,
@@ -757,12 +754,10 @@ add_duplicate_sequence_to_sequences_node(
          */
         if( PSEUDO_LOC_MIN_SIZE - 1 == loc->locs_array.locs_size )
         {
-            fprintf( stderr, 
-                     "PSEDUO LOCATION FOUND - NOT ADDING Chr %u Loc %u\n",  
-                     new_loc.chr, new_loc.loc 
-            );
-            
             /*** add a pseudo location to the pseudo location DB */
+            unsigned int psloc_index = 
+                add_new_pseudo_location( ps_locs  );
+
             /* find the start */
             GENOME_LOC_TYPE* of_locs = 
                 get_overflow_genome_locations_array_start( seqs, seq_len )
@@ -771,8 +766,14 @@ add_duplicate_sequence_to_sequences_node(
             int i;
             for( i = 0; i < loc->locs_array.locs_size; i++ )
             {
-                printf("%i: Chr %i\tLoc: %u\n", i, of_locs[i].chr, of_locs[i].loc);
+                add_loc_to_pseudo_location( 
+                    ps_locs->locs + psloc_index, of_locs + i );
+                // printf("%i: Chr %i\tLoc: %u\n", i, of_locs[i].chr, of_locs[i].loc);
             }
+
+            /* add the new location */
+            add_loc_to_pseudo_location( 
+                ps_locs->locs + psloc_index, &new_loc );
             
             /* remove the array memory */
             /* 1) shift the other memory forward */
@@ -787,7 +788,7 @@ add_duplicate_sequence_to_sequences_node(
             set_num_allocated_bytes( seqs, new_size );
             set_num_used_bytes( seqs, new_size );
             loc = get_genome_locations_array_start( seqs, seq_len ) + insert_loc;
-
+            
             /* 
              * Because we just removed memory in the middle of this array, 
              * we need to move the start pointers forward for every position 
@@ -821,8 +822,9 @@ add_duplicate_sequence_to_sequences_node(
             loc->loc.covers_snp = 0;
             loc->loc.snp_coverage = 0;
             loc->loc.read_type = 0;
-            loc->loc.chr = PSEDUO_LOC_CHR_INDEX;
-            loc->loc.loc = 0; // BUG
+            loc->loc.chr = PSEUDO_LOC_CHR_INDEX;
+            assert( psloc_index <= LOCATION_MAX );
+            loc->loc.loc = psloc_index;
         } else {
             /* we add memory for the new genome location */
             size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
@@ -894,10 +896,13 @@ add_duplicate_sequence_to_sequences_node(
 }
 
 sequences_node*
-add_sequence_to_sequences_node(     sequences_node* seqs, 
-                                    LETTER_TYPE* new_seq,
-                                    LEVEL_TYPE num_letters,
-                                    GENOME_LOC_TYPE loc )
+add_sequence_to_sequences_node(     
+    /* this is necessary when we need to add pseudo locations */
+    struct pseudo_locations_t* ps_locs,
+    sequences_node* seqs, 
+    LETTER_TYPE* new_seq,
+    LEVEL_TYPE num_letters,
+    GENOME_LOC_TYPE loc )
 {
     /* find the location in the seqs node that the new sequence should go */
     insert_location il = 
@@ -909,7 +914,7 @@ add_sequence_to_sequences_node(     sequences_node* seqs,
      */
     if( il.is_pseudo == true )
     {
-        fprintf( stderr, "FOUND PSEUDO LOCATION \n" );
+        add_loc_to_pseudo_location( ps_locs->locs+il.location, &loc );
         return seqs;
     } 
     else if( il.is_duplicate == true )
@@ -927,7 +932,7 @@ add_sequence_to_sequences_node(     sequences_node* seqs,
         );
         
         return add_duplicate_sequence_to_sequences_node( 
-            seqs, il.location, num_letters, loc 
+            ps_locs, seqs, il.location, num_letters, loc 
         );
     } else {
         return add_new_sequence_to_sequences_node( 
@@ -1172,7 +1177,12 @@ print_sequences_node( sequences_node* seqs, int seq_length )
                     printf("\t\t%i\n", e_locs[j].loc);
                 }
             } else {
-                printf("\t Is Loc\tLoc: %i\n", locs[i].loc.loc);
+                if( locs[i].loc.chr == PSEUDO_LOC_CHR_INDEX ) 
+                {
+                    printf("\t Is PSEUDO Loc\tLoc: %i\n", locs[i].loc.loc);
+                } else {
+                    printf("\t Is Loc\tChr: %i\tLoc: %i\n", locs[i].loc.chr, locs[i].loc.loc);
+                }
             }
 
             /* move tot he next sequence in the array */

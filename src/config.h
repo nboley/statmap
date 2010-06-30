@@ -41,7 +41,7 @@
 
 /**** determine how the letters are packed       ****/
 
-#define PSEUDO_LOC_MIN_SIZE 50000
+#define PSEUDO_LOC_MIN_SIZE 3
 
 typedef unsigned char LEVEL_TYPE;
 typedef unsigned char READ_POSITION;
@@ -180,7 +180,7 @@ enum RECHECK
 */
 #define CHR_BITS 15
 #define CHR_NUM_MAX (32768 - 1) // 2**15 - 1
-#define PSEDUO_LOC_CHR_INDEX 0
+#define PSEUDO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 28
 #define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
 #define FRAGMENT_LENGTH_BITS 20

@@ -218,8 +218,9 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 */
 
 inline void 
-add_sequence( index_t* index, LETTER_TYPE* seq, 
-              const int seq_length, GENOME_LOC_TYPE genome_loc );
+add_sequence( index_t* index, struct pseudo_locations_t* ps_locs, 
+              LETTER_TYPE* seq, const int seq_length, 
+              GENOME_LOC_TYPE genome_loc );
 
 extern void
 add_junction_positions_from_chr_string( 

@@ -13,7 +13,8 @@ fprintf_mapped_read_to_sam(
     struct mapped_read_t* pkd_rd,
     struct genome_data* genome,
     struct rawread* rr1,
-    struct rawread* rr2
+    struct rawread* rr2,
+    enum bool expand_pseudo_locations
 );
 
 void
@@ -28,5 +29,9 @@ write_mapped_reads_to_sam(
     struct mapped_reads_db* mappings_db,
     struct genome_data* genome,
     enum bool reset_cond_read_prbs,
+    /* whether or not to print out pseudo locations
+       as real locations, or to print out each real loc
+       that makes ups the pseudo location */
+    enum bool expand_pseudo_locations,
     FILE* sam_ofp );
 

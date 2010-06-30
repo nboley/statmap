@@ -514,7 +514,7 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                 loc.snp_coverage = 0;
                 
                 /* Add the sequence into the tree */
-                add_sequence(genome->index, translation, seq_len, loc);
+                add_sequence(genome->index, genome->ps_locs, translation, seq_len, loc);
                 
                 free( translation );                                
             } else {
@@ -576,7 +576,8 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                     loc.snp_coverage = bm;
                     
                     /* Add the sequence into the tree */
-                    add_sequence(genome->index, translation, seq_len, loc);
+                    add_sequence(genome->index, genome->ps_locs, 
+                                 translation, seq_len, loc);
                     
                     free( translation );                
                 }
@@ -841,7 +842,12 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
              */        
             if( !check_sequence_type_ptr(qnode, i) )
             {
-                *child_seqs = add_sequence_to_sequences_node(   
+                *child_seqs = add_sequence_to_sequences_node(
+                    /* we pass NULL for the pseudo_locs, because we know that
+                       it is only used to add pseudo locations and, since we 
+                       are building a dynamic node from a sequences node, 
+                       anything that is already a pseudo loc wont change */
+                    NULL,
                     *child_seqs, 
                     sequences + i*num_letters + 1, 
                     num_letters-1, 
@@ -861,6 +867,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                     GENOME_LOC_TYPE loc = gen_locs[j];
 
                     *child_seqs = add_sequence_to_sequences_node(   
+                        NULL,
                         *child_seqs, 
                         sequences + i*num_letters + 1, 
                         num_letters-1, 
@@ -909,8 +916,9 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 
 
 inline void 
-add_sequence( index_t* index, LETTER_TYPE* seq, 
-              const int seq_length, GENOME_LOC_TYPE genome_loc ) 
+add_sequence( index_t* index, struct pseudo_locations_t* ps_locs,
+              LETTER_TYPE* seq, const int seq_length, 
+              GENOME_LOC_TYPE genome_loc ) 
 {
     assert( index->index_type == TREE );
     static_node* root = index->index;
@@ -1036,6 +1044,7 @@ add_sequence( index_t* index, LETTER_TYPE* seq,
     assert( *node_type_ref == 'q' );
     /* add the sequence to current node */
     *node_ref = add_sequence_to_sequences_node(   
+        ps_locs,
         (sequences_node*) *node_ref, 
         seq + level,
         num_levels - level,

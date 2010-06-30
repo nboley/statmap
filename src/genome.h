@@ -27,8 +27,12 @@ struct snp_db_t;
 struct genome_data {
     /* The index for this genome */
     index_t* index;
+    
     /* snps, NULL if there are none */
     struct snp_db_t* snp_db;
+    
+    /* the pseudo locations info */
+    struct pseudo_locations_t* ps_locs;
     
     /* The number of chromosomes */
     int num_chrs;

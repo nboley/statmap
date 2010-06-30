@@ -10,19 +10,29 @@
 #include "index_genome.h"
 #include "genome.h"
 #include "snp.h"
+#include "pseudo_location.h"
 
 void
 init_genome( struct genome_data** gen )
 {
     *gen = malloc( sizeof( struct genome_data ) );
-    (*gen)->index = NULL;
+
+    /* init the raw genome info */
     (*gen)->num_chrs = 0;
     (*gen)->chr_names = NULL;
     (*gen)->chrs = NULL;
     (*gen)->chr_lens = NULL;
-    (*gen)->snp_db = NULL;
+
+    /* the genome index */
+    (*gen)->index = NULL;
     
-    /* Add the pseduo chromosome */
+    /* snps - we dont init because they may not exist */
+    (*gen)->snp_db = NULL;
+
+    /** Init the pseudo locations **/
+    (*gen)->ps_locs = NULL;    
+    init_pseudo_locations( &((*gen)->ps_locs)  );
+    /* Add the pseudo chromosome */
     add_chr_to_genome( "Pseudo", "", 0, *gen );
 }
 

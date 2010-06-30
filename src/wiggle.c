@@ -365,6 +365,10 @@ write_wiggle_from_trace( struct trace_t* traces,
 
         for( j = 0; j < traces->num_chrs; j++ )
         {
+            /* skip the pseudo chr */
+            if( j == PSEUDO_LOC_CHR_INDEX )
+                continue;
+            
             /* Print out the new chr start line */
             if( scaffold_names == NULL ) {
                 fprintf( wfp, "variableStep chrom=%i\n", j );
@@ -414,6 +418,10 @@ write_marginal_mapped_reads_to_stranded_wiggles(
         /* Update the trace from this mapping */
         unsigned int j;
         for( j = 0; j < rd->num_mappings; j++ ) {
+            /* skip the pseudo chromosome */
+            if( rd->locations[j].chr == PSEUDO_LOC_CHR_INDEX )
+                continue;
+            
             naive_update_trace_expectation_from_location( 
                 traces, rd->locations + j );
         }
@@ -429,6 +437,10 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     fprintf( fwd_wfp, "track type=wiggle_0 name=%s\n", "fwd_strnd" );
     for( i = 0; i < traces->num_chrs; i++ )
     {
+        /* skip the pseudo chromosome */
+        if( i == PSEUDO_LOC_CHR_INDEX )
+            continue;
+
         fprintf( fwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
         for( j = 0; j < traces->trace_lengths[i]; j++ )
             if( traces->traces[0][i][j] >= filter_threshold )
@@ -440,6 +452,10 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     fprintf( bkwd_wfp, "track type=wiggle_0 name=%s\n", "bkwd_strnd" );
     for( i = 0; i < traces->num_chrs; i++ )
     {
+        /* skip the pseudo chromosome */
+        if( i == PSEUDO_LOC_CHR_INDEX )
+            continue;
+
         fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
         for( j = 0; j < traces->trace_lengths[i]; j++ )
             if( traces->traces[1][i][j] >= filter_threshold )
