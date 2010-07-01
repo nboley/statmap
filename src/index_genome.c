@@ -10,6 +10,7 @@
 #include "quality.h"
 #include "index_genome.h"
 #include "snp.h"
+#include "pseudo_location.h"
 
 /******************************************************************************/
 /* Memory function for  building the index      */
@@ -585,6 +586,10 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
         }
     }
     free( tmp_seq );
+
+    /* sort all of the pseudo locations */
+    sort_pseudo_locations( genome->ps_locs );
+
 
     return;
 }
@@ -1176,14 +1181,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
     while( pmatch_stack_length( stack ) > 0 )
     {
-        /* 
-         * If we get a *very* degenerate read, then tons 
-         * of time can be wasted mapping reads that are otherwise
-         * unmappable. If this is the case, then stop searching and 
-         * move onto the next read.
-         *
-         */
-        
         potential_match match = pop_pmatch( stack );
         
         void* node = match.node;
@@ -1215,8 +1212,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          * a match.
          */
            
-
-
+        
+        
         /* check to make sure that this branch is still valid */
         /* avoid rounding errors with the small number - it is your fault
            if you put in a negative number for the max penalty spread */

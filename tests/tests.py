@@ -572,7 +572,7 @@ def test_paired_end_sequence_finding( ):
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
+def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
     output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads )
     
     rl = read_len
@@ -585,7 +585,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads ):
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
+    fragments = sample_uniformily_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
@@ -652,7 +652,7 @@ def test_lots_of_repeat_sequence_finding( ):
     rls = [ 16, ]
     for rl in rls:
         # setting n_threads to -1 makes it deafult to the number of avialable cores
-        test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1 ) 
+        test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100 ) 
         print "PASS: lots of repeat seqs ( %i ) %i BP Test. ( This tests a genome with lots and lots of repeats ( pbly mostly corner cases )  )" % ( 4000, rl )
 
 
@@ -935,19 +935,20 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
-    print "Starting test_fivep_sequence_finding()"
-    test_fivep_sequence_finding()
-    print "Starting test_threep_sequence_finding()"
-    test_threep_sequence_finding()
-    print "Starting test_paired_end_sequence_finding()"
-    test_paired_end_sequence_finding( )
-    print "Starting test_repeat_sequence_finding()"
-    test_repeat_sequence_finding()
-    print "Starting test_mutated_read_finding()"
-    test_mutated_read_finding()
-    print "Starting test_multithreaded_mapping()"
-    test_multithreaded_mapping( )
-    print "Starting test_snp_finding()"
+    if True:
+        print "Starting test_fivep_sequence_finding()"
+        test_fivep_sequence_finding()
+        print "Starting test_threep_sequence_finding()"
+        test_threep_sequence_finding()
+        print "Starting test_paired_end_sequence_finding()"
+        test_paired_end_sequence_finding( )
+        print "Starting test_repeat_sequence_finding()"
+        test_repeat_sequence_finding()
+        print "Starting test_mutated_read_finding()"
+        test_mutated_read_finding()
+        print "Starting test_multithreaded_mapping()"
+        test_multithreaded_mapping( )
+        print "Starting test_snp_finding()"
     # test_snp_finding()
     
     # We skip this test because statmap can't currently

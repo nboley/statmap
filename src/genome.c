@@ -46,9 +46,7 @@ free_genome( struct genome_data* gen )
     
     for( i = 0; i < gen->num_chrs; i++ )
     {
-        if( (gen->chr_lens)[i] > 0 )
-            free( (gen->chrs)[i] );
-
+        free( (gen->chrs)[i] );
         free( (gen->chr_names)[i] );
     }
     free( gen->chr_names );
@@ -58,7 +56,10 @@ free_genome( struct genome_data* gen )
 
     if( gen->snp_db != NULL )
         free_snp_db( gen->snp_db );
-
+    
+    if( gen->ps_locs )
+        free_pseudo_locations( gen->ps_locs );
+    
     free( gen );
 }
 

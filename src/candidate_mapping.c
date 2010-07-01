@@ -650,7 +650,8 @@ get_next_candidate_mapping_from_cursor(
 
 void
 join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
-                             struct mapped_reads_db* mpd_rds_db )
+                             struct mapped_reads_db* mpd_rds_db,
+                             struct genome_data* genome )
 {
     int error;
 
@@ -680,7 +681,7 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
             fprintf( stderr, "NOTICE       : Written %li reads to sam\n", read_key );
         
         build_mapped_read_from_candidate_mappings( 
-            mappings, &mpd_rd, read_key );
+            genome, mappings, &mpd_rd, read_key );
         
         add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
 

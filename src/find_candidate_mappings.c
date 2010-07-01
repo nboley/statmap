@@ -266,6 +266,7 @@ find_candidate_mappings( void* params )
 
             /****** add the results to the database ******/
             /* BUG - assert the readnames are identical */
+            /* BUG - why is this mutex necessary? */
             pthread_mutex_lock( mappings_db_mutex );
             assert( thread_id < num_threads );
             /* note that we add to the DB even if there are 0 that map,

@@ -914,7 +914,10 @@ add_sequence_to_sequences_node(
      */
     if( il.is_pseudo == true )
     {
-        add_loc_to_pseudo_location( ps_locs->locs+il.location, &loc );
+        int ps_loc_index = 
+            get_genome_locations_array_start( seqs, num_letters )
+            [il.location].loc.loc;
+        add_loc_to_pseudo_location( ps_locs->locs+ps_loc_index, &loc );
         return seqs;
     } 
     else if( il.is_duplicate == true )

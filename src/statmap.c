@@ -654,7 +654,7 @@ map_marginal( args_t* args,
 
     if( args->frag_len_fp != NULL )
         build_fl_dist_from_file( *mpd_rds_db, args->frag_len_fp );
-
+    
     /***** END initialize the mappings dbs */
     
     start = clock();
@@ -680,13 +680,13 @@ map_marginal( args_t* args,
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
     start = clock();
-    join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db );
+    join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db, genome );
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
     /*  close candidate mappings db */
     close_candidate_mappings_db( &candidate_mappings );
-
+    
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
     FILE* fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w+" );
@@ -695,7 +695,7 @@ map_marginal( args_t* args,
         *mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
     fclose( fwd_wig_fp );
     fclose( bkwd_wig_fp );
-
+    
     /* write the mapped reads to SAM */
     start = clock();
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
@@ -703,7 +703,7 @@ map_marginal( args_t* args,
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
-
+    
     /* write the mapped reads to SAM */
     start = clock();
     fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
@@ -819,6 +819,10 @@ main( int argc, char** argv )
 cleanup:
     /* Free the genome and indexes */
     free_genome( genome );
+
+    close_mapped_reads_db( mpd_rds_db );
+
+    close_rawread_db( args.rdb );
     
     /* Close the log file */
     if( args.log_fp != NULL )

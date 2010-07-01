@@ -8,6 +8,8 @@
 /* FWD declaration for rawread */
 // #include "rawread.h"
 struct rawread;
+// #include "genome.h"
+struct genome_data;
 
 /* block size for newly allocated results memory */
 #define CAND_MAPPING_RESULTS_GROWTH_FACTOR 100
@@ -240,7 +242,8 @@ struct mapped_read;
 void
 join_all_candidate_mappings( 
     candidate_mappings_db* cand_mappings_db,
-    struct mapped_reads_db* mpd_rds_db );
+    struct mapped_reads_db* mpd_rds_db,
+    struct genome_data* genome );
 
 
 #endif // #ifdef CANDIDATE_MAPPING
