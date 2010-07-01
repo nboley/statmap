@@ -81,7 +81,7 @@ ML_PRB_TYPE_to_float(
     assert( rv >= 0 );
     return rv;
 #else
-    return value - 1000;
+    return value;
 #endif
 }
 
@@ -116,7 +116,7 @@ ML_PRB_TYPE_from_float( float value  )
 
     return rv;
 #else
-    return value + 1000;
+    return value;
 #endif
 }
 
