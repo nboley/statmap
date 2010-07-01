@@ -72,7 +72,7 @@ int main( int argc, char** argv )
         );
     }
     
-    write_mapped_reads_to_sam( raw_rdb, mpd_rdb, genome, true, stdout );
+    write_mapped_reads_to_sam( raw_rdb, mpd_rdb, genome, true, false, stdout );
 
 cleanup:
     free_genome( genome );

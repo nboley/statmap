@@ -1,9 +1,5 @@
 #include "config.h"
 
-/* realloc with error checking */
-inline void* 
-realloc_CE( void* ptr, size_t size );
-
 /*
  * A single pseudo location. This stores all of the real 
  * locations associated with a pseudo location.
@@ -13,13 +9,6 @@ struct pseudo_location_t {
     int num;
     GENOME_LOC_TYPE* locs;
 };
-
-/* We assume that space has already been allocated for the struct */
-inline void
-init_pseudo_location( struct pseudo_location_t* loc );
-
-inline void 
-free_pseudo_location( struct pseudo_location_t* loc );
 
 inline void
 add_loc_to_pseudo_location( 

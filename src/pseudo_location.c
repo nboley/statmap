@@ -3,6 +3,7 @@
 #include <assert.h>
 
 #include "config.h"
+#include "pseudo_location.h"
 
 static inline void* 
 realloc_CE( void* ptr, size_t size )
@@ -51,11 +52,14 @@ cmp_genome_location( void* loc1, void* loc2 )
     return 0;
 }
 
-
-struct pseudo_location_t {
-    unsigned int num;
-    GENOME_LOC_TYPE* locs;
-};
+/*
+ * Pseudo location
+ *
+ * Each pseudo location corresponds to multiple real locations
+ * with the same sequence. For very heavily repeated sequence, 
+ * we use this to cut down on the storage and processing costs.
+ *
+ */
 
 /* We assume that space has already been allocated for the struct */
 static inline void
@@ -95,10 +99,33 @@ add_loc_to_pseudo_location(
     ps_loc->locs[ps_loc->num-1] = *loc;
 };
 
-struct pseudo_locations_t {
-    int num;
-    struct pseudo_location_t* locs;
-};
+static inline void
+fprint_pseudo_locations( FILE* of, struct pseudo_locations_t* ps_locs )
+{
+    int i;
+    for( i = 0; i < ps_locs->num; i++ )
+    {
+        assert( ps_locs->locs[i].num > 0 );
+        fprintf( of, "%i\t%i", i, ps_locs->locs[i].num );
+        int j;
+        for( j = 0; j < ps_locs->locs[i].num; j++ )
+        {
+            fprintf( of, 
+                "\t%i,%i", 
+                ps_locs->locs[i].locs[j].chr,
+                ps_locs->locs[i].locs[j].loc 
+            );
+        }
+        fprintf( of, "\n" );
+    }
+}
+
+/*
+ * Pseudo Locations 
+ *
+ * container for pseudo location's
+ * 
+ */
 
 void
 init_pseudo_locations( 

@@ -199,7 +199,10 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     candidate_mapping* cm,
     struct mapped_read_location* loc    
 )
-{    
+{
+    loc->snps_bm_r1 = 0;
+    loc->snps_bm_r2 = 0;
+    
     /* Ensure all of the flags are turned off */
     MRL_FLAG_TYPE flag = 0;
 
@@ -242,6 +245,9 @@ join_two_candidate_mappings(
     struct mapped_read_location* loc    
 )
 {
+    loc->snps_bm_r1 = 0;
+    loc->snps_bm_r2 = 0;
+
     /* Ensure all of the flags are turned off */
     MRL_FLAG_TYPE flag = IS_PAIRED;
     
