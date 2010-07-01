@@ -677,8 +677,8 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
     
     while( CURSOR_EMPTY != error ) 
     {
-        if( read_key > 0 && read_key%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %li reads to sam\n", read_key );
+        if( read_key > 0 && read_key%4000000 == 0 )
+            fprintf( stderr, "NOTICE       : Joined %li reads\n", read_key );
         
         build_mapped_read_from_candidate_mappings( 
             genome, mappings, &mpd_rd, read_key );
