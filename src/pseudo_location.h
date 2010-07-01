@@ -34,6 +34,9 @@ free_pseudo_locations( struct pseudo_locations_t* locs );
 void
 sort_pseudo_locations( struct pseudo_locations_t* locs );
 
+void
+fprint_pseudo_locations( FILE* of, struct pseudo_locations_t* ps_locs );
+
 /* return the index of the new entry */
 unsigned int 
 add_new_pseudo_location( struct pseudo_locations_t* locs );

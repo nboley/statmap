@@ -99,7 +99,7 @@ add_loc_to_pseudo_location(
     ps_loc->locs[ps_loc->num-1] = *loc;
 };
 
-static inline void
+void
 fprint_pseudo_locations( FILE* of, struct pseudo_locations_t* ps_locs )
 {
     int i;

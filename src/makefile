@@ -135,3 +135,4 @@ dna_sequence.h : config.h
 .PHONY : clean
 clean :
 	-rm $(objects)
+	-rm statmap

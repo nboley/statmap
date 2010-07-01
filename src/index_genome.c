@@ -449,6 +449,8 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     /* 
      * Iterate through each indexable sequence in the genome. If the 
      * sequence covers snps, then add them.
+     *
+     * We skip chr 0 - the pseudo chromosome.
      */
     for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
     {
@@ -590,7 +592,17 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     /* sort all of the pseudo locations */
     sort_pseudo_locations( genome->ps_locs );
 
-
+    FILE* ps_locs_of = fopen(PSEUDO_LOCATIONS_FNAME, "w");
+    if( NULL == ps_locs_of )
+    {
+        char buffer[500];
+        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
+        perror( buffer );
+        exit( -1 );
+    }
+    fprint_pseudo_locations( ps_locs_of, genome->ps_locs );
+    fclose(ps_locs_of);
+    
     return;
 }
 

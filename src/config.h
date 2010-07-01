@@ -39,6 +39,8 @@
 
 #define MAPPED_READS_DB_FNAME "mapped_reads.db"
 
+#define PSEUDO_LOCATIONS_FNAME "pseudo_locations.txt"
+
 /**** determine how the letters are packed       ****/
 
 #define PSEUDO_LOC_MIN_SIZE 100
