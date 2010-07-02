@@ -650,7 +650,7 @@ map_marginal( args_t* args,
     candidate_mappings_db candidate_mappings;
     init_candidate_mappings_db( &candidate_mappings, "candidate_mappings" );
     
-    open_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
 
     if( args->frag_len_fp != NULL )
         build_fl_dist_from_file( *mpd_rds_db, args->frag_len_fp );
@@ -752,7 +752,8 @@ iterative_mapping( args_t* args,
                    struct mapped_reads_db* mpd_rds_db )
 {   
     if( NULL != args->unpaired_reads_fnames 
-        && args->assay_type == CHIP_SEQ )
+        && args->assay_type == CHIP_SEQ
+        && mpd_rds_db->fl_dist == NULL )
     {
         fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
         exit(-1);

@@ -82,22 +82,24 @@ reset_read_cond_probs( struct mapped_read_t* rd )
     struct fragment_length_dist_t* fl_dist = NULL;
     if( rd->rdb != NULL )
         fl_dist = rd->rdb->fl_dist;
-
+    
+    if( 0 == rd->num_mappings )
+        return;
+    
+    float *prbs = calloc( rd->num_mappings, sizeof(float)  );
+    
     /* prevent divide by zero */
     double prb_sum = ML_PRB_MIN;
     int i;
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
-        
-        const float cond_prob =             
-            get_seq_error_from_mapped_read_location( loc )
-            *get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
-        
-        set_cond_prob_in_mapped_read_location( loc, cond_prob );
+        float cond_prob = get_seq_error_from_mapped_read_location( loc );
+        if( get_flag_from_mapped_read_location( loc )&IS_PAIRED )
+            cond_prob *= get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
+        prbs[i] = cond_prob;
         prb_sum += cond_prob;
     }
-
     assert( rd->num_mappings == 0 || prb_sum > ML_PRB_MIN );
 
     for( i = 0; i < rd->num_mappings; i++ )
@@ -108,7 +110,9 @@ reset_read_cond_probs( struct mapped_read_t* rd )
                /prb_sum 
         );
     }
-
+    
+    free( prbs );
+    
     return;
 };
 
@@ -750,6 +754,7 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
     if( (*rdb)->fp == NULL )
     {
         perror("FATAL       :  Could not open mapped reads file");
+        assert( false );
         exit(-1);
     }
 

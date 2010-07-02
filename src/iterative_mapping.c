@@ -947,24 +947,6 @@ update_chipseq_trace_expectation_from_location(
             #endif
         }
         
-        /* FIXME - hope that we actually have a fragment length */
-        /* FIXME get the real fragment length */
-        /* FIXME - cleanup the stop condition */
-        unsigned int frag_len = 400;
-        for( k = 0; k < frag_len; k++ )
-        {
-            if( start + k < traces->trace_lengths[chr_index] )
-            {
-                traces->traces[0][chr_index][start + k] 
-                    += k*cond_prob/( frag_len*frag_len  );
-            }
-            
-            if( stop >= k )
-            {
-                traces->traces[0][chr_index][stop - k] 
-                    += k*cond_prob/( frag_len*frag_len  );
-            }
-        }
     }
 
     return;
@@ -993,7 +975,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         unsigned char flag = get_flag_from_mapped_read_location( r->locations + i );
         unsigned int start = get_start_from_mapped_read_location( r->locations + i );
         unsigned int stop = get_stop_from_mapped_read_location( r->locations + i );
-        
+
         /* If the reads are paired */
         unsigned int j = 0;
         if( (flag&IS_PAIRED) > 0 )
@@ -1003,37 +985,50 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
                 assert( j < traces->trace_lengths[chr_index] );
                 window_density += traces->traces[0][chr_index][j];
             }
+
+            /* 
+             * This is the probability of observing the seqeunce given that it came from 
+             * location i, assuming the chip traces have been normalized to 0. 
+             */
+            float fl_prb = get_fl_prb( 
+                global_fl_dist, 
+                get_fl_from_mapped_read_location( r->locations + i ) 
+            );
+            
+            window_density *= fl_prb;
         } 
         /* If the read is *not* paired */
         else {
-            /* This is completely broken */
-            assert( 0 );
-            /* BUG - FIXME - hope that we actually have a fragment length */
-            /* FIXME get the real fragment length */
-            /* FIXME - cleanup the stop condition */
-            unsigned int frag_len = 400;
-            for( j = start; 
-                 j < MIN(traces->trace_lengths[chr_index], start + frag_len); 
-                 j++ )
+            unsigned int k;
+            
+            /* the binding site must be on the five prime side of the read */
+            unsigned int window_start;
+            unsigned int window_stop;
+            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
-                window_density += traces->traces[0][chr_index][j];
+                window_start = stop-global_fl_dist->max_fl;
+                window_stop = stop;
+            } else {
+                window_start = start;
+                window_stop = start + global_fl_dist->max_fl;
+            }
+
+            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            {
+                for( k = window_start; k < window_stop; k++ )
+                    window_density += traces->traces[0][chr_index][k]*global_fl_dist->chipseq_bs_density[ global_fl_dist->max_fl - k ];
+            } else {
+                for( k = window_start; k < window_stop; k++ )
+                    window_density += traces->traces[0][chr_index][j]*global_fl_dist->chipseq_bs_density[ k-window_start ];
             }
         }
         
-        /* 
-         * This is the probability of observing the seqeunce given that it came from 
-         * location i, assuming the chip traces have been normalized to 0. 
-         */
-        float fl_prb = get_fl_prb( 
-            global_fl_dist, 
-            get_fl_from_mapped_read_location( r->locations + i ) 
-        );
-        
         new_prbs[i] = 
             get_seq_error_from_mapped_read_location( r->locations + i )
-            *fl_prb*window_density;
-        prb_sum += new_prbs[i];
+            *window_density;
+        prb_sum += new_prbs[i];        
     }
+        
     
     /* renormalize the read probabilities */
     if( prb_sum > 0 )
@@ -1204,10 +1199,7 @@ update_CAGE_mapped_read_prbs(
             double normalized_density = new_prbs[i]/density_sum; 
 
             rv.max_change += MAX( 
-                normalized_density 
-                - get_cond_prob_from_mapped_read_location( r->locations + i ),
-                -normalized_density 
-                + get_cond_prob_from_mapped_read_location( r->locations + i ) 
+                normalized_density - new_prbs[i], new_prbs[i] - normalized_density 
             );
             
             set_cond_prob_in_mapped_read_location( 
