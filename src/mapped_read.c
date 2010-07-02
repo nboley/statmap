@@ -742,11 +742,11 @@ build_mapped_read_from_candidate_mappings(
 
 
 
-void
-init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
+static void
+init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mode )
 {
     *rdb = malloc(sizeof(struct mapped_reads_db));
-    (*rdb)->fp = fopen( fname, "w+" );
+    (*rdb)->fp = fopen( fname, mode );
     if( (*rdb)->fp == NULL )
     {
         perror("FATAL       :  Could not open mapped reads file");
@@ -773,31 +773,15 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
 }
 
 void
+new_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
+{
+    init_mapped_reads_db( rdb, fname, "w+" );
+}
+
+void
 open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
 {
-    *rdb = malloc(sizeof(struct mapped_reads_db));
-    (*rdb)->fp = fopen( fname, "r+" );
-    if( (*rdb)->fp == NULL )
-    {
-        perror("FATAL       :  Could not open mapped reads file");
-        exit(-1);
-    }
-
-    /* whether or not the DB is mmapped */
-    (*rdb)->write_locked = false;
-
-    /* mmapped data */
-    (*rdb)->mmapped_data = NULL;    
-    (*rdb)->mmapped_data_size = 0;
-
-    /* index */
-    (*rdb)->mmapped_reads_starts = NULL;
-    (*rdb)->num_mmapped_reads = 0;
- 
-    /* fl dist */
-    (*rdb)->fl_dist = NULL;
-   
-    return;
+    init_mapped_reads_db( rdb, fname, "r+" );
 }
 
 

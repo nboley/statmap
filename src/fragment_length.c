@@ -231,6 +231,24 @@ cleanup:
     free( temp_fls );
 }
 
+void
+build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
+{
+    fl_dist->chipseq_bs_density = calloc( fl_dist->max_fl, sizeof(float) );
+    
+    int i = 0, frag_len = 0;
+    for( frag_len = fl_dist->min_fl; frag_len <= fl_dist->max_fl; frag_len++ )
+    {
+        const float amt = 1/frag_len;
+        const float frag_len_prb = fl_dist->density[frag_len - fl_dist->min_fl];
+        for( i = 0; i < frag_len; i++ )
+        {
+            fl_dist->chipseq_bs_density[i] += frag_len_prb*amt;
+        }
+    }
+
+    return;
+}
 
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl )

@@ -44,7 +44,7 @@
 /**** determine how the letters are packed       ****/
 
 #define PSEUDO_LOC_MIN_SIZE 100
-#define EXPAND_UNPAIRED_PSEUDO_LOCATIONS false
+#define EXPAND_UNPAIRED_PSEUDO_LOCATIONS true
 #define EXPAND_PAIRED_PSEUDO_LOCATIONS true
 
 typedef unsigned char LEVEL_TYPE;

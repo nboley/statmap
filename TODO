@@ -6,6 +6,8 @@
 -20.1) FIX the chr name hack in the wiggle aggregation code. Currently, we 
        hard coded the max number of chr names to be 100. That is realy really DIRTY
 -20.01) use vector operations for trace aggregation
+-20.001) FIX not accounting for the tag length in fl dist density ( build_chipseq_bs_density ) 
+         ALSO, at the same time, look for a better place to put that density
 X -20) Make DEFAULT output use timestamp
 X -19) add in MAKE CHECK
 M -18) Make copy traces actually copy traces

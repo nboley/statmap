@@ -650,7 +650,7 @@ map_marginal( args_t* args,
     candidate_mappings_db candidate_mappings;
     init_candidate_mappings_db( &candidate_mappings, "candidate_mappings" );
     
-    init_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    open_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
 
     if( args->frag_len_fp != NULL )
         build_fl_dist_from_file( *mpd_rds_db, args->frag_len_fp );
@@ -799,6 +799,11 @@ main( int argc, char** argv )
     map_marginal( &args, genome, &mpd_rds_db );
 
     build_fl_dist( &args, mpd_rds_db );
+
+    if( args.assay_type == CHIP_SEQ
+        && args.unpaired_reads_fnames != NULL )
+        build_chipseq_bs_density( mpd_rds_db->fl_dist );
+
 
     if( args.assay_type != UNKNOWN )
         iterative_mapping( &args, genome, mpd_rds_db );

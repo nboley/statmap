@@ -270,7 +270,7 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     raw_input()
 
 
-def build_random_chipseq_reads( num_mutations, DIRTY=True ):
+def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True ):
     region = build_chipseq_region( )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
@@ -291,14 +291,14 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True ):
 
     if DIRTY:
         reads = sc.build_reads_from_fragments( 
-            genome, fragments, rev_comp=False, paired_end=True )
+            genome, fragments, rev_comp=False, paired_end=are_paired_end )
         # mutate the reads by their error strings
         sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
         sample_file.close()
         mutated_reads = sc.mutate_reads( reads, error_strs )
     else:
-        reads = sc.build_reads_from_fragments( genome, fragments, paired_end=True )
+        reads = sc.build_reads_from_fragments( genome, fragments, are_paired_end=paired_end )
 
     genome_of = open("tmp.genome", "w")
     # write a second genome
@@ -318,20 +318,33 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True ):
     
     reads_of_1 = open('tmp.1.fastq', "w");
     reads_of_2 = open('tmp.2.fastq', "w");
-    if DIRTY:
-        sc.build_paired_end_fastq_from_mutated_reads(mutated_reads,reads_of_1,reads_of_2)
-    else:
+    
+    if not paired_end and not DIRTY:
+        sc.build_single_end_fastq_from_seqs( reads, reads_of_1 )
+    elif paired_end and not DIRTY:
         sc.build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
+    elif not paired_end and DIRTY:
+        sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of_1 )
+    elif paired_end and DIRTY:        
+        sc.build_paired_end_fastq_from_mutated_reads(mutated_reads,reads_of_1,reads_of_2)
+    
     reads_of_1.close()
     reads_of_2.close()
     
     return rand_indexes
 
-def map_with_statmap( iterative=True ):
-    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -o smo_chipseq_sim -q 0 \
-                             -n %i -f ./data/fl_dist.txt\
-                             " % ( sc.STATMAP_PATH, NUM_SAMPLES )
+def map_with_statmap( iterative=True, paired_end=True ):
+    if paired_end:
+        call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
+                                 -o smo_chipseq_sim -q 0 \
+                                 -n %i -f ./data/fl_dist.txt\
+                                 " % ( sc.STATMAP_PATH, NUM_SAMPLES )
+    else:
+        call = "%s -g tmp.genome -r tmp.1.fastq \
+                                 -o smo_chipseq_sim -q 0 \
+                                 -n %i -f ./data/fl_dist.txt\
+                                 " % ( sc.STATMAP_PATH, NUM_SAMPLES )
+    
     if iterative:
         call += " -a i"
         
@@ -522,6 +535,8 @@ def plot_bootstrap_bounds( png_fname, mut_indexes=[] ):
 
 
 if __name__ == '__main__':
+    paired_end=False
+    
     if False:
         test_cage_region( 3, "relaxed_%i_marginal.wig" % 3, iterative=False )
         if sc.CLEANUP:
@@ -530,9 +545,9 @@ if __name__ == '__main__':
             pass
 
     if True:
-        mut_indexes = build_random_chipseq_reads( 3 )
+        mut_indexes = build_random_chipseq_reads( 3, are_paired_end=paired_end )
         map_with_bowtie( )
-        map_with_statmap( )
+        map_with_statmap( paired_end=paired_end )
         plot_bootstrap_bounds( "bootstrap_bnds.png", mut_indexes )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")

@@ -10,6 +10,7 @@ struct fragment_length_dist_t {
     int min_fl;
     int max_fl;
     float* density;
+    float* chipseq_bs_density;
 };
 
 void
@@ -26,6 +27,9 @@ struct mapped_reads_db;
 
 void
 estimate_fl_dist_from_mapped_reads( struct mapped_reads_db* rdb );
+
+void
+build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist );
 
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl );

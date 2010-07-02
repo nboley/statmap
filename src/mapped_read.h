@@ -355,7 +355,10 @@ typedef struct {
 } mapped_reads_db_cursor;
 
 void
-init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+new_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+
+void
+open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );

@@ -888,7 +888,65 @@ update_chipseq_trace_expectation_from_location(
     } 
     /* If the read is *not* paired */
     else {
-        assert( false );
+        assert( 0 == (flag&IS_PAIRED) ); 
+        /* the binding site must be on the five prime side of the read */
+        unsigned int window_start;
+        unsigned int window_stop;
+        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        {
+            window_start = stop-global_fl_dist->max_fl;
+            window_stop = stop;
+        } else {
+            window_start = start;
+            window_stop = start + global_fl_dist->max_fl;
+        }
+        
+        /* lock the locks */
+        for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
+            #else
+            pthread_spin_lock( traces->locks[0][ chr_index ] + k );
+            #endif
+        }
+        
+        /* 
+         *  loop through every position in the window of possible binding site 
+         *  origins, and update the probability of coming from this location. 
+         */
+        
+        /*
+         *  Because the pre computed density was in the 5prime direction, 
+         *  and we are going in the 3' direction, i need to take values from the 
+         *  end of the density array 
+         */
+
+        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        {
+            for( k = window_start; k < window_stop; k++ )
+            {
+                traces->traces[0][chr_index][k] 
+                    += global_fl_dist->chipseq_bs_density[ global_fl_dist->max_fl - k ];
+            }
+        } else {
+            for( k = window_start; k < window_stop; k++ )
+            {
+                traces->traces[0][chr_index][k] 
+                    += global_fl_dist->chipseq_bs_density[ k-window_start ];
+            }
+        }
+            
+        /* unlock the locks */
+        for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
+            #else
+            pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+            #endif
+        }
+        
         /* FIXME - hope that we actually have a fragment length */
         /* FIXME get the real fragment length */
         /* FIXME - cleanup the stop condition */

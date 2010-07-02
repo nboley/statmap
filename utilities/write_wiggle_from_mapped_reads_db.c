@@ -8,8 +8,9 @@
 /* make it possible to link */
 int min_num_hq_bps = -1;
 
-/* This is to silence a link error with including genome.o. It's OK because this never
-   indexes the genome, so it never needs to free it */
+/* This is to eliminate a link error with including genome.o. It's OK because this never
+   indexes the genome, so it never needs to free it. But, its pretty hacky. I probably
+   need to do some refactoring...  */
 
 void free_tree( void )
 { return; }
@@ -29,12 +30,12 @@ open_check_error( char* fname, char* file_mode )
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./mapped_reads_to_sam genome.fa mapped_reads.db\n" );
+    fprintf( stderr, "Usage: ./mapped_reads_to_sam genome.fa mapped_reads.db fwd_output.wig bkwd_output.wig\n" );
 }
 
 int main( int argc, char** argv )
 {
-    if( argc != 3 )
+    if( argc != 5 )
     {
         usage();
         exit(1);
@@ -52,8 +53,12 @@ int main( int argc, char** argv )
     struct mapped_reads_db* mpd_rdb;
     open_mapped_reads_db( &mpd_rdb, mpd_rd_fname );
     
+    FILE* fwd_wig_fp = open_check_error( argv[3], "w" );
+    FILE* bkwd_wig_fp = open_check_error( argv[4], "w" );
     write_marginal_mapped_reads_to_stranded_wiggles(
-        mpd_rdb, genome, stdout, stdout );
+        mpd_rdb, genome, fwd_wig_fp, bkwd_wig_fp );
+    fclose( fwd_wig_fp );
+    fclose( bkwd_wig_fp );
 
 cleanup:
     free_genome( genome );
