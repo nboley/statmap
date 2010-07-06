@@ -73,8 +73,12 @@ update_traces_from_mapped_reads_worker( void* params )
         for( j = 0; j < r->num_mappings; j++ ) {
             update_trace_expectation_from_location( traces, r->locations + j );
         }
+        
+        free_mapped_read( r );
     }
-
+    
+    free_mapped_read( r );
+    
     return 0;
 }
 
@@ -196,7 +200,11 @@ update_traces_from_mapped_reads(
             for( j = 0; j < r->num_mappings; j++ ) {
                 update_trace_expectation_from_location( traces, r->locations + j );
             }
+            
+            free_mapped_read( r );
         }
+
+        free_mapped_read( r );
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
@@ -309,8 +317,12 @@ update_mapped_reads_from_trace_worker( void* params )
 
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
-    }
 
+        free_mapped_read( r );
+    }
+    
+    free_mapped_read( r );
+    
     return 0;
 }
 
@@ -349,8 +361,12 @@ update_mapped_reads_from_trace(
             
             /* Update the lhd */
             rv.log_lhd += tmp_rv.log_lhd;
+
+            free_mapped_read( r );
         }
 
+        free_mapped_read( r );
+        
     } else {
         /* initialize the thread parameters structure */
         struct update_mapped_reads_param params;
@@ -480,18 +496,21 @@ update_mapping(
             rdb, starting_trace, 
             update_trace_expectation_from_location
         );
-
+        
         stop = clock( );
 
-        if( num_iterations%25 == 0
-            || rv.max_change < max_prb_change_for_convergence )
+        if( num_iterations > 0 &&
+            ( 
+                ( num_iterations == 1 || num_iterations%25 == 0 )
+                || rv.max_change < max_prb_change_for_convergence )
+            )
         {
             fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
             
-            if( num_iterations > 0 
+            if( num_iterations > 1 
                 && rv.max_change < max_prb_change_for_convergence )
                 break;
         }        
@@ -569,7 +588,11 @@ build_random_starting_trace(
             update_trace_expectation_from_location( traces, r->locations + j );
             set_cond_prob_in_mapped_read_location( r->locations + j, tmp_cond_prb );
         }
+
+        free_mapped_read( r );
     }
+    
+    free_mapped_read( r );
     
     return;
 }
@@ -615,25 +638,7 @@ sample_random_traces(
 
     /* Seed the random number generator */
     srand ( time(NULL) );
-
-    /* initialize the max and min traces */
-    struct trace_t *max_trace, *min_trace;
-    /* initialize the max trace to zero, because the first max is always >= */
-    init_traces( genome, &max_trace, num_tracks );
-    /* The min we need to initialize, and then set to flt max */
-    init_traces( genome, &min_trace, num_tracks );
-    set_trace_to_uniform( min_trace, FLT_MAX );
-
-    /* initialize the boostrap max and min traces */
-    struct trace_t *bs_max_trace, *bs_min_trace;
-    if( NUM_BOOTSTRAP_SAMPLES > 0 )
-    {
-        /* initialize the max trace to zero, because the first max is always >= */
-        init_traces( genome, &bs_max_trace, num_tracks );
-        /* The min we need to initialize, and then set to flt max */
-        init_traces( genome, &bs_min_trace, num_tracks );
-    }
-
+    
     /* Create the meta data csv's */
     if( SAVE_STARTING_SAMPLES )
     {
@@ -812,6 +817,13 @@ sample_random_traces(
         
         free( fps );
     }
+
+    /* Create the meta data csv's */
+    if( SAVE_STARTING_SAMPLES )
+        fclose(ss_mi);
+
+    fclose(s_mi);
+
     
     return 0;
 }
@@ -926,14 +938,16 @@ update_chipseq_trace_expectation_from_location(
         {
             for( k = window_start; k < window_stop; k++ )
             {
-                traces->traces[0][chr_index][k] 
-                    += global_fl_dist->chipseq_bs_density[ global_fl_dist->max_fl - k ];
+                traces->traces[0][chr_index][k]
+                    += cond_prob*
+                       global_fl_dist->chipseq_bs_density[ 
+                        global_fl_dist->max_fl-(k-window_start) ];
             }
         } else {
             for( k = window_start; k < window_stop; k++ )
             {
-                traces->traces[0][chr_index][k] 
-                    += global_fl_dist->chipseq_bs_density[ k-window_start ];
+                traces->traces[0][chr_index][k]
+                    += cond_prob*global_fl_dist->chipseq_bs_density[ k-window_start ];
             }
         }
             
@@ -1016,19 +1030,25 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
                 for( k = window_start; k < window_stop; k++ )
-                    window_density += traces->traces[0][chr_index][k]*global_fl_dist->chipseq_bs_density[ global_fl_dist->max_fl - k ];
+                    window_density += traces->traces[0][chr_index][k]
+                        *global_fl_dist->chipseq_bs_density[ 
+                            global_fl_dist->max_fl - (k-window_start) ];
             } else {
                 for( k = window_start; k < window_stop; k++ )
-                    window_density += traces->traces[0][chr_index][j]*global_fl_dist->chipseq_bs_density[ k-window_start ];
+                    window_density += traces->traces[0][chr_index][k]
+                        *global_fl_dist->chipseq_bs_density[ k-window_start ];
             }
         }
         
+        assert( window_density > 0 );
+        
         new_prbs[i] = 
             get_seq_error_from_mapped_read_location( r->locations + i )
-            *window_density;
+               *window_density;
         prb_sum += new_prbs[i];        
-    }
-        
+    }    
+    
+    assert( r->num_mappings == 0 || prb_sum > ML_PRB_MIN );
     
     /* renormalize the read probabilities */
     if( prb_sum > 0 )
@@ -1345,6 +1365,8 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     goto cleanup;
 
 cleanup:
+
+    free( track_names );
 
     close_traces( uniform_trace );
     

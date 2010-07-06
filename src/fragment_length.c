@@ -17,7 +17,8 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
     *fl_dist = malloc(sizeof(struct fragment_length_dist_t));
     (*fl_dist)->min_fl = min_fl;
     (*fl_dist)->max_fl = max_fl;
-    
+
+    (*fl_dist)->chipseq_bs_density = NULL;
     (*fl_dist)->density = calloc( max_fl - min_fl + 1, sizeof(float)  );
     if( NULL == (*fl_dist)->density )
     {
@@ -33,6 +34,9 @@ void
 free_fl_dist( struct fragment_length_dist_t* fl_dist )
 {
     free( fl_dist->density );
+    if( NULL != fl_dist->chipseq_bs_density )
+        free( fl_dist->chipseq_bs_density );
+
     free( fl_dist );
     
     return;
@@ -239,14 +243,22 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
     int i = 0, frag_len = 0;
     for( frag_len = fl_dist->min_fl; frag_len <= fl_dist->max_fl; frag_len++ )
     {
-        const float amt = 1/frag_len;
-        const float frag_len_prb = fl_dist->density[frag_len - fl_dist->min_fl];
+        const double amt = 1.0/frag_len;
+        const double frag_len_prb = fl_dist->density[frag_len - fl_dist->min_fl];
         for( i = 0; i < frag_len; i++ )
         {
             fl_dist->chipseq_bs_density[i] += frag_len_prb*amt;
         }
     }
 
+    double sum = 0;
+    for( i = 0; i < fl_dist->max_fl; i++ )
+    {
+        sum += fl_dist->chipseq_bs_density[i];
+    }
+    
+    assert( sum > 0.99 && sum < 1.01 );
+    
     return;
 }
 

@@ -35,7 +35,7 @@ init_mapped_read( struct mapped_read_t** rd )
     (*rd)->read_id = 0;
     (*rd)->num_mappings = 0;
     (*rd)->rdb = NULL;
-    (*rd)->free_locations = false;
+    (*rd)->free_locations = true;
     (*rd)->locations = NULL;
     return;
 }
@@ -961,7 +961,12 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb )
     struct mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
+    {
         reset_read_cond_probs( r );
+        free_mapped_read( r );
+    }
+
+    free_mapped_read( r );
 }
 
 

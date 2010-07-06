@@ -178,15 +178,19 @@ def parse_wig( fname, genome ):
     fp.close()
     return density
 
-def parse_bwtout( fname, genome ):
+def parse_bwtout( fname, genome, paired_end ):
     fp = open( fname )
     density = numpy.zeros(len(genome.values()[0])+1)
     while True:
         line = fp.readline()
         if line == '': break
-        loc1 = int( line.strip().split("\t")[3] )
-        loc2 = int( fp.readline().strip().split("\t")[3] )
-        density[loc1:loc2] += 0.5/(loc2 - loc1)
+        if paired_end:
+            loc1 = int( line.strip().split("\t")[3] )
+            loc2 = int( fp.readline().strip().split("\t")[3] )
+            density[loc1:loc2] += 0.5/(loc2 - loc1)
+        else:
+            loc = int( line.strip().split("\t")[3] )
+            density[loc:(loc+35)] += 0.5/(35)
     fp.close()
     return density
 
@@ -291,7 +295,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
 
     if DIRTY:
         reads = sc.build_reads_from_fragments( 
-            genome, fragments, rev_comp=False, paired_end=are_paired_end )
+            genome, fragments, rev_comp=True, paired_end=are_paired_end )
         # mutate the reads by their error strings
         sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
@@ -356,7 +360,9 @@ def map_with_statmap( iterative=True, paired_end=True ):
         sys.exit( -1 )
     
     # run the aggregation generation code
-    ret_code = subprocess.call( [ "../utilities/build_aggregates.py", "smo_chipseq_sim" ]  )
+    call = [ "../utilities/build_aggregates.py", "smo_chipseq_sim" ]
+    print >> sc.stdout, " ".join( call )
+    ret_code = subprocess.call( call  )
     if ret_code != 0:
         print "TEST FAILED - aggregation call returned error code ", ret_code
         sys.exit( -1 )
@@ -364,14 +370,18 @@ def map_with_statmap( iterative=True, paired_end=True ):
     return
 
 
-def map_with_bowtie( ):
+def map_with_bowtie( paired_end = True ):
     # build the index
     # pie out to null to ignore output
     cmd = "bowtie-build -f tmp.genome bowtie_index/tmp.ebwt > /dev/null"
     subprocess.call( cmd, shell=True )
     # map the reads with bowtie
-    cmd = "bowtie -a --tryhard -X 2500 --fr bowtie_index/tmp.ebwt \
-           -1 tmp.1.fastq -2 tmp.2.fastq mapped_reads.bwtout"
+    if paired_end:
+        cmd = "bowtie -a --tryhard -X 2500 --fr bowtie_index/tmp.ebwt \
+               -1 tmp.1.fastq -2 tmp.2.fastq mapped_reads.bwtout"
+    else:
+        cmd = "bowtie -a --tryhard -X 2500 --fr bowtie_index/tmp.ebwt \
+               tmp.1.fastq mapped_reads.bwtout"        
     subprocess.call( cmd, shell=True )
     
 def plot_all_wiggles( mutations ):
@@ -475,7 +485,7 @@ def plot_wig_bounds( dir, png_fname ):
         
     rpy.r.dev_off()
 
-def plot_bootstrap_bounds( png_fname, mut_indexes=[] ):
+def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     region = build_chipseq_region( )
     genome = { 'chr2L': region + region }
 
@@ -501,7 +511,7 @@ def plot_bootstrap_bounds( png_fname, mut_indexes=[] ):
         os.chdir(curr_dir)
 
     # parse bowtie out
-    density = parse_bwtout( "mapped_reads.bwtout", genome )
+    density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
     rpy.r.points( density, type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
@@ -546,9 +556,9 @@ if __name__ == '__main__':
 
     if True:
         mut_indexes = build_random_chipseq_reads( 3, are_paired_end=paired_end )
-        map_with_bowtie( )
+        map_with_bowtie( paired_end )
         map_with_statmap( paired_end=paired_end )
-        plot_bootstrap_bounds( "bootstrap_bnds.png", mut_indexes )
+        plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
         if False and sc.CLEANUP:

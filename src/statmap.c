@@ -334,14 +334,7 @@ parse_arguments( int argc, char** argv )
         fprintf(stderr, "FATAL       :  -g ( reference_genome ) is required\n");
         exit( -1 );
     }
-
-    /* open the chromosome file */
-    args.genome_fp = fopen( args.genome_fname, "r");
-    if( args.genome_fp == NULL ) {
-        fprintf(stderr, "FATAL       :  Unable to open '%s'\n", args.genome_fname);
-        exit(-1);
-    }
-
+    
     if( args.unpaired_reads_fnames == NULL
         && ( args.pair2_reads_fnames == NULL
              || args.pair1_reads_fnames == NULL ) 
@@ -398,13 +391,52 @@ parse_arguments( int argc, char** argv )
         args.output_directory = calloc(strlen(buffer)+1, sizeof(char));
         memcpy( args.output_directory, buffer, (strlen(buffer)+1)*sizeof(char) );
     } 
+    
     error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
     if( -1 == error )
     {
         perror( "FATAL       :  Cannot make output directory");
         exit( -1 );
     }
-    
+
+    if( true ) 
+    {
+        char buffer[500];
+        /* copy the genome into the output directory */
+        /*
+        sprintf( buffer, "mkdir ./%s/genome/", args.output_directory );
+        error = mkdir( buffer, S_IRWXU | S_IRWXG | S_IRWXO );
+        if( -1 == error )
+        {
+            perror( "FATAL       :  Cannot make output directory");
+            exit( -1 );
+        }
+        */
+        
+        /* copy the genome into the output directory */
+        sprintf( buffer, "cp %s %s/genome.fa", 
+                 args.genome_fname, args.output_directory );
+        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  
+                args.genome_fname );
+        error = system( buffer );
+        if (WIFSIGNALED(error) &&
+        (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        {
+            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+            perror( "System Call Failure");
+            assert( false );
+            exit( -1 );
+        }
+
+        sprintf( buffer, "%s/genome.fa", args.output_directory );    
+        /* open the chromosome file */
+        args.genome_fp = fopen( buffer, "r");
+        if( args.genome_fp == NULL ) {
+            fprintf(stderr, "FATAL       :  Unable to open '%s'\n", buffer);
+            exit(-1);
+        }
+    }
+        
     if( args.min_match_penalty == 1 )
     {
         args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
@@ -804,8 +836,7 @@ main( int argc, char** argv )
     if( args.assay_type == CHIP_SEQ
         && args.unpaired_reads_fnames != NULL )
         build_chipseq_bs_density( mpd_rds_db->fl_dist );
-
-
+    
     if( args.assay_type != UNKNOWN )
         iterative_mapping( &args, genome, mpd_rds_db );
 
@@ -839,5 +870,9 @@ cleanup:
         fclose( args.snpcov_fp );
     }
 
+    if( args.frag_len_fp != NULL ) {
+        fclose( args.frag_len_fp );
+    }
+    
     return 0;
 }

@@ -215,7 +215,7 @@ normalize_traces( struct trace_t* traces )
 {
     double sum = sum_traces( traces );
     assert( sum > 0 );
-
+    
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
