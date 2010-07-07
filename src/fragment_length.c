@@ -243,7 +243,7 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
     int i = 0, frag_len = 0;
     for( frag_len = fl_dist->min_fl; frag_len <= fl_dist->max_fl; frag_len++ )
     {
-        const double amt = 1.0/frag_len;
+        const double amt = 1.0/(frag_len);
         const double frag_len_prb = fl_dist->density[frag_len - fl_dist->min_fl];
         for( i = 0; i < frag_len; i++ )
         {

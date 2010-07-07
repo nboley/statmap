@@ -941,7 +941,7 @@ update_chipseq_trace_expectation_from_location(
                 traces->traces[0][chr_index][k]
                     += cond_prob*
                        global_fl_dist->chipseq_bs_density[ 
-                        global_fl_dist->max_fl-(k-window_start) ];
+                        global_fl_dist->max_fl -1 -(k-window_start) ];
             }
         } else {
             for( k = window_start; k < window_stop; k++ )
@@ -1032,7 +1032,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
                 for( k = window_start; k < window_stop; k++ )
                     window_density += traces->traces[0][chr_index][k]
                         *global_fl_dist->chipseq_bs_density[ 
-                            global_fl_dist->max_fl - (k-window_start) ];
+                            global_fl_dist->max_fl - 1 - (k-window_start) ];
             } else {
                 for( k = window_start; k < window_stop; k++ )
                     window_density += traces->traces[0][chr_index][k]

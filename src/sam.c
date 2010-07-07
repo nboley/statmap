@@ -465,15 +465,16 @@ cleanup:
 
 
 void
-write_mapped_reads_to_sam( struct rawread_db_t* rdb,
-                           struct mapped_reads_db* mappings_db,
-                           struct genome_data* genome,
-                           enum bool reset_cond_read_prbs,
-                           /* whether or not to print out pseudo locations
-                              as real locations, or to print out each real loc
-                              that makes ups the pseudo location */
-                           enum bool expand_pseudo_locations,
-                           FILE* sam_ofp )
+write_mapped_reads_to_sam( 
+    struct rawread_db_t* rdb,
+    struct mapped_reads_db* mappings_db,
+    struct genome_data* genome,
+    enum bool reset_cond_read_prbs,
+    /* whether or not to print out pseudo locations
+       as real locations, or to print out each real loc
+       that makes ups the pseudo location */
+    enum bool expand_pseudo_locations,
+    FILE* sam_ofp )
 {
     assert( expand_pseudo_locations == false );
 

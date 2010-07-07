@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
 
 #include "config.h"
 #include "candidate_mapping.h"
