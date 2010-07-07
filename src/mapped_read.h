@@ -3,6 +3,8 @@
 #ifndef MAPPED_READ
 #define MAPPED_READ
 
+#define MALLOC_READS_DB
+
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>

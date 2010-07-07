@@ -1,3 +1,4 @@
+-25) COPY estimated_fl_dist into the output directory
 -24) simple repeat analysis, with an eye towards item -23
 -23) PSEDUO locations - speed up repeats
 -22.5) make the mapped_locaiton type smaller - maybe half floats?

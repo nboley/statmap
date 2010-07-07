@@ -1032,7 +1032,22 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     struct stat buf;
     fstat(fdin, &buf);
     rdb->mmapped_data_size = buf.st_size;
-        
+    
+    #ifdef MALLOC_READS_DB
+    fseek( rdb->fp, 0, SEEK_SET );
+    
+    rdb->mmapped_data = malloc( buf.st_size );
+    if( NULL == rdb->mmapped_data )
+    {
+        fprintf( stderr, 
+                 "FATAL       : Failed to allocate %zu bytes for the mapped reads.\n",
+                 (size_t) buf.st_size );
+        exit( 1 );
+    }
+    
+    fread( rdb->mmapped_data, buf.st_size, 1, rdb->fp );
+           
+    #else
     /* mmap the file */
     rdb->mmapped_data
         = mmap( NULL, rdb->mmapped_data_size,  
@@ -1048,7 +1063,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
         assert( false );
         exit( -1 );
     }
-
+    #endif
+    
     return;
 }
 
@@ -1058,6 +1074,9 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
     if( rdb->mmapped_data == NULL )
         return;
 
+    #ifdef MALLOC_READS_DB
+    free( rdb->mmapped_data );
+    #else 
     int error = munmap( rdb->mmapped_data, rdb->mmapped_data_size );
     if( error != 0 )
     {
@@ -1065,6 +1084,8 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
         assert( false );
         exit( -1 );
     }
+    #endif
+
     rdb->mmapped_data = NULL;
 
     rdb->write_locked = false;
