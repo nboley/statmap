@@ -114,15 +114,18 @@ sample_relaxed_mapping(
     init_traces( genome, &starting_trace, trace_size );
     if( use_random_start == true )
     {
+        fprintf(stderr, "DEBUG       :  Building Random Starting Trace.\n" );
         build_random_starting_trace( 
             starting_trace, rdb, 
             update_expectation,
             update_reads
         );
     } else {
+        fprintf(stderr, "DEBUG       :  Building Uniform Starting Trace.\n" );
         set_trace_to_uniform( starting_trace, 1 );
     }
     
+    fprintf(stderr, "DEBUG       :  Updating mapping.\n" );
     error = update_mapping (
         rdb, 
         starting_trace,
@@ -201,7 +204,7 @@ int main( int argc, char** argv )
 
     enum assay_type_t assay_type = CHIP_SEQ;
     enum bool use_random_start = false;
-    float max_prb_change_for_convergence = 1e-3;
+    float max_prb_change_for_convergence = 1e-2;
     num_threads = 1;
     min_num_hq_bps = 10;
     

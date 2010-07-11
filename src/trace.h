@@ -7,12 +7,12 @@
 /* Trace spinlock granularity */
 /* How many basepairs are grouped together for a single spinlock */
 /* Always just call lock_spinlock - this should never be used directly */
-#define TM_GRAN 200
+#define TM_GRAN 5000
 
 struct genome_data;
 
 // define this to use mutexes, otherwise use spinlocks
-#define USE_MUTEX
+#define DONT_USE_MUTEX
 // #define USE_SPINLOCK
 
 struct trace_t {

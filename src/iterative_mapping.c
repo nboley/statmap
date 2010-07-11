@@ -192,9 +192,13 @@ update_traces_from_mapped_reads(
     if( num_threads == 1 )
     {
         struct mapped_read_t* r;
-        
+        int read_num = 0;
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
+            read_num++;
+            if( read_num%1000000 == 0 )
+                fprintf( stderr, "DEBUG       :  Updated traces from mapped reads for %i reads\n", read_num );
+            
             /* Update the trace from this mapping */        
             unsigned int j;
             for( j = 0; j < r->num_mappings; j++ ) {
@@ -342,6 +346,8 @@ update_mapped_reads_from_trace(
     /* reset the cursor */
     rewind_mapped_reads_db( reads_db );
 
+    int read_cnt = 0;
+
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
     {
@@ -349,6 +355,10 @@ update_mapped_reads_from_trace(
         
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
         {
+            read_cnt++;
+            if( read_cnt%1000000 == 0 )
+                fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", read_cnt );
+            
             /* Update the read */
             struct update_mapped_read_rv_t tmp_rv 
                 = update_mapped_read_prbs( traces, r );
@@ -501,7 +511,9 @@ update_mapping(
 
         if( num_iterations > 0 &&
             ( 
-                ( num_iterations == 1 || num_iterations%25 == 0 )
+                ( num_iterations == 1 
+                  || num_iterations%25 == 0 
+                  || ((double)stop-(double)start)/CLOCKS_PER_SEC > 30 )
                 || rv.max_change < max_prb_change_for_convergence )
             )
         {
@@ -867,6 +879,7 @@ update_chipseq_trace_expectation_from_location(
     /* If the reads are paired */
     if( (flag&IS_PAIRED) != 0 )
     {
+        #ifdef LOCK_TRACES
         /* lock the spinlocks */
         for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
         {
@@ -876,7 +889,8 @@ update_chipseq_trace_expectation_from_location(
             pthread_spin_lock( traces->locks[0][ chr_index ] + k );
             #endif
         }
-
+        #endif
+        
         const float scale = (1.0/(stop-start));
         
         for( k = start; k < stop; k++ )
@@ -889,6 +903,7 @@ update_chipseq_trace_expectation_from_location(
         }
 
         /* unlock the spinlocks */
+        #ifdef LOCK_TRACES
         for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
         {
             #ifdef USE_MUTEX
@@ -897,6 +912,7 @@ update_chipseq_trace_expectation_from_location(
             pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
             #endif
         }
+        #endif
     } 
     /* If the read is *not* paired */
     else {
@@ -914,6 +930,7 @@ update_chipseq_trace_expectation_from_location(
         }
         
         /* lock the locks */
+        #ifdef LOCK_TRACES
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
             #ifdef USE_MUTEX
@@ -922,6 +939,7 @@ update_chipseq_trace_expectation_from_location(
             pthread_spin_lock( traces->locks[0][ chr_index ] + k );
             #endif
         }
+        #endif
         
         /* 
          *  loop through every position in the window of possible binding site 
@@ -952,6 +970,7 @@ update_chipseq_trace_expectation_from_location(
         }
             
         /* unlock the locks */
+        #ifdef LOCK_TRACES
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
             #ifdef USE_MUTEX
@@ -960,6 +979,7 @@ update_chipseq_trace_expectation_from_location(
             pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
             #endif
         }
+        #endif
         
     }
 
@@ -1040,15 +1060,11 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             }
         }
         
-        assert( window_density > 0 );
-        
         new_prbs[i] = 
             get_seq_error_from_mapped_read_location( r->locations + i )
                *window_density;
         prb_sum += new_prbs[i];        
     }    
-    
-    assert( r->num_mappings == 0 || prb_sum > ML_PRB_MIN );
     
     /* renormalize the read probabilities */
     if( prb_sum > 0 )

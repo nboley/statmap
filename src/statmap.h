@@ -60,8 +60,10 @@ typedef enum {
     // All scores are perfect h's, 
     // assume it's the test code, and the 
     // scores are ILLUMINA_v13_FQ
-    TEST_SUITE_FORMAT = 2
-
+    TEST_SUITE_FORMAT = 2,
+    // Marks SOLEXA ( from his ChIP-seq )
+    // Maximum is ASCII V
+    MARKS_SOLEXA = 4
 } input_file_type_t;
 
 /* fwd declaration for the rawread db type */

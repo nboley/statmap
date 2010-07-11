@@ -98,6 +98,9 @@ guess_input_file_type( args_t* args )
        this is almost certainly a sanger format */
     if( max_qual == 73 ) {
         input_file_type = SANGER_FQ ;
+    } else if( max_qual > 73 && max_qual <= 90 )
+    {
+        input_file_type = MARKS_SOLEXA;
     } else {
         // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
@@ -127,6 +130,9 @@ guess_input_file_type( args_t* args )
             } else if ( min_qual < 70 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
                 input_file_type = ILLUMINA_v15_FQ;
+            } else if ( min_qual < 90 ) {
+                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+                input_file_type = MARKS_SOLEXA;
             } else if ( min_qual == 104 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
                input_file_type = TEST_SUITE_FORMAT;
@@ -158,6 +164,10 @@ guess_input_file_type( args_t* args )
     case 3:
         QUAL_SHIFT = 59;
         ARE_LOG_ODDS = true;
+        break;
+    case 4:
+        QUAL_SHIFT = 50;
+        ARE_LOG_ODDS = false;
         break;
     default:
         fprintf( stderr,
