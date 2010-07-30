@@ -94,6 +94,8 @@ cleanup:
     free_genome( genome );
     close_mapped_reads_db( mpd_rdb );
     close_rawread_db( raw_rdb );
+
+    return 0;
 }
 
 

@@ -190,7 +190,7 @@ cleanup:
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./mapped_reads_to_sam output_directory output.wig [ output.sam ]\n" );
+    fprintf( stderr, "Usage: ./estiamte_read_density output_directory output.wig [ output.sam ]\n" );
 }
 
 int main( int argc, char** argv )
