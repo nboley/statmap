@@ -15,30 +15,32 @@ import tests as sc # for simulation code
 
 NUM_READS = 1000
 NUM_SAMPLES = 10
+BCD_REGION_FNAME = "./data/bcd_region.fasta"
+#BCD_REGION_FNAME = "./data/chr4.fasta"
 
-bps = ['A', 'C', 'G', 'T' ]
-comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A' }
-bp_index = { 'A': 0, 'C': 1, 'G': 2, 'T': 3 }
+bps = ['A', 'C', 'G', 'T', 'N' ]
+comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N' }
+bp_index = { 'A': 0, 'C': 1, 'G': 2, 'T': 3, 'N': 4 }
 
 
 bcd_motif = [
-    [  0.0,  0.0, 0.0, 12.0 ],
-    [ 12.0,  0.0, 0.0,  0.0 ],
-    [ 12.0,  0.0, 0.0,  0.0 ],
-    [  0.0,  0.0, 0.0, 12.0 ],
-    [  0.0,  5.0, 0.0,  0.0 ],
-    [  0.0,  5.0, 0.0,  0.0 ]
+    [  0.0,  0.0, 0.0, 12.0, -1000 ],
+    [ 12.0,  0.0, 0.0,  0.0, -1000 ],
+    [ 12.0,  0.0, 0.0,  0.0, -1000 ],
+    [  0.0,  0.0, 0.0, 12.0, -1000 ],
+    [  0.0,  5.0, 0.0,  0.0, -1000 ],
+    [  0.0,  5.0, 0.0,  0.0, -1000 ]
 ]
 
 bcd_motif = [
-    [ 35.000000,   35-11.090456,  35-9.002181,   35-5.832550],
-    [-11.508077,  -26.296853,  -13.735887,   0.000000],
-    [-11.533022,  -9.851050,   -14.876660,   0.000000],
-    [ 0.000000,   -6.228376,   -9.521876,   -9.307275],
-    [-6.842543,   -7.893736,    0.000000,   -7.614652],
-    [-5.025504,   -4.851005,    0.000000,   -5.449993],
-    [-3.162324,    0.000000,   -0.148652,   -1.038180],
-    [-2.535381,   -0.893484,    0.000000,   -1.141034]
+    [ 35.000000,   35-11.090456,  35-9.002181,   35-5.832550, -1000],
+    [-11.508077,  -26.296853,  -13.735887,   0.000000, -1000],
+    [-11.533022,  -9.851050,   -14.876660,   0.000000, -1000],
+    [ 0.000000,   -6.228376,   -9.521876,   -9.307275, -1000],
+    [-6.842543,   -7.893736,    0.000000,   -7.614652, -1000],
+    [-5.025504,   -4.851005,    0.000000,   -5.449993, -1000],
+    [-3.162324,    0.000000,   -0.148652,   -1.038180, -1000],
+    [-2.535381,   -0.893484,    0.000000,   -1.141034, -1000]
 ]
 
 tf_conc = 1e-12
@@ -113,7 +115,7 @@ class frag_len_generator_t():
 
 # build a random chr from which to simulate chipseq
 def build_chipseq_region(  ):
-    fp = open( "./data/bcd_region.fasta" )
+    fp = open( BCD_REGION_FNAME )
     genome = []
     for line in fp:
         if line.startswith( ">" ): continue
@@ -159,10 +161,8 @@ def build_fragments( region, bind_prbs, num ):
         # ( we say that it is uniform, except for the edges )
         bind_loc = random.randint( 0, fl - len(motif)  )
         fl_start = bs_index - bind_loc
-        fragments.append( ('chr2L', fl_start, fl_start+fl) )
-
-    """
-    """
+        fragments.append( ('chr2L', fl_start, fl_start+fl ) )
+        # fragments.append( ('chr2L', fl_start, min( fl_start+fl, len(cum_array) ) ) )
     
     return fragments
 
@@ -290,9 +290,15 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
 
 def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True ):
     region = build_chipseq_region( )
+
+    # simulate the ip reads
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
-    fragments = build_fragments( region, bind_prbs, NUM_READS )
+    ip_fragments = build_fragments( region, bind_prbs, NUM_READS )
+
+    # simualte the negative control reads
+    uniform = array.array( 'f', [1.0]*len(bind_prbs) )
+    nc_fragments = build_fragments( region, uniform, NUM_READS )
 
     # write the binding site probs to a wiggle
     # so that we can plot them
@@ -305,7 +311,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
     fp.close()
     
     density = numpy.zeros(len(region))
-    for chr, start, stop in fragments:
+    for chr, start, stop in ip_fragments:
         density[start:stop] += 1.0/(stop-start)
     fp = open( "true_read_coverage.wig", "w" )
     fp.write("track type=wiggle_0 name=fwd_true_read_coverage\n")
@@ -323,15 +329,20 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
     genome = { 'chr2L': region }
 
     if DIRTY:
-        reads = sc.build_reads_from_fragments( 
-            genome, fragments, rev_comp=True, paired_end=are_paired_end )
-        # mutate the reads by their error strings
         sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
         sample_file.close()
-        mutated_reads = sc.mutate_reads( reads, error_strs )
+
+        ip_reads = sc.build_reads_from_fragments( 
+            genome, ip_fragments, rev_comp=True, paired_end=are_paired_end )
+        ip_mutated_reads = sc.mutate_reads( ip_reads, error_strs )
+        
+        nc_reads = sc.build_reads_from_fragments( 
+            genome, nc_fragments, rev_comp=True, paired_end=are_paired_end )
+        nc_mutated_reads = sc.mutate_reads( nc_reads, error_strs )
     else:
-        reads = sc.build_reads_from_fragments( genome, fragments, are_paired_end=paired_end )
+        ip_reads = sc.build_reads_from_fragments( genome, ip_fragments, are_paired_end=paired_end )
+        nc_reads = sc.build_reads_from_fragments( genome, nc_fragments, are_paired_end=paired_end )
 
     genome_of = open("tmp.genome", "w")
     # write a second genome
@@ -351,15 +362,23 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
     
     reads_of_1 = open('tmp.1.fastq', "w");
     reads_of_2 = open('tmp.2.fastq', "w");
+
+    reads_nc_of_1 = open('tmp.nc.1.fastq', "w");
+    reads_nc_of_2 = open('tmp.nc.2.fastq', "w");
+
     
     if not paired_end and not DIRTY:
-        sc.build_single_end_fastq_from_seqs( reads, reads_of_1 )
+        sc.build_single_end_fastq_from_seqs( ip_reads, reads_of_1 )
+        sc.build_single_end_fastq_from_seqs( nc_reads, reads_nc_of_1 )
     elif paired_end and not DIRTY:
-        sc.build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
+        sc.build_paired_end_fastq_from_seqs( ip_reads, reads_of_1, reads_of_2 )
+        sc.build_paired_end_fastq_from_seqs( nc_reads, reads_nc_of_1, reads_nc_of_2 )
     elif not paired_end and DIRTY:
-        sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of_1 )
+        sc.build_single_end_fastq_from_mutated_reads( ip_mutated_reads, reads_of_1 )
+        sc.build_single_end_fastq_from_mutated_reads( nc_mutated_reads, reads_nc_of_1 )
     elif paired_end and DIRTY:        
-        sc.build_paired_end_fastq_from_mutated_reads(mutated_reads,reads_of_1,reads_of_2)
+        sc.build_paired_end_fastq_from_mutated_reads( ip_mutated_reads,reads_of_1,reads_of_2 )
+        sc.build_paired_end_fastq_from_mutated_reads( nc_mutated_reads,reads_nc_of_1,reads_nc_of_2 )
     
     reads_of_1.close()
     reads_of_2.close()
@@ -369,11 +388,12 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
 def map_with_statmap( iterative=True, paired_end=True ):
     if paired_end:
         call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
+                                 -3 tmp.nc.1.fastq -4 tmp.nc.2.fastq \
                                  -o smo_chipseq_sim -q 0 \
                                  -n %i -f ./data/fl_dist.txt\
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     else:
-        call = "%s -g tmp.genome -r tmp.1.fastq \
+        call = "%s -g tmp.genome -r tmp.1.fastq -c tmp.nc.1.fastq \
                                  -o smo_chipseq_sim -q 0 \
                                  -n %i -f ./data/fl_dist.txt\
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
@@ -527,7 +547,8 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     print density_max
     rpy.r.plot( density[0]/density_max, type='l', col='blue', main='Inferred Fragment Coverage Density', \
                 xlab='', ylab='', lty=1, ylim=(-0.55, 0.55) )
-    rpy.r.points( -1*density[1], type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 1:
+        rpy.r.points( -1*density[1], type='l', col='blue', main='', xlab='', ylab='', lty=1 )
     
     def plot_wiggles( dir, color  ):
         fnames = []
@@ -538,34 +559,46 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
                 
         for fname in fnames:
             density = parse_wig( fname, genome )
-            rpy.r.points( density[0]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
-            rpy.r.points( -1*density[1]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+            if len( density ) > 0:
+                rpy.r.points( density[0]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+            if len( density ) > 1:
+                rpy.r.points( -1*density[1]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
         os.chdir(curr_dir)
 
     # parse bowtie out
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
-    rpy.r.points( density[0], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
-    rpy.r.points( density[1], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
+    if len( density ) > 0:
+        rpy.r.points( density[0], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
+    if len( density ) > 1:
+        rpy.r.points( density[1], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
     plot_wiggles( "./smo_chipseq_sim/samples/", 'black' )
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
-    rpy.r.points( density[0]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
-    rpy.r.points( -1*density[1]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 0:
+        rpy.r.points( density[0]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 1:
+        rpy.r.points( -1*density[1]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
     
     density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )
-    rpy.r.points( density[0]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
-    rpy.r.points( -1*density[1]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 0:
+        rpy.r.points( density[0]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 1:
+        rpy.r.points( -1*density[1]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
     
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
-    rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
-    rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 0:
+        rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    if len( density ) > 1:
+        rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     
     true_density = parse_wig( "true_read_coverage.wig", genome )
-    rpy.r.points( true_density[0], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
-    rpy.r.points( -1*true_density[1], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    if len( density ) > 0:
+        rpy.r.points( true_density[0], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    if len( density ) > 1:
+        rpy.r.points( -1*true_density[1], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
 
     true_density = parse_wig( "binding_site_occupancies.wig", genome )
     for index, value in enumerate(true_density[0]):
