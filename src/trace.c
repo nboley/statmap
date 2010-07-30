@@ -196,6 +196,28 @@ close_traces( struct trace_t* traces )
         for( j = 0; j < traces->num_chrs; j++ )
         {
             free( traces->traces[i][j] );                          
+
+            /* initialize the locks */
+            int locks_len = traces->trace_lengths[j]/TM_GRAN;
+            if( traces->trace_lengths[j] % TM_GRAN > 0 )
+                locks_len += 1;
+            
+            int k;
+            for( k = 0; k < locks_len; k++ )
+            {
+                #ifdef USE_MUTEX
+                int error = pthread_mutex_destroy( traces->locks[i][j] + k );
+                #else
+                int error = pthread_spin_destroy( traces->locks[i][j] + k );
+                #endif        
+                              
+                if( error != 0 )
+                {
+                    perror( "Failed to destroy lock in close_trace" );
+                    exit( -1 );
+                }
+            }
+
             free( traces->locks[i][j] );
         }
         free( traces->traces[i] );                          

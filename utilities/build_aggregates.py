@@ -25,7 +25,12 @@ def aggregate_over_wigs_in_dir( directory, output_fname, aggregate_type ):
 
     # open the output file
     f = open( output_fname, "w" )
-    subprocess.call( args, stdout=f )
+    try: 
+        rv = subprocess.check_call( args, stdout=f )
+    except subprocess.CalledProcessError:
+        print args
+        print " ".join( args )
+        raise
     f.close()
 
     return

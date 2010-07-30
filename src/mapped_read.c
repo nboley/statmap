@@ -1035,7 +1035,10 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     
     #ifdef MALLOC_READS_DB
     fseek( rdb->fp, 0, SEEK_SET );
-    
+
+    fprintf( stderr, 
+             "NOTICE        : Allocating %zu bytes for the mapped reads db.", 
+             buf.st_size );
     rdb->mmapped_data = malloc( buf.st_size );
     if( NULL == rdb->mmapped_data )
     {

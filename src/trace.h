@@ -12,7 +12,7 @@
 struct genome_data;
 
 // define this to use mutexes, otherwise use spinlocks
-#define DONT_USE_MUTEX
+#define USE_MUTEX
 // #define USE_SPINLOCK
 
 struct trace_t {

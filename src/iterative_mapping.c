@@ -29,6 +29,8 @@
 #include "fragment_length.h"
 #include "sam.h"
 
+#define LOCK_TRACES
+
 struct fragment_length_dist_t* global_fl_dist;
 
 /* 
@@ -78,6 +80,8 @@ update_traces_from_mapped_reads_worker( void* params )
     }
     
     free_mapped_read( r );
+    
+    pthread_exit( NULL );
     
     return 0;
 }
@@ -326,6 +330,8 @@ update_mapped_reads_from_trace_worker( void* params )
     }
     
     free_mapped_read( r );
+
+    pthread_exit( NULL );
     
     return 0;
 }
@@ -920,13 +926,17 @@ update_chipseq_trace_expectation_from_location(
         /* the binding site must be on the five prime side of the read */
         unsigned int window_start;
         unsigned int window_stop;
+        /* determine which trace to lock */
+        int trace_index;
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
             window_start = stop-global_fl_dist->max_fl;
             window_stop = stop;
+            trace_index = 1;
         } else {
             window_start = start;
             window_stop = start + global_fl_dist->max_fl;
+            trace_index = 0;
         }
         
         /* lock the locks */
@@ -934,9 +944,9 @@ update_chipseq_trace_expectation_from_location(
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
             #ifdef USE_MUTEX
-            pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
+            pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
             #else
-            pthread_spin_lock( traces->locks[0][ chr_index ] + k );
+            pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
             #endif
         }
         #endif
@@ -956,7 +966,7 @@ update_chipseq_trace_expectation_from_location(
         {
             for( k = window_start; k < window_stop; k++ )
             {
-                traces->traces[0][chr_index][k]
+                traces->traces[1][chr_index][k]
                     += cond_prob*
                        global_fl_dist->chipseq_bs_density[ 
                         global_fl_dist->max_fl -1 -(k-window_start) ];
@@ -974,9 +984,9 @@ update_chipseq_trace_expectation_from_location(
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
             #ifdef USE_MUTEX
-            pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
+            pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
             #else
-            pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+            pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
             #endif
         }
         #endif
@@ -1038,6 +1048,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* the binding site must be on the five prime side of the read */
             unsigned int window_start;
             unsigned int window_stop;
+            /* determine which trace to use */
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
                 window_start = stop-global_fl_dist->max_fl;
@@ -1050,13 +1061,26 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
                 for( k = window_start; k < window_stop; k++ )
-                    window_density += traces->traces[0][chr_index][k]
+                {
+                    /* 
+                       This is a bit confusing. First, at this stage we dont care whether the inferred
+                       binding site came from 5'or 3' reads  - so we add up the binding site density 
+                       from both strands. Next, we normalize this value by the precomputed frag length
+                       normalization factor.
+                    */
+                    window_density += 
+                        ( traces->traces[0][chr_index][k] + traces->traces[1][chr_index][k] )
                         *global_fl_dist->chipseq_bs_density[ 
                             global_fl_dist->max_fl - 1 - (k-window_start) ];
+                }
             } else {
                 for( k = window_start; k < window_stop; k++ )
-                    window_density += traces->traces[0][chr_index][k]
+                {
+                    /* same comment as directly above */
+                    window_density += 
+                        ( traces->traces[0][chr_index][k] + traces->traces[1][chr_index][k] )
                         *global_fl_dist->chipseq_bs_density[ k-window_start ];
+                }
             }
         }
         
@@ -1308,9 +1332,10 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     case CHIP_SEQ:
         update_expectation = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
-        trace_size = 1;
+        trace_size = 2;
         track_names = malloc( trace_size*sizeof(char*) );
-        track_names[0] = "read_density";
+        track_names[0] = "fwd_strand_read_density";
+        track_names[1] = "bkwd_strand_read_density";
         can_iteratively_map = true;
         break;
     

@@ -158,17 +158,32 @@ cmp_wig_line_info( const void* a, const void* b)
         return 1;
     }
 
-    /* compare on chr index */
-    if( ((struct wig_line_info*) b)->chr_index != ((struct wig_line_info*) a)->chr_index )
+    /* compare on track index */
+    if( ((struct wig_line_info*) b)->trace_index 
+        != ((struct wig_line_info*) a)->trace_index )
     {
-        return ((struct wig_line_info*) a)->chr_index - ((struct wig_line_info*) b)->chr_index;
+        return ((struct wig_line_info*) a)->trace_index 
+                 - ((struct wig_line_info*) b)->trace_index;
+    }
+
+
+    /* compare on chr index */
+    if( ((struct wig_line_info*) b)->chr_index 
+        != ((struct wig_line_info*) a)->chr_index )
+    {
+        return ((struct wig_line_info*) a)->chr_index 
+                 - ((struct wig_line_info*) b)->chr_index;
     }
     
-    return ((struct wig_line_info*) a)->position - ((struct wig_line_info*) b)->position;
+    return ((struct wig_line_info*) a)->position 
+             - ((struct wig_line_info*) b)->position;
 }
 
 static void
-parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
+parse_next_line( struct wig_line_info* lines, 
+                 char** chr_names,
+                 char** track_names,
+                 int line_index )
 {
     char* rv;
     char buffer[500];
@@ -176,10 +191,10 @@ parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
     /* loop until we get a valid line */
     while( 1 )
     {
-        rv = fgets( buffer, 500, lines[index].fp );
+        rv = fgets( buffer, 500, lines[line_index].fp );
         if( rv == NULL ) 
         {
-            lines[index].fp = NULL;
+            lines[line_index].fp = NULL;
             return;
         }
         if( buffer[0] == 'f' )
@@ -187,36 +202,59 @@ parse_next_line( struct wig_line_info* lines, char** chr_names, int index )
             fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
             assert( 0 );
             exit( -1 );
-        } else if ( buffer[0] == 'v') {
+        } else if( buffer[0] == 't') {
             /* increment the chr index */
-            lines[index].chr_index += 1;
+            lines[line_index].trace_index += 1;
+            /* get the chr name */
+            char* track_name = strstr( buffer, "name=" );
+            /* skip past the name= characters */
+            track_name += 5;
+            /* set the chr name */
+            if( track_names[lines[line_index].trace_index] != NULL )
+            {
+                if( 0 != strncmp( track_name, track_names[lines[line_index].trace_index], strlen( track_names[lines[line_index].trace_index] ) ) )
+                {
+                    fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync", 
+                             (int)strlen(track_names[lines[line_index].trace_index]), track_name, track_names[lines[line_index].trace_index] );
+                    assert( 0 );
+                }
+            } else {
+                /* remoive the trailing newline */
+                int track_name_len = strlen(track_name)-1;
+                track_names[lines[line_index].trace_index] = calloc( track_name_len+1, sizeof(char)  );
+                memcpy( track_names[lines[line_index].trace_index], track_name, track_name_len );
+                track_names[lines[line_index].trace_index][ track_name_len ] = '\0';
+            }
+        } else if ( buffer[0] == 'v') {
+            /* increment the chr line_index */
+            lines[line_index].chr_index += 1;
             /* get the chr name */
             char* chr_name = strstr( buffer, "chrom=" );
             chr_name += 6;
             /* set the chr name */
-            if( chr_names[lines[index].chr_index] != NULL )
+            if( chr_names[lines[line_index].chr_index] != NULL )
             {
-                if( 0 != strncmp( chr_name, chr_names[lines[index].chr_index], strlen( chr_names[lines[index].chr_index] ) ) )
+                if( 0 != strncmp( chr_name, chr_names[lines[line_index].chr_index], strlen( chr_names[lines[line_index].chr_index] ) ) )
                 {
                     fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
-                             (int)strlen(chr_names[lines[index].chr_index]), chr_name, chr_names[lines[index].chr_index] );
+                             (int)strlen(chr_names[lines[line_index].chr_index]), chr_name, chr_names[lines[line_index].chr_index] );
                     assert( 0 );
                 }
             } else {
                 /* remoive the trailing newline */
                 int chr_name_len = strlen(chr_name)-1;
-                chr_names[lines[index].chr_index] = calloc( chr_name_len+1, sizeof(char)  );
-                memcpy( chr_names[lines[index].chr_index], chr_name, chr_name_len );
-                chr_names[lines[index].chr_index][ chr_name_len ] = '\0';
+                chr_names[lines[line_index].chr_index] = calloc( chr_name_len+1, sizeof(char)  );
+                memcpy( chr_names[lines[line_index].chr_index], chr_name, chr_name_len );
+                chr_names[lines[line_index].chr_index][ chr_name_len ] = '\0';
             }
         /* Assuming this is a variable step numeric line */
         } else {
             int rv = sscanf( buffer, "%i\t%e\n", 
-                             &(lines[index].position), &(lines[index].value)  );
+                             &(lines[line_index].position), &(lines[line_index].value)  );
             if( rv != 2 )
             {
                 assert( rv == EOF );
-                lines[index].fp = NULL;
+                lines[line_index].fp = NULL;
             }
 
             return;
@@ -239,12 +277,14 @@ aggregate_over_wiggles(
     char* rv;
 
     int curr_chr_index = -1;
+    int curr_trace_index = -1;
 
     /* loop over num wigs */
     int i;
 
     /* BUG!!! HORRIBLE HACK */
     char** chr_names = malloc(sizeof(char*)*100);
+    char** track_names = malloc(sizeof(char*)*100);
     
     /* we implement this as a merge sort. 
        First, we read lines from each until we have a chr and position.
@@ -252,38 +292,23 @@ aggregate_over_wiggles(
 
     struct wig_line_info* lines = malloc( sizeof(struct wig_line_info)*num_wigs );
     
-    /* get the track names */
-    char buffer[500];
-    for( i = 0; i < num_wigs; i++ )
-    {
-        lines[i].fp = wig_fps[i];
-        lines[i].chr_index = -1;
-        rv = fgets( buffer, 500, lines[i].fp );
-        if( rv == NULL )
-        {
-            perror( "FATAL    : Could not read line from wiggle file" );
-            exit( -1 );
-        }
-    }
-    /* make sure that the header is not too long */
-    if( strlen( buffer ) > 495 )
-    {
-        fprintf( stderr, "ERROR     : wiggle header too long ( %zu )", strlen( buffer ) );
-        assert( 0 );
-        exit( -1 );
-    }
-    /* write the header to the output file */
-    fprintf( ofp, "%s", buffer );
-    
     /* initialize the data arrays */
     for( i = 0; i < num_wigs; i++ )
     {
-        parse_next_line( lines, chr_names, i );
+        lines[i].fp = wig_fps[i];
+        parse_next_line( lines, chr_names, track_names, i );
     }
     
     qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     while( NULL != lines[0].fp )
     {
+        if( lines[0].trace_index > curr_trace_index )
+        {    
+            fprintf( ofp, "track type=wiggle_0 name=%s\n", 
+                     track_names[lines[0].trace_index] );
+            curr_trace_index = lines[0].trace_index;
+        }
+        
         if( lines[0].chr_index > curr_chr_index )
         {    
             fprintf( ofp, "variableStep chrom=%s\n", chr_names[lines[0].chr_index] );
@@ -308,7 +333,7 @@ aggregate_over_wiggles(
             fprintf( ofp, "%i\t%e\n", position, value  );
         
         for( i = 0; i <= ub; i++ )
-            parse_next_line( lines, chr_names, i );
+            parse_next_line( lines, chr_names, track_names, i );
         
         qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
@@ -356,12 +381,12 @@ write_wiggle_from_trace( struct trace_t* traces,
         exit( -1 );
     }
     
-    int track_index, j;
+    int trace_index, j;
     unsigned int k;
-    for( track_index = 0; track_index < traces->num_traces; track_index++ )
+    for( trace_index = 0; trace_index < traces->num_traces; trace_index++ )
     {
         /* Print out the header */
-        fprintf( wfp, "track type=wiggle_0 name=%s\n", track_names[track_index] );
+        fprintf( wfp, "track type=wiggle_0 name=%s\n", track_names[trace_index] );
 
         for( j = 0; j < traces->num_chrs; j++ )
         {
@@ -378,9 +403,9 @@ write_wiggle_from_trace( struct trace_t* traces,
             
             for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
-                if( traces->traces[track_index][j][k] > filter_threshold )
+                if( traces->traces[trace_index][j][k] > filter_threshold )
                     fprintf( wfp, "%i\t%e\n", k+1, 
-                             traces->traces[track_index][j][k] );
+                             traces->traces[trace_index][j][k] );
             }
         }
     }

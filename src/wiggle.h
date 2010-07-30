@@ -6,6 +6,7 @@
 
 struct wig_line_info {
     FILE* fp;
+    int trace_index;
     int chr_index;
     unsigned int position;
     float value;

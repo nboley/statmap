@@ -168,19 +168,26 @@ def build_fragments( region, bind_prbs, num ):
 
 def parse_wig( fname, genome ):
     fp = open( fname )
-    density = numpy.zeros(len(genome.values()[0])+1)
+    tracks = []
     for line in fp:
-        if line.startswith('track') or line.startswith('variable'):
+        if line.startswith('track'):
+            track_name = line.strip().split("name=")[1]
+            tracks.append( numpy.zeros(len(genome.values()[0])+1) )
+        elif line.startswith('variable'):
             continue
-        data = line.strip().split("\t")
-        loc, value = int(data[0]), float(data[1])
-        density[loc] += value
+        # assume this is a variable step line
+        else:
+            data = line.strip().split("\t")
+            loc, value = int(data[0]), float(data[1])
+            tracks[-1][loc] += value
     fp.close()
-    return density
+    return tracks
 
 def parse_bwtout( fname, genome, paired_end ):
     fp = open( fname )
-    density = numpy.zeros(len(genome.values()[0])+1)
+    tracks = []
+    tracks.append( numpy.zeros(len(genome.values()[0])+1) )
+    tracks.append( numpy.zeros(len(genome.values()[0])+1) )
     while True:
         line = fp.readline()
         if line == '': break
@@ -190,9 +197,13 @@ def parse_bwtout( fname, genome, paired_end ):
             density[loc1:loc2] += 0.5/(loc2 - loc1)
         else:
             loc = int( line.strip().split("\t")[3] )
-            density[loc:(loc+35)] += 0.5/(35)
+            strand = line.strip().split("\t")[1]
+            if strand == '+':
+                tracks[0][loc:(loc+35)] += 0.5/(35)
+            else:
+                tracks[1][loc:(loc+35)] -= 0.5/(35)
     fp.close()
-    return density
+    return tracks
 
 def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     DIRTY = True
@@ -259,15 +270,18 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
 
     return
 
-    true_density = numpy.zeros( len( region ) )
+    true_density = [ numpy.zeros( len( region ) ), numpy.zeros( len( region ) ) ]
     for chr, start, stop in fragments:
-        true_density[start:stop] += 1
-    true_density = true_density/true_density.sum()
+        true_density[0][start:stop] += 0.5
+        true_density[1][start:stop] += 0.5
+    true_density[0] = true_density[0]/true_density[0].sum()
+    true_density[1] = true_density[1]/true_density[1].sum()
     
     density = parse_wig( wig_fname, genome )
-    density = density/density.sum()
+    density[0] = density[0]/density[0].sum()
+    density[1] = density[1]/density[1].sum()
     
-    rpy.r.plot( density, col='green', ylim=(0,true_density.max()), \
+    rpy.r.plot( density[0], col='green', ylim=(-true_density.max(),true_density.max()), \
                 type='l', main='', ylab='', xlab='' )
     rpy.r.points( true_density, type='l' )
     rpy.r.points( density.max()*numpy.array(bind_prbs), type='l', col='red' )
@@ -279,16 +293,31 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
     fragments = build_fragments( region, bind_prbs, NUM_READS )
+
+    # write the binding site probs to a wiggle
+    # so that we can plot them
+    fp = open( "binding_site_occupancies.wig", "w" )
+    fp.write("track type=wiggle_0 name=binding_site_occupancy\n")
+    fp.write("variableStep chrom=chr2L\n")
+    for pos, value in enumerate(bind_prbs):
+        if value > 0:
+            fp.write( "%i\t%e\n" % (pos+1, value) )
+    fp.close()
     
     density = numpy.zeros(len(region))
     for chr, start, stop in fragments:
         density[start:stop] += 1.0/(stop-start)
     fp = open( "true_read_coverage.wig", "w" )
-    fp.write("track type=wiggle_0 name=true_read_coverage\n")
+    fp.write("track type=wiggle_0 name=fwd_true_read_coverage\n")
     fp.write("variableStep chrom=chr2L\n")
     for pos, value in enumerate(density):
         if value > 0:
-            fp.write( "%i\t%e\n" % (pos+1, value) )
+            fp.write( "%i\t%e\n" % (pos+1, value/2) )
+    fp.write("track type=wiggle_0 name=bkwd_true_read_coverage\n")
+    fp.write("variableStep chrom=chr2L\n")
+    for pos, value in enumerate(density):
+        if value > 0:
+            fp.write( "%i\t%e\n" % (pos+1, value/2) )
     fp.close()
     
     genome = { 'chr2L': region }
@@ -461,7 +490,7 @@ def plot_wig_bounds( dir, png_fname ):
     rpy.r("par(cex=0.2, mai=c(0.5,0.4,0.4,0.2))")
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
-    density_max = density.max()
+    density_max = 0.5 # density.max()
     density = density/density_max
     rpy.r.plot( density, type='l', col='blue', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2), cex=0.2, mai=(0.5,0.4,0.4,0.2) )
 
@@ -494,9 +523,11 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5)")
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
-    density_max = 1.0 # density.max()
-    rpy.r.plot( density/density_max, type='l', col='blue', main='Inferred Read Coverage Density', \
-                xlab='', ylab='', lty=1, ylim=(0, 1.05) )
+    density_max = 1.0 # max( density[0].max(), density[1].max() )
+    print density_max
+    rpy.r.plot( density[0]/density_max, type='l', col='blue', main='Inferred Fragment Coverage Density', \
+                xlab='', ylab='', lty=1, ylim=(-0.55, 0.55) )
+    rpy.r.points( -1*density[1], type='l', col='blue', main='', xlab='', ylab='', lty=1 )
     
     def plot_wiggles( dir, color  ):
         fnames = []
@@ -506,56 +537,68 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
                 fnames.append( file )
                 
         for fname in fnames:
-            density = parse_wig( fname, genome )/density_max
-            rpy.r.points( density, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+            density = parse_wig( fname, genome )
+            rpy.r.points( density[0]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+            rpy.r.points( -1*density[1]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
         os.chdir(curr_dir)
 
     # parse bowtie out
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
-    rpy.r.points( density, type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
+    rpy.r.points( density[0], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
+    rpy.r.points( density[1], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
     plot_wiggles( "./smo_chipseq_sim/samples/", 'black' )
     
-    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )/density_max
-    rpy.r.points( density, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
+    rpy.r.points( density[0]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    rpy.r.points( -1*density[1]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
     
-    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )/density_max
-    rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=1 )
+    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )
+    rpy.r.points( density[0]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
+    rpy.r.points( -1*density[1]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
     
-    density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )/density_max
-    rpy.r.points( density, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
+    rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     
     true_density = parse_wig( "true_read_coverage.wig", genome )
-    rpy.r.points( true_density, type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    rpy.r.points( true_density[0], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    rpy.r.points( -1*true_density[1], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+
+    true_density = parse_wig( "binding_site_occupancies.wig", genome )
+    for index, value in enumerate(true_density[0]):
+        if value > 0.25:
+            rpy.r.abline( v=index, col='black', lty=2  )
     
     for bp_index in mut_indexes:
         rpy.r.abline( v=bp_index, col='red', lty=2  )
-    
-    rpy.r("""legend( x=7700, y=1.0,
+    # x=7700, y=0.5,
+    rpy.r("""legend( x=4500, y=-0.10,
              legend=c("Statmap Upper Bound", "Statmap Lower Bound", "Statmap Expectation", 
                       "Statmap Local Maxima", "Statmap Bootstrap Upper Bounds", 
                       "Statmap Bootstrap Lower Bounds",
-                      "Bowtie", "True Read Coverage", "Mutations"),
-             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black", "Red"),
-             lwd=c(0.5,0.5,1.5,0.5,0.5,0.5,2,2,0.5), lty=c(1,1,1,1,1,1,3,3,2) )""" )
+                      "Bowtie", "True Read Coverage", "Mutations", "Bind Sites w/ > 0.25 Average Occupancy"),
+             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black", "Red", "Black"),
+             lwd=c(0.5,0.5,1.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,1,3,3,2,2) )""" )
     
     rpy.r.dev_off()
 
 
 if __name__ == '__main__':
     paired_end=False
+    NUM_MUTS = 3
     
     if False:
-        test_cage_region( 3, "relaxed_%i_marginal.wig" % 3, iterative=False )
+        test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )
         if sc.CLEANUP:
             #subprocess.call( "rm tmp.*", shell=True )
             #subprocess.call( "rm ./smo_chipseq_sim/ -rf", shell=True )
             pass
 
     if True:
-        mut_indexes = build_random_chipseq_reads( 3, are_paired_end=paired_end )
+        mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end )
         map_with_bowtie( paired_end )
         map_with_statmap( paired_end=paired_end )
         plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes )
