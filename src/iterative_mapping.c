@@ -29,7 +29,7 @@
 #include "fragment_length.h"
 #include "sam.h"
 
-#define LOCK_TRACES
+#define DONT_LOCK_TRACES
 
 struct fragment_length_dist_t* global_fl_dist;
 
@@ -159,7 +159,11 @@ bootstrap_traces_from_mapped_reads(
                 if( j == r.num_mappings )
                 {
                     j = r.num_mappings - 1;
-                    assert( cum_dist > 0.999 );
+                    if( cum_dist < 0.999 )
+                    {
+                        fprintf( stderr, "ERROR      : There is a serious error in the bs code. It appears as if the read cond probs dont sum to 1 - contuining but PLEASE file a bug report.\n");
+                        return;
+                    }
                 }
             }
                         
@@ -930,12 +934,15 @@ update_chipseq_trace_expectation_from_location(
         int trace_index;
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
-            window_start = stop-global_fl_dist->max_fl;
-            window_stop = stop;
+            /* prevent overrunning the trace bounadry - this is fancy to avoid the 
+               fact that the indexes are unsigned */
+            window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
+            window_stop = MIN( stop, traces->trace_lengths[chr_index] );
             trace_index = 1;
         } else {
             window_start = start;
-            window_stop = start + global_fl_dist->max_fl;
+            window_stop = MIN( start + global_fl_dist->max_fl, 
+                               traces->trace_lengths[chr_index] );
             trace_index = 0;
         }
         
@@ -1287,6 +1294,105 @@ update_CAGE_mapped_read_prbs(
  */
 
 
+int
+update_chipseq_mapping_wnc(  
+    struct mapped_reads_db* ip_rdb, 
+    struct trace_t** ip_trace,
+    
+    struct mapped_reads_db* nc_rdb,
+    struct trace_t** nc_trace,
+    
+    struct genome_data* genome,
+    float max_prb_change_for_convergence,
+    /* true if we should use a random start - otherwise, we use uniform */
+    enum bool random_start )
+{
+    clock_t start, stop;
+    
+    int error = 0;
+    
+    /* BUG!!! */
+    /* Set the global fl dist - we should probably be passing this in through
+       the call chain via a void ptr, but thats a lot of work with very little
+       benefit ( except some cleanliness of course )
+     */
+    global_fl_dist = ip_rdb->fl_dist;
+
+    /* reset the read cond prbs under a uniform prior */
+    reset_all_read_cond_probs( ip_rdb );
+    reset_all_read_cond_probs( nc_rdb );
+            
+    /* iteratively map from a uniform prior */
+    start = clock();
+    fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
+    
+    /* initialize the trace that we will store the expectation in */
+    /* it has dimension 2 - for the negative and positive stranded reads */
+    init_traces( genome, ip_trace, 2 );
+    init_traces( genome, nc_trace, 2 );    
+
+    if( false == random_start )
+    {
+        set_trace_to_uniform( *ip_trace, 1 );    
+    } else {
+        build_random_starting_trace( 
+            *ip_trace, ip_rdb, 
+            update_chipseq_trace_expectation_from_location,
+            update_chipseq_mapped_read_prbs
+        );
+    }
+    
+    /* reset the read cond prbs under a uniform prior */
+    reset_all_read_cond_probs( ip_rdb );
+    
+    /* update the 'real' IP data */
+    error = update_mapping (
+        ip_rdb, 
+        *ip_trace,
+        MAX_NUM_EM_ITERATIONS,
+        max_prb_change_for_convergence,
+        update_chipseq_trace_expectation_from_location,
+        update_chipseq_mapped_read_prbs
+    );
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
+            ((float)(stop-start))/CLOCKS_PER_SEC );
+    
+    /* update the NC data based upon the IP data's NC */
+    normalize_traces( *ip_trace );
+    
+    struct update_mapped_read_rv_t rv = 
+        update_mapped_reads_from_trace(
+            nc_rdb, *ip_trace, 
+            update_chipseq_mapped_read_prbs
+        );
+    
+    /* update the NC reads from the ip marginal density */
+    update_traces_from_mapped_reads( 
+        nc_rdb, *nc_trace, 
+        update_chipseq_trace_expectation_from_location
+    );
+
+    /* we need to do this because I renormalized the read sensity, 
+       and it screws up the wiggle printing. Kind of a hack... */
+    update_traces_from_mapped_reads( 
+        ip_rdb, *ip_trace, 
+        update_chipseq_trace_expectation_from_location
+    );
+    
+    /* 
+       now we have two traces - one is the NC and one is the IP. They are 
+       mapped from the same marginal read density, so we should be able
+       to call peaks on them individually 
+    */
+    goto cleanup;
+    
+cleanup:
+    
+    return 0;    
+}
+
 
 int
 generic_update_mapping(  struct rawread_db_t* rawread_db,
@@ -1297,8 +1403,6 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
                          float max_prb_change_for_convergence)
 {
     /* tell whether or not we *can* iteratively map ( ie, do we know the assay? ) */
-    enum bool can_iteratively_map = false; 
-
     clock_t start, stop;
     
     int error = 0;
@@ -1326,7 +1430,6 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
         track_names = malloc( trace_size*sizeof(char*) );
         track_names[0] = "fwd_strnd_read_density"; 
         track_names[1] = "rev_strnd_read_density";
-        can_iteratively_map = true;
         break;
     
     case CHIP_SEQ:
@@ -1336,19 +1439,16 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
         track_names = malloc( trace_size*sizeof(char*) );
         track_names[0] = "fwd_strand_read_density";
         track_names[1] = "bkwd_strand_read_density";
-        can_iteratively_map = true;
         break;
     
     default:
         fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'. Returning marginal mappings.\n", assay_type);
-        can_iteratively_map = false;
         return 0;
     }
     
     /* BUG!!! */
     /* Set the global fl dist */
     global_fl_dist = rdb->fl_dist;
-
     
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );

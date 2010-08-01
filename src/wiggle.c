@@ -274,8 +274,6 @@ aggregate_over_wiggles(
     float agg_fn( const struct wig_line_info*, const int, const int  )
 )
 {
-    char* rv;
-
     int curr_chr_index = -1;
     int curr_trace_index = -1;
 
@@ -373,7 +371,7 @@ write_wiggle_from_trace( struct trace_t* traces,
                          const char* output_fname,                           
                          const double filter_threshold )
 {    
-    FILE* wfp = fopen( output_fname, "w" );
+    FILE* wfp = fopen( output_fname, "a" );
     if( wfp == NULL )
     {
         perror( "FATAL        : Could not open wiggle file for writing " );

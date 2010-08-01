@@ -800,6 +800,9 @@ build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
 void
 close_mapped_reads_db( struct mapped_reads_db* rdb )
 {
+    if( NULL == rdb )
+        return;
+    
     munmap_mapped_reads_db( rdb );
     fclose( rdb->fp );
 

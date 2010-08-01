@@ -191,6 +191,19 @@ write_mapped_reads_to_wiggle( struct mapped_reads_db* rdb,
 enum assay_type_t;
 
 int
+update_chipseq_mapping_wnc(  
+    struct mapped_reads_db* ip_rdb, 
+    struct trace_t** ip_trace,
+    
+    struct mapped_reads_db* nc_rdb,
+    struct trace_t** nc_trace,
+    
+    struct genome_data* genome,
+    float max_prb_change_for_convergence,
+    /* true if we should use a random start - otherwise, we use uniform */
+    enum bool random_start );
+
+int
 generic_update_mapping( struct rawread_db_t* rawread_db,
                         struct mapped_reads_db* rdb, 
                         struct genome_data* genome,

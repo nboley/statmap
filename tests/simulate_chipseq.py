@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 10
+NUM_SAMPLES = 1
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -161,8 +161,8 @@ def build_fragments( region, bind_prbs, num ):
         # ( we say that it is uniform, except for the edges )
         bind_loc = random.randint( 0, fl - len(motif)  )
         fl_start = bs_index - bind_loc
-        fragments.append( ('chr2L', fl_start, fl_start+fl ) )
-        # fragments.append( ('chr2L', fl_start, min( fl_start+fl, len(cum_array) ) ) )
+        # fragments.append( ('chr2L', fl_start, fl_start+fl ) )
+        fragments.append( ('chr2L_paternal', fl_start, min( fl_start+fl, len(cum_array) ) ) )
     
     return fragments
 
@@ -213,8 +213,8 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     bind_prbs = assign_bind_prbs( bind_site_scores )
     fragments = build_fragments( region, bind_prbs, NUM_READS )
     
-    genome = { 'chr2L': region }
-
+    genome = { 'chr2L_paternal': region }
+    
     if DIRTY:
         reads = sc.build_reads_from_fragments( 
             genome, fragments, rev_comp=False, paired_end=False )
@@ -225,21 +225,21 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
         mutated_reads = sc.mutate_reads( reads, error_strs )
     else:
         reads = sc.build_reads_from_fragments( genome, fragments, paired_end=False )
-
+    
     genome_of = open("tmp.genome", "w")
     # write a second genome
-    chr2L = genome['chr2L']
-    mutated_chr2L = array.array( 'c', chr2L )
-
-    # mutated num_mutations random indexes
-    rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
-    for rand_index in rand_indexes:
-        curr_bp = mutated_chr2L[ rand_index ]
-        valid_bps = [ bp for bp in bps if bp != curr_bp ]
-        mutated_chr2L[rand_index] = random.choice( valid_bps )
+    chr2L_maternal = genome['chr2L_paternal']
+    mutated_chr2L_maternal = array.array( 'c', chr2L_maternal )
     
-    genome['chr2L'] = chr2L + mutated_chr2L.tostring()
-    sc.write_genome_to_fasta( genome, genome_of, 1 )
+    # mutated num_mutations random indexes
+    rand_indexes = random.sample( xrange(len(mutated_chr2L_maternal)), num_mutations )
+    for rand_index in rand_indexes:
+        curr_bp = mutated_chr2L_maternal[ rand_index ]
+        valid_bps = [ bp for bp in bps if bp != curr_bp ]
+        mutated_chr2L_maternal[rand_index] = random.choice( valid_bps )
+    
+    genome['chr2L_maternal'] = mutated_chr2L_maternal.tostring()
+    sc.write_genome_to_fasta( genome, genome_of )
     genome_of.close()
     
     reads_of = open('tmp.fastq', "w");
@@ -248,58 +248,25 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     else:
         sc.build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
-
-    return
-
-    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                             -o smo_chipseq_sim \
-                             -n %i -f ./data/fl_dist.txt\
-                             " % ( sc.STATMAP_PATH, NUM_SAMPLES )
-    if iterative:
-        call += " -a i"
-        
-    print re.sub( "\s+", " ", call)
-
-    ret_code = subprocess.call( call, shell=True )
-    # ret_code = ( os.system( call ) >> 8 )
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
-        
-    ## Plot everything
-
-    return
-
-    true_density = [ numpy.zeros( len( region ) ), numpy.zeros( len( region ) ) ]
-    for chr, start, stop in fragments:
-        true_density[0][start:stop] += 0.5
-        true_density[1][start:stop] += 0.5
-    true_density[0] = true_density[0]/true_density[0].sum()
-    true_density[1] = true_density[1]/true_density[1].sum()
     
-    density = parse_wig( wig_fname, genome )
-    density[0] = density[0]/density[0].sum()
-    density[1] = density[1]/density[1].sum()
-    
-    rpy.r.plot( density[0], col='green', ylim=(-true_density.max(),true_density.max()), \
-                type='l', main='', ylab='', xlab='' )
-    rpy.r.points( true_density, type='l' )
-    rpy.r.points( density.max()*numpy.array(bind_prbs), type='l', col='red' )
-    raw_input()
-
+    return
 
 def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True ):
     region = build_chipseq_region( )
-
+    
     # simulate the ip reads
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
     ip_fragments = build_fragments( region, bind_prbs, NUM_READS )
-
-    # simualte the negative control reads
+    
+    # simulate the negative control reads
+    # zero the boundaries to prevent framgnets from overlapping
+    zeroed_bndry_size = 650
     uniform = array.array( 'f', [1.0]*len(bind_prbs) )
+    uniform[:zeroed_bndry_size] = array.array( 'f', [0.0]*zeroed_bndry_size )
+    uniform[-zeroed_bndry_size:] = array.array( 'f', [0.0]*zeroed_bndry_size )
     nc_fragments = build_fragments( region, uniform, NUM_READS )
-
+    
     # write the binding site probs to a wiggle
     # so that we can plot them
     fp = open( "binding_site_occupancies.wig", "w" )
@@ -326,8 +293,8 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
             fp.write( "%i\t%e\n" % (pos+1, value/2) )
     fp.close()
     
-    genome = { 'chr2L': region }
-
+    genome = { 'chr2L_paternal': region }
+    
     if DIRTY:
         sample_file = gzip.open( './data/cage_error_strs.fastq.gz' )
         error_strs = sc.get_error_strs_from_fastq( sample_file )
@@ -341,14 +308,16 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
             genome, nc_fragments, rev_comp=True, paired_end=are_paired_end )
         nc_mutated_reads = sc.mutate_reads( nc_reads, error_strs )
     else:
-        ip_reads = sc.build_reads_from_fragments( genome, ip_fragments, are_paired_end=paired_end )
-        nc_reads = sc.build_reads_from_fragments( genome, nc_fragments, are_paired_end=paired_end )
-
+        ip_reads = sc.build_reads_from_fragments( 
+            genome, ip_fragments, are_paired_end=paired_end )
+        nc_reads = sc.build_reads_from_fragments( 
+            genome, nc_fragments, are_paired_end=paired_end )
+    
     genome_of = open("tmp.genome", "w")
     # write a second genome
-    chr2L = genome['chr2L']
+    chr2L = genome['chr2L_paternal']
     mutated_chr2L = array.array( 'c', chr2L )
-
+    
     # mutate num_mutations random indexes
     rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
     for rand_index in rand_indexes:
@@ -356,8 +325,8 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
         valid_bps = [ bp for bp in bps if bp != curr_bp ]
         mutated_chr2L[rand_index] = random.choice( valid_bps )
     
-    genome['chr2L'] = chr2L + mutated_chr2L.tostring()
-    sc.write_genome_to_fasta( genome, genome_of, 1 )
+    genome['chr2L_maternal'] = mutated_chr2L.tostring()
+    sc.write_genome_to_fasta( genome, genome_of )
     genome_of.close()
     
     reads_of_1 = open('tmp.1.fastq', "w");
@@ -549,6 +518,16 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
                 xlab='', ylab='', lty=1, ylim=(-0.55, 0.55) )
     if len( density ) > 1:
         rpy.r.points( -1*density[1], type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+
+    def plot_wiggle( wiggle_density, color, lty=1, lwd=1  ):
+        if len( wiggle_density ) > 0:
+            rpy.r.points( wiggle_density[0], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 1:
+            rpy.r.points( -1*wiggle_density[1], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 2:
+            rpy.r.points( wiggle_density[2], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        if len( wiggle_density ) > 3:
+            rpy.r.points( -1*wiggle_density[3], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
     
     def plot_wiggles( dir, color  ):
         fnames = []
@@ -559,46 +538,32 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
                 
         for fname in fnames:
             density = parse_wig( fname, genome )
-            if len( density ) > 0:
-                rpy.r.points( density[0]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
-            if len( density ) > 1:
-                rpy.r.points( -1*density[1]/density_max, type='l', col=color, main='', xlab='', ylab='', lty=1 )
+            plot_wiggle( density, color )
         os.chdir(curr_dir)
 
     # parse bowtie out
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
-    if len( density ) > 0:
-        rpy.r.points( density[0], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
-    if len( density ) > 1:
-        rpy.r.points( density[1], type='l', col='green', lwd=2, main='', xlab='', ylab='', lty=3 )
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
     plot_wiggles( "./smo_chipseq_sim/samples/", 'black' )
     
     density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
-    if len( density ) > 0:
-        rpy.r.points( density[0]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
-    if len( density ) > 1:
-        rpy.r.points( -1*density[1]/density_max, type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    plot_wiggle( density, 'blue' )
     
     density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )
-    if len( density ) > 0:
-        rpy.r.points( density[0]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
-    if len( density ) > 1:
-        rpy.r.points( -1*density[1]/density_max, type='l', col='red', main='', xlab='', ylab='', lty=1 )
-    
+    plot_wiggle( density, 'red' )
+
+    """
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
     if len( density ) > 0:
         rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     if len( density ) > 1:
         rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
+    """
     
     true_density = parse_wig( "true_read_coverage.wig", genome )
-    if len( density ) > 0:
-        rpy.r.points( true_density[0], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
-    if len( density ) > 1:
-        rpy.r.points( -1*true_density[1], type='l', col='black', main='', xlab='', ylab='', lty=3, lwd=2 )
+    plot_wiggle( true_density, 'black', lty=3, lwd=2 )
 
     true_density = parse_wig( "binding_site_occupancies.wig", genome )
     for index, value in enumerate(true_density[0]):

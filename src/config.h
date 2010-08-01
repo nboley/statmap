@@ -38,6 +38,10 @@
 #define RELAXED_SAMPLES_META_INFO_FNAME "./samples/meta_info.csv"
 
 #define MAPPED_READS_DB_FNAME "mapped_reads.db"
+#define MAPPED_NC_READS_DB_FNAME "mapped_NC_reads.db"
+
+#define CANDIDATE_MAPPINGS_DB_FNAME "candidate_mappings"
+#define CANDIDATE_MAPPINGS_NC_DB_FNAME "NC_candidate_mapings"
 
 #define PSEUDO_LOCATIONS_FNAME "pseudo_locations.txt"
 

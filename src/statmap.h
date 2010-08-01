@@ -3,6 +3,8 @@
 #ifndef STATMAP_H
 #define STATMAP_H
 
+#include "config.h"
+
 struct genome_data;
 
 extern int num_threads;
@@ -79,6 +81,11 @@ typedef struct {
     char* pair2_reads_fnames;
     struct rawread_db_t* rdb;
 
+    char* unpaired_NC_reads_fnames;
+    char* pair1_NC_reads_fnames;
+    char* pair2_NC_reads_fnames;
+    struct rawread_db_t* NC_rdb;
+
     char* snpcov_fname;
     FILE* snpcov_fp;
 
@@ -139,7 +146,9 @@ struct mapped_reads_db;
 void
 map_marginal( args_t* args, 
               struct genome_data* genome,
-              struct mapped_reads_db** mpd_rds_db );
+              struct rawread_db_t* rdb,
+              struct mapped_reads_db** mpd_rds_db,
+              enum bool is_nc );
 
 void
 build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db );

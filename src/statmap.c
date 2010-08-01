@@ -26,6 +26,8 @@
 #include "candidate_mapping.h"
 #include "fragment_length.h"
 #include "sam.h"
+#include "wiggle.h"
+#include "trace.h"
 
 /* fwd declaration */
 struct snp_db_t;
@@ -51,8 +53,29 @@ safe_mkdir(char* dir)
     if( -1 == error )
     {
         perror( buffer );
+        assert( false );
         exit( -1 );
     }
+}
+
+static void
+safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fname )
+{
+    int error;
+    char buffer[500];
+    sprintf( buffer, "cp %s %s/%s", fname, output_dir, output_fname );
+    fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  fname );
+    error = system( buffer );
+    if (WIFSIGNALED(error) &&
+        (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+    {
+        fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+        perror( "System Call Failure");
+        assert( false );
+        exit( -1 );
+    }
+    
+    return;
 }
 
 input_file_type_t
@@ -232,6 +255,12 @@ parse_arguments( int argc, char** argv )
     args.unpaired_reads_fnames = NULL;
     args.pair1_reads_fnames = NULL;
     args.pair2_reads_fnames = NULL;
+    args.rdb = NULL;
+
+    args.unpaired_NC_reads_fnames = NULL;
+    args.pair1_NC_reads_fnames = NULL;
+    args.pair2_NC_reads_fnames = NULL;
+    args.NC_rdb = NULL;
 
     args.snpcov_fname = NULL;
     args.snpcov_fp = NULL;
@@ -261,7 +290,7 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:c:o:p:m:s:f:l:a:w:t:q:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:p:m:s:f:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -284,6 +313,17 @@ parse_arguments( int argc, char** argv )
             break;
         case 'r': // single end reads input file
             args.unpaired_reads_fnames = optarg;
+            break;
+
+        /* either ( -3 and -4 ) or -c should be set exclusively, but neither are required */
+        case '3': // paired end reads input file 1
+            args.pair1_NC_reads_fnames = optarg;
+            break;
+        case '4': // paired end reads input file 2
+            args.pair2_NC_reads_fnames = optarg;
+            break;
+        case 'c': // single end reads input file
+            args.unpaired_NC_reads_fnames = optarg;
             break;
             
         /* optional arguments ( that you probably want ) */
@@ -424,20 +464,8 @@ parse_arguments( int argc, char** argv )
         */
         
         /* copy the genome into the output directory */
-        sprintf( buffer, "cp %s %s/genome.fa", 
-                 args.genome_fname, args.output_directory );
-        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  
-                args.genome_fname );
-        error = system( buffer );
-        if (WIFSIGNALED(error) &&
-        (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-        {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
-        }
-
+        safe_copy_into_output_directory( args.genome_fname, args.output_directory, "genome.fa" );
+        
         sprintf( buffer, "%s/genome.fa", args.output_directory );    
         /* open the chromosome file */
         args.genome_fp = fopen( buffer, "r");
@@ -464,47 +492,39 @@ parse_arguments( int argc, char** argv )
     if( args.unpaired_reads_fnames != NULL )
     {
         /* first, copy the read file(s) into the output directory */
-        char buffer[500];
-        sprintf( buffer, "cp %s %s/reads.unpaired", args.unpaired_reads_fnames, args.output_directory );
-        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.unpaired_reads_fnames );
-        error = system( buffer );
-        if (WIFSIGNALED(error) &&
-            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        safe_copy_into_output_directory( 
+            args.unpaired_reads_fnames, args.output_directory, "reads.unpaired" );
+
+        /* copy the unpaired NC reads */
+        if( args.unpaired_NC_reads_fnames != NULL )
         {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
+            safe_copy_into_output_directory( 
+                args.unpaired_NC_reads_fnames, args.output_directory, "reads.NC.unpaired" );
         }
     } 
     /* If the reads are paired */
     else {
-        /* first, copy the read file(s) into the output directory */
-        char buffer[500];
-        sprintf( buffer, "cp %s %s/reads.pair1", args.pair1_reads_fnames, args.output_directory );
-        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair1_reads_fnames );
-        error = system( buffer );
-        if (WIFSIGNALED(error) &&
-            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-        {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
-        }
+        safe_copy_into_output_directory( 
+            args.pair1_reads_fnames, args.output_directory, "reads.pair1" );
+        
+        safe_copy_into_output_directory( 
+            args.pair2_reads_fnames, args.output_directory, "reads.pair2" );
 
-        fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  args.pair2_reads_fnames );
-        sprintf( buffer, "cp %s %s/reads.pair2", args.pair2_reads_fnames, args.output_directory );
-        error = system( buffer );
-        if (WIFSIGNALED(error) &&
-            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        /* if they exist, copy the negatice control reads */ 
+        if( args.pair1_NC_reads_fnames != NULL )
         {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
+            safe_copy_into_output_directory( 
+                args.pair1_NC_reads_fnames, args.output_directory, "reads.NC.pair2" );
+            
+            if( args.pair2_NC_reads_fnames != NULL )
+            {
+                fprintf( stderr, "FATAL     : The NC reads must be paired for a paired experiment.\n" );
+                exit( 1 );
+            }
+            
+            safe_copy_into_output_directory( 
+                args.pair2_NC_reads_fnames, args.output_directory, "reads.NC.pair2" );            
         }
-
     }
 
     /*
@@ -579,13 +599,25 @@ parse_arguments( int argc, char** argv )
 
     /***** initialize the raw reads db */
     init_rawread_db( &(args.rdb) );
-
+    if( args.unpaired_NC_reads_fnames != NULL 
+        || args.pair1_NC_reads_fnames != NULL )
+    {
+        init_rawread_db( &(args.NC_rdb) );
+    }
+    
     /* If the reads are not paired */
     if( args.unpaired_reads_fnames != NULL )
     {
         add_single_end_reads_to_rawread_db(
             args.rdb, "reads.unpaired", FASTQ 
         );
+        
+        if( args.unpaired_NC_reads_fnames != NULL )
+        {
+            add_single_end_reads_to_rawread_db(
+                args.NC_rdb, "reads.NC.unpaired", FASTQ 
+            );
+        }
     } 
     /* If the reads are paired */
     else {
@@ -595,6 +627,16 @@ parse_arguments( int argc, char** argv )
             "reads.pair2",
             FASTQ 
         );
+
+        if( args.pair1_NC_reads_fnames != NULL )
+        {
+            add_paired_end_reads_to_rawread_db(
+                args.NC_rdb, 
+                "reads.NC.pair1",
+                "reads.NC.pair2",
+                FASTQ 
+            );
+        }
     }
     /***** END initialize the read db */
 
@@ -666,36 +708,27 @@ parse_arguments( int argc, char** argv )
 void
 map_marginal( args_t* args, 
               struct genome_data* genome, 
-              struct mapped_reads_db** mpd_rds_db )
+              struct rawread_db_t* rdb,
+              struct mapped_reads_db** mpd_rds_db,
+              enum bool is_nc )
 {
     /* store clock times - useful for benchmarking */
-    clock_t start, stop;
-    
-    /***** Index the genome */
-    start = clock();
-    
-    /* initialize the genome */
-    index_genome( genome, args->indexed_seq_len );
-    
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
-    
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
-    
-    /***** END Genome processing */
-    
+    clock_t start, stop;    
     
     /***** initialize the mappings dbs */
     
     candidate_mappings_db candidate_mappings;
-    init_candidate_mappings_db( &candidate_mappings, "candidate_mappings" );
-    
-    new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    if( false == is_nc )
+    {
+        init_candidate_mappings_db( &candidate_mappings, 
+                                    CANDIDATE_MAPPINGS_DB_FNAME );
+        new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    } else {
+        init_candidate_mappings_db( &candidate_mappings, 
+                                    CANDIDATE_MAPPINGS_NC_DB_FNAME );
+        new_mapped_reads_db( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
 
-    if( args->frag_len_fp != NULL )
-        build_fl_dist_from_file( *mpd_rds_db, args->frag_len_fp );
     
     /***** END initialize the mappings dbs */
     
@@ -704,20 +737,12 @@ map_marginal( args_t* args,
     find_all_candidate_mappings( 
         genome,
         args->log_fp,
-        args->rdb,
+        rdb,
         &candidate_mappings,
         args->min_match_penalty,
         args->max_penalty_spread,
         args->indexed_seq_len );
-    
-    /* Free the genome index */
-    /* we may need the memory later */
-    fprintf(stderr, "NOTICE      :  Freeing index\n" );
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
-    free_tree( genome->index );
-    genome->index = NULL;
-    
+        
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
@@ -731,8 +756,18 @@ map_marginal( args_t* args,
     
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
-    FILE* fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w+" );
-    FILE* bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w+" );
+    
+    FILE* fwd_wig_fp = NULL;
+    FILE* bkwd_wig_fp = NULL;
+    if( false == is_nc )
+    {
+        fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w" );
+        bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w" );
+    } else {
+        fwd_wig_fp = fopen( "marginal_mappings_fwd.NC.wig", "w" );
+        bkwd_wig_fp = fopen( "marginal_mappings_bkwd.NC.wig", "w" );
+    }
+    
     write_marginal_mapped_reads_to_stranded_wiggles( 
         *mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
     fclose( fwd_wig_fp );
@@ -741,7 +776,7 @@ map_marginal( args_t* args,
     /* write the mapped reads to SAM */
     start = clock();
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
-    write_nonmapping_reads_to_fastq( args->rdb, *mpd_rds_db );
+    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
@@ -749,9 +784,14 @@ map_marginal( args_t* args,
     /* write the mapped reads to SAM */
     start = clock();
     fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-    FILE* sam_ofp = fopen( "mapped_reads.sam", "w+" );
+    FILE* sam_ofp = NULL;
+    if ( false == is_nc ) {
+        sam_ofp = fopen( "mapped_reads.sam", "w+" );
+    } else {
+        sam_ofp = fopen( "mapped_reads.NC.sam", "w+" );
+    }
     write_mapped_reads_to_sam( 
-        args->rdb, *mpd_rds_db, genome, false, false, sam_ofp );
+        rdb, *mpd_rds_db, genome, false, false, sam_ofp );
     fclose( sam_ofp );    
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
@@ -821,6 +861,262 @@ iterative_mapping( args_t* args,
     return;
 }
 
+void
+map_generic_data(  args_t* args, 
+                   struct genome_data* genome )
+{
+    /* store clock times - useful for benchmarking */
+    clock_t start, stop;    
+    
+    /***** Index the genome */
+    start = clock();
+    
+    /* initialize the genome */
+    index_genome( genome, args->indexed_seq_len );
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+    
+    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
+            (unsigned long) sizeof_tree( genome->index ) );
+    
+    /***** END Genome processing */
+    
+    struct mapped_reads_db* mpd_rds_db;    
+    map_marginal( args, genome, args->rdb, &mpd_rds_db, false );
+    
+    /* Free the genome index */
+    /* we may need the memory later */
+    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
+            (unsigned long) sizeof_tree( genome->index ) );
+    free_tree( genome->index );
+    genome->index = NULL;
+    
+    if( args->frag_len_fp != NULL ) {
+        build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
+    } else {
+        build_fl_dist( args, mpd_rds_db );
+    }
+
+    close_mapped_reads_db( mpd_rds_db );
+    
+    return;
+}
+
+void
+map_chipseq_data(  args_t* args, 
+                   struct genome_data* genome )
+{
+    /* store clock times - useful for benchmarking */
+    clock_t start, stop;    
+    
+    /***** Index the genome */
+    start = clock();
+    
+    /* initialize the genome */
+    index_genome( genome, args->indexed_seq_len );
+    
+    stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
+                    ((float)(stop-start))/CLOCKS_PER_SEC );
+    
+    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
+            (unsigned long) sizeof_tree( genome->index ) );
+    
+    /***** END Genome processing */
+    
+    /* map the real ( IP ) data */
+    struct mapped_reads_db* chip_mpd_rds_db = NULL;    
+    map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
+    
+    if( args->frag_len_fp != NULL ) {
+        build_fl_dist_from_file( chip_mpd_rds_db, args->frag_len_fp );
+    } else {
+        build_fl_dist( args, chip_mpd_rds_db );
+    }
+    
+    /* 
+       this is a bit messy - for single end chipseq we need to 
+       do a bit of work in advance to speed up the fragment 
+       coverage smoothing. We do that in the next line.
+    */
+    if( args->unpaired_reads_fnames != NULL )
+        build_chipseq_bs_density( chip_mpd_rds_db->fl_dist );
+
+    struct mapped_reads_db* NC_mpd_rds_db = NULL;
+    if ( args->NC_rdb != NULL )
+    {        
+        map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
+        
+        if( args->frag_len_fp != NULL ) {
+            build_fl_dist_from_file( NC_mpd_rds_db, args->frag_len_fp );
+        } else {
+            build_fl_dist( args, NC_mpd_rds_db );
+        }
+
+        /* 
+           this is a bit messy - for single end chipseq we need to 
+           do a bit of work in advance to speed up the fragment 
+           coverage smoothing. We do that in the next line.
+        */
+        if( args->unpaired_reads_fnames != NULL )
+            build_chipseq_bs_density( NC_mpd_rds_db->fl_dist );
+    }
+
+    /* Free the genome index */
+    /* we may need the memory later */
+    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
+            (unsigned long) sizeof_tree( genome->index ) );
+    free_tree( genome->index );
+    genome->index = NULL;
+    
+    /* if there is no negative control, we use the same iterative 
+       scheme as the generic version. iterative_mapping takes care of 
+       everything ( output, iterative, etc. ). We dont touch peak calling - 
+       ( we dont really know how to do it well inside our probability model
+         without a NC because of chromatin solubility, etc., so we leave that for
+         people that have taken the time to build effective heiristics. ie. 
+         peak callers.  )
+    */
+    if( NULL == args->NC_rdb )
+    {
+        iterative_mapping( args, genome, chip_mpd_rds_db );
+    } 
+    /* if there is a NC, we can do something simple. For each 
+       sample that we take from the mapping distribution, we use the 
+       machinery to build a marginal read density. Then, we update the 
+       read mapping locations for the NC control from the marginal density, 
+       and build a NC marginal density. Of course, the marginal density is 
+       precisely the expectation of the binding site density distribution,
+       so calling peaks ( basepair per basepair ) corresponds to testing the
+       hypothesis that the binding site in the IP sample is greater than 
+       the negative control. 
+    */
+    else {
+        /* Iterative mapping */
+        /* mmap and index the necessary data */
+        fprintf(stderr, "NOTICE      :  mmapping mapped IP reads DB.\n" );
+        mmap_mapped_reads_db( chip_mpd_rds_db );
+        fprintf(stderr, "NOTICE      :  indexing mapped IP reads DB.\n" );
+        index_mapped_reads_db( chip_mpd_rds_db );
+
+        fprintf(stderr, "NOTICE      :  mmapping mapped NC reads DB.\n" );
+        mmap_mapped_reads_db( NC_mpd_rds_db );
+        fprintf(stderr, "NOTICE      :  indexing mapped NC reads DB.\n" );
+        index_mapped_reads_db( NC_mpd_rds_db );
+
+        /* traces and track names to store the 2 marginal densities */
+        struct trace_t* ip_trace;
+        struct trace_t* nc_trace;
+        char** track_names = NULL;
+        track_names = malloc(sizeof(char*)*4);
+        track_names[0] = "IP_fwd_strand_fragment_coverage";
+        track_names[1] = "IP_bkwd_strand_fragment_coverage";
+        track_names[2] = "NC_fwd_strand_fragment_coverage";
+        track_names[3] = "NC_bkwd_strand_fragment_coverage";
+        
+        int i;
+        for( i = 0; i < args->num_starting_locations; i++ )
+        {
+            /* jointly update the mappings */
+            update_chipseq_mapping_wnc(  chip_mpd_rds_db, &ip_trace,
+                                         NC_mpd_rds_db, &nc_trace,
+                                         genome, MAX_PRB_CHANGE_FOR_CONVERGENCE,
+                                         true ); // use a random starting location
+            
+            /* write the joint mappings to a single wiggle */
+            /* we use a trick - writing wiggles appends to the file. So we just
+               call the writing code with the same filename, and let it append 
+               automatically 
+            */
+            if( SAVE_SAMPLES )
+            {
+                char wig_fname[100];
+                sprintf( wig_fname, "%ssample%i.wig", RELAXED_SAMPLES_PATH, i+1 );
+
+                write_wiggle_from_trace( ip_trace, genome->chr_names, 
+                                         track_names, wig_fname,
+                                         MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                
+                write_wiggle_from_trace( nc_trace, genome->chr_names, 
+                                         track_names + 2, wig_fname,
+                                         MAX_PRB_CHANGE_FOR_CONVERGENCE );
+            }
+            
+            if( NUM_BOOTSTRAP_SAMPLES > 0 )
+            {
+                fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
+                char buffer[200];
+                sprintf( buffer, "mkdir %ssample%i/",
+                         BOOTSTRAP_SAMPLES_ALL_PATH, i+1 );
+                int error = system( buffer );
+                if (WIFSIGNALED(error) &&
+                    (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+                {
+                    fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+                    perror( "System Call Failure");
+                    assert( false );
+                    exit( -1 );
+                }
+
+                int j;
+                for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+                {                
+                    if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
+                        fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
+                    
+                    /* actually perform the bootstrap */
+                    bootstrap_traces_from_mapped_reads( 
+                        chip_mpd_rds_db, ip_trace, 
+                        update_chipseq_trace_expectation_from_location );
+                    
+                    /* actually perform the bootstrap */
+                    bootstrap_traces_from_mapped_reads( 
+                        NC_mpd_rds_db, nc_trace,
+                        update_chipseq_trace_expectation_from_location );
+                    
+                    if( SAVE_BOOTSTRAP_SAMPLES )
+                    {
+                        sprintf( buffer, "%ssample%i/bssample%i.wig", 
+                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
+                        
+                        /* We use the fact the write_wiggle_from_trace appends to 
+                           put all four tracks into the same wiggle file */
+                        
+                        write_wiggle_from_trace( 
+                            ip_trace, genome->chr_names, track_names,
+                            buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                        
+                        write_wiggle_from_trace( 
+                            nc_trace, genome->chr_names, track_names,
+                            buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                    }    
+                }
+                fprintf( stderr, " 100%%\n");
+                
+                close_traces( ip_trace );
+                close_traces( nc_trace );
+            }     
+        }
+        
+        free( track_names );
+        
+        munmap_mapped_reads_db( chip_mpd_rds_db );
+        munmap_mapped_reads_db( NC_mpd_rds_db );
+    }
+    
+    goto cleanup;
+
+cleanup:    
+    close_mapped_reads_db( chip_mpd_rds_db );
+    close_mapped_reads_db( NC_mpd_rds_db );
+    
+    return;
+}
+
 int 
 main( int argc, char** argv )
 {       
@@ -836,21 +1132,22 @@ main( int argc, char** argv )
     if( args.snpcov_fp != NULL )
         build_snp_db_from_snpcov_file( args.snpcov_fp, genome );
 
-    struct mapped_reads_db* mpd_rds_db;
-           
-    /* Map the marginal reads and output them into a read density wiggle */
-    map_marginal( &args, genome, &mpd_rds_db );
-
-    build_fl_dist( &args, mpd_rds_db );
-
-    if( args.assay_type == CHIP_SEQ
-        && args.unpaired_reads_fnames != NULL )
-        build_chipseq_bs_density( mpd_rds_db->fl_dist );
+    if( args.assay_type == CHIP_SEQ )
+    {
+        map_chipseq_data( &args, genome );
+    }
     
-    if( args.assay_type != UNKNOWN )
-        iterative_mapping( &args, genome, mpd_rds_db );
+    if( args.assay_type == UNKNOWN )
+    {
+        map_generic_data( &args, genome );
+    }
 
     /* If appropriate, print out the snp db */
+/* The snp code is kibnd of broken, and the negative control addition is breaking it more, 
+   so I am going to TODO it, if it out, and come back later. In a nutshelll, I think I 
+   am only going to allow snp counts for situations where there is actual paternal/maternal
+   info */
+#if 0 
     if( args.snpcov_fp != NULL )
     {
         fprintf(stderr, "NOTICE      :  Updating SNP count estiamtes.\n" );
@@ -860,6 +1157,7 @@ main( int argc, char** argv )
         write_snps_to_file( snp_fp, genome );
         fclose( snp_fp );
     }
+#endif
     
     goto cleanup;
     
@@ -867,9 +1165,10 @@ cleanup:
     /* Free the genome and indexes */
     free_genome( genome );
 
-    close_mapped_reads_db( mpd_rds_db );
-
     close_rawread_db( args.rdb );
+    
+    if( args.NC_rdb != NULL )
+        close_rawread_db( args.NC_rdb );
     
     /* Close the log file */
     if( args.log_fp != NULL )
