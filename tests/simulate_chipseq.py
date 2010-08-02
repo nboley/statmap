@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 1
+NUM_SAMPLES = 10
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -169,17 +169,23 @@ def build_fragments( region, bind_prbs, num ):
 def parse_wig( fname, genome ):
     fp = open( fname )
     tracks = []
+    curr_chr_name = None
     for line in fp:
         if line.startswith('track'):
+            # append a new chr list
             track_name = line.strip().split("name=")[1]
-            tracks.append( numpy.zeros(len(genome.values()[0])+1) )
+            tracks.append( {} )
         elif line.startswith('variable'):
-            continue
+            # strip out the chromosome name
+            chr_name = line.strip().split("=")[1]
+            curr_chr_name = chr_name
+            # append a new chr array
+            tracks[-1][chr_name] = numpy.zeros(len(genome.values()[len(tracks[-1])-1])+1)
         # assume this is a variable step line
         else:
             data = line.strip().split("\t")
             loc, value = int(data[0]), float(data[1])
-            tracks[-1][loc] += value
+            tracks[-1][chr_name][loc] += value
     fp.close()
     return tracks
 
@@ -271,7 +277,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
     # so that we can plot them
     fp = open( "binding_site_occupancies.wig", "w" )
     fp.write("track type=wiggle_0 name=binding_site_occupancy\n")
-    fp.write("variableStep chrom=chr2L\n")
+    fp.write("variableStep chrom=chr2L_paternal\n")
     for pos, value in enumerate(bind_prbs):
         if value > 0:
             fp.write( "%i\t%e\n" % (pos+1, value) )
@@ -282,12 +288,12 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
         density[start:stop] += 1.0/(stop-start)
     fp = open( "true_read_coverage.wig", "w" )
     fp.write("track type=wiggle_0 name=fwd_true_read_coverage\n")
-    fp.write("variableStep chrom=chr2L\n")
+    fp.write("variableStep chrom=chr2L_paternal\n")
     for pos, value in enumerate(density):
         if value > 0:
             fp.write( "%i\t%e\n" % (pos+1, value/2) )
     fp.write("track type=wiggle_0 name=bkwd_true_read_coverage\n")
-    fp.write("variableStep chrom=chr2L\n")
+    fp.write("variableStep chrom=chr2L_paternal\n")
     for pos, value in enumerate(density):
         if value > 0:
             fp.write( "%i\t%e\n" % (pos+1, value/2) )
@@ -505,29 +511,38 @@ def plot_wig_bounds( dir, png_fname ):
 
 def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     region = build_chipseq_region( )
-    genome = { 'chr2L': region + region }
+    genome = { 'chr2L_paternal': region, 'chr2L_maternal': region }
 
+    # set up the plotting environment
     curr_dir = os.getcwd()
-    rpy.r.png( os.path.join(curr_dir, png_fname), width=7.5, height=3.5, units='in', res=300 )
-    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5)")
+    rpy.r.png( os.path.join(curr_dir, png_fname), width=15.0, height=15.0, units='in', res=300 )
+    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5, mfrow=c(2,1))")
     
-    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
     density_max = 1.0 # max( density[0].max(), density[1].max() )
-    print density_max
-    rpy.r.plot( density[0]/density_max, type='l', col='blue', main='Inferred Fragment Coverage Density', \
-                xlab='', ylab='', lty=1, ylim=(-0.55, 0.55) )
-    if len( density ) > 1:
-        rpy.r.points( -1*density[1], type='l', col='blue', main='', xlab='', ylab='', lty=1 )
+    rpy.r.plot( (), main='Paternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
+    rpy.r.plot( (), main='Maternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
 
-    def plot_wiggle( wiggle_density, color, lty=1, lwd=1  ):
-        if len( wiggle_density ) > 0:
-            rpy.r.points( wiggle_density[0], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 1:
-            rpy.r.points( -1*wiggle_density[1], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 2:
-            rpy.r.points( wiggle_density[2], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-        if len( wiggle_density ) > 3:
-            rpy.r.points( -1*wiggle_density[3], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+    def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5  ):
+        rpy.r("par(mfg=c(1,1))")
+        if wiggle_density[0].has_key( 'chr2L_paternal' ):
+            if len( wiggle_density ) > 0:
+                rpy.r.points( wiggle_density[0]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 1:
+                rpy.r.points( -1*wiggle_density[1]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 2:
+                rpy.r.points( wiggle_density[2]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            if len( wiggle_density ) > 3:
+                rpy.r.points( -1*wiggle_density[3]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        rpy.r("par(mfg=c(2,1))")
+        if wiggle_density[0].has_key( 'chr2L_maternal' ):
+            if len( wiggle_density ) > 0:
+                rpy.r.points( wiggle_density[0]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 1:
+                rpy.r.points( -1*wiggle_density[1]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 2:
+                rpy.r.points( wiggle_density[2]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            if len( wiggle_density ) > 3:
+                rpy.r.points( -1*wiggle_density[3]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
     
     def plot_wiggles( dir, color  ):
         fnames = []
@@ -562,24 +577,36 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
         rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     """
     
+    rpy.r("par(mfg=c(1,1))")
     true_density = parse_wig( "true_read_coverage.wig", genome )
-    plot_wiggle( true_density, 'black', lty=3, lwd=2 )
+    plot_wiggle( true_density, 'black', lty=3, lwd=5 )
 
+    rpy.r("par(mfg=c(1,1))")
     true_density = parse_wig( "binding_site_occupancies.wig", genome )
-    for index, value in enumerate(true_density[0]):
+    for index, value in enumerate(true_density[0].values()[0]):
+        if value > 0.25:
+            rpy.r.abline( v=index, col='black', lty=2  )
+    rpy.r("par(mfg=c(2,1))")
+    true_density = parse_wig( "binding_site_occupancies.wig", genome )
+    for index, value in enumerate(true_density[0].values()[0]):
         if value > 0.25:
             rpy.r.abline( v=index, col='black', lty=2  )
     
+    rpy.r("par(mfg=c(1,1))")
     for bp_index in mut_indexes:
         rpy.r.abline( v=bp_index, col='red', lty=2  )
+    rpy.r("par(mfg=c(2,1))")
+    for bp_index in mut_indexes:
+        rpy.r.abline( v=bp_index, col='red', lty=2  )
+
     # x=7700, y=0.5,
-    rpy.r("""legend( x=4500, y=-0.10,
-             legend=c("Statmap Upper Bound", "Statmap Lower Bound", "Statmap Expectation", 
+    rpy.r("""legend( x=50, y=0.49,
+             legend=c("Statmap Upper Bound", "Statmap Lower Bound", 
                       "Statmap Local Maxima", "Statmap Bootstrap Upper Bounds", 
                       "Statmap Bootstrap Lower Bounds",
-                      "Bowtie", "True Read Coverage", "Mutations", "Bind Sites w/ > 0.25 Average Occupancy"),
-             col=c("Blue", "Red", "Green", "Black", "Purple", "Orange", "Green", "Black", "Red", "Black"),
-             lwd=c(0.5,0.5,1.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,1,3,3,2,2) )""" )
+                      "Bowtie", "True Read Coverage", "Maternal SNPs", "Bind Sites w/ > 0.25 Average Occupancy"),
+             col=c("Blue", "Red", "Black", "Purple", "Orange", "Green", "Black", "Red", "Black"),
+             lwd=c(0.5,0.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,3,3,2,2) )""" )
     
     rpy.r.dev_off()
 
