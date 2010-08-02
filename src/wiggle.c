@@ -202,6 +202,7 @@ parse_next_line( struct wig_line_info* lines,
             fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
             assert( 0 );
             exit( -1 );
+        /* if we are at a 'track' line */
         } else if( buffer[0] == 't') {
             /* increment the chr index */
             lines[line_index].trace_index += 1;
@@ -225,6 +226,7 @@ parse_next_line( struct wig_line_info* lines,
                 memcpy( track_names[lines[line_index].trace_index], track_name, track_name_len );
                 track_names[lines[line_index].trace_index][ track_name_len ] = '\0';
             }
+        /* if we are at a variable step ( contains chromosome ) line */
         } else if ( buffer[0] == 'v') {
             /* increment the chr line_index */
             lines[line_index].chr_index += 1;
@@ -241,10 +243,13 @@ parse_next_line( struct wig_line_info* lines,
                     assert( 0 );
                 }
             } else {
-                /* remoive the trailing newline */
+                /* remove the trailing newline */
                 int chr_name_len = strlen(chr_name)-1;
-                chr_names[lines[line_index].chr_index] = calloc( chr_name_len+1, sizeof(char)  );
-                memcpy( chr_names[lines[line_index].chr_index], chr_name, chr_name_len );
+                chr_names[lines[line_index].chr_index] = 
+                    calloc( chr_name_len+1, sizeof(char)  );
+                memcpy( chr_names[lines[line_index].chr_index], 
+                        chr_name, chr_name_len );
+                /* append the trailing null after the chr name */
                 chr_names[lines[line_index].chr_index][ chr_name_len ] = '\0';
             }
         /* Assuming this is a variable step numeric line */
@@ -309,7 +314,14 @@ aggregate_over_wiggles(
         
         if( lines[0].chr_index > curr_chr_index )
         {    
-            fprintf( ofp, "variableStep chrom=%s\n", chr_names[lines[0].chr_index] );
+            assert( curr_chr_index + 1 >= 0 );
+            /* in case there were chrs with zero reads, 
+               we loop through skipped indexes. Note that 
+               we use the min to explicitly skip the pseudo 
+               chromosome */
+            int i;
+            for( i = MAX( 1, curr_chr_index + 1); i <= lines[0].chr_index; i++ )
+                fprintf( ofp, "variableStep chrom=%s\n", chr_names[i] );
             curr_chr_index = lines[0].chr_index;
         }
         
