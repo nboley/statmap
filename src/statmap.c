@@ -704,6 +704,47 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
+void load_genome_index( struct genome_data* genome, int indexed_seq_len )
+{
+    /* first, check to see if there is already a genome index */
+    FILE* fp;
+    fp = fopen( "ODIndex.bin", "r" );
+    
+    /* if there is no index, create one */
+    if( NULL == fp )
+    {
+        pid_t pID = fork();
+        /* create the index, and then exit */
+        /* we do this for the separate address space */
+        if( pID == 0 )
+        {
+            index_genome( genome, indexed_seq_len );
+            build_ondisk_index( genome->index, "ODIndex.bin"  );
+            exit( 0 );
+        } 
+        else if ( pID < 0 )
+        {
+            perror( "FATAL       :  Failed to fork. " );
+            exit( 1 );
+        }
+        /* parent process. just wait until the index is created */
+        else {
+            int status;
+            wait( &status );
+        }
+    } else {
+        fclose( fp  );
+    }
+    
+    /* make the on disk index the new index */
+    load_ondisk_index( "ODIndex.bin", &(genome->index) );
+    
+    /* load the pseudo locations */
+    FILE* pslocs_fp = fopen( "pseudo_locations.txt", "r" ); 
+    load_pseudo_locations( pslocs_fp, &(genome->ps_locs) );
+
+    return;
+}
 
 void
 map_marginal( args_t* args, 
@@ -872,7 +913,7 @@ map_generic_data(  args_t* args,
     start = clock();
     
     /* initialize the genome */
-    index_genome( genome, args->indexed_seq_len );
+    load_genome_index( genome, args->indexed_seq_len );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
@@ -891,8 +932,6 @@ map_generic_data(  args_t* args,
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
             (unsigned long) sizeof_tree( genome->index ) );
-    free_tree( genome->index );
-    genome->index = NULL;
     
     if( args->frag_len_fp != NULL ) {
         build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
@@ -916,7 +955,7 @@ map_chipseq_data(  args_t* args,
     start = clock();
     
     /* initialize the genome */
-    index_genome( genome, args->indexed_seq_len );
+    load_genome_index( genome, args->indexed_seq_len );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
@@ -970,8 +1009,6 @@ map_chipseq_data(  args_t* args,
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
             (unsigned long) sizeof_tree( genome->index ) );
-    free_tree( genome->index );
-    genome->index = NULL;
     
     /* if there is no negative control, we use the same iterative 
        scheme as the generic version. iterative_mapping takes care of 

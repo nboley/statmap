@@ -9,7 +9,7 @@ build_index : build_index.c
 	../src/genome.o ../src/pseudo_location.o ../src/snp.o \
 	../src/dna_sequence.o ../src/quality.o \
 	-lm -pthread
-	cp aggregate_over_wiggles ../bin/
+	cp build_index ../bin/
 
 aggregate_over_wiggles : aggregate_over_wiggles.c
 	gcc $(compile_options) -o aggregate_over_wiggles aggregate_over_wiggles.c \
@@ -53,3 +53,4 @@ clean :
 	-rm mapped_reads_into_sam
 	-rm mapped_reads_into_wiggle
 	-rm estimate_read_density
+	-rm build_index

@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/mman.h> /* mmap() is defined in this header */
+#include <sys/stat.h> /* permission bit defines */
 
 #include "quality.h"
 #include "index_genome.h"
@@ -1629,8 +1630,9 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     if( magic_number != 0 )
     {
         fprintf( stderr, "FATAL    : We appear to have loaded an invalid index\n" );
+        exit( 1 );
     }
-
+    
     /* Find the indexed sequence length */
     fread( &indexed_seq_len, 1, 1, index_fp );
     assert( indexed_seq_len > 0 );
@@ -1645,8 +1647,6 @@ load_ondisk_index( char* index_fname, struct index_t** index )
 
     fread( &index_size, sizeof(size_t), 1, index_fp );
 
-    printf( "%i - %i - %zu\n", indexed_seq_len, magic_number, index_size );
-
     fclose( index_fp );
 
     int fd;
@@ -1659,9 +1659,9 @@ load_ondisk_index( char* index_fname, struct index_t** index )
                           MAP_SHARED, fd, 0)) == (caddr_t) -1)
         fprintf(stderr, "FATAL     : mmap error for index file");
     
-    index_offset = ((size_t) OD_index) + sizeof(size_t) + sizeof(char);
+    index_offset = ((size_t) OD_index) + sizeof(size_t) + sizeof(char) + sizeof( unsigned char );
     
-    /* the root of the tree is always at 0, after being offset 
+    /* the root of the tree is always at 0, before being offset 
        by index_offset */
     (*index)->index = 0;
     
@@ -1679,17 +1679,26 @@ build_ondisk_index( struct index_t* index, char* ofname  )
 
     /* open/create the output file */
     int fdout;
-    if ((fdout = open(ofname, O_RDWR | O_CREAT | O_TRUNC)) < 0)
-        fprintf(stderr, "FATAL     : can't create %s for writing", "index.bin");
-
+    if ((fdout = open(ofname, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)) < 0)
+    {
+        perror( "FATAL       :  can't create ODindex.bin for writing" );
+        exit( 1 );
+    }
+    
     /* go to the location corresponding to the last byte */
     if (lseek (fdout, index_size - 1, SEEK_SET) == -1)
-        fprintf(stderr, "FATAL     : lseek error");
- 
+    {
+        perror("FATAL       :  lseek error");
+        exit( 1 );
+    }
+    
     /* write a dummy byte at the last location */
     if (write (fdout, "", 1) != 1)
-        fprintf(stderr, "FATAL     : write error");
-
+    {
+        perror("FATAL       :  write error");
+        exit( 1 );
+    }
+    
     /* mmap the output file */
     void* OD_index;
     if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
@@ -1744,6 +1753,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
         /* update the parent pointer */
         *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
         
+        /* DEBUG */
         /*
         fprintf( stdout, "NODE %i---- Level: %i\tType: %c\tSize: %zu\tPtr: %p\n",
                  stack_index, curr_node->level, curr_node->node_type, 

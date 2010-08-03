@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #include "config.h"
@@ -118,6 +119,73 @@ fprint_pseudo_locations( FILE* of, struct pseudo_locations_t* ps_locs )
         }
         fprintf( of, "\n" );
     }
+}
+
+void
+load_pseudo_locations( FILE* fp, struct pseudo_locations_t** ps_locs )
+{
+    int error;
+    
+    /* initialize the container */
+    init_pseudo_locations( ps_locs );
+
+    if( fp == NULL )
+        return;
+    
+    while( !feof( fp ) )
+    {
+        
+        /* initialize a new pseudo location */
+        struct pseudo_location_t ps_loc;
+        init_pseudo_location( &ps_loc );
+        
+        int chr_index = -1; 
+        int num_locs = -1;
+        
+        /* read the line header ( chromosome and number ) */
+        error = fscanf( fp, "%i\t%i", &chr_index, &num_locs );
+        if( error != 2 )
+        {
+            if( feof( fp ) )
+            {
+                /* gracefuly alowing spurious trailing newlines */
+                break;
+            }
+            fprintf( stderr, "FATAL         : Error reading line header in pseudo loc parsing code.\n" );
+            exit( 1 );
+        }
+        
+        int i;
+        for( i = 0; i < num_locs; i++ )
+        {
+            int chr = -1;
+            int pos = -1;
+            error = fscanf( fp, "\t%i,%i", &chr, &pos );
+            if( error != 2 )
+            {
+                fprintf( stderr, "FATAL         : Error reading data in pseudo loc parsing code.\n" );
+                exit( 1 );
+            }
+            
+            GENOME_LOC_TYPE loc;
+            memset( &loc, 0, sizeof( GENOME_LOC_TYPE ) );
+            loc.chr = chr;
+            loc.loc = pos;
+            add_loc_to_pseudo_location( &ps_loc, &loc );
+        }
+        
+        int index = add_new_pseudo_location( *ps_locs );
+        (*ps_locs)->locs[index] = ps_loc;
+
+        /* move the pointer to the next line. If there is nothing, then check for eof. */
+        char nl = getc(fp);
+        if( nl != '\n' )
+        {
+            assert( feof( fp ) );
+        }
+
+    }
+
 }
 
 /*

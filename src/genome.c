@@ -41,7 +41,8 @@ free_genome( struct genome_data* gen )
 {
     int i;
     
-    if( gen->index != NULL )
+    /* BUG - make this recognize the tree */
+    if( false && gen->index != NULL )
         free_tree( gen->index );
     
     for( i = 0; i < gen->num_chrs; i++ )

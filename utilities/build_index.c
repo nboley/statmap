@@ -13,10 +13,20 @@
 */
 #define EXPLICITLY_FREE_INDEX
 
+void usage()
+{
+    fprintf( stderr, "Usage: ./build_index genome.fa indexed_seq_len\n" );
+    return;
+}
+
 int 
 main( int argc, char** argv )
 {
-    assert( argc == 3 );
+    if( argc != 3 )
+    {
+        usage();
+        exit( 1 );
+    }
     
     char* genome_fname = argv[1];
     int indexed_seq_len = atoi( argv[2] );
@@ -35,11 +45,8 @@ main( int argc, char** argv )
     build_ondisk_index( genome->index, "ODIndex.bin"  );
 
 #ifdef EXPLICITLY_FREE_INDEX
-    /* free the old index */
-    free_node_and_children( (static_node*) genome->index->index, 's' );
-#endif
-    
     free_genome( genome );
+#endif
 
     return 0;
 }
