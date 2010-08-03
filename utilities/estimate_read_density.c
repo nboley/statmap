@@ -201,7 +201,7 @@ int main( int argc, char** argv )
         usage();
         exit(1);
     }
-
+    
     enum assay_type_t assay_type = CHIP_SEQ;
     enum bool use_random_start = false;
     float max_prb_change_for_convergence = 1e-2;
@@ -209,7 +209,7 @@ int main( int argc, char** argv )
     min_num_hq_bps = 10;
     
     /* END parse arguments */
-
+    
     char* curr_wd = NULL;
     curr_wd = getcwd( NULL, 0 );
     if( curr_wd == NULL )
@@ -274,6 +274,48 @@ int main( int argc, char** argv )
             FASTQ 
         );
     }
+
+    /**** 
+     **** Try loading the negative control data. If we can load the raw 
+     **** data, then assume the mapped reads exist.
+     ****
+     ****/
+    struct rawread_db_t* raw_NC_rdb = NULL;
+    FILE* tmp = fopen( "reads.NC.unpaired", "r" );
+    if( tmp != NULL )
+    {
+        fclose(tmp);
+        init_rawread_db( &raw_NC_rdb );
+        add_single_end_reads_to_rawread_db(
+            raw_NC_rdb, "reads.NC.unpaired", FASTQ 
+        );
+    }
+
+    FILE* tmp = fopen( "reads.NC.pair1", "r" );
+    if( tmp != NULL )
+    {
+        fclose(tmp);
+        init_rawread_db( &raw_NC_rdb );
+        add_paired_end_reads_to_rawread_db(
+            raw_NC_rdb, "reads.NC.pair1", "reads.NC.pair2", FASTQ 
+        );
+    }
+
+    /* if there are negative control reads,
+        then assume there are mapped nc reads */
+    struct mapped_reads_db* mpd_NC_rdb = NULL;
+    if( NULL != raw_NC_rdb )
+    {
+        char* mpd_NC_rd_fname = "mapped_NC_reads.db";
+        open_mapped_reads_db( &mpd_NC_rdb, mpd_NC_rd_fname );
+        fprintf(stderr, "NOTICE      :  mmapping mapped reads DB.\n" );
+        mmap_mapped_reads_db( mpd_NC_rdb );
+        fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
+        index_mapped_reads_db( mpd_NC_rdb );
+    }
+    
+
+    /*** END negative control data */
 
     /* change to the curr working directory */
     error = chdir( curr_wd );
