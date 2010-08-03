@@ -7,10 +7,20 @@
 #include <time.h>
 #include <ctype.h>
 
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/mman.h> /* mmap() is defined in this header */
+
 #include "quality.h"
 #include "index_genome.h"
+#include "genome.h"
 #include "snp.h"
 #include "pseudo_location.h"
+
+/* a global pointer offset */
+/* This must be added to all pointers */
+static size_t index_offset = 0;
 
 /******************************************************************************/
 /* Memory function for  building the index      */
@@ -317,10 +327,10 @@ size_of_dnode( const dynamic_node* const node )
 
 
 
-extern void init_tree( index_t** index, int seq_length )
+extern void 
+init_tree( struct index_t** index, int seq_length )
 {   
-    *index = malloc( sizeof( index_t ) );
-    // assert( (*index)->index_type == TREE );
+    *index = malloc( sizeof( struct index_t ) );
     static_node* tree_root;
     init_static_node( &tree_root );
     (*index)->index = tree_root;
@@ -409,202 +419,6 @@ inline void add_child_to_static_node(
     node[bp].node_ref = new_node;
 }
 
-extern void
-index_genome( struct genome_data* genome, int indexed_seq_len )
-{
-    /* initialize the tree structure */
-    init_tree( &(genome->index), indexed_seq_len );
-
-    /* TODO - use snps directly */
-    struct snp_db_t* snp_db = genome->snp_db;
-    /* 
-     * If there is no initialized snp DB, then we set the
-     * number of snps to zero so that we dont try and 
-     * add any downstream. Maybe, in the future, I will 
-     * just always the db but set the number of snps to 0.
-     *
-     */
-    int num_snps;
-    if( snp_db == NULL )
-    {
-        num_snps = 0;
-    } else {
-        num_snps = snp_db->num_snps;
-    }
-    
-    /* initialize the constant loc elements */
-    GENOME_LOC_TYPE loc;
-    /* Not a junction read */
-    loc.read_type = 0;
-    
-    int seq_len = genome->index->seq_length;
-    char* tmp_seq = malloc(seq_len*sizeof(char));
-
-    int chr_index;
-    unsigned int bp_index;
-    
-    int snp_lb = 0;
-    int snp_ub = 0;
-
-    /* 
-     * Iterate through each indexable sequence in the genome. If the 
-     * sequence covers snps, then add them.
-     *
-     * We skip chr 0 - the pseudo chromosome.
-     */
-    for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
-    {
-        if( genome->chr_lens[chr_index] > LOCATION_MAX )
-        {
-            fprintf( stderr, 
-                     "FATAL ERROR       :  Max indexable chr size is '%i'\n", 
-                     LOCATION_MAX );
-            exit( -1 );
-        }
-
-        fprintf(stderr, "NOTICE      :  Indexing '%s'\n", (genome->chr_names)[chr_index] );
-
-        /* Set the chr index in the soon to be added location */
-        loc.chr = chr_index;
-
-        for( bp_index = 0; bp_index < genome->chr_lens[chr_index] - seq_len; bp_index += 1 )
-        {            
-            /* Set the basepair index */
-            loc.loc = bp_index;
-            
-            /* 
-             * Update the snp_lb. While the snps are strictly below bp_index, the
-             * lower bound, then the snps can not fall into the sequence and there
-             * is no need to consider these
-             */
-            while( snp_lb < num_snps
-                   && snp_db->snps[snp_lb].loc.chr == chr_index 
-                   && snp_db->snps[snp_lb].loc.loc < bp_index  )
-            {
-                snp_lb += 1;
-            }
-                        
-            /* 
-             * Update the snp_ub. While the snps are strictly below bp_index, the
-             * lower bound, then the snps can not fall into the sequence and there
-             * is no need to consider these
-             */
-            snp_ub = MAX( snp_lb, snp_ub );
-            while( snp_ub < num_snps
-                   && snp_db->snps[snp_ub].loc.chr == chr_index 
-                   && snp_db->snps[snp_ub].loc.loc < bp_index + seq_len )
-            {
-                snp_ub += 1;
-            }
-                   
-            /* 
-             * If lb == ub, then we know this sequence doesnt cover any snps. 
-             */
-            if( snp_lb == snp_ub )
-            {
-                memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
-                
-                /* Add the normal sequence */
-                LETTER_TYPE *translation;
-                translate_seq( tmp_seq, seq_len, &(translation));
-                
-                /* if we cant add this sequence ( probably an N ) continue */
-                if( translation == NULL ) {
-                    continue;
-                }
-                
-                loc.covers_snp = 0;
-                loc.snp_coverage = 0;
-                
-                /* Add the sequence into the tree */
-                add_sequence(genome->index, genome->ps_locs, translation, seq_len, loc);
-                
-                free( translation );                                
-            } else {
-                /* If there are too many snps in this sequence, print a warning */
-                if( snp_ub - snp_lb > MAX_NUM_SNPS )
-                {
-                    fprintf(stderr, "ERROR       :  Can not add the sequence at 'chr %i: bp %i' - it contains %i SNPs ( %i max )\n", 
-                            chr_index, bp_index, snp_ub - snp_lb, MAX_NUM_SNPS );
-                    continue;
-                }
-                
-                /* 
-                 * We need to iterate through every combination of snps in the following
-                 * list. Ie, if there are 2 snps, then we need to add all of the 
-                 * subsequences with s1 on, s2 on, sn1 on, s2 off, s1 off, s2 off, 
-                 * and both off.  This might be hard in general, but there
-                 * is an easy way of dealing with this. Since there are 2^NS -1 total
-                 * combinations, we just count from 1 to 2^NS. Then, if the ith bit
-                 * is set, we know that the ith snp should be on. 
-                 */
-                
-                /* Make sure there is room in the bitmap to store all of the snips */
-                assert( sizeof(unsigned int)*8 > MAX_NUM_SNPS  );
-                /* bm stands for bitmap */
-                unsigned int bm;
-                assert( snp_ub > snp_lb );
-                for( bm = 0; bm < (((unsigned int)1) << (snp_ub - snp_lb)); bm++ )
-                {
-                    /* Make a copy of the sequence that we will be mutating */
-                    /* 
-                     * TODO - Make this more efficient. We shouldnt need to recopy the sequence
-                     * every single time. Although, since snps should typically be pretty 
-                     * sparse, this may not matter in practice.
-                     */
-                    memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
-                    
-                    /* 
-                     * Loop through each possible snp. If the bit is set, then 
-                     * set the bp location in the seq to the alternate.
-                     */
-                    int snp_index; 
-                    for( snp_index = 0; snp_index < snp_ub - snp_lb; snp_index++ )
-                    {
-                        /* If the correct bit is set */
-                        if( (bm&(1<<snp_index)) > 0 )
-                            tmp_seq[ snp_db->snps[snp_lb+snp_index].loc.loc - bp_index  ] 
-                                = snp_db->snps[snp_lb+snp_index].alt_bp;                        
-                    }
-                    
-                    LETTER_TYPE *translation;
-                    translate_seq( tmp_seq, seq_len, &(translation));
-                    
-                    /* if we cant add this sequence ( probably an N ) continue */
-                    if( translation == NULL ) {
-                        continue;
-                    }
-                    
-                    loc.covers_snp = 1;
-                    loc.snp_coverage = bm;
-                    
-                    /* Add the sequence into the tree */
-                    add_sequence(genome->index, genome->ps_locs, 
-                                 translation, seq_len, loc);
-                    
-                    free( translation );                
-                }
-            }
-        }
-    }
-    free( tmp_seq );
-
-    /* sort all of the pseudo locations */
-    sort_pseudo_locations( genome->ps_locs );
-
-    FILE* ps_locs_of = fopen(PSEUDO_LOCATIONS_FNAME, "w");
-    if( NULL == ps_locs_of )
-    {
-        char buffer[500];
-        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
-        perror( buffer );
-        exit( -1 );
-    }
-    fprint_pseudo_locations( ps_locs_of, genome->ps_locs );
-    fclose(ps_locs_of);
-    
-    return;
-}
 
 /**** CLEANUP functions *******************************************************/
 
@@ -644,6 +458,8 @@ void free_node( void* node, char node_type )
 
 void free_node_and_children( void* node, char node_type )
 {
+    node += index_offset;
+
     int i;
     switch( node_type )
     {
@@ -685,11 +501,11 @@ void free_node_and_children( void* node, char node_type )
     }
 }
 
-void free_tree( index_t* root )
+void free_tree( struct index_t* index )
 {
-    assert( root->index_type == TREE );
-    free_node_and_children( (static_node*) root->index, 's' );
-    free( root );
+    assert( index->index_type == TREE );
+    free_node_and_children( (static_node*) index->index, 's');
+    free( index );
 }
 
 /**** END CLEANUP functions ***************************************************/
@@ -933,8 +749,9 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 
 
 inline void 
-add_sequence( index_t* index, struct pseudo_locations_t* ps_locs,
-              LETTER_TYPE* seq, const int seq_length, 
+add_sequence( struct index_t* index,
+              struct pseudo_locations_t* ps_locs,
+              LETTER_TYPE* seq, const int seq_length,
               GENOME_LOC_TYPE genome_loc ) 
 {
     assert( index->index_type == TREE );
@@ -1194,8 +1011,16 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     while( pmatch_stack_length( stack ) > 0 )
     {
         potential_match match = pop_pmatch( stack );
-        
-        void* node = match.node;
+
+        /* add the index offset so that this is a phsyical location */
+        /* 
+         * because every pointer that we consider passes through this 
+         * location for index searches, this is the only time that we
+         * need consider it.
+         *
+         */
+        void* node = index_offset + match.node;
+
         NODE_TYPE node_type = match.node_type; 
         int node_level = match.node_level;
         float curr_penalty = match.penalty;
@@ -1428,7 +1253,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
 
 extern void
-find_matches_from_root( index_t* index,
+find_matches_from_root( struct index_t* index,
              
                         float min_match_penalty,
                         float max_penalty_spread,
@@ -1475,7 +1300,7 @@ find_matches_from_root( index_t* index,
 }
 
 void
-search_index( index_t* index, 
+search_index( struct index_t* index, 
               
               float min_match_penalty,
               float max_penalty_spread,
@@ -1571,14 +1396,16 @@ size_of_snode( )
 }
 
 size_t
-calc_node_size( NODE_TYPE type, void* node  )
+calc_node_and_children_size( NODE_TYPE type, void* node  )
 {
     size_t size = 0;
     int i;
 
     if( node == NULL )
         return 0;
-
+    
+    node += index_offset;
+    
     switch ( type ) 
     {
     case 'q':
@@ -1592,7 +1419,7 @@ calc_node_size( NODE_TYPE type, void* node  )
     case 's':
         for( i = 0; i < 1<<(2*LETTER_LEN); i++ )
         {
-            size += calc_node_size( 
+            size += calc_node_and_children_size( 
                 ((static_node*)node)[i].type, 
                 ((static_node*)node)[i].node_ref 
             );
@@ -1602,7 +1429,7 @@ calc_node_size( NODE_TYPE type, void* node  )
     case 'd':
         for( i = 0; i < get_dnode_num_children( node ); i++ )
         {
-            size += calc_node_size( 
+            size += calc_node_and_children_size( 
                 get_dnode_children(node)[i].type, 
                 get_dnode_children(node)[i].node_ref 
             );
@@ -1616,11 +1443,43 @@ calc_node_size( NODE_TYPE type, void* node  )
     exit( -1 );
 }
 
+size_t
+calc_node_size( NODE_TYPE type, void* node  )
+{
+    if( node == NULL )
+        return 0;
+    
+    node += index_offset;
+    
+    switch ( type ) 
+    {
+    case 'q':
+        /* sequence nodes dont have any children */
+        return get_num_used_bytes( node );
+        break;
+    case 'l':
+        /* locations nodes dont have any children */
+        return size_of_locations_node( node );
+        break;
+    case 's':
+        return size_of_snode();
+        break;
+    case 'd':
+        return size_of_dnode( node );
+        break;
+    }
+
+    fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
+    assert( false );
+    exit( -1 );
+}
+
+
 size_t 
-sizeof_tree( index_t* index )
+sizeof_tree( struct index_t* index )
 {
     assert( index->index_type == TREE );
-    return calc_node_size( 's', index->index );
+    return calc_node_and_children_size( 's', index->index );
 }
 
 /*****************************************************************************
@@ -1633,6 +1492,12 @@ sizeof_tree( index_t* index )
  * 3) Open the mmap file
  * 4) Grow the file size
  * 5) MMAP it
+ * HOW TO WRITE A NODE TO A STACK - 
+   Add a new node.
+   For each child ( if applicable ) 
+      1) Add the child to the end of the stack
+      2) Change the parent's pointer to NULL
+      3) Add the pointer to the parents pointer to the child
  * 6) Write the tree to the file
  *    1) Build a to-do stack
  *    2) Write the root to the stack
@@ -1654,18 +1519,18 @@ typedef struct {
 } ODI_stack_item;
 
 /* On Disk Index Stack Items */
-typedef struct {
+struct ODI_stack {
     size_t allocated_size;
     size_t size;
     ODI_stack_item* stack;
-} ODI_stack;
+};
 
 #define ODI_stack_GROW_FACTOR 100000
 
 void
-init_ODI_stack( ODI_stack** stack )
+init_ODI_stack( struct ODI_stack** stack )
 {
-    *stack = malloc( sizeof( ODI_stack ) );
+    *stack = malloc( sizeof( struct ODI_stack ) );
     (*stack)->allocated_size = ODI_stack_GROW_FACTOR;
     (*stack)->size = 0;
     (*stack)->stack = 
@@ -1675,11 +1540,24 @@ init_ODI_stack( ODI_stack** stack )
 }
 
 void
-add_ODI_stack_item( ODI_stack* stack, 
+free_ODI_stack( struct ODI_stack* stack )
+{
+    free( stack->stack );
+    free( stack );
+}
+
+void
+add_ODI_stack_item( struct ODI_stack* stack, 
                     void** node_ref, 
                     NODE_TYPE node_type, 
                     LEVEL_TYPE level )
 {
+    /* 
+     * It's possible for a root node to pass a NULL ptr ( indicating a 
+     * non-existent child ). If this happens, do nothing.
+     */
+    if( *node_ref == NULL ) return;
+
     stack->size++;
     
     if( stack->size == stack->allocated_size )
@@ -1711,7 +1589,7 @@ cmp_ODI_stack_item( const void* a, const void* b )
 } 
 
 void
-sort_ODI_stack( ODI_stack* stack )
+sort_ODI_stack( struct ODI_stack* stack )
 {
     qsort ( 
         stack->stack,
@@ -1723,6 +1601,202 @@ sort_ODI_stack( ODI_stack* stack )
     return;
 }
 
+/* the size of the index header */
+/* MAGIC_NUMBER + SEQ_LEN + INDEX_SIZE */
+#define HEADER_SIZE ( 1 + 1 + sizeof(size_t) )
+
+void
+load_ondisk_index( char* index_fname, struct index_t** index )
+{
+    /* 
+       first, 
+       open the file containing the index to ensure that
+       the magic number is correct and to get the size.
+    */
+    
+    FILE* index_fp = fopen( index_fname, "r" );
+    if( index_fp == NULL )
+    {
+        fprintf( stderr, "Cannot open the index '%s' for reading", index_fname );
+        exit( -1 );
+    }
+    
+    char magic_number;
+    unsigned char indexed_seq_len;
+    size_t index_size;
+
+    fread( &magic_number, 1, 1, index_fp );
+    if( magic_number != 0 )
+    {
+        fprintf( stderr, "FATAL    : We appear to have loaded an invalid index\n" );
+    }
+
+    /* Find the indexed sequence length */
+    fread( &indexed_seq_len, 1, 1, index_fp );
+    assert( indexed_seq_len > 0 );
+
+    init_tree( index, indexed_seq_len );
+
+    /* set the index type */
+    (*index)->index_type = TREE;
+
+    /* Set the indexed sequence length */
+    (*index)->seq_length = indexed_seq_len;
+
+    fread( &index_size, sizeof(size_t), 1, index_fp );
+
+    printf( "%i - %i - %zu\n", indexed_seq_len, magic_number, index_size );
+
+    fclose( index_fp );
+
+    int fd;
+    if ((fd = open(index_fname, O_RDONLY )) < 0)
+        fprintf(stderr, "FATAL     : can't create %s for reading", index_fname);
+    
+    void* OD_index;
+    if ((OD_index = mmap (0, index_size + sizeof(size_t) + sizeof(char), 
+                          PROT_READ,
+                          MAP_SHARED, fd, 0)) == (caddr_t) -1)
+        fprintf(stderr, "FATAL     : mmap error for index file");
+    
+    index_offset = ((size_t) OD_index) + sizeof(size_t) + sizeof(char);
+    
+    /* the root of the tree is always at 0, after being offset 
+       by index_offset */
+    (*index)->index = 0;
+    
+    return;
+}
+
+void
+build_ondisk_index( struct index_t* index, char* ofname  )
+{
+    /* first, calculate the size of the tree in bytes */
+    size_t index_size = sizeof_tree( index );
+
+    unsigned char indexed_seq_len = index->seq_length;
+    assert( index->seq_length < 255 );
+
+    /* open/create the output file */
+    int fdout;
+    if ((fdout = open(ofname, O_RDWR | O_CREAT | O_TRUNC)) < 0)
+        fprintf(stderr, "FATAL     : can't create %s for writing", "index.bin");
+
+    /* go to the location corresponding to the last byte */
+    if (lseek (fdout, index_size - 1, SEEK_SET) == -1)
+        fprintf(stderr, "FATAL     : lseek error");
+ 
+    /* write a dummy byte at the last location */
+    if (write (fdout, "", 1) != 1)
+        fprintf(stderr, "FATAL     : write error");
+
+    /* mmap the output file */
+    void* OD_index;
+    if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
+                          PROT_READ | PROT_WRITE,
+                          MAP_SHARED, fdout, 0)) == (caddr_t) -1)
+        fprintf(stderr, "FATAL     : mmap error for index output");
+    
+    /* write the header information to the file */
+    /* first, write a magic number. This allows us to tell if the file
+       we just opened is a binary index or not */
+    ((char*) OD_index)[0] = 0;
+    OD_index += 1;
+    
+    /* next, write the indexed sequence length */
+    ((unsigned char*) OD_index)[0] = indexed_seq_len;
+    OD_index += 1;
+
+    /* next, write the size of the index in bytes */
+    /* 
+     * this is a size_t on whatever architecture the index was created on. 
+     * this is kind of a problem for portability, but there are much 
+     * bigger problems if one wants to move binary indexes between 
+     * architectures.
+     *
+     */
+    ((size_t*) OD_index)[0] = index_size;
+    OD_index += sizeof( size_t );
+
+    /* Store the current position in mmapped file */
+    void* curr_pos = OD_index;
+
+    /* initialize a stack to store nodes that still need to be written */
+    struct ODI_stack* stack;
+    init_ODI_stack( &stack );
+    
+    /* initialize the current node to be the root node */
+    void* root_node = index->index;
+    add_ODI_stack_item( stack, &root_node, 's', 0 );
+    
+    /* while there are still nodes to add */
+    unsigned int stack_index = 0;
+    while( stack_index < stack->size )
+    {
+        /* index to loop through children */
+        int i;
+
+        /* write the node to disk */
+        ODI_stack_item* curr_node = stack->stack + stack_index;
+        size_t node_size = calc_node_size(
+            curr_node->node_type, *(curr_node->node_ref));
+        memcpy( curr_pos, *(curr_node->node_ref), node_size);
+        /* update the parent pointer */
+        *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
+        
+        /*
+        fprintf( stdout, "NODE %i---- Level: %i\tType: %c\tSize: %zu\tPtr: %p\n",
+                 stack_index, curr_node->level, curr_node->node_type, 
+                 node_size, curr_pos );
+        */
+
+        /* add all of the children to the stack */
+        switch( curr_node->node_type )
+        {
+        case 's':
+            for( i = 0; i < 1<<(2*LETTER_LEN); i++ )
+            {
+                add_ODI_stack_item( 
+                    stack, 
+                    &(((static_node*)(curr_pos))[i].node_ref),
+                    ((static_node*)curr_pos)[i].type,
+                    curr_node->level + 1
+                );
+            }
+            break;
+        case 'd':
+            for( i = 0; 
+                 i < get_dnode_num_children((dynamic_node*)curr_pos); 
+                 i++ )
+            {
+                add_ODI_stack_item( 
+                    stack, 
+                    &(get_dnode_children((dynamic_node*)curr_pos)[i].node_ref),
+                    get_dnode_children((dynamic_node*)curr_pos)[i].type,
+                    curr_node->level + 1
+                );
+            }
+            break;
+        default:
+            break;
+        }
+        
+        /* move to the next stack item */
+        stack_index += 1;
+        /* move the pointer to free space */
+        curr_pos = ((char*) curr_pos) + node_size;
+        // printf( "%p\t%i\t%i\n", curr_pos, stack_index, stack->size );
+    }
+    
+    free_ODI_stack( stack );
+
+    munmap( OD_index - HEADER_SIZE, 
+            index_size + HEADER_SIZE );
+
+    close( fdout );
+    
+    return;
+}
 
 
 /****************************************************************************/

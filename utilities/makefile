@@ -1,6 +1,15 @@
 compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64
 
-all: aggregate_over_wiggles mapped_reads_into_sam mapped_reads_into_wiggle estimate_read_density
+all: build_index aggregate_over_wiggles mapped_reads_into_sam mapped_reads_into_wiggle estimate_read_density
+
+build_index : build_index.c
+	gcc $(compile_options) -o build_index build_index.c \
+	../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/mapped_location.o   \
+	../src/genome.o ../src/pseudo_location.o ../src/snp.o \
+	../src/dna_sequence.o ../src/quality.o \
+	-lm -pthread
+	cp aggregate_over_wiggles ../bin/
 
 aggregate_over_wiggles : aggregate_over_wiggles.c
 	gcc $(compile_options) -o aggregate_over_wiggles aggregate_over_wiggles.c \
@@ -12,6 +21,7 @@ mapped_reads_into_sam :
 	gcc $(compile_options) -o mapped_reads_into_sam write_sam_from_mapped_reads_db.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o  ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
 	-lm -pthread
 	cp mapped_reads_into_sam ../bin/
 
@@ -20,6 +30,7 @@ mapped_reads_into_wiggle :
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
 	 ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
 	-lm -pthread
 	cp mapped_reads_into_wiggle ../bin/
 
@@ -28,6 +39,7 @@ estimate_read_density :
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
 	 ../src/pseudo_location.o ../src/iterative_mapping.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
 	-lm -pthread
 	cp estimate_read_density ../bin/
 

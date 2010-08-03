@@ -20,11 +20,6 @@ int min_num_hq_bps = -1;
 
 struct fragment_length_dist_t* global_fl_dist;
 
-/* This is to silence a link error with including genome.o. It's OK because this never
-   indexes the genome, so it never needs to free it */
-void free_tree( void )
-{ return; }
-
 static FILE* 
 open_check_error( char* fname, char* file_mode )
 {
@@ -281,7 +276,7 @@ int main( int argc, char** argv )
      ****
      ****/
     struct rawread_db_t* raw_NC_rdb = NULL;
-    FILE* tmp = fopen( "reads.NC.unpaired", "r" );
+    tmp = fopen( "reads.NC.unpaired", "r" );
     if( tmp != NULL )
     {
         fclose(tmp);
@@ -291,7 +286,7 @@ int main( int argc, char** argv )
         );
     }
 
-    FILE* tmp = fopen( "reads.NC.pair1", "r" );
+    tmp = fopen( "reads.NC.pair1", "r" );
     if( tmp != NULL )
     {
         fclose(tmp);

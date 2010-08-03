@@ -10,12 +10,6 @@
 /* make it possible to link */
 int min_num_hq_bps = -1;
 
-/* This is to eliminate a link error with including genome.o. It's OK because this never
-   indexes the genome, so it never needs to free it. But, its pretty hacky. I probably
-   need to do some refactoring...  */
-
-void free_tree( void )
-{ return; }
 
 static FILE* 
 open_check_error( char* fname, char* file_mode )

@@ -173,7 +173,7 @@ inline void init_static_node( static_node** node );
 
 inline void init_dynamic_node( dynamic_node** node );
 
-extern void init_tree( index_t** index, int seq_length );
+extern void init_tree( struct index_t** index, int seq_length );
 
 inline dynamic_node*
 add_child_to_dynamic_node( 
@@ -192,7 +192,7 @@ void free_node( void* node, char node_type );
 
 void free_node_and_children( void* node, char node_type );
 
-void free_tree( index_t* root );
+void free_tree( struct index_t* root );
 
 inline void 
 build_static_node_from_dynamic_node( dynamic_node* dnode, 
@@ -218,13 +218,13 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 */
 
 inline void 
-add_sequence( index_t* index, struct pseudo_locations_t* ps_locs, 
-              LETTER_TYPE* seq, const int seq_length, 
+add_sequence( struct index_t* index, struct pseudo_locations_t* ps_locs, 
+              LETTER_TYPE* seq, const int seq_length,
               GENOME_LOC_TYPE genome_loc );
 
 extern void
 add_junction_positions_from_chr_string( 
-    index_t* index, int seq_length, char* chr_str, int chr_index );
+    struct index_t* index, int seq_length, char* chr_str, int chr_index );
 
 extern void 
 naive_add_genome_from_fasta_file( 
@@ -254,7 +254,7 @@ find_matches( void* node,
 
 
 extern void
-find_matches_from_root( index_t* index, 
+find_matches_from_root( struct index_t* index, 
 
                         float min_match_penalty,
                         float max_penalty_spread,
@@ -274,7 +274,7 @@ find_matches_from_root( index_t* index,
 );
 
 void
-search_index( index_t* index, 
+search_index( struct index_t* index, 
               
               float min_match_penalty,
               float max_penalty_spread,
@@ -291,7 +291,17 @@ size_t
 calc_node_size( NODE_TYPE type, void* node  );
 
 size_t 
-sizeof_tree( index_t* index );
+sizeof_tree( struct index_t* index );
+
+
+/* fwd declaration for the index type */
+struct index_t;
+void
+load_ondisk_index( char* index_fname, struct index_t** index );
+
+void
+build_ondisk_index( struct index_t* index, char* ofname  );
+
 
 /*
  * Check to see that, for a random sequence, the penalties returned for every
