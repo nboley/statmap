@@ -400,3 +400,83 @@ write_snps_to_file( FILE* ofp, struct genome_data* genome )
     
 }
 
+/* returns size written */
+size_t
+write_snp_db_to_binary_file( struct snp_db_t* snp_db, FILE* ofp )
+{
+    int rv;
+    
+    size_t size_written = 0;
+    
+    /* if the snp db is empty, there are just 0 snps */
+    if( snp_db == NULL )
+    {
+        int zero = 0;
+        
+        rv = fwrite( &zero, sizeof(int), 1, ofp );
+        assert( rv == 1 );
+        size_written += sizeof(int);
+        
+        rv = fwrite( &zero, sizeof(size_t), 1, ofp );
+        assert( rv == 1 );
+        size_written += sizeof(size_t);
+        
+        return size_written;
+    }
+    
+    /* write the number of snps */
+    rv = fwrite( &(snp_db->num_snps), sizeof(int), 1, ofp ); 
+    assert( rv == 1 );
+    size_written += sizeof(int);
+    
+    /* this is redundant - but it provides a crude architecture check */
+    /* write the size of the snp array */
+    size_t size = (snp_db->num_snps)*sizeof(snp_t);
+    rv = fwrite( &size, sizeof(size_t), 1, ofp );     
+    assert( rv == 1 );
+    size_written += sizeof(size_t);
+
+    /* write the snp array */
+    rv = fwrite( snp_db->snps, sizeof(snp_t), snp_db->num_snps, ofp ); 
+    assert( rv == snp_db->num_snps );
+    size_written += sizeof(snp_t)*snp_db->num_snps;
+    
+    return size_written;
+}
+
+void
+load_snp_db_from_mmapped_data( struct genome_data* genome, char* data )
+{
+    int num_snps = -1;
+    size_t size = 0;
+    
+    num_snps = *( (int*) data );
+    data += sizeof( int );
+    
+    size = *( (size_t*) data );
+    data += sizeof( size_t  );
+    
+    if( num_snps == 0 )
+    {
+        assert( 0 == size );
+        genome->snp_db = NULL;
+        return;
+    } 
+
+    init_snp_db( &(genome->snp_db) );
+    
+    genome->snp_db->num_snps = num_snps;
+    
+    if( size != num_snps*sizeof( snp_t )  )
+    {
+        fprintf( stderr, "FATAL       :  Error loading snp db from file - there appears to be a size mismatch.\n" );
+        exit( 1 );
+    }
+
+    genome->snp_db->snps = ( snp_t* ) data;
+    
+    return;
+}
+
+
+

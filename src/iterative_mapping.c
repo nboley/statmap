@@ -1385,8 +1385,8 @@ update_chipseq_mapping_wnc(
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );
     
-    struct update_mapped_read_rv_t rv = 
-        update_mapped_reads_from_trace(
+    struct update_mapped_read_rv_t rv;
+    rv = update_mapped_reads_from_trace(
             nc_rdb, *ip_trace, 
             update_chipseq_mapped_read_prbs
         );

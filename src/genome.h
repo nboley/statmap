@@ -62,5 +62,19 @@ init_genome( struct genome_data** gen );
 void
 free_genome( struct genome_data* gen );
 
+struct genome_header {
+    size_t size;
+    size_t genome_offset;
+    size_t snp_db_offset;
+    size_t pseudo_locs_offset;
+    size_t index_offset;
+};
+
+void
+load_genome_from_disk( struct genome_data** gen, char* fname );
+
+void
+write_genome_to_disk( struct genome_data* gen, char* fname );
+
 
 #endif //#ifndef GENOME

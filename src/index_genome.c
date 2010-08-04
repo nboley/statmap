@@ -1392,7 +1392,7 @@ cleanup_table:
 size_t
 size_of_snode( )
 {
-    return sizeof(static_node_child)*(2<<(2*LETTER_LEN));
+    return sizeof(static_node_child)*(1<<(2*LETTER_LEN));
 
 }
 
@@ -1637,7 +1637,8 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     fread( &indexed_seq_len, 1, 1, index_fp );
     assert( indexed_seq_len > 0 );
 
-    init_tree( index, indexed_seq_len );
+    /* allocate space for the index */
+    *index = malloc( sizeof( struct index_t ) );
 
     /* set the index type */
     (*index)->index_type = TREE;
@@ -1654,12 +1655,14 @@ load_ondisk_index( char* index_fname, struct index_t** index )
         fprintf(stderr, "FATAL     : can't create %s for reading", index_fname);
     
     void* OD_index;
-    if ((OD_index = mmap (0, index_size + sizeof(size_t) + sizeof(char), 
+    if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
+                             // index_size + sizeof(size_t) + sizeof(char), 
                           PROT_READ,
                           MAP_SHARED, fd, 0)) == (caddr_t) -1)
         fprintf(stderr, "FATAL     : mmap error for index file");
     
-    index_offset = ((size_t) OD_index) + sizeof(size_t) + sizeof(char) + sizeof( unsigned char );
+    index_offset = ((size_t) OD_index) + HEADER_SIZE; 
+             // sizeof(size_t) + sizeof(char) + sizeof( unsigned char );
     
     /* the root of the tree is always at 0, before being offset 
        by index_offset */
@@ -1704,8 +1707,11 @@ build_ondisk_index( struct index_t* index, char* ofname  )
     if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
                           PROT_READ | PROT_WRITE,
                           MAP_SHARED, fdout, 0)) == (caddr_t) -1)
-        fprintf(stderr, "FATAL     : mmap error for index output");
-    
+    {
+        perror( "FATAL      :  mmap error for index output" );
+        exit( 1 );
+    }
+
     /* write the header information to the file */
     /* first, write a magic number. This allows us to tell if the file
        we just opened is a binary index or not */
@@ -1754,11 +1760,11 @@ build_ondisk_index( struct index_t* index, char* ofname  )
         *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
         
         /* DEBUG */
-        /*
+
         fprintf( stdout, "NODE %i---- Level: %i\tType: %c\tSize: %zu\tPtr: %p\n",
                  stack_index, curr_node->level, curr_node->node_type, 
                  node_size, curr_pos );
-        */
+        
 
         /* add all of the children to the stack */
         switch( curr_node->node_type )

@@ -37,12 +37,22 @@ main( int argc, char** argv )
     init_genome( &genome );
     /* load the genome into memory */
     add_chrs_from_fasta_file( genome, genome_fp );
-
+    
     /* index the genome */
     index_genome( genome, indexed_seq_len );
     
     /* write the index to disk */
     build_ondisk_index( genome->index, "ODIndex.bin"  );
+
+    /* write the genome to file */
+    write_genome_to_disk( genome, "ODGenome.bin"  );
+
+    struct genome_data* genome_copy;
+    load_genome_from_disk( &genome_copy, "ODGenome.bin" );
+
+    /* write the genome to file */
+    write_genome_to_disk( genome_copy, "ODGenome_2.bin"  );
+
 
 #ifdef EXPLICITLY_FREE_INDEX
     free_genome( genome );

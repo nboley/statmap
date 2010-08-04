@@ -121,6 +121,72 @@ fprint_pseudo_locations( FILE* of, struct pseudo_locations_t* ps_locs )
     }
 }
 
+size_t
+write_pseudo_locations_to_file( struct pseudo_locations_t* ps_locs, FILE* of )
+{
+    int rv;    
+    size_t size_written = 0;
+    
+    if( NULL == ps_locs )
+    {
+        int zero = 0;
+        rv = fwrite( &zero, sizeof(int), 1, of );
+        assert( rv == 1 );
+        return sizeof( int );
+    }
+    
+    rv = fwrite( &(ps_locs->num), sizeof(int), 1, of );
+    assert( rv == 1 );
+    size_written += sizeof( int );
+    
+    int i;
+    for( i = 0; i < ps_locs->num; i++ )
+    {
+        rv = fwrite( &(ps_locs->locs[i].num), sizeof(int), 1, of );
+        assert( rv == 1 );
+        size_written += sizeof( int );
+        
+        rv = fwrite( ps_locs->locs[i].locs, sizeof(GENOME_LOC_TYPE), ps_locs->locs[i].num, of );
+        assert( rv == ps_locs->locs[i].num );
+        size_written += ps_locs->locs[i].num*sizeof( GENOME_LOC_TYPE );
+    }
+
+    return size_written;
+}
+
+void
+load_pseudo_locations_from_mmapped_data( 
+    struct pseudo_locations_t** ps_locs, char* data )
+{
+    int num = *data;
+    /* if there are no pseudo ocations, dont even init */
+    if( num == 0 )
+    {
+        *ps_locs = NULL;
+        return;
+    }
+
+    init_pseudo_locations( ps_locs );
+    
+    (*ps_locs)->num = *( (int*) data );
+    data += sizeof(int);
+        
+    (*ps_locs)->locs = malloc( (*ps_locs)->num*sizeof(struct pseudo_location_t) );
+    
+    int i;
+    for( i = 0; i < (*ps_locs)->num; i++ )
+    {
+        (*ps_locs)->locs[i].num = *( (int*) data );
+        data += sizeof(int);
+
+        (*ps_locs)->locs[i].locs = ( GENOME_LOC_TYPE* ) data;
+        data += (*ps_locs)->locs[i].num*sizeof(GENOME_LOC_TYPE);
+    }
+
+    return;
+}
+
+
 void
 load_pseudo_locations( FILE* fp, struct pseudo_locations_t** ps_locs )
 {

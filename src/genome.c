@@ -1,16 +1,82 @@
 /* Copyright (c) 2009-2010, Nathan Boley */
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+
+#include <fcntl.h>
+#include <sys/mman.h> /* mmap() is defined in this header */
+#include <sys/stat.h> /* permission bit defines */
 
 #include "config.h"
 #include "index_genome.h"
 #include "genome.h"
 #include "snp.h"
 #include "pseudo_location.h"
+
+/**** ON DISK Code **********************************************************************/
+
+/* returns size written to disk */
+static size_t
+write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
+{
+    int rv;
+    fprintf( fp, "SM_OD_GEN" );
+    
+    rv = fwrite( &(header->size), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fwrite( &(header->genome_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fwrite( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fwrite( &(header->snp_db_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+    
+    /* // keep the index in a separate file
+    rv = fwrite( &(header->index_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+    */
+    
+    return ( 9*sizeof(char) + 4*sizeof(size_t) );
+}
+
+static void
+read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
+{
+    int rv;
+    
+    char magic_number[9];
+    rv = fread( magic_number, sizeof(unsigned char), 9, fp );
+    printf( "NOTICE      :  Genome Magic Number - %.9s\n", magic_number );
+    assert( rv == 9 );
+
+    rv = fread( &(header->size), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fread( &(header->genome_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fread( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    rv = fread( &(header->snp_db_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    /* // keep the index in a separate file
+    rv = fread( &(header->index_offset), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+    */
+    
+    return;
+}
+
+/* END on disk code **********************************************************/
 
 void
 init_genome( struct genome_data** gen )
@@ -32,9 +98,199 @@ init_genome( struct genome_data** gen )
     /** Init the pseudo locations **/
     (*gen)->ps_locs = NULL;    
     init_pseudo_locations( &((*gen)->ps_locs)  );
+    
     /* Add the pseudo chromosome */
     add_chr_to_genome( "Pseudo", "", 0, *gen );
 }
+
+/* returns the size written */
+size_t
+write_standard_genome_to_file( struct genome_data* gen, FILE* ofp  )
+{
+    size_t size_written = 0;
+    int rv;
+    int i;
+    
+    /* write the number of chromosomes */
+    rv = fwrite( &(gen->num_chrs), sizeof( int ), 1, ofp );
+    size_written += sizeof( int );
+    assert( rv == 1 );
+
+    /* write the chr names */
+    for( i = 0; i < gen->num_chrs; i++ )
+    {
+        /* DONT include the terminating null */
+        int chr_name_len = strlen( gen->chr_names[i] ) + 1;
+        
+        /* write the number of characters in the chr name */
+        rv = fwrite( &chr_name_len, sizeof( int ), 1, ofp );
+        size_written += sizeof( int );
+        assert( rv == 1 );
+        
+        /* write the chr name */
+        rv = fwrite( gen->chr_names[i], sizeof( char ), chr_name_len, ofp );
+        assert( rv == chr_name_len );
+        size_written += chr_name_len*sizeof( char );
+    }
+
+    /* write the chr lengths */
+    rv = fwrite( gen->chr_lens, sizeof( unsigned int ), gen->num_chrs, ofp );
+    size_written += (gen->num_chrs)*sizeof( unsigned int );
+    assert( rv == gen->num_chrs);
+    
+    
+    /* write the actual chromosomes */
+    for( i = 0; i < gen->num_chrs; i++ )
+    {
+        /* write the number of characters in the chr name */
+        rv = fwrite( gen->chrs[i], sizeof( char ), gen->chr_lens[i], ofp );
+        size_written += sizeof( char )*gen->chr_lens[i];
+        assert( rv == (int) gen->chr_lens[i] );        
+    }
+    
+    return size_written;
+}
+
+
+void
+populate_standard_genome_from_mmapped_file( struct genome_data* gen, char* data  )
+{    
+    int i;
+
+    /* get the number of chromosomes */
+    gen->num_chrs = *((int*) data);
+    data += sizeof( int );
+    
+    /* read the chr names */
+    gen->chr_names = malloc( gen->num_chrs*sizeof(char*) );
+    for( i = 0; i < gen->num_chrs; i++ )
+    {
+        /* include the terminating null */
+        int chr_name_len = *((int*) data);
+        data += sizeof( int );
+        
+        gen->chr_names[i] = data;
+        data += chr_name_len*sizeof( char );
+    }
+
+    /* read the chr lengths */
+    gen->chr_lens = (unsigned int*) data;
+    data += sizeof(unsigned int)*gen->num_chrs;
+    
+    /* read the actual chromosomes */
+    gen->chrs = malloc( gen->num_chrs*sizeof(char**) );
+    for( i = 0; i < gen->num_chrs; i++ )
+    {
+        gen->chrs[i] = data;
+        data += sizeof(char)*gen->chr_lens[i];
+    }
+    
+    return;
+}
+
+
+void
+write_genome_to_disk( struct genome_data* gen, char* fname )
+{
+    FILE* ofp;
+    ofp = fopen( fname, "w+" );
+    if( ofp == NULL )
+    {
+        fprintf( stderr, "Can not open '%s' for writing.", fname );
+        exit( 1 );
+    }
+      
+    size_t size_written;
+    
+    /** write the header  */
+    /* 
+       we dont actually know what any of these values are, so we write 
+       them to allocate the sapce, then we will go back and make them 
+       correct 
+    */
+    struct genome_header header;
+    
+    header.size = 0;
+    header.genome_offset = 0;
+    header.snp_db_offset = 0;
+    header.pseudo_locs_offset = 0;
+    // header.index_offset = 0;
+
+    size_written = write_reference_data_header_to_disk( &header, ofp );
+    header.size += size_written;
+    header.genome_offset = size_written;
+    
+    size_written = write_standard_genome_to_file( gen, ofp  );
+    header.size += size_written;
+    header.snp_db_offset = header.genome_offset + size_written;
+    
+    size_written = write_snp_db_to_binary_file( gen->snp_db, ofp );
+    header.size += size_written;
+    header.pseudo_locs_offset = header.snp_db_offset + size_written;
+
+    size_written = write_pseudo_locations_to_file( gen->ps_locs, ofp );
+    header.size += size_written;
+    // header.index_offset = header.pseudo_locs_offset + size_written;
+    
+    /* write the updated header */
+    fseek( ofp, 0, SEEK_SET );
+    size_written = write_reference_data_header_to_disk( &header, ofp );
+    
+    fclose( ofp );
+    
+    return;
+}
+
+void
+load_genome_from_disk( struct genome_data** gen, char* fname )
+{
+    /* 
+       first, 
+       open the file containing the index to ensure that
+       the magic number is correct and to get the size.
+    */
+    
+    FILE* genome_fp = fopen( fname, "r" );
+    if( genome_fp == NULL )
+    {
+        fprintf( stderr, "Cannot open the binary genome '%s' for reading", fname );
+        exit( -1 );
+    }
+
+    struct genome_header header;
+    read_reference_data_header_from_disk( &header, genome_fp );
+    printf( "DEBUG       :  HEADER DATA: %i %i %i %i\n", 
+            header.size, header.genome_offset, 
+            header.snp_db_offset, header.pseudo_locs_offset  );
+
+    
+    *gen = malloc( sizeof( struct genome_data ) );
+    
+    fclose( genome_fp );
+
+    int fd;
+    if ((fd = open(fname, O_RDONLY )) < 0)
+        fprintf(stderr, "FATAL     : can't create %s for reading", fname);
+    
+    char* OD_genome;
+    assert( sizeof(char) == 1 );
+    if ((OD_genome = mmap (0, header.size,
+                          PROT_READ,
+                          MAP_SHARED, fd, 0)) == (caddr_t) -1)
+        fprintf(stderr, "FATAL     : mmap error for genome file");
+
+    char* curr_pos = OD_genome + header.genome_offset;
+    populate_standard_genome_from_mmapped_file( *gen, curr_pos );
+
+    curr_pos = OD_genome + header.snp_db_offset;
+    load_snp_db_from_mmapped_data( *gen, curr_pos );
+
+    curr_pos = OD_genome + header.pseudo_locs_offset;
+    load_pseudo_locations_from_mmapped_data( &((*gen)->ps_locs), curr_pos );
+        
+    return;
+}
+
 
 void
 free_genome( struct genome_data* gen )
@@ -442,4 +698,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     
     return;
 }
+
+
 
