@@ -45,6 +45,9 @@
 
 #define PSEUDO_LOCATIONS_FNAME "pseudo_locations.txt"
 
+#define GENOME_FNAME "genome.bin"
+#define GENOME_INDEX_FNAME "genome.bin.index"
+
 /**** determine how the letters are packed       ****/
 
 #define PSEUDO_LOC_MIN_SIZE 50

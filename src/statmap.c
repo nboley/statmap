@@ -252,7 +252,6 @@ parse_arguments( int argc, char** argv )
     
     args.genome_fname = NULL;
     args.genome_index_fname = NULL;
-    args.genome = NULL;
     
     args.unpaired_reads_fnames = NULL;
     args.pair1_reads_fnames = NULL;
@@ -459,49 +458,7 @@ parse_arguments( int argc, char** argv )
         char* error = realpath( args.genome_fname, genome_fname );
         assert( NULL != error );
         args.genome_fname = genome_fname;
-
-        /* test to see if this is acorrectly converted binary genome file */
-        FILE* genome_fp = fopen( args.genome_fname, "r" );
-        if( NULL == genome_fp )
-        {
-            fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args.genome_fname);
-            exit( 1 );
-        }
-        
-        char magic_number[9];
-        fread( magic_number, sizeof(char), 9, genome_fp );
-        /* if there isnt a binary index, assume its fasta and build the binary index */
-        if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
-        {
-            printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
-            init_genome( &args.genome );
-            add_chrs_from_fasta_file( args.genome, genome_fp );
-            char buffer[500];
-            sprintf( buffer, "%s/genome.bin", args.output_directory );
-            write_genome_to_disk( args.genome, buffer  );
-        } else {
-            /* copy the genome into the output directory */
-            safe_copy_into_output_directory( args.genome_fname, args.output_directory, "genome.bin" );
-            char buffer[500];
-            sprintf( buffer, "%s/genome.bin", args.output_directory );
-            load_genome_from_disk( &(args.genome), buffer );
-
-            /* try to copy the genome index into the directory */
-            sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
-            /* test if the file exists */
-            FILE* test_fp = fopen( args.genome_index_fname, "r" );
-            if( NULL != test_fp )
-            {
-                fclose( test_fp );
-                safe_copy_into_output_directory( 
-                    args.genome_index_fname, args.output_directory, "genome.bin.index" );
-            } else {
-                args.genome_index_fname = NULL;
-            }
-        }
-        
-        // BUG - WTF 
-        // fclose( genome_fp );
+        sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
     }
     
     if( args.min_match_penalty == 1 )
@@ -733,26 +690,33 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
-void load_genome_index( struct genome_data* genome, int indexed_seq_len )
+void load_genome( struct genome_data** genome, args_t* args )
 {
-    char* genome_index_name = "./genome.bin.index";
-
-    /* first, check to see if there is already a genome index */
-    FILE* fp;
-    fp = fopen( genome_index_name, "r" );
-    
-    /* if there is no index, create one */
-    if( NULL == fp )
+    /* test to see if this is acorrectly converted binary genome file */
+    FILE* genome_fp = fopen( args->genome_fname, "r" );
+    if( NULL == genome_fp )
     {
+        fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
+        exit( 1 );
+    }
+    
+    char magic_number[9];
+    fread( magic_number, sizeof(char), 9, genome_fp );
+    /* if there isnt a binary index, assume its fasta and build the binary index */
+    if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
+    {
+        fseek( genome_fp, 0, SEEK_SET ); 
+        printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
+        init_genome( genome );
+        add_chrs_from_fasta_file( *genome, genome_fp );
+        
         pid_t pID = fork();
         /* create the index, and then exit */
         /* we do this for the separate address space */
         if( pID == 0 )
         {
-            printf( "FORKEDDDDDDDDDDDD\n" );
-            index_genome( genome, indexed_seq_len );
-            fprintf( stderr, "NOTICE      :  Writing index to %s.\n", genome_index_name );
-            build_ondisk_index( genome->index, genome_index_name  );
+            index_genome( *genome, args->indexed_seq_len );
+            build_ondisk_index( (*genome)->index, GENOME_INDEX_FNAME  );
             exit( 0 );
         } 
         else if ( pID < 0 )
@@ -765,13 +729,20 @@ void load_genome_index( struct genome_data* genome, int indexed_seq_len )
             int status;
             wait( &status );
         }
+        
+        write_genome_to_disk( *genome, GENOME_FNAME  );
     } else {
-        fclose( fp  );
+        /* copy the genome into the output directory */
+        safe_copy_into_output_directory( 
+            args->genome_fname, args->output_directory, GENOME_FNAME );
+        safe_copy_into_output_directory( 
+            args->genome_index_fname, args->output_directory, GENOME_INDEX_FNAME );
+        
+        load_genome_from_disk( genome, GENOME_FNAME );
     }
     
-    /* make the on disk index the new index */
-    load_ondisk_index( genome_index_name, &(genome->index) );
-
+    load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
+    
     return;
 }
 
@@ -932,9 +903,10 @@ iterative_mapping( args_t* args,
 }
 
 void
-map_generic_data(  args_t* args, 
-                   struct genome_data* genome )
+map_generic_data(  args_t* args )
 {
+    struct genome_data* genome;
+    
     /* store clock times - useful for benchmarking */
     clock_t start, stop;    
     
@@ -942,7 +914,7 @@ map_generic_data(  args_t* args,
     start = clock();
     
     /* initialize the genome */
-    load_genome_index( genome, args->indexed_seq_len );
+    load_genome( &genome, args );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
@@ -974,19 +946,19 @@ map_generic_data(  args_t* args,
 }
 
 void
-map_chipseq_data(  args_t* args, 
-                   struct genome_data* genome )
+map_chipseq_data(  args_t* args )
 {
+    struct genome_data* genome;
+
     /* store clock times - useful for benchmarking */
     clock_t start, stop;    
     
     /***** Index the genome */
     start = clock();
-    
     /* initialize the genome */
-    load_genome_index( genome, args->indexed_seq_len );
-    
+    load_genome( &genome, args );
     stop = clock();
+    
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
     
@@ -1189,18 +1161,14 @@ main( int argc, char** argv )
     /* parse and sanity check arguments */
     args_t args = parse_arguments( argc, argv );
     
-    /* Load the genome */
-    struct genome_data* genome;
-    load_genome_from_disk( &genome, "genome.bin" );
-    
     if( args.assay_type == CHIP_SEQ )
     {
-        map_chipseq_data( &args, genome );
+        map_chipseq_data( &args );
     }
     
     if( args.assay_type == UNKNOWN )
     {
-        map_generic_data( &args, genome );
+        map_generic_data( &args );
     }
 
     /* If appropriate, print out the snp db */
@@ -1223,9 +1191,6 @@ main( int argc, char** argv )
     goto cleanup;
     
 cleanup:
-    /* Free the genome and indexes */
-    free_genome( genome );
-
     close_rawread_db( args.rdb );
     
     if( args.NC_rdb != NULL )

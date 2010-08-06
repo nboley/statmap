@@ -101,6 +101,8 @@ init_genome( struct genome_data** gen )
     /* snps - we dont init because they may not exist */
     (*gen)->snp_db = NULL;
 
+    (*gen)->is_mmapped = false;
+
     /** Init the pseudo locations **/
     (*gen)->ps_locs = NULL;    
     init_pseudo_locations( &((*gen)->ps_locs)  );
@@ -274,6 +276,8 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
     
     fclose( genome_fp );
 
+    (*gen)->is_mmapped = true;
+    
     int fd;
     if ((fd = open(fname, O_RDONLY )) < 0)
         fprintf(stderr, "FATAL     : can't create %s for reading", fname);
@@ -303,6 +307,13 @@ free_genome( struct genome_data* gen )
 {
     int i;
     
+    
+    if( gen->is_mmapped == true )
+    {
+        free( gen );
+        return;
+    }
+
     /* BUG - make this recognize the tree */
     if( false && gen->index != NULL )
         free_tree( gen->index );

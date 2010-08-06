@@ -3,6 +3,8 @@
 #ifndef GENOME
 #define GENOME
 
+#include "config.h"
+
 /* 
  * Eventually we may want indexes to pluggable, providing for multiple types ( or
  * for instance, some on disk, etc. ). To this end, we define some generic index
@@ -42,6 +44,8 @@ struct genome_data {
     char** chrs;
     /* the length of the chrsomosomes in bps' */
     unsigned int* chr_lens;
+
+    enum bool is_mmapped;
 };
 
 void
