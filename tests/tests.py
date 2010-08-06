@@ -26,7 +26,7 @@ STATMAP_PATH = '../src/statmap'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()

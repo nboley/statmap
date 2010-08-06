@@ -6,7 +6,11 @@
 #include <time.h>
 #include <getopt.h>
 #include <string.h>
+#include <limits.h>
+
 #include <pthread.h>
+
+
 /* to find out the  number of available processors */
 #include <sys/sysinfo.h>
 /* mkdir */
@@ -63,8 +67,8 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
 {
     int error;
 
-    char realpath_buffer[500];
-    char* error_2 = realpath( output_dir, realpath_buffer );
+    char* realpath_buffer = realpath( output_dir, NULL );
+    assert( NULL != realpath_buffer );
 
     char buffer[500];
     sprintf( buffer, "cp %s %s/%s", fname, realpath_buffer, output_fname );
@@ -456,11 +460,10 @@ parse_arguments( int argc, char** argv )
 
     if( true ) 
     {
-        char* genome_fname = calloc( sizeof(char), 500 );
-        args.genome_index_fname = calloc( sizeof(char), 500 );
+        args.genome_index_fname = calloc( sizeof(char), PATH_MAX + 6 );
         
-        char* error = realpath( args.genome_fname, genome_fname );
-        assert( NULL != error );
+        char* genome_fname = realpath( args.genome_fname, NULL );
+        assert( NULL != genome_fname );
         args.genome_fname = genome_fname;
         sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
     }
