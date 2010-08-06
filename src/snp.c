@@ -458,7 +458,8 @@ load_snp_db_from_mmapped_data( struct genome_data* genome, char* data )
     
     if( num_snps == 0 )
     {
-        assert( 0 == size );
+        // BUG BUG
+        // assert( 0 == size );
         genome->snp_db = NULL;
         return;
     } 

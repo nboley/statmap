@@ -82,9 +82,10 @@ sample_relaxed_mapping(
     case CHIP_SEQ:
         update_expectation = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
-        trace_size = 1;
+        trace_size = 2;
         track_names = malloc( trace_size*sizeof(char*) );
-        track_names[0] = "read_density";
+        track_names[0] = "fwd_strand_read_density";
+        track_names[1] = "bkwd_strand_read_density";
         break;
     
     default:
@@ -223,11 +224,8 @@ int main( int argc, char** argv )
     
     /* Load the genome */
     struct genome_data* genome;
-    init_genome( &genome );
-    FILE* genome_fp = open_check_error( "genome.fa", "r" );
-    add_chrs_from_fasta_file( genome,  genome_fp );
-
-    // BUG Why does it segfault when I close the file handle?
+    load_genome_from_disk( &genome, GENOME_FNAME );
+    load_ondisk_index( GENOME_INDEX_FNAME, &(genome->index) );
     
     /* load the mapped read db */
     char* mpd_rd_fname = "mapped_reads.db";

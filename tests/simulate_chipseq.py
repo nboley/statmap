@@ -524,25 +524,23 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
 
     def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5  ):
         rpy.r("par(mfg=c(1,1))")
-        if wiggle_density[0].has_key( 'chr2L_paternal' ):
-            if len( wiggle_density ) > 0:
-                rpy.r.points( wiggle_density[0]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 1:
-                rpy.r.points( -1*wiggle_density[1]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 2:
-                rpy.r.points( wiggle_density[2]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-            if len( wiggle_density ) > 3:
-                rpy.r.points( -1*wiggle_density[3]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_paternal' ):
+            rpy.r.points( wiggle_density[0]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_paternal' ):
+            rpy.r.points( -1*wiggle_density[1]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_paternal' ):
+            rpy.r.points( wiggle_density[2]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_paternal' ):
+            rpy.r.points( -1*wiggle_density[3]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         rpy.r("par(mfg=c(2,1))")
-        if wiggle_density[0].has_key( 'chr2L_maternal' ):
-            if len( wiggle_density ) > 0:
-                rpy.r.points( wiggle_density[0]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 1:
-                rpy.r.points( -1*wiggle_density[1]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 2:
-                rpy.r.points( wiggle_density[2]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-            if len( wiggle_density ) > 3:
-                rpy.r.points( -1*wiggle_density[3]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_maternal' ):
+            rpy.r.points( wiggle_density[0]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_maternal' ):
+            rpy.r.points( -1*wiggle_density[1]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+        if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_maternal' ):
+            rpy.r.points( wiggle_density[2]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_maternal' ):
+            rpy.r.points( -1*wiggle_density[3]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
     
     def plot_wiggles( dir, color  ):
         fnames = []

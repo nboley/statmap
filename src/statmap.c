@@ -549,6 +549,9 @@ parse_arguments( int argc, char** argv )
 
     if( args.frag_len_fname != NULL )
     {
+        safe_copy_into_output_directory( 
+            args.frag_len_fname, args.output_directory, "estimated_fl_dist.txt" );
+        
         args.frag_len_fp = fopen( args.frag_len_fname, "r" );
         if( NULL == args.frag_len_fp )
         {
@@ -729,7 +732,10 @@ void load_genome( struct genome_data** genome, args_t* args )
             int status;
             wait( &status );
         }
-        
+
+        FILE* fp = fopen( "pseudo_locations.txt", "r" );
+        assert( NULL != fp );
+        load_pseudo_locations( fp, &((*genome)->ps_locs) );
         write_genome_to_disk( *genome, GENOME_FNAME  );
     } else {
         /* copy the genome into the output directory */
@@ -1129,7 +1135,7 @@ map_chipseq_data(  args_t* args )
                             buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
                         
                         write_wiggle_from_trace( 
-                            nc_trace, genome->chr_names, track_names,
+                            nc_trace, genome->chr_names, track_names + 2,
                             buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
                     }    
                 }
