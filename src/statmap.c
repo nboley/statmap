@@ -62,8 +62,12 @@ static void
 safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fname )
 {
     int error;
+
+    char realpath_buffer[500];
+    char* error_2 = realpath( output_dir, realpath_buffer );
+
     char buffer[500];
-    sprintf( buffer, "cp %s %s/%s", fname, output_dir, output_fname );
+    sprintf( buffer, "cp %s %s/%s", fname, realpath_buffer, output_fname );
     fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  fname );
     error = system( buffer );
     if (WIFSIGNALED(error) &&
@@ -740,9 +744,9 @@ void load_genome( struct genome_data** genome, args_t* args )
     } else {
         /* copy the genome into the output directory */
         safe_copy_into_output_directory( 
-            args->genome_fname, args->output_directory, GENOME_FNAME );
+            args->genome_fname, "./", GENOME_FNAME );
         safe_copy_into_output_directory( 
-            args->genome_index_fname, args->output_directory, GENOME_INDEX_FNAME );
+            args->genome_index_fname, "./", GENOME_INDEX_FNAME );
         
         load_genome_from_disk( genome, GENOME_FNAME );
     }
