@@ -15,14 +15,14 @@
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./build_index genome.fa indexed_seq_len\n" );
+    fprintf( stderr, "Usage: ./build_index genome.fa indexed_seq_len output_filename\n" );
     return;
 }
 
 int 
 main( int argc, char** argv )
 {
-    if( argc != 3 )
+    if( argc != 4 )
     {
         usage();
         exit( 1 );
@@ -40,19 +40,21 @@ main( int argc, char** argv )
     
     /* index the genome */
     index_genome( genome, indexed_seq_len );
+
+    /* write the genome to file */
+    write_genome_to_disk( genome, argv[3]  );
     
     /* write the index to disk */
-    build_ondisk_index( genome->index, "ODIndex.bin"  );
+    char buffer[500];
+    sprintf( buffer, "%s.index", argv[3] );
+    build_ondisk_index( genome->index, buffer  );
 
-    /* write the genome to file */
-    write_genome_to_disk( genome, "ODGenome.bin"  );
-
+    /* Test the code - make sure the two copies are identical
     struct genome_data* genome_copy;
     load_genome_from_disk( &genome_copy, "ODGenome.bin" );
-
-    /* write the genome to file */
+    // write the genome to file
     write_genome_to_disk( genome_copy, "ODGenome_2.bin"  );
-
+    */
 
 #ifdef EXPLICITLY_FREE_INDEX
     free_genome( genome );

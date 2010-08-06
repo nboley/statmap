@@ -73,8 +73,9 @@ struct rawread_db_t;
 
 /* Store parsed options */
 typedef struct {
+    struct genome_data* genome;
     char* genome_fname;
-    FILE* genome_fp;
+    char* genome_index_fname;
     
     char* unpaired_reads_fnames;
     char* pair1_reads_fnames;

@@ -55,6 +55,12 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
     rv = fread( magic_number, sizeof(unsigned char), 9, fp );
     printf( "NOTICE      :  Genome Magic Number - %.9s\n", magic_number );
     assert( rv == 9 );
+    if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
+    {
+        fprintf( stderr, "FATAL       :  Genome Magic Number ('%.9s') is incorrect ( it should be 'SM_OD_GEN' ) \n", magic_number );
+        fprintf( stderr, "HINT        :  Is this a fasta file? Fasta files need to be converted with build_index.\n" );
+        exit( 1 );
+    }
 
     rv = fread( &(header->size), sizeof(size_t), 1, fp );
     assert( rv == 1 );

@@ -70,7 +70,7 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
         (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
     {
         fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-        perror( "System Call Failure");
+        perror( "Copy failure");
         assert( false );
         exit( -1 );
     }
@@ -251,6 +251,8 @@ parse_arguments( int argc, char** argv )
     args_t args;
     
     args.genome_fname = NULL;
+    args.genome_index_fname = NULL;
+    args.genome = NULL;
     
     args.unpaired_reads_fnames = NULL;
     args.pair1_reads_fnames = NULL;
@@ -451,30 +453,57 @@ parse_arguments( int argc, char** argv )
 
     if( true ) 
     {
-        char buffer[500];
-        /* copy the genome into the output directory */
-        /*
-        sprintf( buffer, "mkdir ./%s/genome/", args.output_directory );
-        error = mkdir( buffer, S_IRWXU | S_IRWXG | S_IRWXO );
-        if( -1 == error )
+        char* genome_fname = calloc( sizeof(char), 500 );
+        args.genome_index_fname = calloc( sizeof(char), 500 );
+        
+        char* error = realpath( args.genome_fname, genome_fname );
+        assert( NULL != error );
+        args.genome_fname = genome_fname;
+
+        /* test to see if this is acorrectly converted binary genome file */
+        FILE* genome_fp = fopen( args.genome_fname, "r" );
+        if( NULL == genome_fp )
         {
-            perror( "FATAL       :  Cannot make output directory");
-            exit( -1 );
+            fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args.genome_fname);
+            exit( 1 );
         }
-        */
         
-        /* copy the genome into the output directory */
-        safe_copy_into_output_directory( args.genome_fname, args.output_directory, "genome.fa" );
-        
-        sprintf( buffer, "%s/genome.fa", args.output_directory );    
-        /* open the chromosome file */
-        args.genome_fp = fopen( buffer, "r");
-        if( args.genome_fp == NULL ) {
-            fprintf(stderr, "FATAL       :  Unable to open '%s'\n", buffer);
-            exit(-1);
+        char magic_number[9];
+        fread( magic_number, sizeof(char), 9, genome_fp );
+        /* if there isnt a binary index, assume its fasta and build the binary index */
+        if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
+        {
+            printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
+            init_genome( &args.genome );
+            add_chrs_from_fasta_file( args.genome, genome_fp );
+            char buffer[500];
+            sprintf( buffer, "%s/genome.bin", args.output_directory );
+            write_genome_to_disk( args.genome, buffer  );
+        } else {
+            /* copy the genome into the output directory */
+            safe_copy_into_output_directory( args.genome_fname, args.output_directory, "genome.bin" );
+            char buffer[500];
+            sprintf( buffer, "%s/genome.bin", args.output_directory );
+            load_genome_from_disk( &(args.genome), buffer );
+
+            /* try to copy the genome index into the directory */
+            sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
+            /* test if the file exists */
+            FILE* test_fp = fopen( args.genome_index_fname, "r" );
+            if( NULL != test_fp )
+            {
+                fclose( test_fp );
+                safe_copy_into_output_directory( 
+                    args.genome_index_fname, args.output_directory, "genome.bin.index" );
+            } else {
+                args.genome_index_fname = NULL;
+            }
         }
+        
+        // BUG - WTF 
+        // fclose( genome_fp );
     }
-        
+    
     if( args.min_match_penalty == 1 )
     {
         args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
@@ -706,9 +735,11 @@ parse_arguments( int argc, char** argv )
 
 void load_genome_index( struct genome_data* genome, int indexed_seq_len )
 {
+    char* genome_index_name = "./genome.bin.index";
+
     /* first, check to see if there is already a genome index */
     FILE* fp;
-    fp = fopen( "ODIndex.bin", "r" );
+    fp = fopen( genome_index_name, "r" );
     
     /* if there is no index, create one */
     if( NULL == fp )
@@ -718,8 +749,10 @@ void load_genome_index( struct genome_data* genome, int indexed_seq_len )
         /* we do this for the separate address space */
         if( pID == 0 )
         {
+            printf( "FORKEDDDDDDDDDDDD\n" );
             index_genome( genome, indexed_seq_len );
-            build_ondisk_index( genome->index, "ODIndex.bin"  );
+            fprintf( stderr, "NOTICE      :  Writing index to %s.\n", genome_index_name );
+            build_ondisk_index( genome->index, genome_index_name  );
             exit( 0 );
         } 
         else if ( pID < 0 )
@@ -737,11 +770,7 @@ void load_genome_index( struct genome_data* genome, int indexed_seq_len )
     }
     
     /* make the on disk index the new index */
-    load_ondisk_index( "ODIndex.bin", &(genome->index) );
-    
-    /* load the pseudo locations */
-    FILE* pslocs_fp = fopen( "pseudo_locations.txt", "r" ); 
-    load_pseudo_locations( pslocs_fp, &(genome->ps_locs) );
+    load_ondisk_index( genome_index_name, &(genome->index) );
 
     return;
 }
@@ -1162,13 +1191,8 @@ main( int argc, char** argv )
     
     /* Load the genome */
     struct genome_data* genome;
-    init_genome( &genome );
-    add_chrs_from_fasta_file( genome, args.genome_fp );
-
-    /* parse the snps */
-    if( args.snpcov_fp != NULL )
-        build_snp_db_from_snpcov_file( args.snpcov_fp, genome );
-
+    load_genome_from_disk( &genome, "genome.bin" );
+    
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args, genome );

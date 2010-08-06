@@ -1566,6 +1566,7 @@ add_ODI_stack_item( struct ODI_stack* stack,
         stack->allocated_size += ODI_stack_GROW_FACTOR;
         stack->stack = realloc( 
             stack->stack, sizeof(ODI_stack_item)*(stack->allocated_size) );
+        
         if( stack->stack == NULL )
         {
             fprintf( stderr, "FATAL       :  Error allocating memory for the ODI Stack.\n" );
@@ -1615,11 +1616,14 @@ load_ondisk_index( char* index_fname, struct index_t** index )
        the magic number is correct and to get the size.
     */
     
+    fprintf( stderr, "NOTICE      :  Loading the index file '%s'.\n", index_fname );
+
     FILE* index_fp = fopen( index_fname, "r" );
     if( index_fp == NULL )
     {
-        fprintf( stderr, "Cannot open the index '%s' for reading", index_fname );
-        exit( -1 );
+        fprintf( stderr, "FATAL       :  Cannot open the index '%s' for reading\n", index_fname );
+        assert( false );
+        exit( 1 );
     }
     
     char magic_number;
@@ -1629,7 +1633,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     fread( &magic_number, 1, 1, index_fp );
     if( magic_number != 0 )
     {
-        fprintf( stderr, "FATAL    : We appear to have loaded an invalid index\n" );
+        fprintf( stderr, "FATAL    :  We appear to have loaded an invalid index\n" );
         exit( 1 );
     }
     
@@ -1684,7 +1688,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
     int fdout;
     if ((fdout = open(ofname, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)) < 0)
     {
-        perror( "FATAL       :  can't create ODindex.bin for writing" );
+        perror( "FATAL       :  can't create index file for writing" );
         exit( 1 );
     }
     
@@ -1708,7 +1712,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
                           PROT_READ | PROT_WRITE,
                           MAP_SHARED, fdout, 0)) == (caddr_t) -1)
     {
-        perror( "FATAL      :  mmap error for index output" );
+        perror( "FATAL       :  mmap error for index output" );
         exit( 1 );
     }
 
@@ -1760,12 +1764,14 @@ build_ondisk_index( struct index_t* index, char* ofname  )
         *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
         
         /* DEBUG */
-
+        /*
         fprintf( stdout, "NODE %i---- Level: %i\tType: %c\tSize: %zu\tPtr: %p\n",
                  stack_index, curr_node->level, curr_node->node_type, 
                  node_size, curr_pos );
+        */
         
-
+        int level = curr_node->level;
+        
         /* add all of the children to the stack */
         switch( curr_node->node_type )
         {
@@ -1776,7 +1782,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
                     stack, 
                     &(((static_node*)(curr_pos))[i].node_ref),
                     ((static_node*)curr_pos)[i].type,
-                    curr_node->level + 1
+                    level + 1
                 );
             }
             break;
@@ -1789,7 +1795,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
                     stack, 
                     &(get_dnode_children((dynamic_node*)curr_pos)[i].node_ref),
                     get_dnode_children((dynamic_node*)curr_pos)[i].type,
-                    curr_node->level + 1
+                    level + 1
                 );
             }
             break;
