@@ -351,6 +351,101 @@ aggregate_over_wiggles(
     return;
 }
 
+
+extern void
+call_peaks_from_wiggles(
+    FILE** IP_wig_fps,
+    FILE** NC_wig_fps,
+    int num_wigs,
+    
+    FILE* ofp
+)
+{
+    
+
+    int curr_chr_index = -1;
+    int curr_trace_index = -1;
+
+    /* loop over num wigs */
+    int i;
+
+    /* BUG!!! HORRIBLE HACK */
+    char** chr_names = malloc(sizeof(char*)*100);
+    char** track_names = malloc(sizeof(char*)*100);
+    
+    /* we implement this as a merge sort. 
+       First, we read lines from each until we have a chr and position.
+    */
+
+    struct IP_wig_line_info* IP_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
+    struct NC_wig_line_info* NC_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
+    
+    /* initialize the data arrays */
+    for( i = 0; i < num_wigs; i++ )
+    {
+        IP_lines[i].fp = IP_wig_fps[i];
+        parse_next_line( IP_lines, chr_names, track_names, i );
+
+        NC_lines[i].fp = NC_wig_fps[i];
+        parse_next_line( NC_lines, chr_names, track_names, i );
+    }
+    
+    qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info ;)
+    while( NULL != IP_lines[0].fp 
+           && NULL != NC_lines[0].fp)
+    {
+        if( IP_lines[0].trace_index > curr_trace_index
+            && NC_lines[0].trace_index > curr_trace_index )
+        {    
+            const int tmp_trace_index = MIN( IP_lines[0].trace_index, NC_lines[0].trace_index );
+            fprintf( ofp, "track type=wiggle_0 name=%s\n", 
+                     track_names[tmp_trace_index] );
+            curr_trace_index = tmp_trace_index;
+        }
+        
+        if( IP_lines[0].chr_index > curr_chr_index
+            && NC_lines[0].chr_index > curr_chr_index)
+        {    
+            assert( curr_chr_index + 1 >= 0 );
+            const int tmp_chr_index = MIN( IP_lines[0].chr_index, NC_lines[0].chr_index )
+            /* in case there were chrs with zero reads, 
+               we loop through skipped indexes. Note that 
+               we use the min to explicitly skip the pseudo 
+               chromosome */
+            int i;
+            for( i = MAX( 1, curr_chr_index + 1); i <= tmp_chr_index; i++ )
+                fprintf( ofp, "variableStep chrom=%s\n", chr_names[i] );
+            curr_chr_index = tmp_chr_index;
+        }
+        
+        unsigned int position = lines[0].position;
+        int chr_index = lines[0].chr_index;
+        int ub = 0;
+        i = 1;
+        while( position == lines[i].position 
+               && chr_index == lines[i].chr_index
+               && NULL != lines[i].fp
+               && i < num_wigs )
+        {
+            ub++;
+            i++;
+        }
+
+        float value = agg_fn( lines, ub, num_wigs );
+        if( value > FLT_EPSILON )
+            fprintf( ofp, "%i\t%e\n", position, value  );
+        
+        for( i = 0; i <= ub; i++ )
+            parse_next_line( lines, chr_names, track_names, i );
+        
+        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    }
+    
+    return;
+}
+
+
 /* this isnt implemented yet - I have no need */
 #if 0
 extern void
