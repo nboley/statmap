@@ -174,9 +174,18 @@ cmp_wig_line_info( const void* a, const void* b)
         return ((struct wig_line_info*) a)->chr_index 
                  - ((struct wig_line_info*) b)->chr_index;
     }
-    
-    return ((struct wig_line_info*) a)->position 
-             - ((struct wig_line_info*) b)->position;
+
+    /* compare on position */
+    if( ((struct wig_line_info*) a)->position 
+        != ((struct wig_line_info*) b)->position )
+    {
+        return ((struct wig_line_info*) a)->position 
+            - ((struct wig_line_info*) b)->position;
+    }
+
+    /* finally, compare on the file index */
+    return ((struct wig_line_info*) a)->file_index 
+        - ((struct wig_line_info*) b)->file_index;
 }
 
 static void
@@ -299,6 +308,7 @@ aggregate_over_wiggles(
     for( i = 0; i < num_wigs; i++ )
     {
         lines[i].fp = wig_fps[i];
+        lines[i].file_index = i;
         parse_next_line( lines, chr_names, track_names, i );
     }
     
@@ -354,15 +364,14 @@ aggregate_over_wiggles(
 
 extern void
 call_peaks_from_wiggles(
-    FILE** IP_wig_fps,
-    FILE** NC_wig_fps,
+    FILE** wig_fps,
     int num_wigs,
     
-    FILE* ofp
+    FILE* ofp,
+
+    float pvalue_thresh
 )
 {
-    
-
     int curr_chr_index = -1;
     int curr_trace_index = -1;
 
@@ -377,28 +386,31 @@ call_peaks_from_wiggles(
        First, we read lines from each until we have a chr and position.
     */
 
-    struct IP_wig_line_info* IP_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
-    struct NC_wig_line_info* NC_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
+    struct wig_line_info* IP_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
+    struct wig_line_info* NC_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
     
     /* initialize the data arrays */
     for( i = 0; i < num_wigs; i++ )
     {
         IP_lines[i].fp = IP_wig_fps[i];
+        IP_lines[i].file_index = i;
         parse_next_line( IP_lines, chr_names, track_names, i );
 
         NC_lines[i].fp = NC_wig_fps[i];
+        NC_lines[i].file_index = i;
         parse_next_line( NC_lines, chr_names, track_names, i );
     }
     
     qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
-    qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info ;)
+    qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     while( NULL != IP_lines[0].fp 
            && NULL != NC_lines[0].fp)
     {
         if( IP_lines[0].trace_index > curr_trace_index
             && NC_lines[0].trace_index > curr_trace_index )
         {    
-            const int tmp_trace_index = MIN( IP_lines[0].trace_index, NC_lines[0].trace_index );
+            const int tmp_trace_index = 
+                MIN( IP_lines[0].trace_index, NC_lines[0].trace_index );
             fprintf( ofp, "track type=wiggle_0 name=%s\n", 
                      track_names[tmp_trace_index] );
             curr_trace_index = tmp_trace_index;
@@ -408,7 +420,8 @@ call_peaks_from_wiggles(
             && NC_lines[0].chr_index > curr_chr_index)
         {    
             assert( curr_chr_index + 1 >= 0 );
-            const int tmp_chr_index = MIN( IP_lines[0].chr_index, NC_lines[0].chr_index )
+            const int tmp_chr_index = 
+                MIN( IP_lines[0].chr_index, NC_lines[0].chr_index );
             /* in case there were chrs with zero reads, 
                we loop through skipped indexes. Note that 
                we use the min to explicitly skip the pseudo 
@@ -419,27 +432,113 @@ call_peaks_from_wiggles(
             curr_chr_index = tmp_chr_index;
         }
         
-        unsigned int position = lines[0].position;
-        int chr_index = lines[0].chr_index;
-        int ub = 0;
-        i = 1;
-        while( position == lines[i].position 
-               && chr_index == lines[i].chr_index
-               && NULL != lines[i].fp
-               && i < num_wigs )
+        /* determine the next minimum position */
+        int chr_index = IP_lines[0].chr_index;
+        long position = -1;
+        /* if the chr is the same in the NC and the IP, then the position is
+           just the minimum over the two 
+        */
+        if( NC_lines[0].chr_index == chr_index )
         {
-            ub++;
-            i++;
+            position = MIN( IP_lines[0].position, NC_lines[0].position );
+        }
+        /* otherwise, choose the position from the list with the smallest chr index */
+        else if( NC_lines[0].chr_index < chr_index )
+        {
+            chr_index = NC_lines[0].chr_index;
+            position = NC_lines[0].position;
+        } 
+        /* NC_lines[0].chr_index > chr_index */
+        else {
+            /* ALREADY set -  chr_index = IP_lines[0].chr_index; */
+            position = IP_lines[0].position;
+        }
+        
+        /* loop through the remaining items in the queue */
+        int i = 0;
+        int j = 0;
+        /* ties are stored as 1/2 in each */
+        float ip_exceeds_nc_cnt = 0;
+        float nc_exceeds_ip_cnt = 0;
+        /* keep going while there are still lines at this position in either the IP or NC */
+        while( (  position == IP_lines[i].position 
+                  && chr_index == IP_lines[i].chr_index
+                  && NULL != IP_lines[i].fp
+                  && i < num_wigs 
+               ) || ( 
+                  position == NC_lines[j].position 
+                  && chr_index == NC_lines[j].chr_index
+                  && NULL != NC_lines[j].fp
+                  && j < num_wigs 
+               )
+            )
+        {
+            /* if we've run out of ip lines */
+            if( i == num_wigs ) {
+                nc_exceeds_ip_cnt += 1;
+                j++;
+                continue;
+            }
+
+            /* if we've run out of NC lines */
+            if( j == num_wigs ) {
+                ip_exceeds_nc_cnt += 1;
+                i++;
+                continue;
+            }
+                
+            
+            /* check how the IP and NC compare */ 
+            switch( cmp_wig_line_info( IP_lines + i, NC_lines + j ) )
+            {
+            /** the two are identical **/
+            /* then we need to do some calculation to 
+               see how we add to the stuff */
+            case 0:
+                if( IP_lines[i].value < NC_lines[i].value )
+                    ip_exceeds_nc_cnt += 1;
+
+                if( IP_lines[i].value == NC_lines[i].value ) {
+                    ip_exceeds_nc_cnt += 0.5;
+                    nc_exceeds_ip_cnt += 0.5;
+                }
+
+                if( IP_lines[i].value < NC_lines[i].value )
+                    nc_exceeds_ip_cnt += 1;
+                
+                /* we know that there can't be duplicates, so
+                   we can move the index forward for both */
+                i += 1;
+                j += 1;
+                
+                break;
+
+            /** the ip case is smaller **/
+            case -1:
+                ip_exceeds_nc_cnt += 1;
+                i += 1;
+                break;
+
+            /** the nc case is smaller **/
+            case 1:
+                nc_exceeds_ip_cnt += 1;
+                j += 1;
+                break;
+            }
         }
 
-        float value = agg_fn( lines, ub, num_wigs );
-        if( value > FLT_EPSILON )
-            fprintf( ofp, "%i\t%e\n", position, value  );
+        float value = ip_exceeds_nc_cnt / ( 1.0 + nc_exceeds_ip_cnt );
+        if( value > pvalue_thresh )
+            fprintf( ofp, "%li\t%e\n", position, value  );
         
-        for( i = 0; i <= ub; i++ )
-            parse_next_line( lines, chr_names, track_names, i );
+        int k;
+        for( k = 0; k < i; k++ )
+            parse_next_line( IP_lines, chr_names, track_names, k );
+        qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
         
-        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+        for( k = 0; k < j; k++ )
+            parse_next_line( NC_lines, chr_names, track_names, k );
+        qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
     
     return;
