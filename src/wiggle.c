@@ -364,7 +364,8 @@ aggregate_over_wiggles(
 
 extern void
 call_peaks_from_wiggles(
-    FILE** wig_fps,
+    FILE** IP_wig_fps,
+    FILE** NC_wig_fps,
     int num_wigs,
     
     FILE* ofp,
