@@ -6,64 +6,53 @@ int num_threads = -1;
 int min_num_hq_bps = -1;
 
 #include "../src/wiggle.h"
-
+#include "../src/trace.h"
+#include "../src/genome.h"
 
 void usage()
 {
-    fprintf(stderr, "Usage: ./call_peaks bs_sample_wiggles > called_peaks.wig\n");
+    fprintf(stderr, "Usage: ./call_peaks genome.bin IP_bs_sample.wig NC_bs_sample.wig > called_peaks.wig\n");
 }
 
 
 int 
 main( int argc, char** argv )
 {
-    if( argc < 2 )
+    if( argc != 4 )
     {
         usage();
         exit( -1 );
     }
 
-    /* open the wiggles */
-    FILE** ip_wigs = calloc((argc-1)/2, sizeof(FILE*));
-    int ip_cntr = -1;
-    FILE** nc_wigs = calloc((argc-1)/2, sizeof(FILE*));
-    int nc_cntr = -1;
-    int i;
-    for( i = 0; i < argc-1; i++ )
-    {
-        int cntr = -1;
-        
-        /* determine if this is a nc or an ip sample */
-        FILE** wigs = NULL;
-        if ( NULL == strstr( argv[i+1], ".nc" ) )
-        {    
-            wigs = ip_wigs;
-            ip_cntr += 1;
-            cntr = ip_cntr;
-        } else { 
-            wigs = nc_wigs;
-            nc_cntr += 1;
-            cntr = nc_cntr;
-        }
-        
-        wigs[cntr] = fopen( argv[i+1], "r" );
-        if( NULL == wigs[cntr] )
-        {
-            perror( "FATAL     : Could not open wiggle file for reading" );
-            exit( -1 );
-        }
-    }
-
-    call_peaks_from_wiggles( ip_wigs, nc_wigs, (argc-1)/2, stdout, -0.9 );
+    /* Load the genome */
+    struct genome_data* genome;
+    load_genome_from_disk( &genome, argv[1] );
     
-    for( i = 0; i < (argc-1)/2; i++ )
+    /* open the wiggles */
+    FILE* ip_wig = fopen( argv[2], "r" );
+    if( NULL == ip_wig )
     {
-        fclose( ip_wigs[i] );
-        fclose( nc_wigs[i] );
+        perror( "FATAL     : Could not open IP wiggle file for reading" );
+        exit( -1 );
     }
-
-    free( ip_wigs );
-    free( nc_wigs );
+    
+    FILE* nc_wig = fopen( argv[3], "r" );
+    if( NULL == nc_wig )
+    {
+        perror( "FATAL     : Could not open NC wiggle file for reading" );
+        exit( -1 );
+    }
+    
+    /* init the trace */
+    struct trace_t* trace;
+    /* two tracks correspond to pos and neg strands */
+    init_traces( genome, &trace, 2 );
+    
+    /* update the trace */
+    call_peaks_from_wiggles( ip_wig, nc_wig, genome, trace );
+    
+    fclose( ip_wig );
+    fclose( nc_wig );
     
     return 0;
 }

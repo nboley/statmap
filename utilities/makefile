@@ -13,7 +13,11 @@ build_index : build_index.c
 
 aggregate_over_wiggles : aggregate_over_wiggles.c
 	gcc $(compile_options) -o aggregate_over_wiggles aggregate_over_wiggles.c \
-	../src/wiggle.o ../src/trace.o ../src/mapped_read.o ../src/fragment_length.o ../src/pseudo_location.o \
+	../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/mapped_location.o   \
+	../src/genome.o ../src/pseudo_location.o ../src/snp.o \
+	../src/dna_sequence.o ../src/quality.o \
+	../src/wiggle.o \
 	-lm -pthread
 	cp aggregate_over_wiggles ../bin/
 

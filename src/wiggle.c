@@ -130,14 +130,24 @@ wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wi
     return sum;
 }
 
+static int
+cmp_wig_line_info_by_position( const struct wig_line_info* a, 
+                               const struct wig_line_info* b)
+{
+    /* compare on track index */
+    if( b->trace_index != a->trace_index )
+        return ( a->trace_index - b->trace_index );
+    
+    /* compare on chr index */    
+    if( b->chr_index != a->chr_index )
+        return ( a->chr_index - b->chr_index );
 
-/* 
- *  This makes tons of assumptions about the 
- *  wiggle file format, order, that wont hold in 
- *  general. IE, this is a poor general solution,
- *  but it is fine to be used on files generated 
- *  by statmap 
- */
+    /* compare on chr index */    
+    if( b->position != a->position )
+        return ( a->position - b->position );
+
+    return 0;
+}
 
 static int 
 cmp_wig_line_info( const void* a, const void* b)
@@ -158,41 +168,29 @@ cmp_wig_line_info( const void* a, const void* b)
         return 1;
     }
 
-    /* compare on track index */
-    if( ((struct wig_line_info*) b)->trace_index 
-        != ((struct wig_line_info*) a)->trace_index )
-    {
-        return ((struct wig_line_info*) a)->trace_index 
-                 - ((struct wig_line_info*) b)->trace_index;
-    }
-
-
-    /* compare on chr index */
-    if( ((struct wig_line_info*) b)->chr_index 
-        != ((struct wig_line_info*) a)->chr_index )
-    {
-        return ((struct wig_line_info*) a)->chr_index 
-                 - ((struct wig_line_info*) b)->chr_index;
-    }
-
-    /* compare on position */
-    if( ((struct wig_line_info*) a)->position 
-        != ((struct wig_line_info*) b)->position )
-    {
-        return ((struct wig_line_info*) a)->position 
-            - ((struct wig_line_info*) b)->position;
-    }
-
+    /* Compare based upon position */
+    int pos_cmp = cmp_wig_line_info_by_position( a, b );
+    if( 0 != pos_cmp )
+        return pos_cmp;
+    
     /* finally, compare on the file index */
     return ((struct wig_line_info*) a)->file_index 
         - ((struct wig_line_info*) b)->file_index;
 }
 
+/* 
+ *  This makes tons of assumptions about the 
+ *  wiggle file format, order, that wont hold in 
+ *  general. IE, this is a poor general solution,
+ *  but it is fine to be used on files generated 
+ *  by statmap 
+ */
+
 static void
-parse_next_line( struct wig_line_info* lines, 
-                 char** chr_names,
-                 char** track_names,
-                 int line_index )
+parse_next_line( struct wig_line_info* line, 
+                 char** chr_names, /* set to NULL to ignore */
+                 char** track_names /* pass null to ignore */
+    )
 {
     char* rv;
     char buffer[500];
@@ -200,10 +198,10 @@ parse_next_line( struct wig_line_info* lines,
     /* loop until we get a valid line */
     while( 1 )
     {
-        rv = fgets( buffer, 500, lines[line_index].fp );
+        rv = fgets( buffer, 500, line->fp );
         if( rv == NULL ) 
         {
-            lines[line_index].fp = NULL;
+            line->fp = NULL;
             return;
         }
         if( buffer[0] == 'f' )
@@ -213,62 +211,75 @@ parse_next_line( struct wig_line_info* lines,
             exit( -1 );
         /* if we are at a 'track' line */
         } else if( buffer[0] == 't') {
-            /* increment the chr index */
-            lines[line_index].trace_index += 1;
-            /* get the chr name */
-            char* track_name = strstr( buffer, "name=" );
-            /* skip past the name= characters */
-            track_name += 5;
-            /* set the chr name */
-            if( track_names[lines[line_index].trace_index] != NULL )
+            /* increment the track index */
+            line->trace_index += 1;
+            /* if the track names array is non-null, 
+               that means we want to record the track names
+            */
+            if( track_names != NULL )
             {
-                if( 0 != strncmp( track_name, track_names[lines[line_index].trace_index], strlen( track_names[lines[line_index].trace_index] ) ) )
+                /* get the chr name */
+                char* track_name = strstr( buffer, "name=" );
+                /* skip past the name= characters */
+                track_name += 5;
+                /* set the track name */
+                if( track_names[line->trace_index] != NULL )
                 {
-                    fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync\n", 
-                             (int)strlen(track_names[lines[line_index].trace_index]), track_name, track_names[lines[line_index].trace_index] );
-                    assert( 0 );
+                    if( 0 != strncmp( track_name, track_names[line->trace_index], strlen( track_names[line->trace_index] ) ) )
+                    {
+                        fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync\n", 
+                                 (int)strlen(track_names[line->trace_index]), track_name, track_names[line->trace_index] );
+                        assert( 0 );
+                    }
+                } else {
+                    /* remove the trailing newline */
+                    int track_name_len = strlen(track_name)-1;
+                    track_names[line->trace_index] = calloc( track_name_len+1, sizeof(char)  );
+                    memcpy( track_names[line->trace_index], track_name, track_name_len );
+                    track_names[line->trace_index][ track_name_len ] = '\0';
                 }
-            } else {
-                /* remove the trailing newline */
-                int track_name_len = strlen(track_name)-1;
-                track_names[lines[line_index].trace_index] = calloc( track_name_len+1, sizeof(char)  );
-                memcpy( track_names[lines[line_index].trace_index], track_name, track_name_len );
-                track_names[lines[line_index].trace_index][ track_name_len ] = '\0';
             }
         /* if we are at a variable step ( contains chromosome ) line */
         } else if ( buffer[0] == 'v') {
             /* increment the chr line_index */
-            lines[line_index].chr_index += 1;
-            /* get the chr name */
-            char* chr_name = strstr( buffer, "chrom=" );
-            chr_name += 6;
-            /* set the chr name */
-            if( chr_names[lines[line_index].chr_index] != NULL )
+            line->chr_index += 1;
+
+            /* if the chr names array is non-null, 
+               that means we want to record the chr names
+            */
+            if( chr_names != NULL )
             {
-                if( 0 != strncmp( chr_name, chr_names[lines[line_index].chr_index], strlen( chr_names[lines[line_index].chr_index] ) ) )
+                /* get the chr name */
+                char* chr_name = strstr( buffer, "chrom=" );
+                chr_name += 6;
+                /* set the chr name */
+                if( chr_names[line->chr_index] != NULL )
                 {
-                    fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
-                             (int)strlen(chr_names[lines[line_index].chr_index]), chr_name, chr_names[lines[line_index].chr_index] );
-                    assert( 0 );
+                    if( 0 != strncmp( chr_name, chr_names[line->chr_index], strlen( chr_names[line->chr_index] ) ) )
+                    {
+                        fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
+                                 (int)strlen(chr_names[line->chr_index]), chr_name, chr_names[line->chr_index] );
+                        assert( 0 );
+                    }
+                } else {
+                    /* remove the trailing newline */
+                    int chr_name_len = strlen(chr_name)-1;
+                    chr_names[line->chr_index] = 
+                        calloc( chr_name_len+1, sizeof(char)  );
+                    memcpy( chr_names[line->chr_index], 
+                            chr_name, chr_name_len );
+                    /* append the trailing null after the chr name */
+                    chr_names[line->chr_index][ chr_name_len ] = '\0';
                 }
-            } else {
-                /* remove the trailing newline */
-                int chr_name_len = strlen(chr_name)-1;
-                chr_names[lines[line_index].chr_index] = 
-                    calloc( chr_name_len+1, sizeof(char)  );
-                memcpy( chr_names[lines[line_index].chr_index], 
-                        chr_name, chr_name_len );
-                /* append the trailing null after the chr name */
-                chr_names[lines[line_index].chr_index][ chr_name_len ] = '\0';
             }
         /* Assuming this is a variable step numeric line */
         } else {
             int rv = sscanf( buffer, "%i\t%e\n", 
-                             &(lines[line_index].position), &(lines[line_index].value)  );
+                             &(line->position), &(line->value)  );
             if( rv != 2 )
             {
                 assert( rv == EOF );
-                lines[line_index].fp = NULL;
+                line->fp = NULL;
             }
 
             return;
@@ -309,7 +320,7 @@ aggregate_over_wiggles(
     {
         lines[i].fp = wig_fps[i];
         lines[i].file_index = i;
-        parse_next_line( lines, chr_names, track_names, i );
+        parse_next_line( lines+i, chr_names, track_names );
     }
     
     qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
@@ -353,7 +364,7 @@ aggregate_over_wiggles(
             fprintf( ofp, "%i\t%e\n", position, value  );
         
         for( i = 0; i <= ub; i++ )
-            parse_next_line( lines, chr_names, track_names, i );
+            parse_next_line( lines+i, chr_names, track_names );
         
         qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
@@ -370,251 +381,71 @@ aggregate_over_wiggles(
 extern void
 call_peaks_from_wiggles(
     FILE* IP_wig_fp,
-    FILE* NC_wig_fps,
+    FILE* NC_wig_fp,
     
-    trace_t* trace
+    struct genome_data* genome,
+    struct trace_t* trace
 )
 {
-    int curr_chr_index = -1;
-    int curr_trace_index = -1;
+    char** chr_names = malloc( 100*sizeof( char* ) );
     
-    int ip_curr_pos;
-    int ip_curr_chr_index;
-    int nc_curr_pos;
-    int nc_curr_chr_index;
+    struct wig_line_info ip_line = { IP_wig_fp, 0, -1, -1, 0, 0 };
+    struct wig_line_info nc_line = { NC_wig_fp, 1, -1, -1, 0, 0 };
     
-    while( true )
+    /* initialize the ip and nc lines */
+    parse_next_line( &ip_line, chr_names, NULL );
+    parse_next_line( &nc_line, chr_names, NULL );
+    
+    /* we set it to 1 to skip the pseudo chromosome */
+    int curr_wig_chr_index = 0;
+    int curr_chr_index = find_chr_index( genome, chr_names[curr_wig_chr_index] );
+    
+    /* until we run out of lines ... */
+    while( NULL != ip_line.fp && NULL != nc_line.fp )
     {
-        if( lines[0].trace_index > curr_trace_index )
-        {    
-            fprintf( ofp, "track type=wiggle_0 name=%s\n", 
-                     track_names[lines[0].trace_index] );
-            curr_trace_index = lines[0].trace_index;
-        }
+        assert( NULL != ip_line.fp );
+        assert( NULL != nc_line.fp );
         
-        if( lines[0].chr_index > curr_chr_index )
-        {    
-            assert( curr_chr_index + 1 >= 0 );
-            /* in case there were chrs with zero reads, 
-               we loop through skipped indexes. Note that 
-               we use the min to explicitly skip the pseudo 
-               chromosome */
-            int i;
-            for( i = MAX( 1, curr_chr_index + 1); i <= lines[0].chr_index; i++ )
-                fprintf( ofp, "variableStep chrom=%s\n", chr_names[i] );
-            curr_chr_index = lines[0].chr_index;
-        }
-        
-        unsigned int position = lines[0].position;
-        int chr_index = lines[0].chr_index;
-        int ub = 0;
-        i = 1;
-        while( position == lines[i].position 
-               && chr_index == lines[i].chr_index
-               && NULL != lines[i].fp
-               && i < num_wigs )
-        {
-            ub++;
-            i++;
-        }
-
-        float value = agg_fn( lines, ub, num_wigs );
-        if( value > FLT_EPSILON )
-            fprintf( ofp, "%i\t%e\n", position, value  );
-        
-        for( i = 0; i <= ub; i++ )
-            parse_next_line( lines, chr_names, track_names, i );
-        
-        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
-    }
-    
-    return;
-}
-
-extern void
-call_peaks_from_wiggles(
-    FILE** IP_wig_fps,
-    FILE** NC_wig_fps,
-    int num_wigs,
-    
-    FILE* ofp,
-
-    float pvalue_thresh
-)
-{
-    int curr_chr_index = -1;
-    int curr_trace_index = -1;
-
-    /* loop over num wigs */
-    int i;
-
-    /* BUG!!! HORRIBLE HACK */
-    char** chr_names = malloc(sizeof(char*)*100);
-    char** ip_track_names = malloc(sizeof(char*)*100);
-    char** nc_track_names = malloc(sizeof(char*)*100);
-    
-    /* we implement this as a merge sort. 
-       First, we read lines from each until we have a chr and position.
-    */
-
-    struct wig_line_info* IP_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
-    struct wig_line_info* NC_lines = malloc( sizeof(struct wig_line_info)*num_wigs );
-    
-    /* initialize the data arrays */
-    for( i = 0; i < num_wigs; i++ )
-    {
-        IP_lines[i].fp = IP_wig_fps[i];
-        IP_lines[i].file_index = i;
-        parse_next_line( IP_lines, chr_names, ip_track_names, i );
-
-        NC_lines[i].fp = NC_wig_fps[i];
-        NC_lines[i].file_index = i;
-        parse_next_line( NC_lines, chr_names, nc_track_names, i );
-    }
-    
-    qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
-    qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
-    int cnt = -1;
-    printf( "here\n" );
-    while( NULL != IP_lines[0].fp 
-           && NULL != NC_lines[0].fp)
-    {
-        cnt += 1;
-        printf( "Count: 5i\n" );
-
-        if( IP_lines[0].trace_index > curr_trace_index
-            && NC_lines[0].trace_index > curr_trace_index )
-        {    
-            const int tmp_trace_index = 
-                MIN( IP_lines[0].trace_index, NC_lines[0].trace_index );
-            fprintf( ofp, "track type=wiggle_0 name=%s\n", 
-                     ip_track_names[tmp_trace_index] );
-            curr_trace_index = tmp_trace_index;
-        }
-        
-        if( IP_lines[0].chr_index > curr_chr_index
-            && NC_lines[0].chr_index > curr_chr_index)
-        {    
-            assert( curr_chr_index + 1 >= 0 );
-            const int tmp_chr_index = 
-                MIN( IP_lines[0].chr_index, NC_lines[0].chr_index );
-            /* in case there were chrs with zero reads, 
-               we loop through skipped indexes. Note that 
-               we use the min to explicitly skip the pseudo 
-               chromosome */
-            int i;
-            for( i = MAX( 1, curr_chr_index + 1); i <= tmp_chr_index; i++ )
-                fprintf( ofp, "variableStep chrom=%s\n", chr_names[i] );
-            curr_chr_index = tmp_chr_index;
-        }
-        
-        /* determine the next minimum position */
-        int chr_index = IP_lines[0].chr_index;
-        long position = -1;
-        /* if the chr is the same in the NC and the IP, then the position is
-           just the minimum over the two 
+        /* we only need to check the ip line because we only print 
+           info from the IP line.
         */
-        if( NC_lines[0].chr_index == chr_index )
+        if( ip_line.chr_index > curr_wig_chr_index )
         {
-            position = MIN( IP_lines[0].position, NC_lines[0].position );
+            curr_wig_chr_index = ip_line.chr_index;
+            curr_chr_index = find_chr_index( genome, chr_names[curr_wig_chr_index] );
         }
-        /* otherwise, choose the position from the list with the smallest chr index */
-        else if( NC_lines[0].chr_index < chr_index )
-        {
-            chr_index = NC_lines[0].chr_index;
-            position = NC_lines[0].position;
-        } 
-        /* NC_lines[0].chr_index > chr_index */
-        else {
-            /* ALREADY set -  chr_index = IP_lines[0].chr_index; */
-            position = IP_lines[0].position;
-        }
-        
-        /* loop through the remaining items in the queue */
-        int i = 0;
-        int j = 0;
-        /* ties are stored as 1/2 in each */
-        float ip_exceeds_nc_cnt = 0;
-        float nc_exceeds_ip_cnt = 0;
-        /* keep going while there are still lines at this position in either the IP or NC */
-        while( (  position == IP_lines[i].position 
-                  && chr_index == IP_lines[i].chr_index
-                  && NULL != IP_lines[i].fp
-                  && i < num_wigs 
-               ) || ( 
-                  position == NC_lines[j].position 
-                  && chr_index == NC_lines[j].chr_index
-                  && NULL != NC_lines[j].fp
-                  && j < num_wigs 
-               )
-            )
-        {
-            /* if we've run out of ip lines */
-            if( i == num_wigs ) {
-                nc_exceeds_ip_cnt += 1;
-                j++;
-                continue;
-            }
 
-            /* if we've run out of NC lines */
-            if( j == num_wigs ) {
-                ip_exceeds_nc_cnt += 1;
-                i++;
-                continue;
-            }
-                
-            
-            /* check how the IP and NC compare */ 
-            switch( cmp_wig_line_info( IP_lines + i, NC_lines + j ) )
+        /* compare the 2 line infos by position */
+        int cmp = cmp_wig_line_info_by_position( &ip_line, &nc_line );
+        /* if the positions are identical then update the trace at that position */
+        if( 0 == cmp )
+        {
+            if( ip_line.value > nc_line.value )
             {
-            /** the two are identical **/
-            /* then we need to do some calculation to 
-               see how we add to the stuff */
-            case 0:
-                if( IP_lines[i].value < NC_lines[i].value )
-                    ip_exceeds_nc_cnt += 1;
-
-                if( IP_lines[i].value == NC_lines[i].value ) {
-                    ip_exceeds_nc_cnt += 0.5;
-                    nc_exceeds_ip_cnt += 0.5;
-                }
-
-                if( IP_lines[i].value < NC_lines[i].value )
-                    nc_exceeds_ip_cnt += 1;
-                
-                /* we know that there can't be duplicates, so
-                   we can move the index forward for both */
-                i += 1;
-                j += 1;
-                
-                break;
-
-            /** the ip case is smaller **/
-            case -1:
-                ip_exceeds_nc_cnt += 1;
-                i += 1;
-                break;
-
-            /** the nc case is smaller **/
-            case 1:
-                nc_exceeds_ip_cnt += 1;
-                j += 1;
-                break;
+                trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ];
             }
+            
+            printf( "%i\t%s (%i)\t%i\n", 
+                    ip_line.trace_index, 
+                    genome->chr_names[curr_chr_index], curr_chr_index,
+                    ip_line.position );
+            parse_next_line( &ip_line, chr_names, NULL );
+            parse_next_line( &nc_line, chr_names, NULL );
         }
-
-        float value = ip_exceeds_nc_cnt / ( 1.0 + nc_exceeds_ip_cnt );
-        if( value > pvalue_thresh )
-            fprintf( ofp, "%li\t%e\n", position, value  );
-        
-        int k;
-        for( k = 0; k < i; k++ )
-            parse_next_line( IP_lines, chr_names, ip_track_names, k );
-        qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
-        
-        for( k = 0; k < j; k++ )
-            parse_next_line( NC_lines, chr_names, nc_track_names, k );
-        qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+        /* if the IP is less than the NC */
+        else if ( cmp < 0 )
+        {
+            parse_next_line( &ip_line, chr_names, NULL );
+        }
+        /* if the IP is greater */
+        else
+        {
+            assert( cmp > 0 );
+            /* the ip is always greater */
+            trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ];
+            
+            parse_next_line( &nc_line, chr_names, NULL );
+        }
     }
     
     return;

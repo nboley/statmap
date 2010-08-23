@@ -32,13 +32,11 @@ aggregate_over_wiggles(
 
 extern void
 call_peaks_from_wiggles(
-    FILE** IP_wig_fps,
-    FILE** NC_wig_fps,
-    int num_wigs,
-    
-    FILE* ofp,
-
-    float pvalue_thresh
+    FILE* IP_wig_fp,
+    FILE* NC_wig_fp,
+   
+    struct genome_data* genome,
+    struct trace_t* trace
     );
 
 #if 0
