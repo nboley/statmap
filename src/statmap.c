@@ -1086,12 +1086,12 @@ map_chipseq_data(  args_t* args )
             if( SAVE_SAMPLES )
             {
                 char wig_fname[100];
-                sprintf( wig_fname, "%ssample%i.wig", RELAXED_SAMPLES_PATH, i+1 );
-
+                sprintf( wig_fname, "%ssample%i.ip.wig", RELAXED_SAMPLES_PATH, i+1 );
                 write_wiggle_from_trace( ip_trace, genome->chr_names, 
                                          track_names, wig_fname,
                                          MAX_PRB_CHANGE_FOR_CONVERGENCE );
                 
+                sprintf( wig_fname, "%ssample%i.nc.wig", RELAXED_SAMPLES_PATH, i+1 );
                 write_wiggle_from_trace( nc_trace, genome->chr_names, 
                                          track_names + 2, wig_fname,
                                          MAX_PRB_CHANGE_FOR_CONVERGENCE );
@@ -1131,15 +1131,17 @@ map_chipseq_data(  args_t* args )
                     
                     if( SAVE_BOOTSTRAP_SAMPLES )
                     {
-                        sprintf( buffer, "%ssample%i/bssample%i.wig", 
-                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
-                        
-                        /* We use the fact the write_wiggle_from_trace appends to 
-                           put all four tracks into the same wiggle file */
-                        
+                        /* write out the IP */
+                        sprintf( buffer, "%ssample%i/bssample%i.ip.wig", 
+                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );                        
+
                         write_wiggle_from_trace( 
                             ip_trace, genome->chr_names, track_names,
                             buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+
+                        /* write out the NC */
+                        sprintf( buffer, "%ssample%i/bssample%i.nc.wig", 
+                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );                        
                         
                         write_wiggle_from_trace( 
                             nc_trace, genome->chr_names, track_names + 2,

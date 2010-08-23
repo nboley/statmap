@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 10
+NUM_SAMPLES = 25
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -484,7 +484,7 @@ def plot_wig_bounds( dir, png_fname ):
     rpy.r.png( os.path.join(curr_dir, png_fname), width=1900, height=750 )
     rpy.r("par(cex=0.2, mai=c(0.5,0.4,0.4,0.2))")
     
-    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
+    density = parse_wig( "./smo_chipseq_sim/max_trace.ip.wig", genome )
     density_max = 0.5 # density.max()
     density = density/density_max
     rpy.r.plot( density, type='l', col='blue', main='', xlab='', ylab='', lty=4, ylim=(0, 1.2), cex=0.2, mai=(0.5,0.4,0.4,0.2) )
@@ -501,7 +501,7 @@ def plot_wig_bounds( dir, png_fname ):
 
     os.chdir(curr_dir)
     
-    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )/density_max
+    density = parse_wig( "./smo_chipseq_sim/min_trace.ip.wig", genome )/density_max
     rpy.r.points( density, type='l', col='red', main='', xlab='', ylab='', lty=4 )
 
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )/density_max
@@ -561,10 +561,10 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
     plot_wiggles( "./smo_chipseq_sim/samples/", 'black' )
     
-    density = parse_wig( "./smo_chipseq_sim/max_trace.wig", genome )
+    density = parse_wig( "./smo_chipseq_sim/max_trace.ip.wig", genome )
     plot_wiggle( density, 'blue' )
     
-    density = parse_wig( "./smo_chipseq_sim/min_trace.wig", genome )
+    density = parse_wig( "./smo_chipseq_sim/min_trace.ip.wig", genome )
     plot_wiggle( density, 'red' )
 
     """

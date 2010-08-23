@@ -224,12 +224,12 @@ parse_next_line( struct wig_line_info* lines,
             {
                 if( 0 != strncmp( track_name, track_names[lines[line_index].trace_index], strlen( track_names[lines[line_index].trace_index] ) ) )
                 {
-                    fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync", 
+                    fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync\n", 
                              (int)strlen(track_names[lines[line_index].trace_index]), track_name, track_names[lines[line_index].trace_index] );
                     assert( 0 );
                 }
             } else {
-                /* remoive the trailing newline */
+                /* remove the trailing newline */
                 int track_name_len = strlen(track_name)-1;
                 track_names[lines[line_index].trace_index] = calloc( track_name_len+1, sizeof(char)  );
                 memcpy( track_names[lines[line_index].trace_index], track_name, track_name_len );
@@ -361,6 +361,75 @@ aggregate_over_wiggles(
     return;
 }
 
+/*
+ * Take a paired bootstrap sample and update the trace to 
+ * reflect the number of times that the ip bootstrap sample 
+ * exceeds the nc bs sample.
+ *
+ */
+extern void
+call_peaks_from_wiggles(
+    FILE* IP_wig_fp,
+    FILE* NC_wig_fps,
+    
+    trace_t* trace
+)
+{
+    int curr_chr_index = -1;
+    int curr_trace_index = -1;
+    
+    int ip_curr_pos;
+    int ip_curr_chr_index;
+    int nc_curr_pos;
+    int nc_curr_chr_index;
+    
+    while( true )
+    {
+        if( lines[0].trace_index > curr_trace_index )
+        {    
+            fprintf( ofp, "track type=wiggle_0 name=%s\n", 
+                     track_names[lines[0].trace_index] );
+            curr_trace_index = lines[0].trace_index;
+        }
+        
+        if( lines[0].chr_index > curr_chr_index )
+        {    
+            assert( curr_chr_index + 1 >= 0 );
+            /* in case there were chrs with zero reads, 
+               we loop through skipped indexes. Note that 
+               we use the min to explicitly skip the pseudo 
+               chromosome */
+            int i;
+            for( i = MAX( 1, curr_chr_index + 1); i <= lines[0].chr_index; i++ )
+                fprintf( ofp, "variableStep chrom=%s\n", chr_names[i] );
+            curr_chr_index = lines[0].chr_index;
+        }
+        
+        unsigned int position = lines[0].position;
+        int chr_index = lines[0].chr_index;
+        int ub = 0;
+        i = 1;
+        while( position == lines[i].position 
+               && chr_index == lines[i].chr_index
+               && NULL != lines[i].fp
+               && i < num_wigs )
+        {
+            ub++;
+            i++;
+        }
+
+        float value = agg_fn( lines, ub, num_wigs );
+        if( value > FLT_EPSILON )
+            fprintf( ofp, "%i\t%e\n", position, value  );
+        
+        for( i = 0; i <= ub; i++ )
+            parse_next_line( lines, chr_names, track_names, i );
+        
+        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    }
+    
+    return;
+}
 
 extern void
 call_peaks_from_wiggles(
@@ -381,7 +450,8 @@ call_peaks_from_wiggles(
 
     /* BUG!!! HORRIBLE HACK */
     char** chr_names = malloc(sizeof(char*)*100);
-    char** track_names = malloc(sizeof(char*)*100);
+    char** ip_track_names = malloc(sizeof(char*)*100);
+    char** nc_track_names = malloc(sizeof(char*)*100);
     
     /* we implement this as a merge sort. 
        First, we read lines from each until we have a chr and position.
@@ -395,25 +465,30 @@ call_peaks_from_wiggles(
     {
         IP_lines[i].fp = IP_wig_fps[i];
         IP_lines[i].file_index = i;
-        parse_next_line( IP_lines, chr_names, track_names, i );
+        parse_next_line( IP_lines, chr_names, ip_track_names, i );
 
         NC_lines[i].fp = NC_wig_fps[i];
         NC_lines[i].file_index = i;
-        parse_next_line( NC_lines, chr_names, track_names, i );
+        parse_next_line( NC_lines, chr_names, nc_track_names, i );
     }
     
     qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    int cnt = -1;
+    printf( "here\n" );
     while( NULL != IP_lines[0].fp 
            && NULL != NC_lines[0].fp)
     {
+        cnt += 1;
+        printf( "Count: 5i\n" );
+
         if( IP_lines[0].trace_index > curr_trace_index
             && NC_lines[0].trace_index > curr_trace_index )
         {    
             const int tmp_trace_index = 
                 MIN( IP_lines[0].trace_index, NC_lines[0].trace_index );
             fprintf( ofp, "track type=wiggle_0 name=%s\n", 
-                     track_names[tmp_trace_index] );
+                     ip_track_names[tmp_trace_index] );
             curr_trace_index = tmp_trace_index;
         }
         
@@ -534,11 +609,11 @@ call_peaks_from_wiggles(
         
         int k;
         for( k = 0; k < i; k++ )
-            parse_next_line( IP_lines, chr_names, track_names, k );
+            parse_next_line( IP_lines, chr_names, ip_track_names, k );
         qsort( IP_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
         
         for( k = 0; k < j; k++ )
-            parse_next_line( NC_lines, chr_names, track_names, k );
+            parse_next_line( NC_lines, chr_names, nc_track_names, k );
         qsort( NC_lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
     

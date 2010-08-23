@@ -30,6 +30,17 @@ aggregate_over_wiggles(
     float agg_fn( const struct wig_line_info*, const int, const int  )
 );
 
+extern void
+call_peaks_from_wiggles(
+    FILE** IP_wig_fps,
+    FILE** NC_wig_fps,
+    int num_wigs,
+    
+    FILE* ofp,
+
+    float pvalue_thresh
+    );
+
 #if 0
 /* TODO - implement this */
 extern void
