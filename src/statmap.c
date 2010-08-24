@@ -32,6 +32,7 @@
 #include "sam.h"
 #include "wiggle.h"
 #include "trace.h"
+#include "pseudo_location.h"
 
 /* fwd declaration */
 struct snp_db_t;

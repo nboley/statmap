@@ -311,6 +311,8 @@ free_genome( struct genome_data* gen )
     
     if( gen->is_mmapped == true )
     {
+        free( gen->chr_names );
+        free( gen->chrs );
         free( gen );
         return;
     }

@@ -387,7 +387,7 @@ call_peaks_from_wiggles(
     struct trace_t* trace
 )
 {
-    char** chr_names = malloc( 100*sizeof( char* ) );
+    char** chr_names = calloc( 100, sizeof( char* ) );
     
     struct wig_line_info ip_line = { IP_wig_fp, 0, -1, -1, 0, 0 };
     struct wig_line_info nc_line = { NC_wig_fp, 1, -1, -1, 0, 0 };
@@ -422,13 +422,15 @@ call_peaks_from_wiggles(
         {
             if( ip_line.value > nc_line.value )
             {
-                trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ];
+                trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ] += 1;
             }
-            
+
+            /* DEBUG 
             printf( "%i\t%s (%i)\t%i\n", 
                     ip_line.trace_index, 
                     genome->chr_names[curr_chr_index], curr_chr_index,
                     ip_line.position );
+            */
             parse_next_line( &ip_line, chr_names, NULL );
             parse_next_line( &nc_line, chr_names, NULL );
         }
@@ -442,11 +444,18 @@ call_peaks_from_wiggles(
         {
             assert( cmp > 0 );
             /* the ip is always greater */
-            trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ];
+            trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ] += 1;
             
             parse_next_line( &nc_line, chr_names, NULL );
         }
     }
+
+    int i;
+    for( i = 0; i < 100 && NULL != chr_names[i] ; i++ )
+    {
+        free( chr_names[i] );
+    }
+    free( chr_names );
     
     return;
 }
