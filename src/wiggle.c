@@ -320,6 +320,8 @@ aggregate_over_wiggles(
     {
         lines[i].fp = wig_fps[i];
         lines[i].file_index = i;
+        lines[i].trace_index = -1;
+        lines[i].chr_index = -1;
         parse_next_line( lines+i, chr_names, track_names );
     }
     
@@ -422,7 +424,10 @@ call_peaks_from_wiggles(
         {
             if( ip_line.value > nc_line.value )
             {
-                trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ] += 1;
+                trace->traces[ ip_line.trace_index ]
+                             [ curr_chr_index ]
+                             [ ip_line.position ] 
+                    += 1;
             }
 
             /* DEBUG 
@@ -444,7 +449,10 @@ call_peaks_from_wiggles(
         {
             assert( cmp > 0 );
             /* the ip is always greater */
-            trace->traces[ ip_line.trace_index ][ curr_chr_index ][ ip_line.position ] += 1;
+            trace->traces[ ip_line.trace_index ]
+                         [ curr_chr_index ]
+                         [ ip_line.position ] 
+                += 1;
             
             parse_next_line( &nc_line, chr_names, NULL );
         }
@@ -482,6 +490,51 @@ load_wiggle_into_trace(
 #endif
 
 extern void
+write_wiggle_from_trace_to_stream( 
+    struct trace_t* traces,
+    
+    /* These are usually chr names */
+    char** scaffold_names,
+    /* The names of the various tracks */
+    /* Use null for the indexes */
+    char** track_names,
+    
+    FILE* os, /* output stream */                           
+    const double filter_threshold )
+{    
+    int trace_index, j;
+    unsigned int k;
+    for( trace_index = 0; trace_index < traces->num_traces; trace_index++ )
+    {
+        /* Print out the header */
+        fprintf( os, "track type=wiggle_0 name=%s\n", track_names[trace_index] );
+
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            /* skip the pseudo chr */
+            if( j == PSEUDO_LOC_CHR_INDEX )
+                continue;
+            
+            /* Print out the new chr start line */
+            if( scaffold_names == NULL ) {
+                fprintf( os, "variableStep chrom=%i\n", j );
+            } else {
+                fprintf( os, "variableStep chrom=%s\n", scaffold_names[j] );
+            }
+            
+            for( k = 0; k < traces->trace_lengths[j]; k++ )
+            {
+                if( traces->traces[trace_index][j][k] > filter_threshold )
+                    fprintf( os, "%i\t%e\n", k+1, 
+                             traces->traces[trace_index][j][k] );
+            }
+        }
+    }
+    
+    return;
+}
+
+extern void
 write_wiggle_from_trace( struct trace_t* traces,
 
                          /* These are usually chr names */
@@ -497,38 +550,13 @@ write_wiggle_from_trace( struct trace_t* traces,
     if( wfp == NULL )
     {
         perror( "FATAL        : Could not open wiggle file for writing " );
+        fprintf( stderr, "Filename: %s\n", output_fname );
         assert( 0 );
         exit( -1 );
     }
     
-    int trace_index, j;
-    unsigned int k;
-    for( trace_index = 0; trace_index < traces->num_traces; trace_index++ )
-    {
-        /* Print out the header */
-        fprintf( wfp, "track type=wiggle_0 name=%s\n", track_names[trace_index] );
-
-        for( j = 0; j < traces->num_chrs; j++ )
-        {
-            /* skip the pseudo chr */
-            if( j == PSEUDO_LOC_CHR_INDEX )
-                continue;
-            
-            /* Print out the new chr start line */
-            if( scaffold_names == NULL ) {
-                fprintf( wfp, "variableStep chrom=%i\n", j );
-            } else {
-                fprintf( wfp, "variableStep chrom=%s\n", scaffold_names[j] );
-            }
-            
-            for( k = 0; k < traces->trace_lengths[j]; k++ )
-            {
-                if( traces->traces[trace_index][j][k] > filter_threshold )
-                    fprintf( wfp, "%i\t%e\n", k+1, 
-                             traces->traces[trace_index][j][k] );
-            }
-        }
-    }
+    write_wiggle_from_trace_to_stream( 
+        traces, scaffold_names, track_names, wfp, filter_threshold );
     
     fclose( wfp );
 }

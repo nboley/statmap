@@ -28,6 +28,10 @@
 #define BOOTSTRAP_SAMPLES_MIN_PATH "./bootstrap_samples/min_traces/"
 #define BOOTSTRAP_SAMPLES_ALL_PATH "./bootstrap_samples/all_traces/"
 
+#define CALL_PEAKS true
+#define CALLED_PEAKS_OUTPUT_DIRECTORY "./called_peaks/"
+#define JOINED_CALLED_PEAKS_FNAME "./called_peaks/peaks.wig"
+#define CALLED_PEAK_REGIONS_FNAME "./called_peaks/peaks.bed"
 
 #define SAVE_STARTING_SAMPLES true
 #define STARTING_SAMPLES_PATH "./starting_samples/"

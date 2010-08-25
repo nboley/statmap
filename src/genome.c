@@ -53,7 +53,7 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
     
     char magic_number[9];
     rv = fread( magic_number, sizeof(unsigned char), 9, fp );
-    printf( "NOTICE      :  Genome Magic Number - %.9s\n", magic_number );
+    fprintf( stderr, "DEBUG       :  Genome Magic Number - %.9s\n", magic_number );
     assert( rv == 9 );
     if( 0 != memcmp( magic_number, "SM_OD_GEN", 9 ) )
     {

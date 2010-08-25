@@ -21,6 +21,7 @@ import tempfile
 import numpy
 
 STATMAP_PATH = '../src/statmap'
+CALL_PEAKS_PATH = '../bin/call_peaks'
 
 #################################################################################################
 ### verbosity level information 

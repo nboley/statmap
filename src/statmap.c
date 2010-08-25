@@ -586,6 +586,9 @@ parse_arguments( int argc, char** argv )
     if( SAVE_SAMPLES )
         safe_mkdir( RELAXED_SAMPLES_PATH );
 
+    if( CALL_PEAKS )
+        safe_mkdir( CALLED_PEAKS_OUTPUT_DIRECTORY );
+    
     if( SAVE_BOOTSTRAP_SAMPLES )
     {
         safe_mkdir( BOOTSTRAP_SAMPLES_PATH );
@@ -992,7 +995,7 @@ map_chipseq_data(  args_t* args )
     }
     
     /* 
-       this is a bit messy - for single end chipseq we need to 
+       this is a bit hacky - for single end chipseq we need to 
        do a bit of work in advance to speed up the fragment 
        coverage smoothing. We do that in the next line.
     */
@@ -1069,6 +1072,10 @@ map_chipseq_data(  args_t* args )
         track_names[1] = "IP_bkwd_strand_fragment_coverage";
         track_names[2] = "NC_fwd_strand_fragment_coverage";
         track_names[3] = "NC_bkwd_strand_fragment_coverage";
+
+        /* open the file to store the meta info, and print out the header */
+        FILE* s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
+        fprintf( s_mi, "sample_number,log_lhd\n" );
         
         int i;
         for( i = 0; i < args->num_starting_locations; i++ )
@@ -1078,7 +1085,7 @@ map_chipseq_data(  args_t* args )
                                          NC_mpd_rds_db, &nc_trace,
                                          genome, MAX_PRB_CHANGE_FOR_CONVERGENCE,
                                          true ); // use a random starting location
-            
+           
             /* write the joint mappings to a single wiggle */
             /* we use a trick - writing wiggles appends to the file. So we just
                call the writing code with the same filename, and let it append 
@@ -1096,6 +1103,12 @@ map_chipseq_data(  args_t* args )
                 write_wiggle_from_trace( nc_trace, genome->chr_names, 
                                          track_names + 2, wig_fname,
                                          MAX_PRB_CHANGE_FOR_CONVERGENCE );
+
+                /* write the lhd to the meta info folder */
+                double log_lhd = calc_log_lhd( 
+                    chip_mpd_rds_db, ip_trace, update_chipseq_mapped_read_prbs );
+                fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
+                fflush( s_mi );
             }
             
             if( NUM_BOOTSTRAP_SAMPLES > 0 )
@@ -1155,7 +1168,9 @@ map_chipseq_data(  args_t* args )
                 close_traces( nc_trace );
             }     
         }
-        
+    
+        fclose( s_mi );
+    
         free( track_names );
         
         munmap_mapped_reads_db( chip_mpd_rds_db );

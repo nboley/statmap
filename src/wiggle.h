@@ -34,7 +34,7 @@ extern void
 call_peaks_from_wiggles(
     FILE* IP_wig_fp,
     FILE* NC_wig_fp,
-   
+
     struct genome_data* genome,
     struct trace_t* trace
     );

@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 25
+NUM_SAMPLES = 2
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -393,6 +393,13 @@ def map_with_statmap( iterative=True, paired_end=True ):
         
     return
 
+def call_peaks( ):
+    ret_code = subprocess.call( "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH, shell=True )    
+    if ret_code != 0:
+        print "TEST FAILED - statmap call returned error code ", ret_code
+        print "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH
+        sys.exit( -1 )
+    
 
 def map_with_bowtie( paired_end = True ):
     # build the index
@@ -567,6 +574,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     density = parse_wig( "./smo_chipseq_sim/min_trace.ip.wig", genome )
     plot_wiggle( density, 'red' )
 
+    density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
+    plot_wiggle( density, 'black' )
+
     """
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
     if len( density ) > 0:
@@ -624,6 +634,7 @@ if __name__ == '__main__':
         mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end )
         map_with_bowtie( paired_end )
         map_with_statmap( paired_end=paired_end )
+        call_peaks()
         plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")

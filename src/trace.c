@@ -233,18 +233,23 @@ close_traces( struct trace_t* traces )
 }
 
 void
-normalize_traces( struct trace_t* traces )
+divide_trace_by_sum( struct trace_t* traces, double value )
 {
-    double sum = sum_traces( traces );
-    assert( sum > 0 );
-    
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
         for( j = 0; j < traces->num_chrs; j++ )
             for( k = 0; k < traces->trace_lengths[j]; k++ )
-                traces->traces[i][j][k] /= sum;
-    
+                traces->traces[i][j][k] /= value;
+    return;
+}
+
+void
+normalize_traces( struct trace_t* traces )
+{
+    double sum = sum_traces( traces );
+    assert( sum > 0 );
+    divide_trace_by_sum( traces, sum );
     return;
 }
 
@@ -296,6 +301,24 @@ set_trace_to_uniform( struct trace_t* traces, double value )
     }
 }
 
+void
+apply_to_trace( struct trace_t* traces, double (*fun)(double) )
+{
+    int i, j;
+    unsigned int k;
+    for( i = 0; i < traces->num_traces; i++ )
+    {
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            for( k = 0; k < traces->trace_lengths[j]; k++ )
+            {
+                traces->traces[i][j][k] = fun( traces->traces[i][j][k] );
+            }
+        }
+    }
+    
+    return;
+}
 
 /* traces must be the same dimension */
 /* This function applies an aggregate to every basepair in the traces */

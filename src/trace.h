@@ -46,6 +46,9 @@ void
 close_traces( struct trace_t* traces );
 
 void
+divide_trace_by_sum( struct trace_t* traces, double value );
+
+void
 normalize_traces( struct trace_t* traces );
 
 double
@@ -56,6 +59,9 @@ zero_traces( struct trace_t* traces );
 
 void
 set_trace_to_uniform( struct trace_t* traces, double value );
+
+void
+apply_to_trace( struct trace_t* traces, double (*fun)(double) );
 
 void
 aggregate_over_traces(  struct trace_t* update_trace, 
