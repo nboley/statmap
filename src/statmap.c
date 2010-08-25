@@ -706,6 +706,8 @@ parse_arguments( int argc, char** argv )
 
 void load_genome( struct genome_data** genome, args_t* args )
 {
+    int rv;
+    
     /* test to see if this is acorrectly converted binary genome file */
     FILE* genome_fp = fopen( args->genome_fname, "r" );
     if( NULL == genome_fp )
@@ -715,7 +717,9 @@ void load_genome( struct genome_data** genome, args_t* args )
     }
     
     char magic_number[9];
-    fread( magic_number, sizeof(char), 9, genome_fp );
+    rv = fread( magic_number, sizeof(char), 9, genome_fp );
+    assert( rv == 9 );
+    
     /* if there isnt a binary index, assume its fasta and build the binary index */
     if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
     {
@@ -1062,17 +1066,7 @@ map_chipseq_data(  args_t* args )
         mmap_mapped_reads_db( NC_mpd_rds_db );
         fprintf(stderr, "NOTICE      :  indexing mapped NC reads DB.\n" );
         index_mapped_reads_db( NC_mpd_rds_db );
-
-        /* traces and track names to store the 2 marginal densities */
-        struct trace_t* ip_trace;
-        struct trace_t* nc_trace;
-        char** track_names = NULL;
-        track_names = malloc(sizeof(char*)*4);
-        track_names[0] = "IP_fwd_strand_fragment_coverage";
-        track_names[1] = "IP_bkwd_strand_fragment_coverage";
-        track_names[2] = "NC_fwd_strand_fragment_coverage";
-        track_names[3] = "NC_bkwd_strand_fragment_coverage";
-
+        
         /* open the file to store the meta info, and print out the header */
         FILE* s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
         fprintf( s_mi, "sample_number,log_lhd\n" );
@@ -1080,99 +1074,18 @@ map_chipseq_data(  args_t* args )
         int i;
         for( i = 0; i < args->num_starting_locations; i++ )
         {
-            /* jointly update the mappings */
-            update_chipseq_mapping_wnc(  chip_mpd_rds_db, &ip_trace,
-                                         NC_mpd_rds_db, &nc_trace,
-                                         genome, MAX_PRB_CHANGE_FOR_CONVERGENCE,
-                                         true ); // use a random starting location
-           
-            /* write the joint mappings to a single wiggle */
-            /* we use a trick - writing wiggles appends to the file. So we just
-               call the writing code with the same filename, and let it append 
-               automatically 
-            */
-            if( SAVE_SAMPLES )
-            {
-                char wig_fname[100];
-                sprintf( wig_fname, "%ssample%i.ip.wig", RELAXED_SAMPLES_PATH, i+1 );
-                write_wiggle_from_trace( ip_trace, genome->chr_names, 
-                                         track_names, wig_fname,
-                                         MAX_PRB_CHANGE_FOR_CONVERGENCE );
-                
-                sprintf( wig_fname, "%ssample%i.nc.wig", RELAXED_SAMPLES_PATH, i+1 );
-                write_wiggle_from_trace( nc_trace, genome->chr_names, 
-                                         track_names + 2, wig_fname,
-                                         MAX_PRB_CHANGE_FOR_CONVERGENCE );
-
-                /* write the lhd to the meta info folder */
-                double log_lhd = calc_log_lhd( 
-                    chip_mpd_rds_db, ip_trace, update_chipseq_mapped_read_prbs );
-                fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
-                fflush( s_mi );
-            }
-            
-            if( NUM_BOOTSTRAP_SAMPLES > 0 )
-            {
-                fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
-                char buffer[200];
-                sprintf( buffer, "mkdir %ssample%i/",
-                         BOOTSTRAP_SAMPLES_ALL_PATH, i+1 );
-                int error = system( buffer );
-                if (WIFSIGNALED(error) &&
-                    (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-                {
-                    fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-                    perror( "System Call Failure");
-                    assert( false );
-                    exit( -1 );
-                }
-
-                int j;
-                for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-                {                
-                    if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
-                        fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
-                    
-                    /* actually perform the bootstrap */
-                    bootstrap_traces_from_mapped_reads( 
-                        chip_mpd_rds_db, ip_trace, 
-                        update_chipseq_trace_expectation_from_location );
-                    
-                    /* actually perform the bootstrap */
-                    bootstrap_traces_from_mapped_reads( 
-                        NC_mpd_rds_db, nc_trace,
-                        update_chipseq_trace_expectation_from_location );
-                    
-                    if( SAVE_BOOTSTRAP_SAMPLES )
-                    {
-                        /* write out the IP */
-                        sprintf( buffer, "%ssample%i/bssample%i.ip.wig", 
-                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );                        
-
-                        write_wiggle_from_trace( 
-                            ip_trace, genome->chr_names, track_names,
-                            buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
-
-                        /* write out the NC */
-                        sprintf( buffer, "%ssample%i/bssample%i.nc.wig", 
-                                 BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );                        
-                        
-                        write_wiggle_from_trace( 
-                            nc_trace, genome->chr_names, track_names + 2,
-                            buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
-                    }    
-                }
-                fprintf( stderr, " 100%%\n");
-                
-                close_traces( ip_trace );
-                close_traces( nc_trace );
-            }     
+            take_chipseq_sample_wnc(
+                chip_mpd_rds_db, NC_mpd_rds_db,
+                genome, 
+                s_mi,  // meta info file pointer
+                i, // sample index
+                MAX_PRB_CHANGE_FOR_CONVERGENCE, 
+                true // use a random starting location
+            );
         }
     
         fclose( s_mi );
     
-        free( track_names );
-        
         munmap_mapped_reads_db( chip_mpd_rds_db );
         munmap_mapped_reads_db( NC_mpd_rds_db );
     }

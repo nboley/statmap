@@ -201,7 +201,22 @@ update_chipseq_mapping_wnc(
     struct genome_data* genome,
     float max_prb_change_for_convergence,
     /* true if we should use a random start - otherwise, we use uniform */
-    enum bool random_start );
+    enum bool random_start 
+);
+
+void
+take_chipseq_sample_wnc(
+    struct mapped_reads_db* chip_mpd_rds_db, 
+    struct mapped_reads_db* NC_mpd_rds_db,
+    struct genome_data* genome,
+    
+    FILE* meta_info_fp,
+    int sample_index,
+    
+    float max_prb_change_for_convergence,
+    /* true if we should use a random start - otherwise, we use uniform */
+    enum bool random_start 
+);
 
 int
 generic_update_mapping( struct rawread_db_t* rawread_db,

@@ -629,7 +629,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
 
 if __name__ == '__main__':
     paired_end=False
-    NUM_MUTS = 0
+    NUM_MUTS = 2
     
     if False:
         test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )
