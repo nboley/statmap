@@ -1,9 +1,9 @@
-compile_options = -O0 -g  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O3 -g  --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
-	  fragment_length.o wiggle.o sam.o pseudo_location.o
+	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o
 
 all: statmap
 
@@ -26,6 +26,14 @@ find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h 
 	gcc $(compile_options) -c find_candidate_mappings.c
 
 find_candidate_mappings.h : genome.h rawread.h 
+
+#############################################################################
+#
+# Peak Calling
+#
+
+peak_calling.o : peak_calling.c wiggle.h trace.h genome.h
+	gcc $(compile_options) -c peak_calling.c
 
 #############################################################################
 #

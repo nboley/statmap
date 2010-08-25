@@ -785,7 +785,7 @@ sample_random_traces(
                      BOOTSTRAP_SAMPLES_MIN_PATH, i+1 );
             FILE* ofp = fopen( buffer, "w" );
             aggregate_over_wiggles( 
-                fps, NUM_BOOTSTRAP_SAMPLES, ofp, wig_lines_min  );
+                fps, NUM_BOOTSTRAP_SAMPLES, ofp, FLT_EPSILON, wig_lines_min  );
             fclose( ofp );
             for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
                 fseek( fps[j], 0, SEEK_SET );
@@ -795,7 +795,7 @@ sample_random_traces(
                      BOOTSTRAP_SAMPLES_MAX_PATH, i+1 );
             ofp = fopen( buffer, "w" );
             aggregate_over_wiggles( 
-                fps, NUM_BOOTSTRAP_SAMPLES, ofp, wig_lines_max  );
+                fps, NUM_BOOTSTRAP_SAMPLES, ofp, FLT_EPSILON, wig_lines_max  );
             fclose( ofp );
             for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
                 fclose( fps[j] );
@@ -821,7 +821,7 @@ sample_random_traces(
             assert( fps[j] != NULL );
         }
         FILE* ofp = fopen( MIN_TRACE_FNAME, "w" );
-        aggregate_over_wiggles( fps, num_samples, ofp, wig_lines_min  );
+        aggregate_over_wiggles( fps, num_samples, ofp, FLT_EPSILON, wig_lines_min  );
         fclose( ofp );
         for( j = 0; j < num_samples; j++ )
             fclose( fps[j] );
@@ -834,7 +834,7 @@ sample_random_traces(
             assert( fps[j] != NULL );
         }
         ofp = fopen( MAX_TRACE_FNAME, "w" );
-        aggregate_over_wiggles( fps, num_samples, ofp, wig_lines_max  );
+        aggregate_over_wiggles( fps, num_samples, ofp, FLT_EPSILON, wig_lines_max  );
         fclose( ofp );
         for( j = 0; j < num_samples; j++ )
             fclose( fps[j] );

@@ -52,7 +52,8 @@ call_peaks :
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
 	 ../src/pseudo_location.o ../src/iterative_mapping.o \
-	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o \
+	../src/mapped_location.o  ../src/peak_calling.o \
 	-lm -pthread
 	cp call_peaks ../bin/
 

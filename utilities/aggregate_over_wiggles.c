@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
 
 #include "../src/wiggle.h"
 
@@ -47,7 +48,7 @@ main( int argc, char** argv )
         }
     }
 
-    aggregate_over_wiggles( wigs, argc-2, stdout, agg_fn );
+    aggregate_over_wiggles( wigs, argc-2, stdout, FLT_EPSILON, agg_fn );
     
     for( i = 0; i < argc-2; i++ )
         fclose( wigs[i] );

@@ -27,6 +27,7 @@ aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
     FILE* ofp,
+    float threshold,
     float agg_fn( const struct wig_line_info*, const int, const int  )
 );
 

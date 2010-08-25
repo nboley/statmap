@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 2
+NUM_SAMPLES = 25
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -185,7 +185,7 @@ def parse_wig( fname, genome ):
         else:
             data = line.strip().split("\t")
             loc, value = int(data[0]), float(data[1])
-            tracks[-1][chr_name][loc] += value
+            tracks[-1][curr_chr_name][loc] += value
     fp.close()
     return tracks
 
@@ -529,25 +529,25 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     rpy.r.plot( (), main='Paternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
     rpy.r.plot( (), main='Maternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
 
-    def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5  ):
+    def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
         rpy.r("par(mfg=c(1,1))")
         if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_paternal' ):
-            rpy.r.points( wiggle_density[0]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            rpy.r.points( wiggle_density[0]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
         if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_paternal' ):
-            rpy.r.points( -1*wiggle_density[1]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            rpy.r.points( -1*wiggle_density[1]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
         if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_paternal' ):
-            rpy.r.points( wiggle_density[2]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            rpy.r.points( wiggle_density[2]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_paternal' ):
-            rpy.r.points( -1*wiggle_density[3]['chr2L_paternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            rpy.r.points( -1*wiggle_density[3]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         rpy.r("par(mfg=c(2,1))")
         if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_maternal' ):
-            rpy.r.points( wiggle_density[0]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            rpy.r.points( wiggle_density[0]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
         if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_maternal' ):
-            rpy.r.points( -1*wiggle_density[1]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            rpy.r.points( -1*wiggle_density[1]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
         if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_maternal' ):
-            rpy.r.points( wiggle_density[2]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            rpy.r.points( wiggle_density[2]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_maternal' ):
-            rpy.r.points( -1*wiggle_density[3]['chr2L_maternal'], type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            rpy.r.points( -1*wiggle_density[3]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
     
     def plot_wiggles( dir, color  ):
         fnames = []
@@ -574,9 +574,17 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     density = parse_wig( "./smo_chipseq_sim/min_trace.ip.wig", genome )
     plot_wiggle( density, 'red' )
 
+    # plot the called peak p-values
+    nf = 0.4
     density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
-    plot_wiggle( density, 'black' )
-
+    plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
+    rpy.r("par(mfg=c(1,1))")
+    rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
+    rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
+    rpy.r("par(mfg=c(2,1))")
+    rpy.r.abline( h=0.95*nf, col='red', lwd=1, lty=2  )
+    rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
+    
     """
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
     if len( density ) > 0:
@@ -621,7 +629,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
 
 if __name__ == '__main__':
     paired_end=False
-    NUM_MUTS = 3
+    NUM_MUTS = 0
     
     if False:
         test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )

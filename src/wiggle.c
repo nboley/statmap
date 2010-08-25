@@ -160,12 +160,12 @@ cmp_wig_line_info( const void* a, const void* b)
         {
             return 0;
         } else {
-            return -1;
+            return 1;
         }
     }
     if( ((struct wig_line_info*) b)->fp == NULL )
     {
-        return 1;
+        return -1;
     }
 
     /* Compare based upon position */
@@ -296,6 +296,7 @@ aggregate_over_wiggles(
     FILE** wig_fps,
     int num_wigs,
     FILE* ofp,
+    float threshold,
     float agg_fn( const struct wig_line_info*, const int, const int  )
 )
 {
@@ -320,8 +321,8 @@ aggregate_over_wiggles(
     {
         lines[i].fp = wig_fps[i];
         lines[i].file_index = i;
-        lines[i].trace_index = -1;
-        lines[i].chr_index = -1;
+        lines[i].trace_index = 0;
+        lines[i].chr_index = 0;
         parse_next_line( lines+i, chr_names, track_names );
     }
     
@@ -362,7 +363,7 @@ aggregate_over_wiggles(
         }
 
         float value = agg_fn( lines, ub, num_wigs );
-        if( value > FLT_EPSILON )
+        if( value >= threshold )
             fprintf( ofp, "%i\t%e\n", position, value  );
         
         for( i = 0; i <= ub; i++ )
@@ -370,6 +371,15 @@ aggregate_over_wiggles(
         
         qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
     }
+
+    /* make sure all of the files are empty */
+    #ifndef NDEBUG
+    int k;
+    for( k = 0; k < num_wigs; k++ )
+    {
+        assert( NULL == lines[k].fp );
+    }
+    #endif
     
     return;
 }
@@ -430,6 +440,19 @@ call_peaks_from_wiggles(
                     += 1;
             }
 
+            if( ip_line.value == nc_line.value )
+            {
+                trace->traces[ ip_line.trace_index ]
+                             [ curr_chr_index ]
+                             [ ip_line.position ] 
+                    += 0.5;
+            }
+
+            assert( NUM_BOOTSTRAP_SAMPLES >= 
+                    trace->traces[ ip_line.trace_index ]
+                        [ curr_chr_index ]
+                        [ ip_line.position ]     );
+
             /* DEBUG 
             printf( "%i\t%s (%i)\t%i\n", 
                     ip_line.trace_index, 
@@ -442,22 +465,49 @@ call_peaks_from_wiggles(
         /* if the IP is less than the NC */
         else if ( cmp < 0 )
         {
-            parse_next_line( &ip_line, chr_names, NULL );
-        }
-        /* if the IP is greater */
-        else
-        {
-            assert( cmp > 0 );
             /* the ip is always greater */
             trace->traces[ ip_line.trace_index ]
                          [ curr_chr_index ]
                          [ ip_line.position ] 
                 += 1;
             
+            assert( NUM_BOOTSTRAP_SAMPLES >= 
+                    trace->traces[ ip_line.trace_index ]
+                        [ curr_chr_index ]
+                        [ ip_line.position ]     );
+
+            parse_next_line( &ip_line, chr_names, NULL );            
+        }
+        /* if the IP is greater */
+        else
+        {
+            assert( cmp > 0 );
+            
             parse_next_line( &nc_line, chr_names, NULL );
         }
     }
 
+    if( NULL == nc_line.fp )
+    {
+        while( NULL != ip_line.fp )
+        {
+            if( ip_line.chr_index > curr_wig_chr_index )
+            {
+                curr_wig_chr_index = ip_line.chr_index;
+                curr_chr_index = find_chr_index( genome, chr_names[curr_wig_chr_index] );
+            }
+
+
+            /* the ip is always greater */
+            trace->traces[ ip_line.trace_index ]
+                         [ curr_chr_index ]
+                         [ ip_line.position ] 
+                += 1;
+            
+            parse_next_line( &ip_line, chr_names, NULL );            
+        }
+    }
+    
     int i;
     for( i = 0; i < 100 && NULL != chr_names[i] ; i++ )
     {
