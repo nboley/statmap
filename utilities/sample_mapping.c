@@ -6,6 +6,9 @@
 /* reading directory entries */
 #include <dirent.h>
 
+/* to find out the  number of available processors */
+#include <sys/sysinfo.h>
+
 int num_threads = -1;
 int min_num_hq_bps = -1;
 
@@ -120,8 +123,15 @@ int main( int argc, char** argv )
     enum assay_type_t assay_type = CHIP_SEQ;
     enum bool use_random_start = true;
     float max_prb_change_for_convergence = 1e-2;
+
+    /* try to get the number of available threads from the os */
+    num_threads = get_nprocs();
+    /* if we cant determine the number of threads, set it to 1 */
+    if( num_threads <= 0 )
+        num_threads = 1;
+    fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
     
-    num_threads = 1;
+
     min_num_hq_bps = 10;
     /* END parse arguments */
         
