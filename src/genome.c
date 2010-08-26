@@ -319,7 +319,14 @@ free_genome( struct genome_data* gen )
 
     /* BUG - make this recognize the tree */
     if( false && gen->index != NULL )
+    {
         free_tree( gen->index );
+    }
+
+    if( gen->index != NULL )
+    {
+        free( gen->index );
+    }
     
     for( i = 0; i < gen->num_chrs; i++ )
     {
@@ -334,8 +341,10 @@ free_genome( struct genome_data* gen )
     if( gen->snp_db != NULL )
         free_snp_db( gen->snp_db );
     
-    if( gen->ps_locs )
+    if( NULL != gen->ps_locs )
+    {
         free_pseudo_locations( gen->ps_locs );
+    }
     
     free( gen );
 }

@@ -84,6 +84,8 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
         exit( -1 );
     }
     
+    free( realpath_buffer );
+    
     return;
 }
 
@@ -1095,6 +1097,8 @@ map_chipseq_data(  args_t* args )
 cleanup:    
     close_mapped_reads_db( chip_mpd_rds_db );
     close_mapped_reads_db( NC_mpd_rds_db );
+
+    free_genome( genome );
     
     return;
 }
@@ -1155,6 +1159,9 @@ cleanup:
     if( args.frag_len_fp != NULL ) {
         fclose( args.frag_len_fp );
     }
-    
+
+    free( args.genome_fname );
+    free( args.genome_index_fname );
+
     return 0;
 }

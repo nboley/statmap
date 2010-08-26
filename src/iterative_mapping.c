@@ -29,9 +29,10 @@
 #include "fragment_length.h"
 #include "sam.h"
 
-#define DONT_LOCK_TRACES
+#define LOCK_TRACES
 
 struct fragment_length_dist_t* global_fl_dist;
+struct genome_data* global_genome;
 
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
@@ -888,40 +889,41 @@ update_chipseq_trace_expectation_from_location(
     /* If the reads are paired */
     if( (flag&IS_PAIRED) != 0 )
     {
-        #ifdef LOCK_TRACES
-        /* lock the spinlocks */
-        for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
-            #else
-            pthread_spin_lock( traces->locks[0][ chr_index ] + k );
-            #endif
-        }
-        #endif
-        
         const float scale = (1.0/(stop-start));
         
-        for( k = start; k < stop; k++ )
-        {
-            assert( chr_index < traces->num_chrs );
-            assert( k < traces->trace_lengths[chr_index] );
-            
-            traces->traces[0][chr_index][k] 
-                += scale*cond_prob;
-        }
-
-        /* unlock the spinlocks */
-        #ifdef LOCK_TRACES
         for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
         {
-            #ifdef USE_MUTEX
-            pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
-            #else
-            pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+            /* lock the spinlocks */
+            #ifdef LOCK_TRACES
+                #ifdef USE_MUTEX
+                pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
+                #else
+                pthread_spin_lock( traces->locks[0][ chr_index ] + k );
+                #endif
+            #endif
+        
+            unsigned int LR_start = MAX( start, k*TM_GRAN ); // Locked Region start
+            unsigned int LR_stop = MIN( stop, (k+1)*TM_GRAN ); // Locked Region stop
+            
+            unsigned int j;
+            for( j = LR_start; j < LR_stop; j++ )
+            {
+                assert( chr_index < traces->num_chrs );
+                assert( j < traces->trace_lengths[chr_index] );
+                
+                traces->traces[0][chr_index][j] 
+                    += scale*cond_prob;
+            }
+
+            /* unlock the spinlocks */
+            #ifdef LOCK_TRACES
+                #ifdef USE_MUTEX
+                pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
+                #else
+                pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+                #endif
             #endif
         }
-        #endif
     } 
     /* If the read is *not* paired */
     else {
@@ -944,59 +946,49 @@ update_chipseq_trace_expectation_from_location(
                                traces->trace_lengths[chr_index] );
             trace_index = 0;
         }
-        
-        /* lock the locks */
-        #ifdef LOCK_TRACES
-        for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
-            #else
-            pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
-            #endif
-        }
-        #endif
-        
-        /* 
-         *  loop through every position in the window of possible binding site 
-         *  origins, and update the probability of coming from this location. 
-         */
-        
-        /*
-         *  Because the pre computed density was in the 5prime direction, 
-         *  and we are going in the 3' direction, i need to take values from the 
-         *  end of the density array 
-         */
 
-        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
-        {
-            for( k = window_start; k < window_stop; k++ )
-            {
-                traces->traces[1][chr_index][k]
-                    += cond_prob*
-                       global_fl_dist->chipseq_bs_density[ 
-                        global_fl_dist->max_fl -1 -(k-window_start) ];
-            }
-        } else {
-            for( k = window_start; k < window_stop; k++ )
-            {
-                traces->traces[0][chr_index][k]
-                    += cond_prob*global_fl_dist->chipseq_bs_density[ k-window_start ];
-            }
-        }
-            
-        /* unlock the locks */
-        #ifdef LOCK_TRACES
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
-            #ifdef USE_MUTEX
-            pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
-            #else
-            pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
+            /* lock the spinlocks */
+            #ifdef LOCK_TRACES
+                #ifdef USE_MUTEX
+                pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
+                #else
+                pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
+                #endif
             #endif
-        }
-        #endif
         
+            int LR_start = MAX( window_start, k*TM_GRAN ); // Locked Region start
+            int LR_stop = MIN( window_stop, (k+1)*TM_GRAN ); // Locked Region stop
+
+            int j;
+            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            {
+                for( j = LR_start; j < LR_stop; j++ )
+                {
+                    traces->traces[1][chr_index][j]
+                        += cond_prob*
+                        global_fl_dist->chipseq_bs_density[ 
+                            global_fl_dist->max_fl -1 -(j-LR_start) ];
+                }
+            } else {
+                for( j = LR_start; j < LR_stop; j++ )
+                {
+                    traces->traces[0][chr_index][j]
+                        += cond_prob*global_fl_dist->chipseq_bs_density[ 
+                            j-LR_start ];
+                }
+            }
+            
+            /* unlock the spinlocks */
+            #ifdef LOCK_TRACES
+                #ifdef USE_MUTEX
+                pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
+                #else
+                pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
+                #endif
+            #endif
+        }        
     }
 
     return;
@@ -1058,11 +1050,12 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* determine which trace to use */
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
-                window_start = stop-global_fl_dist->max_fl;
-                window_stop = stop;
+                window_start = MAX( stop-global_fl_dist->max_fl, 0 );
+                window_stop = MIN( stop, global_genome->chr_lens[chr_index] );
             } else {
                 window_start = start;
-                window_stop = start + global_fl_dist->max_fl;
+                window_stop = MIN( start + global_fl_dist->max_fl, 
+                                   global_genome->chr_lens[chr_index] );
             }
 
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
@@ -1076,7 +1069,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
                        normalization factor.
                     */
                     window_density += 
-                        ( traces->traces[0][chr_index][k] + traces->traces[1][chr_index][k] )
+                        ( traces->traces[0][chr_index][k] 
+                          + traces->traces[1][chr_index][k] )
                         *global_fl_dist->chipseq_bs_density[ 
                             global_fl_dist->max_fl - 1 - (k-window_start) ];
                 }
@@ -1085,7 +1079,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
                 {
                     /* same comment as directly above */
                     window_density += 
-                        ( traces->traces[0][chr_index][k] + traces->traces[1][chr_index][k] )
+                        ( traces->traces[0][chr_index][k] 
+                          + traces->traces[1][chr_index][k] )
                         *global_fl_dist->chipseq_bs_density[ k-window_start ];
                 }
             }
@@ -1337,6 +1332,7 @@ update_chipseq_mapping_wnc(
        benefit ( except some cleanliness of course )
      */
     global_fl_dist = ip_rdb->fl_dist;
+    global_genome = genome;
 
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( ip_rdb );
@@ -1585,6 +1581,7 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     /* BUG!!! */
     /* Set the global fl dist */
     global_fl_dist = rdb->fl_dist;
+    global_genome = genome;
     
     /* reset the read cond prbs under a uniform prior */
     reset_all_read_cond_probs( rdb );
