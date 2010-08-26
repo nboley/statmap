@@ -659,9 +659,6 @@ sample_random_traces(
     /* Store meta information about the samples and starting samples */
     FILE* ss_mi;
     FILE* s_mi;
-
-    /* Seed the random number generator */
-    srand ( time(NULL) );
     
     /* Create the meta data csv's */
     if( SAVE_STARTING_SAMPLES )

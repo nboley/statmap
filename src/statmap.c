@@ -1102,6 +1102,9 @@ cleanup:
 int 
 main( int argc, char** argv )
 {       
+    /* Seed the random number generator */
+    srand ( time(NULL) );
+    
     /* parse and sanity check arguments */
     args_t args = parse_arguments( argc, argv );
     

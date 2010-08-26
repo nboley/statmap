@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 25
+NUM_SAMPLES = 5
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 

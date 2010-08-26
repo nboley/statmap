@@ -1,6 +1,7 @@
 compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64
 
-all: build_index aggregate_over_wiggles mapped_reads_into_sam mapped_reads_into_wiggle estimate_read_density call_peaks
+all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
+	mapped_reads_into_wiggle estimate_read_density call_peaks \
 
 build_index : build_index.c
 	gcc $(compile_options) -o build_index build_index.c \
@@ -47,6 +48,15 @@ estimate_read_density :
 	-lm -pthread
 	cp estimate_read_density ../bin/
 
+sample_mapping : 
+	gcc $(compile_options) -o sample_mapping sample_mapping.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
+	 ../src/pseudo_location.o ../src/iterative_mapping.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	-lm -pthread
+	cp sample_mapping ../bin/
+
 call_peaks : 
 	gcc $(compile_options) -o call_peaks call_peaks.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
@@ -69,3 +79,4 @@ clean :
 	-rm estimate_read_density
 	-rm build_index
 	-rm call_peaks
+	-rm sample_mapping
