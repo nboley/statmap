@@ -346,6 +346,10 @@ struct mapped_reads_db {
     char** mmapped_reads_starts;
     unsigned long num_mmapped_reads;
 
+    /* store the number of times that each read has been
+       iterated over, and found to be below the update threshold */
+    char* num_succ_iterations;
+    
     struct fragment_length_dist_t* fl_dist;
 
     unsigned long current_read;

@@ -39,6 +39,14 @@ init_traces( struct genome_data* genome,
              const int num_traces );
 
 void
+copy_trace_data( struct trace_t* traces,
+                 struct trace_t* original );
+
+void
+copy_trace( struct trace_t** traces,
+            struct trace_t* original );
+
+void
 copy_trace_structure( struct trace_t** traces,
                       struct trace_t* original );
 

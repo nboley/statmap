@@ -773,7 +773,9 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
  
     /* fl dist */
     (*rdb)->fl_dist = NULL;
-   
+
+    (*rdb)->num_succ_iterations = NULL;
+    
     return;
 }
 

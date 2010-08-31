@@ -33,6 +33,7 @@
 
 struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
+struct trace_t* global_starting_trace;
 
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
@@ -66,11 +67,36 @@ update_traces_from_mapped_reads_worker( void* params )
         = ( (struct update_traces_param*) 
             params)->update_trace_expectation_from_location;
     
-
+    int num_skipped_reads = 0;
+    
     struct mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
+        /* if we have already updated this enough times and it's not changing, 
+           stop messing with it */
+        if( NULL != rdb->num_succ_iterations
+            && rdb->num_succ_iterations[ r->read_id  ] 
+            > MAX_NUM_SUCC_UPDATES_FOR_LOCAL_CONVERGENCE )
+        {
+            num_skipped_reads += 1;
+            free_mapped_read( r );
+            continue;
+        }
+        
+        /* if we have updated this exactly enough times so that it stops updating, 
+           update the global trace */
+        if( NULL != rdb->num_succ_iterations
+            && rdb->num_succ_iterations[ r->read_id  ] 
+            == MAX_NUM_SUCC_UPDATES_FOR_LOCAL_CONVERGENCE )
+        {
+            unsigned int j;
+            for( j = 0; j < r->num_mappings; j++ ) {
+                update_trace_expectation_from_location( 
+                    global_starting_trace, r->locations + j );
+            }
+        }
+
         /* Update the trace from this mapping */        
         unsigned int j;
         for( j = 0; j < r->num_mappings; j++ ) {
@@ -81,6 +107,9 @@ update_traces_from_mapped_reads_worker( void* params )
     }
     
     free_mapped_read( r );
+
+    fprintf( stderr, "DEBUG       :  num skipped reads ( thread %i ) - %i\n", 
+             (int) pthread_self(), num_skipped_reads );
     
     pthread_exit( NULL );
     
@@ -109,7 +138,7 @@ bootstrap_traces_from_mapped_reads(
 {        
     /* First, zero the trace to be summed into */
     zero_traces( traces );
-
+    
     if( RAND_MAX < reads_db->num_mmapped_reads )
     {
         fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
@@ -194,11 +223,18 @@ update_traces_from_mapped_reads(
 )
 {        
     /* First, zero the trace to be summed into */
-    zero_traces( traces );
+    if( NULL != global_starting_trace )
+    {
+        copy_trace_data( traces, global_starting_trace );
+    } else {
+        zero_traces( traces );
+    }
 
     /* Move the database ( this should be a cursor ) back to the first read */
     rewind_mapped_reads_db( reads_db );
-
+    
+    int num_skipped_reads = 0;
+    
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
     {
@@ -210,6 +246,30 @@ update_traces_from_mapped_reads(
             if( read_num%1000000 == 0 )
                 fprintf( stderr, "DEBUG       :  Updated traces from mapped reads for %i reads\n", read_num );
             
+            /* if we have already updated this enough times and it's not changing, 
+               stop messing with it */
+            if( NULL != reads_db->num_succ_iterations
+                && reads_db->num_succ_iterations[ r->read_id  ] 
+                > MAX_NUM_SUCC_UPDATES_FOR_LOCAL_CONVERGENCE )
+            {
+                num_skipped_reads += 1;
+                free_mapped_read( r );
+                continue;
+                
+            }
+            /* if we have updated this exactly enough times so that it stops updating, 
+               update the global trace */
+            if( NULL != reads_db->num_succ_iterations
+                && reads_db->num_succ_iterations[ r->read_id  ] 
+                == MAX_NUM_SUCC_UPDATES_FOR_LOCAL_CONVERGENCE )
+            {
+                unsigned int j;
+                for( j = 0; j < r->num_mappings; j++ ) {
+                    update_trace_expectation_from_location( 
+                        global_starting_trace, r->locations + j );
+                }
+            }
+            
             /* Update the trace from this mapping */        
             unsigned int j;
             for( j = 0; j < r->num_mappings; j++ ) {
@@ -220,6 +280,9 @@ update_traces_from_mapped_reads(
         }
 
         free_mapped_read( r );
+        
+        fprintf( stderr, "DEBUG         : num skipped reads - %i\n", 
+                 num_skipped_reads );
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
@@ -330,6 +393,16 @@ update_mapped_reads_from_trace_worker( void* params )
         if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
             ( (struct update_mapped_reads_param*) params)->rv.max_change = tmp_rv.max_change;
 
+        if( NULL != reads_db->num_succ_iterations )
+        {
+            if( tmp_rv.max_change < LOCAL_COVERGENCE_THRESH )
+            {
+                reads_db->num_succ_iterations[ r->read_id  ] += 1;
+            } else {
+                reads_db->num_succ_iterations[ r->read_id  ] = 0;
+            }
+        }
+
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
 
@@ -380,6 +453,16 @@ update_mapped_reads_from_trace(
             if( tmp_rv.max_change > rv.max_change )
             {
                 rv.max_change = tmp_rv.max_change;
+            }
+
+            if( NULL != reads_db->num_succ_iterations )
+            {
+                if( tmp_rv.max_change < LOCAL_COVERGENCE_THRESH )
+                {
+                    reads_db->num_succ_iterations[ r->read_id  ] += 1;
+                } else {
+                    reads_db->num_succ_iterations[ r->read_id  ] = 0;
+                }
             }
             
             /* Update the lhd */
@@ -496,6 +579,17 @@ update_mapping(
     )
 {
     clock_t start, stop;
+
+    /* make sure the mapped reads are mmapped */
+    assert( rdb->write_locked );
+
+    #ifdef USE_LOCAL_CONVERGE_SC
+    /* init the local convergence storage array */
+    rdb->num_succ_iterations 
+        = calloc( sizeof(unsigned char), rdb->num_mmapped_reads );
+    
+    copy_trace_structure( &global_starting_trace, starting_trace );
+    #endif
     
     struct update_mapped_read_rv_t rv;
     
@@ -541,7 +635,14 @@ update_mapping(
         }        
 
     }
-        
+
+    #ifdef USE_LOCAL_CONVERGE_SC
+    free( rdb->num_succ_iterations );
+    rdb->num_succ_iterations = NULL;
+    close_traces( global_starting_trace );
+    global_starting_trace = NULL;
+    #endif 
+    
     return 0;
 }
 
