@@ -11,8 +11,8 @@
 struct genome_data;
 
 // define this to use mutexes, otherwise use spinlocks
-#define USE_MUTEX
-// #define USE_SPINLOCK
+// #define USE_MUTEX
+#define USE_SPINLOCK
 
 struct trace_t {
     int num_traces;
