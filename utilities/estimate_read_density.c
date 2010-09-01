@@ -16,7 +16,7 @@ int min_num_hq_bps = -1;
 #include "../src/iterative_mapping.h"
 #include "../src/mapped_read.h"
 #include "../src/rawread.h"
-
+#include "../src/index_genome.h"
 
 struct fragment_length_dist_t* global_fl_dist;
 

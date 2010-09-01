@@ -22,12 +22,15 @@ double* global_lhd_weights;
 void
 parse_meta_info( FILE* mi_fp, double** lhds )
 {
+    int rv;
+    
     /* initialize the lhds array */
     *lhds = NULL;
     int num_lhds = 0;
     
     /* skip the header */
-    fscanf( mi_fp, "%*s" );
+    rv = fscanf( mi_fp, "%*s" );
+    assert( rv == 0 );
     
     /* store the maximum lhd for normalization */
     double max_log_lhd = -1e99;
@@ -36,7 +39,8 @@ parse_meta_info( FILE* mi_fp, double** lhds )
     for( i = 0; !feof( mi_fp ); i++ ) 
     {
         *lhds = realloc( *lhds, (i+1)*sizeof(double) );
-        fscanf( mi_fp, "%*i,%lf\n", (*lhds) + i );
+        rv = fscanf( mi_fp, "%*i,%lf\n", (*lhds) + i );
+        assert( rv == 1 );
         max_log_lhd = MAX( max_log_lhd, (*lhds)[i] );
     }
     num_lhds = i;

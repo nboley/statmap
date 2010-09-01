@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h> /* mmap() is defined in this header */
+#include <sys/time.h> /* gettimeofday() */
 #include <signal.h>
 #include <sys/wait.h>
 
@@ -31,15 +32,20 @@
 #include "fragment_length.h"
 #include "sam.h"
 
-typedef float v4sf __attribute__ ((mode(V4SF) ));
+#define USE_VEC_OPERATIONS
+#define LOCK_TRACES
+
+
+#ifdef USE_VEC_OPERATIONS
+typedef float v4sf __attribute__ ((vector_size(16) ));
 
 union f4vector 
 {
     v4sf v;
     float f[4];
 };
+#endif
 
-#define LOCK_TRACES
 
 struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
@@ -1101,8 +1107,6 @@ update_chipseq_trace_expectation_from_location(
                 trace_index = 0;
             }            
             
-            #define USE_VEC_OPERATIONS
-            
             int j;
             #ifndef USE_VEC_OPERATIONS
             for( j = LR_start; j < LR_stop; j++ )
@@ -1128,11 +1132,11 @@ update_chipseq_trace_expectation_from_location(
                 (union f4vector*) ( traces->traces[trace_index][chr_index] + LR_start );
             /* word align the trace array */
             /* save this so we know what has been skipped */
-            size_t old_trace_array_start = trace_array;
-            trace_array = (size_t)trace_array + ( AL_SIZE - ((size_t)trace_array)%AL_SIZE );
+            size_t old_trace_array_start = (size_t) trace_array;
+            trace_array =  (union f4vector*) ( (size_t)trace_array + ( AL_SIZE - ((size_t)trace_array)%AL_SIZE ) );
             
             /* deal with the unaligned floats */
-            for( j = 0; j < (size_t)trace_array - old_trace_array_start; j++ )
+            for( j = 0; j < (int) ( (size_t)trace_array - old_trace_array_start ); j++ )
             {
                 float fl_density = fl_dist_array[ j ];
                 fl_density *= cond_prob;

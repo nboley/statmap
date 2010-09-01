@@ -1,3 +1,5 @@
+-27) Fix bug in iterative mapping bector operations that uses incorrectly shifted chipseq trace
+-26.9) Fix failure to free calculated chipseq densities in chipseq_bs_density
 -26) Fix the hack in map_marginal that uses the is_nc flag. ( What's better? )
 -25) COPY estimated_fl_dist into the output directory
 -24) simple repeat analysis, with an eye towards item -23

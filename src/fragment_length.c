@@ -251,15 +251,15 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
     /* align to the 16 byte boundary */
     int offset = ((size_t) fl_dist->chipseq_bs_density )%16;
     if( 0 != offset )
-        fl_dist->chipseq_bs_density = 
-            ((size_t) fl_dist->chipseq_bs_density ) + (16-offset);
+        fl_dist->chipseq_bs_density = ( float* ) (
+            ((size_t) fl_dist->chipseq_bs_density ) + (16-offset) );
 
     fl_dist->rev_chipseq_bs_density = calloc( fl_dist->max_fl + 4, sizeof(float) );
     /* align to the 16 byte boundary */
     offset = ((size_t) fl_dist->rev_chipseq_bs_density )%16;
     if( 0 != offset )
-        fl_dist->rev_chipseq_bs_density = 
-            ((size_t) fl_dist->rev_chipseq_bs_density ) + (16-offset);
+        fl_dist->rev_chipseq_bs_density = ( float* ) (
+            ((size_t) fl_dist->rev_chipseq_bs_density ) + (16-offset) );
     
     int i = 0, frag_len = 0;
     for( frag_len = fl_dist->min_fl; frag_len <= fl_dist->max_fl; frag_len++ )
