@@ -602,8 +602,6 @@ update_mapping(
                                            const struct mapped_read_t* const r  )
     )
 {
-    clock_t start, stop;
-
     /* make sure the mapped reads are mmapped */
     assert( rdb->write_locked );
 
@@ -624,47 +622,39 @@ update_mapping(
     {
         /* Normalize the trace sum to 1 */
         /* This makes the trace the current marginal read density estimate */
+        struct timeval nt_start, nt_stop, umr_start, umr_stop, ut_start, ut_stop;;
+        
+        gettimeofday( &nt_start, NULL );   
         normalize_traces( starting_trace );
-     
-        start = clock();   
+        gettimeofday( &nt_stop, NULL );   
+        
+        gettimeofday( &umr_start, NULL );   
         rv = update_mapped_reads_from_trace(
             rdb, starting_trace, 
             update_mapped_read_prbs
         );
-        stop = clock( );
+        gettimeofday( &umr_stop, NULL );   
         
-        if( num_iterations > 0 &&
-            ( 
-                ( num_iterations == 1 
-                  || num_iterations%25 == 0 
-                  || ((double)stop-(double)start)/CLOCKS_PER_SEC > 30 )
-                || rv.max_change < max_prb_change_for_convergence )
-            )
-        {
-            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated mapped reads from trace in %.2f sec\n", 
-                 num_iterations, rv.max_change, rv.log_lhd,
-                 ((double)stop-(double)start)/CLOCKS_PER_SEC
-            );
-        }
-        
-        start = clock();
+        gettimeofday( &ut_start, NULL );   
         update_traces_from_mapped_reads( 
             rdb, starting_trace, 
             update_trace_expectation_from_location
         );
-        stop = clock( );
+        gettimeofday( &ut_stop, NULL );
 
         if( num_iterations > 0 &&
             ( 
                 ( num_iterations == 1 
                   || num_iterations%25 == 0 
-                  || ((double)stop-(double)start)/CLOCKS_PER_SEC > 30 )
+                  || (ut_stop.tv_sec-nt_start.tv_sec) > 30 )
                 || rv.max_change < max_prb_change_for_convergence )
             )
         {
-            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace from mapped reads in %.2f sec\n", 
+            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
-                 ((double)stop-(double)start)/CLOCKS_PER_SEC
+                     (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
+                     (float)(umr_stop.tv_sec - umr_start.tv_sec) + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
+                     (float)(ut_stop.tv_sec - ut_start.tv_sec) + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
             );
             
             if( num_iterations > 1 
@@ -1111,7 +1101,7 @@ update_chipseq_trace_expectation_from_location(
                 trace_index = 0;
             }            
             
-            #define DONT_USE_VEC_OPERATIONS
+            #define USE_VEC_OPERATIONS
             
             int j;
             #ifndef USE_VEC_OPERATIONS
@@ -1147,7 +1137,6 @@ update_chipseq_trace_expectation_from_location(
                 float fl_density = fl_dist_array[ j ];
                 fl_density *= cond_prob;
                 traces->traces[trace_index][chr_index][j+LR_start] += fl_density;
-                assert( fl_density < 1 );
             }
             
             /* we subtract 1 to account for the revised alignment */
@@ -1345,7 +1334,7 @@ void update_CAGE_trace_expectation_from_location(
     int chr_index = get_chr_from_mapped_read_location( loc  );
     unsigned char flag = get_flag_from_mapped_read_location( loc  );
     unsigned int start = get_start_from_mapped_read_location( loc  );
-    unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    // unsigned int stop = get_stop_from_mapped_read_location( loc  );
     float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
@@ -1511,7 +1500,7 @@ update_chipseq_mapping_wnc(
     /* true if we should use a random start - otherwise, we use uniform */
     enum bool random_start )
 {
-    clock_t start, stop;
+    struct timeval start, stop;
     
     int error = 0;
     
@@ -1528,7 +1517,7 @@ update_chipseq_mapping_wnc(
     reset_all_read_cond_probs( nc_rdb );
             
     /* iteratively map from a uniform prior */
-    start = clock();
+    gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
     
     /* initialize the trace that we will store the expectation in */
@@ -1560,9 +1549,11 @@ update_chipseq_mapping_wnc(
         update_chipseq_mapped_read_prbs
     );
     
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
-            ((float)(stop-start))/CLOCKS_PER_SEC );
+    gettimeofday( &stop, NULL );
+    long seconds  = stop.tv_sec  - start.tv_sec;
+    long useconds = stop.tv_usec - start.tv_usec;
+    
+    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.5f seconds\n", ((float)seconds) + ((float)useconds)/1000000 );
     
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );

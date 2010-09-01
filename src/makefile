@@ -1,5 +1,6 @@
 compile_options = -O2 -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 # -ftree-vectorize
+# -fprofile-arcs -ftest-coverage
 
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
@@ -12,7 +13,7 @@ statmap : $(objects)
 	gcc -o statmap \
 	$(objects) \
 	$(compile_options) \
-	-lm -lpthread
+	-lm -lpthread #  -fprofile-arcs
 	cp statmap ../bin/
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
@@ -42,7 +43,7 @@ peak_calling.o : peak_calling.c wiggle.h trace.h genome.h
 #
 
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h snp.h genome.h fragment_length.h
-	gcc $(compile_options) -ftree-vectorizer-verbose=2 -c iterative_mapping.c
+	gcc $(compile_options) -c iterative_mapping.c
 
 iterative_mapping.h : config.h genome.h trace.h
 #############################################################################
