@@ -11,6 +11,7 @@ struct fragment_length_dist_t {
     int max_fl;
     float* density;
     float* chipseq_bs_density;
+    float* rev_chipseq_bs_density;
 };
 
 void

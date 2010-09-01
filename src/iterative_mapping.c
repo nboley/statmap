@@ -1,5 +1,7 @@
 /* Copyright (c) 2009-2010, Nathan Boley */
 
+#define NDEBUG
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -28,6 +30,14 @@
 #include "genome.h"
 #include "fragment_length.h"
 #include "sam.h"
+
+typedef float v4sf __attribute__ ((mode(V4SF) ));
+
+union f4vector 
+{
+    v4sf v;
+    float f[4];
+};
 
 #define LOCK_TRACES
 
@@ -67,12 +77,15 @@ update_traces_from_mapped_reads_worker( void* params )
         = ( (struct update_traces_param*) 
             params)->update_trace_expectation_from_location;
     
+    #ifdef USE_LOCAL_CONVERGE_SC
     int num_skipped_reads = 0;
+    #endif
     
     struct mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
+        #ifdef USE_LOCAL_CONVERGE_SC
         /* if we have already updated this enough times and it's not changing, 
            stop messing with it */
         if( NULL != rdb->num_succ_iterations
@@ -96,7 +109,8 @@ update_traces_from_mapped_reads_worker( void* params )
                     global_starting_trace, r->locations + j );
             }
         }
-
+        #endif
+        
         /* Update the trace from this mapping */        
         unsigned int j;
         for( j = 0; j < r->num_mappings; j++ ) {
@@ -108,9 +122,11 @@ update_traces_from_mapped_reads_worker( void* params )
     
     free_mapped_read( r );
 
+    #ifdef USE_LOCAL_CONVERGE_SC
     fprintf( stderr, "DEBUG       :  num skipped reads ( thread %i ) - %i\n", 
              (int) pthread_self(), num_skipped_reads );
-    
+    #endif
+
     pthread_exit( NULL );
     
     return 0;
@@ -222,6 +238,9 @@ update_traces_from_mapped_reads(
         const struct mapped_read_location* const loc)
 )
 {        
+    #ifdef USE_LOCAL_CONVERGE_SC    
+    int num_skipped_reads = 0;
+
     /* First, zero the trace to be summed into */
     if( NULL != global_starting_trace )
     {
@@ -229,11 +248,12 @@ update_traces_from_mapped_reads(
     } else {
         zero_traces( traces );
     }
+    #else
+    zero_traces( traces );
+    #endif
 
     /* Move the database ( this should be a cursor ) back to the first read */
     rewind_mapped_reads_db( reads_db );
-    
-    int num_skipped_reads = 0;
     
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
@@ -245,7 +265,8 @@ update_traces_from_mapped_reads(
             read_num++;
             if( read_num%1000000 == 0 )
                 fprintf( stderr, "DEBUG       :  Updated traces from mapped reads for %i reads\n", read_num );
-            
+
+            #ifdef USE_LOCAL_CONVERGE_SC
             /* if we have already updated this enough times and it's not changing, 
                stop messing with it */
             if( NULL != reads_db->num_succ_iterations
@@ -269,6 +290,7 @@ update_traces_from_mapped_reads(
                         global_starting_trace, r->locations + j );
                 }
             }
+            #endif
             
             /* Update the trace from this mapping */        
             unsigned int j;
@@ -281,8 +303,10 @@ update_traces_from_mapped_reads(
 
         free_mapped_read( r );
         
+        #ifdef USE_LOCAL_CONVERGE_SC
         fprintf( stderr, "DEBUG         : num skipped reads - %i\n", 
                  num_skipped_reads );
+        #endif
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
@@ -598,22 +622,36 @@ update_mapping(
          num_iterations < max_num_iterations; 
          num_iterations++ )
     {
-        start = clock();
-
         /* Normalize the trace sum to 1 */
         /* This makes the trace the current marginal read density estimate */
         normalize_traces( starting_trace );
-        
+     
+        start = clock();   
         rv = update_mapped_reads_from_trace(
             rdb, starting_trace, 
             update_mapped_read_prbs
         );
+        stop = clock( );
         
+        if( num_iterations > 0 &&
+            ( 
+                ( num_iterations == 1 
+                  || num_iterations%25 == 0 
+                  || ((double)stop-(double)start)/CLOCKS_PER_SEC > 30 )
+                || rv.max_change < max_prb_change_for_convergence )
+            )
+        {
+            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated mapped reads from trace in %.2f sec\n", 
+                 num_iterations, rv.max_change, rv.log_lhd,
+                 ((double)stop-(double)start)/CLOCKS_PER_SEC
+            );
+        }
+        
+        start = clock();
         update_traces_from_mapped_reads( 
             rdb, starting_trace, 
             update_trace_expectation_from_location
         );
-        
         stop = clock( );
 
         if( num_iterations > 0 &&
@@ -624,7 +662,7 @@ update_mapping(
                 || rv.max_change < max_prb_change_for_convergence )
             )
         {
-            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace in %.2f sec\n", 
+            fprintf( stderr, "Iter %i: \t Error: %e\t Log Lhd: %e \tUpdated trace from mapped reads in %.2f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                  ((double)stop-(double)start)/CLOCKS_PER_SEC
             );
@@ -1050,6 +1088,9 @@ update_chipseq_trace_expectation_from_location(
 
         for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
         {
+            int LR_start = MAX( window_start, k*TM_GRAN ); // Locked Region start
+            int LR_stop = MIN( window_stop, (k+1)*TM_GRAN ); // Locked Region stop
+            
             /* lock the spinlocks */
             #ifdef LOCK_TRACES
                 #ifdef USE_MUTEX
@@ -1058,29 +1099,76 @@ update_chipseq_trace_expectation_from_location(
                 pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
                 #endif
             #endif
-        
-            int LR_start = MAX( window_start, k*TM_GRAN ); // Locked Region start
-            int LR_stop = MIN( window_stop, (k+1)*TM_GRAN ); // Locked Region stop
-
-            int j;
+            
+            float* fl_dist_array;
+            int trace_index;
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
-                for( j = LR_start; j < LR_stop; j++ )
-                {
-                    traces->traces[1][chr_index][j]
-                        += cond_prob*
-                        global_fl_dist->chipseq_bs_density[ 
-                            global_fl_dist->max_fl -1 -(j-LR_start) ];
-                }
+                fl_dist_array = global_fl_dist->rev_chipseq_bs_density;
+                trace_index = 1;
             } else {
-                for( j = LR_start; j < LR_stop; j++ )
-                {
-                    traces->traces[0][chr_index][j]
-                        += cond_prob*global_fl_dist->chipseq_bs_density[ 
-                            j-LR_start ];
-                }
+                fl_dist_array = global_fl_dist->chipseq_bs_density;
+                trace_index = 0;
+            }            
+            
+            #define DONT_USE_VEC_OPERATIONS
+            
+            int j;
+            #ifndef USE_VEC_OPERATIONS
+            for( j = LR_start; j < LR_stop; j++ )
+            {
+                float fl_density = fl_dist_array[ j - LR_start ];
+                fl_density *= cond_prob;
+                traces->traces[trace_index][chr_index][j] += fl_density;
+            }
+            #else
+            
+            #define AL_SIZE 16
+            union f4vector cond_prob_vec;
+            cond_prob_vec.f[0] = cond_prob;
+            cond_prob_vec.f[1] = cond_prob;
+            cond_prob_vec.f[2] = cond_prob;
+            cond_prob_vec.f[3] = cond_prob;
+
+            union f4vector* fl_array = (union f4vector*) fl_dist_array;
+            /* make sure this is aligned to the 16 byte boundary */
+            assert( ( ( (size_t)fl_dist_array)%AL_SIZE ) == 0 );
+            
+            union f4vector* trace_array = 
+                (union f4vector*) ( traces->traces[trace_index][chr_index] + LR_start );
+            /* word align the trace array */
+            /* save this so we know what has been skipped */
+            size_t old_trace_array_start = trace_array;
+            trace_array = (size_t)trace_array + ( AL_SIZE - ((size_t)trace_array)%AL_SIZE );
+            
+            /* deal with the unaligned floats */
+            for( j = 0; j < (size_t)trace_array - old_trace_array_start; j++ )
+            {
+                float fl_density = fl_dist_array[ j ];
+                fl_density *= cond_prob;
+                traces->traces[trace_index][chr_index][j+LR_start] += fl_density;
+                assert( fl_density < 1 );
             }
             
+            /* we subtract 1 to account for the revised alignment */
+            for( j = 0; j < (LR_stop-LR_start)/4 - 1; j++ )
+            {
+                union f4vector fl_density __attribute__ ((aligned (128)));
+                fl_density.v = __builtin_ia32_mulps( fl_array[j].v, cond_prob_vec.v);
+                trace_array[j].v += fl_density.v;
+            }
+            
+            /* deal with the excess - its always greater than 1 
+               because of the alignment floats*/
+            for( j = LR_stop - LR_stop%4 - 4; j < LR_stop; j++ )
+            {
+                float fl_density = fl_dist_array[ j-LR_start ];
+                fl_density *= cond_prob;
+                traces->traces[trace_index][chr_index][j] += fl_density;
+                assert( fl_density < 1 );
+            }
+            #endif
+        
             /* unlock the spinlocks */
             #ifdef LOCK_TRACES
                 #ifdef USE_MUTEX
@@ -1164,25 +1252,27 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
                 for( k = window_start; k < window_stop; k++ )
                 {
                     /* 
-                       This is a bit confusing. First, at this stage we dont care whether the inferred
-                       binding site came from 5'or 3' reads  - so we add up the binding site density 
-                       from both strands. Next, we normalize this value by the precomputed frag length
+                       This is a bit confusing. First, at this stage we dont care 
+                       whether the inferred binding site came from 5'or 3' reads  
+                       - so we add up the binding site density from both strands. 
+                       Next, we normalize this value by the precomputed frag length
                        normalization factor.
                     */
-                    window_density += 
-                        ( traces->traces[0][chr_index][k] 
-                          + traces->traces[1][chr_index][k] )
-                        *global_fl_dist->chipseq_bs_density[ 
-                            global_fl_dist->max_fl - 1 - (k-window_start) ];
+                    float value =  traces->traces[0][chr_index][k];
+                    value += traces->traces[1][chr_index][k];
+                    value *= global_fl_dist->chipseq_bs_density[ 
+                                 global_fl_dist->max_fl - 1 - (k-window_start) ];
+                    window_density += value;
                 }
             } else {
                 for( k = window_start; k < window_stop; k++ )
                 {
                     /* same comment as directly above */
-                    window_density += 
-                        ( traces->traces[0][chr_index][k] 
-                          + traces->traces[1][chr_index][k] )
-                        *global_fl_dist->chipseq_bs_density[ k-window_start ];
+                    float value = traces->traces[0][chr_index][k];
+                    value += traces->traces[1][chr_index][k]; 
+                    value *= global_fl_dist->chipseq_bs_density[ k-window_start ];
+                    window_density += value;
+
                 }
             }
         }
@@ -1351,10 +1441,8 @@ update_CAGE_mapped_read_prbs(
                 trace = traces->traces[1];
             }
             
-            for( j = start;
-                 j < MIN( traces->trace_lengths[chr_index], 
-                          start + WINDOW_SIZE ); 
-                 j++ )
+            unsigned int stop = MIN( traces->trace_lengths[chr_index], start + WINDOW_SIZE );
+            for( j = start; j < stop; j++ )
             {
                 window_density += trace[chr_index][j];
             }

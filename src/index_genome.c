@@ -1610,6 +1610,8 @@ sort_ODI_stack( struct ODI_stack* stack )
 void
 load_ondisk_index( char* index_fname, struct index_t** index )
 {
+    int rv;
+    
     /* 
        first, 
        open the file containing the index to ensure that
@@ -1630,7 +1632,9 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     unsigned char indexed_seq_len;
     size_t index_size;
 
-    fread( &magic_number, 1, 1, index_fp );
+    rv = fread( &magic_number, 1, 1, index_fp );
+    assert( rv == 1 );
+    
     if( magic_number != 0 )
     {
         fprintf( stderr, "FATAL    :  We appear to have loaded an invalid index\n" );
@@ -1638,7 +1642,8 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     }
     
     /* Find the indexed sequence length */
-    fread( &indexed_seq_len, 1, 1, index_fp );
+    rv = fread( &indexed_seq_len, 1, 1, index_fp );
+    assert( 1 == rv );
     assert( indexed_seq_len > 0 );
 
     /* allocate space for the index */
@@ -1650,8 +1655,9 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     /* Set the indexed sequence length */
     (*index)->seq_length = indexed_seq_len;
 
-    fread( &index_size, sizeof(size_t), 1, index_fp );
-
+    rv = fread( &index_size, sizeof(size_t), 1, index_fp );
+    assert( rv == 1 );
+    
     fclose( index_fp );
 
     int fd;

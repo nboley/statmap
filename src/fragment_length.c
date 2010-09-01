@@ -15,17 +15,23 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
     assert( max_fl >= min_fl );
 
     *fl_dist = malloc(sizeof(struct fragment_length_dist_t));
+
     (*fl_dist)->min_fl = min_fl;
     (*fl_dist)->max_fl = max_fl;
 
     (*fl_dist)->chipseq_bs_density = NULL;
-    (*fl_dist)->density = calloc( max_fl - min_fl + 1, sizeof(float)  );
+    (*fl_dist)->rev_chipseq_bs_density = NULL;
+
+    (*fl_dist)->density = calloc( 1 + max_fl - min_fl + 1, sizeof(float)  );
+    
     if( NULL == (*fl_dist)->density )
     {
         fprintf( stderr, "FATAL       :  Failed to allocate memory for the fragment length dist.\n" );
         assert( 0 );
         exit( -1 );
     }
+    
+    /* align the fl density */
     
     return;
 }
@@ -34,9 +40,12 @@ void
 free_fl_dist( struct fragment_length_dist_t* fl_dist )
 {
     free( fl_dist->density );
+
+    /*
     if( NULL != fl_dist->chipseq_bs_density )
         free( fl_dist->chipseq_bs_density );
-
+    */
+    
     free( fl_dist );
     
     return;
@@ -238,7 +247,19 @@ cleanup:
 void
 build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
 {
-    fl_dist->chipseq_bs_density = calloc( fl_dist->max_fl, sizeof(float) );
+    fl_dist->chipseq_bs_density = calloc( fl_dist->max_fl + 4, sizeof(float) );
+    /* align to the 16 byte boundary */
+    int offset = ((size_t) fl_dist->chipseq_bs_density )%16;
+    if( 0 != offset )
+        fl_dist->chipseq_bs_density = 
+            ((size_t) fl_dist->chipseq_bs_density ) + (16-offset);
+
+    fl_dist->rev_chipseq_bs_density = calloc( fl_dist->max_fl + 4, sizeof(float) );
+    /* align to the 16 byte boundary */
+    offset = ((size_t) fl_dist->rev_chipseq_bs_density )%16;
+    if( 0 != offset )
+        fl_dist->rev_chipseq_bs_density = 
+            ((size_t) fl_dist->rev_chipseq_bs_density ) + (16-offset);
     
     int i = 0, frag_len = 0;
     for( frag_len = fl_dist->min_fl; frag_len <= fl_dist->max_fl; frag_len++ )
@@ -248,6 +269,8 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
         for( i = 0; i < frag_len; i++ )
         {
             fl_dist->chipseq_bs_density[i] += frag_len_prb*amt;
+            fl_dist->rev_chipseq_bs_density[frag_len - i - 1] 
+                = fl_dist->chipseq_bs_density[i];
         }
     }
 

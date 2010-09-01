@@ -6,7 +6,7 @@ struct mapped_read_t;
 struct mapped_read_location;
 struct genome_data;
 
-#define USE_LOCAL_CONVERGE_SC
+#define DONT_USE_LOCAL_CONVERGE_SC
 #define LOCAL_COVERGENCE_THRESH (MAX_PRB_CHANGE_FOR_CONVERGENCE*(1e-1))
 #define MAX_NUM_SUCC_UPDATES_FOR_LOCAL_CONVERGENCE 15
 
