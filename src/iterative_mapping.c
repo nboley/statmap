@@ -211,6 +211,9 @@ update_traces_from_mapped_reads(
 {        
     zero_traces( traces );
 
+    struct trace_t* locs_trace;
+    copy_trace_structure( &locs_trace, traces );
+
     /* Move the database ( this should be a cursor ) back to the first read */
     rewind_mapped_reads_db( reads_db );
     
@@ -228,8 +231,10 @@ update_traces_from_mapped_reads(
             /* Update the trace from this mapping */        
             unsigned int j;
             for( j = 0; j < r->num_mappings; j++ ) {
-                update_trace_expectation_from_location( traces, r->locations + j );
+                //locs_trace
             }
+            
+            //update_trace_expectation_from_location( traces, r->locations + j );
             
             free_mapped_read( r );
         }
@@ -345,17 +350,7 @@ update_mapped_reads_from_trace_worker( void* params )
         /* Hand reduce the max */
         if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
             ( (struct update_mapped_reads_param*) params)->rv.max_change = tmp_rv.max_change;
-
-        if( NULL != reads_db->num_succ_iterations )
-        {
-            if( tmp_rv.max_change < LOCAL_COVERGENCE_THRESH )
-            {
-                reads_db->num_succ_iterations[ r->read_id  ] += 1;
-            } else {
-                reads_db->num_succ_iterations[ r->read_id  ] = 0;
-            }
-        }
-
+        
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
 
@@ -406,16 +401,6 @@ update_mapped_reads_from_trace(
             if( tmp_rv.max_change > rv.max_change )
             {
                 rv.max_change = tmp_rv.max_change;
-            }
-
-            if( NULL != reads_db->num_succ_iterations )
-            {
-                if( tmp_rv.max_change < LOCAL_COVERGENCE_THRESH )
-                {
-                    reads_db->num_succ_iterations[ r->read_id  ] += 1;
-                } else {
-                    reads_db->num_succ_iterations[ r->read_id  ] = 0;
-                }
             }
             
             /* Update the lhd */

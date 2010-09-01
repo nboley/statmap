@@ -13,7 +13,7 @@
 #include "mapped_read.h"
 
 // move this 
-void
+static void
 naive_update_trace_expectation_from_location( 
     const struct trace_t* const traces, 
     const struct mapped_read_location* const loc )
