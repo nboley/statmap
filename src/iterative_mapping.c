@@ -607,7 +607,7 @@ update_mapping(
         );
         gettimeofday( &ut_stop, NULL );
 
-        #define LHD_RATIO_STOP_VAL
+        #define LHD_RATIO_STOP_VAL 1.05
         
         if( num_iterations > 0 &&
             ( 
