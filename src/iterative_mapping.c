@@ -71,7 +71,7 @@ update_stranded_read_start_density_from_location(
         #endif
         */
         
-        // #pragma omp atomic
+        #pragma omp atomic
         traces->traces[1][chr_index][start] += cond_prob;
         // traces->traces[1][chr_index][start] += cond_prob;
 
@@ -91,7 +91,7 @@ update_stranded_read_start_density_from_location(
         #endif
         */
 
-        // #pragma omp atomic
+        #pragma omp atomic
         traces->traces[0][chr_index][start] += cond_prob;        
         // traces->traces[0][chr_index][start] += cond_prob;
 

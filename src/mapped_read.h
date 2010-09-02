@@ -148,12 +148,9 @@ ML_PRB_TYPE_from_float( float value  )
 
 /* ACCESS THIS THROUGH THE BELOW FUNCTIONS */
 
+struct mapped_read_t;
+
 struct mapped_read_location {
-    // if stop_pos > start_pos, the strand is pos
-    // else, the strand is negative. For rna-seq, 
-    // the strand will be determined by the exon
-    // that it maps into
-    // enum STRAND strand;
     MRL_FLAG_TYPE flag;
     
     unsigned snps_bm_r1 :MAX_NUM_SNPS;

@@ -1073,6 +1073,10 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     }
     #endif
     
+    /* update the read pointers */
+    
+    
+    
     return;
 }
 
