@@ -575,6 +575,8 @@ update_mapping(
 {
     /* make sure the mapped reads are mmapped */
     assert( rdb->write_locked );
+
+    double prev_log_lhd = 0;
     
     struct update_mapped_read_rv_t rv;
     
@@ -610,21 +612,26 @@ update_mapping(
                 ( num_iterations == 1 
                   || num_iterations%25 == 0 
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 )
-                || rv.max_change < max_prb_change_for_convergence )
+                || rv.max_change < max_prb_change_for_convergence
+                || pow( 10, rv.log_lhd - prev_log_lhd ) < 1.0 )
             )
         {
-            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
+            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
+                     pow( 10, rv.log_lhd - prev_log_lhd ),
                      (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
                      (float)(umr_stop.tv_sec - umr_start.tv_sec) + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
                      (float)(ut_stop.tv_sec - ut_start.tv_sec) + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
             );
             
             if( num_iterations > 1 
-                && rv.max_change < max_prb_change_for_convergence )
+                && ( rv.max_change < max_prb_change_for_convergence 
+                     || pow( 10, rv.log_lhd - prev_log_lhd ) < 1.0 )
+                )
                 break;
         }        
 
+        prev_log_lhd = rv.log_lhd;
     }
     
     return 0;
