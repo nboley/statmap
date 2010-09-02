@@ -607,13 +607,15 @@ update_mapping(
         );
         gettimeofday( &ut_stop, NULL );
 
+        #define LHD_RATIO_STOP_VAL
+        
         if( num_iterations > 0 &&
             ( 
                 ( num_iterations == 1 
                   || num_iterations%25 == 0 
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 )
                 || rv.max_change < max_prb_change_for_convergence
-                || pow( 10, rv.log_lhd - prev_log_lhd ) < 1.0 )
+                || pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL )
             )
         {
             fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
@@ -626,7 +628,7 @@ update_mapping(
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
-                     || pow( 10, rv.log_lhd - prev_log_lhd ) < 1.0 )
+                     || pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL )
                 )
                 break;
         }        
