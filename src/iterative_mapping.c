@@ -51,6 +51,63 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
+static inline void
+update_stranded_read_start_density_from_location( 
+    const struct trace_t* const traces, 
+    const struct mapped_read_location* const loc )
+{
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+    
+    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+    {
+        /*
+        #ifdef USE_MUTEX
+        pthread_mutex_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
+        #else
+        pthread_spin_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
+        #endif
+        */
+        
+        // #pragma omp atomic
+        traces->traces[1][chr_index][start] += cond_prob;
+        // traces->traces[1][chr_index][start] += cond_prob;
+
+        /*
+        #ifdef USE_MUTEX
+        pthread_mutex_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
+        #else
+        pthread_spin_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
+        #endif
+        */
+    } else {
+        /*
+        #ifdef USE_MUTEX
+        pthread_mutex_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
+        #else
+        pthread_spin_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
+        #endif
+        */
+
+        // #pragma omp atomic
+        traces->traces[0][chr_index][start] += cond_prob;        
+        // traces->traces[0][chr_index][start] += cond_prob;
+
+        /*
+        #ifdef USE_MUTEX
+        pthread_mutex_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
+        #else
+        pthread_spin_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
+        #endif
+        */
+    }
+    
+    return;
+}
+
+
 /*
  * This is technically a non-parametric bootstrap
  * but since the reads are conditionally independent 
@@ -187,6 +244,7 @@ update_traces_from_mapped_reads_worker( void* params )
         /* Update the trace from this mapping */        
         unsigned int j;
         for( j = 0; j < r->num_mappings; j++ ) {
+            // update_stranded_read_start_density_from_location( traces, r->locations + j );
             update_trace_expectation_from_location( traces, r->locations + j );
         }
         
@@ -211,8 +269,8 @@ update_traces_from_mapped_reads(
 {        
     zero_traces( traces );
 
-    struct trace_t* locs_trace;
-    copy_trace_structure( &locs_trace, traces );
+    //struct trace_t* locs_trace;
+    //copy_trace_structure( &locs_trace, traces );
 
     /* Move the database ( this should be a cursor ) back to the first read */
     rewind_mapped_reads_db( reads_db );
@@ -231,10 +289,9 @@ update_traces_from_mapped_reads(
             /* Update the trace from this mapping */        
             unsigned int j;
             for( j = 0; j < r->num_mappings; j++ ) {
-                //locs_trace
+                // update_stranded_read_start_density_from_location( traces, r->locations + j );
+                update_trace_expectation_from_location( traces, r->locations + j );
             }
-            
-            //update_trace_expectation_from_location( traces, r->locations + j );
             
             free_mapped_read( r );
         }

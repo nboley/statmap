@@ -1,6 +1,6 @@
 compiler = gcc
 #compile_options = -fast
-compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64
+compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	mapped_reads_into_wiggle estimate_read_density call_peaks \

@@ -17,7 +17,7 @@ statmap : $(objects)
 	$(compiler) -o statmap \
 	$(objects) \
 	$(compile_options) \
-	-lm -lpthread #  -fprofile-arcs
+	-lm -lpthread -fopenmp #  -fprofile-arcs
 	cp statmap ../bin/
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
@@ -47,7 +47,7 @@ peak_calling.o : peak_calling.c wiggle.h trace.h genome.h
 #
 
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h snp.h genome.h fragment_length.h
-	$(compiler) $(compile_options) -c iterative_mapping.c
+	$(compiler) $(compile_options) --openmp -c iterative_mapping.c
 
 iterative_mapping.h : config.h genome.h trace.h
 #############################################################################
@@ -125,7 +125,7 @@ wiggle.h: trace.h
 
 # Store traces across the gnome ( like wiggles )
 trace.o: trace.c trace.h
-	$(compiler) $(compile_options) -c trace.c
+	$(compiler) $(compile_options) -fopenmp -c trace.c
 
 trace.h:
 

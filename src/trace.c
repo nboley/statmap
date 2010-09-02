@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <float.h>
 #include <pthread.h>
+#include <omp.h>
 
 #include "config.h"
 #include "trace.h"
@@ -307,9 +308,16 @@ divide_trace_by_sum( struct trace_t* traces, double value )
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
+    {
         for( j = 0; j < traces->num_chrs; j++ )
+        {
+            #pragma omp parallel for
             for( k = 0; k < traces->trace_lengths[j]; k++ )
+            {
                 traces->traces[i][j][k] /= value;
+            }
+        }
+    }
     return;
 }
 
@@ -330,10 +338,16 @@ sum_traces( struct trace_t* traces )
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_traces; i++ )
+    {
         for( j = 0; j < traces->num_chrs; j++ )
+        {
+            #pragma omp parallel for reduction(+: sum) 
             for( k = 0; k < traces->trace_lengths[j]; k++ )
+            {
                 sum += traces->traces[i][j][k];
-    
+            }
+        }
+    }
     return sum;
 }
 
