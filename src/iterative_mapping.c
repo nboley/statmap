@@ -411,15 +411,8 @@ update_mapped_reads_from_trace_worker( void* params )
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
 
-        /* Update the lhd */
-        ( (struct update_mapped_reads_param*) params)->rv.log_lhd_variance 
-            += tmp_rv.log_lhd_variance;
-
         free_mapped_read( r );
     }
-
-    /* make the delta method correction */
-    tmp_rv.log_lhd_variance = rv.log_lhd_variance - 2*rv.log_lhd;
     
     free_mapped_read( r );
 
@@ -469,7 +462,6 @@ update_mapped_reads_from_trace(
             
             /* Update the lhd */
             rv.log_lhd += tmp_rv.log_lhd;
-            rv.log_lhd_variance += tmp_rv.log_lhd_variance;
 
             free_mapped_read( r );
         }
@@ -482,7 +474,6 @@ update_mapped_reads_from_trace(
         
         params.rv.max_change = 0;
         params.rv.log_lhd = 0;
-        params.rv.log_lhd_variance = 0;
                 
         params.reads_db = reads_db;
         /* traces should be read only, so they are shared */
@@ -540,7 +531,6 @@ update_mapped_reads_from_trace(
         for( t=0; t < num_threads; t++ )
         {
             rv.log_lhd += tds[t].rv.log_lhd;
-            rv.log_lhd_variance += tds[t].rv.log_lhd_variance;
             rv.max_change = MAX( tds[t].rv.max_change, rv.max_change );
         }
         
@@ -586,8 +576,7 @@ update_mapping(
     /* make sure the mapped reads are mmapped */
     assert( rdb->write_locked );
 
-    double prev_log_lhd = 1;
-    double prev_prev_log_lhd = 1;
+    double prev_log_lhd = 0;
     
     struct update_mapped_read_rv_t rv;
     
@@ -629,7 +618,7 @@ update_mapping(
                 || pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL )
             )
         {
-            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e ( Var %e ) (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
+            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
                  num_iterations, rv.max_change, rv.log_lhd,
                      pow( 10, rv.log_lhd - prev_log_lhd ),
                      (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
@@ -644,16 +633,6 @@ update_mapping(
                 break;
         }        
 
-        double deriv = rv.log_lhd - prev_log_lhd;
-        double second_deriv = deriv - ( prev_log_lhd - prev_prev_log_lhd );
-        double exp_num_iters = deriv/(-second_deriv);
-        double pred_llhd = rv.log_lhd + exp_num_iters*(deriv - (second_deriv*exp_num_iters)/2 );
-        double test_stat = 2*( pred_llhd - rv.log_lhd );
-        
-        printf( "Derivs: %e %e\t\t Ex Num Iters: %e\t\t Pred llhd: %e ( %e )\t\t Test Stat: %e\n", 
-                deriv, second_deriv, exp_num_iters, pred_llhd, rv.log_lhd, test_stat );
-
-        prev_prev_log_lhd = prev_log_lhd;
         prev_log_lhd = rv.log_lhd;
     }
     
@@ -1163,8 +1142,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     struct update_mapped_read_rv_t rv = { 0, 0 };
     
     /* allocate space to store the temporary values */
-    float* seq_prbs = malloc( sizeof(float)*(r->num_mappings) );
-    float* window_densities = malloc( sizeof(float)*(r->num_mappings) );
+    float* new_prbs = malloc( sizeof(float)*(r->num_mappings) );
     
     /* Update the reads from the trace */
     /* set to flt_min to avoid division by 0 */
@@ -1251,22 +1229,21 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             }
         }
         
-        seq_prbs[i] = get_seq_error_from_mapped_read_location( r->locations + i );
-        window_densities[i] = window_density;
-        
-        prb_sum += seq_prbs[i]*window_densities[i];        
+        new_prbs[i] = 
+            get_seq_error_from_mapped_read_location( r->locations + i )
+               *window_density;
+        prb_sum += new_prbs[i];        
         error_prb_sum += get_seq_error_from_mapped_read_location( r->locations + i );
-    }
+    }    
     
     /* renormalize the read probabilities */
-    double variance = 0;
     if( prb_sum > 0 )
     {
         for( i = 0; i < r->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
             /* absolute value error */
-            double normalized_density = seq_prbs[i]*window_densities[i]/prb_sum; 
+            double normalized_density = new_prbs[i]/prb_sum; 
             
             rv.max_change += MAX( 
                 normalized_density 
@@ -1277,19 +1254,12 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             
             set_cond_prob_in_mapped_read_location( 
                 r->locations + i, normalized_density );
-            
-            /** Estimate the variance  **/
-            int j;
-            for( j = 0; j < i; j++ )
-                variance += 2*seq_prbs[i]*window_densities[i]*seq_prbs[i]*window_densities[i];
-
-            variance += seq_prbs[i]*seq_prbs[i]*window_densities[i]*(1-window_densities[i]);
         }
         /* BUG - Can we be smarter here? */
         /* if the window density sums to 0, then it is impossible to normalize. 
            so we assume uniformity over the reads. I dont know if this is the right
            thing to do ( in fact, im worried that it may destroy convergence. However,
-           it's the only thing I can think of except ignoring the read, so I do. Note 
+           it's the only thing to think of except ignoring the read, so I do. Note 
            that this should not happen with any trace that is generated by the same 
            stream. ie, this is really only a problem for the starting location trace.
         */
@@ -1307,7 +1277,6 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
     }
     
     rv.log_lhd = log10( prb_sum );
-    rv.log_lhd_variance = log10( variance );
     
     /* Free the tmp array */
     free( new_prbs );

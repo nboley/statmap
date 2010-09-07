@@ -22,8 +22,6 @@ struct update_mapped_read_rv_t {
     /* Store the probability of observing the 
        returned sequence, conditional on the trace */
     double log_lhd;
-    /* Store the estiamted variance of the log lhd */
-    double log_lhd_variance;
     /* Store the max change in conditional mapping 
        probability for the returned read */
     double max_change;
