@@ -311,7 +311,6 @@ divide_trace_by_sum( struct trace_t* traces, double value )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            #pragma omp parallel for
             for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
                 traces->traces[i][j][k] /= value;
@@ -341,7 +340,6 @@ sum_traces( struct trace_t* traces )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            #pragma omp parallel for reduction(+: sum) 
             for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
                 sum += traces->traces[i][j][k];

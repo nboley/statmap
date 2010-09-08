@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 5
+NUM_SAMPLES = 25
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -629,7 +629,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
 
 if __name__ == '__main__':
     paired_end=False
-    NUM_MUTS = 2
+    NUM_MUTS = 3
     
     if False:
         test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )
