@@ -921,8 +921,7 @@ iterative_mapping( args_t* args,
     index_mapped_reads_db( mpd_rds_db );
     
     /* Do the iterative mapping */
-    generic_update_mapping( args->rdb, 
-                            mpd_rds_db,
+    generic_update_mapping( mpd_rds_db,
                             genome, 
                             args->assay_type,
                             args->num_starting_locations, 
@@ -950,10 +949,7 @@ map_generic_data(  args_t* args )
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
-    
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
-    
+        
     /***** END Genome processing */
     
     struct mapped_reads_db* mpd_rds_db;    
@@ -962,8 +958,6 @@ map_generic_data(  args_t* args )
     /* Free the genome index */
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
     
     if( args->frag_len_fp != NULL ) {
         build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
@@ -992,10 +986,7 @@ map_chipseq_data(  args_t* args )
     
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
                     ((float)(stop-start))/CLOCKS_PER_SEC );
-    
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
-    
+        
     /***** END Genome processing */
     
     /* map the real ( IP ) data */
@@ -1039,8 +1030,6 @@ map_chipseq_data(  args_t* args )
     /* Free the genome index */
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
-    fprintf(stderr, "PERFORMANCE :  Tree Size: %lu bytes\n", 
-            (unsigned long) sizeof_tree( genome->index ) );
     
     /* if there is no negative control, we use the same iterative 
        scheme as the generic version. iterative_mapping takes care of 

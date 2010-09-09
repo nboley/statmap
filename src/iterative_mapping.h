@@ -92,7 +92,8 @@ update_mapping(
 
 void
 build_random_starting_trace( 
-    struct trace_t* traces, 
+    struct trace_t* traces,
+    struct genome_data* genome,
     struct mapped_reads_db* rdb,
     
     void (* const update_trace_expectation_from_location)(
@@ -218,8 +219,7 @@ take_chipseq_sample_wnc(
 );
 
 int
-generic_update_mapping( struct rawread_db_t* rawread_db,
-                        struct mapped_reads_db* rdb, 
+generic_update_mapping( struct mapped_reads_db* rdb, 
                         struct genome_data* genome,
                         enum assay_type_t,
                         int num_samples,

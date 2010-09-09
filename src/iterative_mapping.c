@@ -644,6 +644,7 @@ update_mapping(
 void
 build_random_starting_trace( 
     struct trace_t* traces, 
+    struct genome_data* genome,
     struct mapped_reads_db* rdb,
     
     void (* const update_trace_expectation_from_location)(
@@ -655,6 +656,9 @@ build_random_starting_trace(
                                            const struct mapped_read_t* const r  )
     )
 {
+    global_fl_dist = rdb->fl_dist;
+    global_genome = genome;
+    
     /* int traces to a low consant. This should heavily favor prior reads. */
     set_trace_to_uniform( traces, EXPLORATION_PRIOR );
 
@@ -777,7 +781,7 @@ sample_random_traces(
         init_traces( genome, &sample_trace, num_tracks );
 
         build_random_starting_trace( 
-            sample_trace, rdb, 
+            sample_trace, genome, rdb, 
             update_trace_expectation_from_location,
             update_mapped_read_prbs
         );
@@ -1495,7 +1499,7 @@ update_chipseq_mapping_wnc(
         set_trace_to_uniform( *ip_trace, 1 );    
     } else {
         build_random_starting_trace( 
-            *ip_trace, ip_rdb, 
+            *ip_trace, genome, ip_rdb, 
             update_chipseq_trace_expectation_from_location,
             update_chipseq_mapped_read_prbs
         );
@@ -1672,8 +1676,7 @@ take_chipseq_sample_wnc(
 
 
 int
-generic_update_mapping(  struct rawread_db_t* rawread_db,
-                         struct mapped_reads_db* rdb, 
+generic_update_mapping(  struct mapped_reads_db* rdb, 
                          struct genome_data* genome,
                          enum assay_type_t assay_type,
                          int num_samples,
@@ -1759,19 +1762,22 @@ generic_update_mapping(  struct rawread_db_t* rawread_db,
     fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
             ((float)(stop-start))/CLOCKS_PER_SEC );
     
-    /* write the mapped reads to SAM */
-    start = clock();
-    fprintf(stderr, "NOTICE      :  Writing relaxed mapped reads to SAM file.\n" );
-    
-    FILE* sam_ofp = fopen( "mapped_reads_relaxed.sam", "w+" );
-    write_mapped_reads_to_sam( 
-        rawread_db, rdb, genome, false, false, sam_ofp );
-    fclose( sam_ofp );    
-    
-    stop = clock();
-    fprintf(stderr, 
-            "PERFORMANCE :  Wrote relaxed mapped reads to sam in %.2lf seconds\n", 
-            ((float)(stop-start))/CLOCKS_PER_SEC );
+    /* If users want to do this, why not just call the utility? */
+    #if 0 
+        /* write the mapped reads to SAM */
+        start = clock();
+        fprintf(stderr, "NOTICE      :  Writing relaxed mapped reads to SAM file.\n" );
+        
+        FILE* sam_ofp = fopen( "mapped_reads_relaxed.sam", "w+" );
+        write_mapped_reads_to_sam( 
+            rawread_db, rdb, genome, false, false, sam_ofp );
+        fclose( sam_ofp );    
+        
+        stop = clock();
+        fprintf(stderr, 
+                "PERFORMANCE :  Wrote relaxed mapped reads to sam in %.2lf seconds\n", 
+                ((float)(stop-start))/CLOCKS_PER_SEC );
+    #endif
     
     error = sample_random_traces(
         rdb, genome, 

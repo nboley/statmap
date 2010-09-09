@@ -4,7 +4,7 @@ compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	mapped_reads_into_wiggle estimate_read_density call_peaks \
-	bootstrap_wiggles_from_mapped_reads \
+	bootstrap_wiggles_from_mapped_reads build_random_start_from_mapped_reads \
 	
 	
 
@@ -79,6 +79,17 @@ bootstrap_wiggles_from_mapped_reads : bootstrap_wiggles_from_mapped_reads.c
 
 bootstrap_wiggles_from_mapped_reads.c :
 
+build_random_start_from_mapped_reads : build_random_start_from_mapped_reads.c
+	$(compiler) $(compile_options) -o build_random_start_from_mapped_reads build_random_start_from_mapped_reads.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
+	 ../src/pseudo_location.o ../src/iterative_mapping.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	-lm -pthread
+	cp build_random_start_from_mapped_reads ../bin/
+
+build_random_start_from_mapped_reads.c :
+
 call_peaks : call_peaks.c
 	$(compiler) $(compile_options) -o call_peaks call_peaks.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
@@ -104,3 +115,4 @@ clean :
 	-rm call_peaks
 	-rm sample_mapping
 	-rm bootstrap_wiggles_from_mapped_reads
+	-rm build_random_start_from_mapped_reads

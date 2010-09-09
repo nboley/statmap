@@ -112,7 +112,7 @@ sample_relaxed_mapping(
     {
         fprintf(stderr, "DEBUG       :  Building Random Starting Trace.\n" );
         build_random_starting_trace( 
-            starting_trace, rdb, 
+            starting_trace, genome, rdb, 
             update_expectation,
             update_reads
         );
