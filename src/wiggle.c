@@ -555,6 +555,8 @@ write_wiggle_from_trace_to_stream(
     FILE* os, /* output stream */                           
     const double filter_threshold )
 {    
+    unsigned int global_counter = 0;
+
     int trace_index, j;
     unsigned int k;
     for( trace_index = 0; trace_index < traces->num_traces; trace_index++ )
@@ -577,9 +579,14 @@ write_wiggle_from_trace_to_stream(
             
             for( k = 0; k < traces->trace_lengths[j]; k++ )
             {
+                global_counter += 1;
+                
                 if( traces->traces[trace_index][j][k] > filter_threshold )
                     fprintf( os, "%i\t%e\n", k+1, 
                              traces->traces[trace_index][j][k] );
+                
+                if( global_counter%1000000 == 0 )
+                    fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
             }
         }
     }

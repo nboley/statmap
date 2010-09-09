@@ -138,6 +138,8 @@ bootstrap_traces_from_mapped_reads(
         fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
         return;
     }
+
+    int num_error_reads = 0;
     
     /* Update the trace from reads chosen randomly, with replacement */
     unsigned int i;
@@ -154,6 +156,11 @@ bootstrap_traces_from_mapped_reads(
         r.num_mappings = *((unsigned short*) read_start);
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
+
+        if( i%1000000 == 0 )
+        {
+            fprintf( stderr, "NOTICE      :  Read %i reads in bootstrap\n", i );
+        }
 
         /* If there are no mappings, then this is pointless */
         if( r.num_mappings > 0 )
@@ -186,9 +193,10 @@ bootstrap_traces_from_mapped_reads(
                     if( cum_dist < 0.999 )
                     {
                         /* BUG BUG BUG - I dont think that this should ever happen */
+                        num_error_reads += 1;
                         // fprintf( stderr, "%e\t%li\t%i\n", cum_dist, r.read_id, get_start_from_mapped_read_location( r.locations + j ) );
                         // fprintf( stderr, "ERROR      : There is a serious error in the bs code. It appears as if the read cond probs dont sum to 1 - contuining but PLEASE file a bug report.\n");
-                        return;
+                        continue;
                     }
                 }
             }
@@ -204,6 +212,13 @@ bootstrap_traces_from_mapped_reads(
                 r.locations + j, tmp_cond_prb  );
         }
     }
+    
+    if( num_error_reads > 0 )
+    {
+        fprintf( stderr, "ERROR      :  %i reads ( out of %i ) had errors in which the cum dist didnt add up to 1. \n", 
+                 num_error_reads, reads_db->num_mmapped_reads );
+    }
+    
     return;
 }
 
@@ -699,7 +714,7 @@ build_random_starting_trace(
                 assert( j <= r->num_mappings );
                 if( j == r->num_mappings )
                 {
-                    printf( "WARNING - rounding error! %e\n", cum_dist );
+                    // printf( "WARNING - rounding error! %e\n", cum_dist );
                     j = r->num_mappings - 1;
                     assert( cum_dist > 0.999 );
                 }
