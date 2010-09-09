@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 25
+NUM_SAMPLES = 1
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -191,9 +191,10 @@ def parse_wig( fname, genome ):
 
 def parse_bwtout( fname, genome, paired_end ):
     fp = open( fname )
-    tracks = []
-    tracks.append( numpy.zeros(len(genome.values()[0])+1) )
-    tracks.append( numpy.zeros(len(genome.values()[0])+1) )
+    tracks = [ {}, {} ]
+    for index, chr_name in enumerate( genome.keys() ):
+        tracks[0][chr_name] = numpy.zeros(len(genome[chr_name])+1)
+        tracks[1][chr_name] = numpy.zeros(len(genome[chr_name])+1)
     while True:
         line = fp.readline()
         if line == '': break
@@ -204,10 +205,11 @@ def parse_bwtout( fname, genome, paired_end ):
         else:
             loc = int( line.strip().split("\t")[3] )
             strand = line.strip().split("\t")[1]
+            chr = line.strip().split("\t")[2]
             if strand == '+':
-                tracks[0][loc:(loc+35)] += 0.5/(35)
+                tracks[0][chr][loc:(loc+35)] += 1.0/(35)
             else:
-                tracks[1][loc:(loc+35)] -= 0.5/(35)
+                tracks[1][chr][loc:(loc+35)] += 1.0/(35)
     fp.close()
     return tracks
 
@@ -257,7 +259,7 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     
     return
 
-def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True ):
+def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, polymorphic=True ):
     region = build_chipseq_region( )
     
     # simulate the ip reads
@@ -330,8 +332,10 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True )
         curr_bp = mutated_chr2L[ rand_index ]
         valid_bps = [ bp for bp in bps if bp != curr_bp ]
         mutated_chr2L[rand_index] = random.choice( valid_bps )
+
+    if polymorphic:
+        genome['chr2L_maternal'] = mutated_chr2L.tostring()
     
-    genome['chr2L_maternal'] = mutated_chr2L.tostring()
     sc.write_genome_to_fasta( genome, genome_of )
     genome_of.close()
     
@@ -516,39 +520,36 @@ def plot_wig_bounds( dir, png_fname ):
         
     rpy.r.dev_off()
 
-def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
+def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=True ):
     region = build_chipseq_region( )
-    genome = { 'chr2L_paternal': region, 'chr2L_maternal': region }
-
+    if polymorphic:
+        genome = { 'chr2L_paternal': region, 'chr2L_maternal': region }
+    else: 
+        genome = { 'chr2L_paternal': region }
+            
     # set up the plotting environment
     curr_dir = os.getcwd()
-    rpy.r.png( os.path.join(curr_dir, png_fname), width=15.0, height=15.0, units='in', res=300 )
-    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5, mfrow=c(2,1))")
+    rpy.r.png( os.path.join(curr_dir, png_fname), width=8.0, height=4.0*len(genome), units='in', res=300 )
+    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5, mfrow=c(%i,1))" % len(genome) )
     
     density_max = 1.0 # max( density[0].max(), density[1].max() )
-    rpy.r.plot( (), main='Paternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
-    rpy.r.plot( (), main='Maternal Fragment Coverage Density', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.55, 0.55) )
+    #rpy.r.plot( (), main='Paternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
+    #rpy.r.plot( (), main='Maternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
+    rpy.r.plot( (), main='', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
 
     def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
-        rpy.r("par(mfg=c(1,1))")
-        if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_paternal' ):
-            rpy.r.points( wiggle_density[0]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_paternal' ):
-            rpy.r.points( -1*wiggle_density[1]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_paternal' ):
-            rpy.r.points( wiggle_density[2]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-        if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_paternal' ):
-            rpy.r.points( -1*wiggle_density[3]['chr2L_paternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-        rpy.r("par(mfg=c(2,1))")
-        if len( wiggle_density ) > 0 and wiggle_density[0].has_key( 'chr2L_maternal' ):
-            rpy.r.points( wiggle_density[0]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 1 and wiggle_density[1].has_key( 'chr2L_maternal' ):
-            rpy.r.points( -1*wiggle_density[1]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-        if len( wiggle_density ) > 2 and wiggle_density[2].has_key( 'chr2L_maternal' ):
-            rpy.r.points( wiggle_density[2]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-        if len( wiggle_density ) > 3 and wiggle_density[3].has_key( 'chr2L_maternal' ):
-            rpy.r.points( -1*wiggle_density[3]['chr2L_maternal']*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-    
+        for index, key in enumerate(genome.keys()):
+            print genome.keys(), index, key
+            rpy.r("par(mfg=c(%i,1))" % (index+1))
+            if len( wiggle_density ) > 0 and wiggle_density[0].has_key( key ):
+                rpy.r.points( wiggle_density[0][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 1 and wiggle_density[1].has_key( key ):
+                rpy.r.points( -1*wiggle_density[1][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+            if len( wiggle_density ) > 2 and wiggle_density[2].has_key( key ):
+                rpy.r.points( wiggle_density[2][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+            if len( wiggle_density ) > 3 and wiggle_density[3].has_key( key ):
+                rpy.r.points( -1*wiggle_density[3][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+        
     def plot_wiggles( dir, color  ):
         fnames = []
         os.chdir(dir)
@@ -560,9 +561,48 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
             density = parse_wig( fname, genome )
             plot_wiggle( density, color )
         os.chdir(curr_dir)
+    
+    
+    rpy.r("par(mfg=c(1,1))")
+    true_density = parse_wig( "true_read_coverage.wig", genome )    
+    plot_wiggle( true_density, 'black', lty=3, lwd=1 )
 
+    density = parse_wig( "./smo_chipseq_sim/samples/sample1.ip.wig", genome )
+    plot_wiggle( density, 'blue', lwd=1 )
+    
+    # plot_wiggles( "./bootstrapped_samples/", 'black' )
+    # plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/all_traces/sample1/", 'black' )
+
+    
+    density = parse_wig( "bssample_min.wig", genome )
+    plot_wiggle( density, 'green', lwd=1 )
+
+    density = parse_wig( "bssample_max.wig", genome )
+    plot_wiggle( density, 'orange', lwd=1 )
+    
+    
     # parse bowtie out
+    """
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
+    plot_wiggle( density, 'dark green', lty=1, lwd=2 )
+    """
+
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        true_density = parse_wig( "binding_site_occupancies.wig", genome )
+        for index, value in enumerate(true_density[0].values()[0]):
+            if value > 0.50:
+                rpy.r.abline( v=index, col='red', lty=2, lwd=2  )
+
+    """
+    density = parse_wig( "./smo_chipseq_sim/marginal_mappings_fwd.wig", genome )
+    plot_wiggle( density, 'blue' )
+
+    density = parse_wig( "./smo_chipseq_sim/marginal_mappings_bkwd.wig", genome )
+    plot_wiggle( density, 'blue' )
+    """
+    
+    return
     
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'purple' )
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'orange' )
@@ -578,12 +618,10 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     nf = 0.4
     density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
     plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
-    rpy.r("par(mfg=c(1,1))")
-    rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
-    rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
-    rpy.r("par(mfg=c(2,1))")
-    rpy.r.abline( h=0.95*nf, col='red', lwd=1, lty=2  )
-    rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
+        rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
     
     """
     density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
@@ -592,28 +630,11 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
     if len( density ) > 1:
         rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     """
-    
-    rpy.r("par(mfg=c(1,1))")
-    true_density = parse_wig( "true_read_coverage.wig", genome )
-    plot_wiggle( true_density, 'black', lty=3, lwd=5 )
-
-    rpy.r("par(mfg=c(1,1))")
-    true_density = parse_wig( "binding_site_occupancies.wig", genome )
-    for index, value in enumerate(true_density[0].values()[0]):
-        if value > 0.25:
-            rpy.r.abline( v=index, col='black', lty=2  )
-    rpy.r("par(mfg=c(2,1))")
-    true_density = parse_wig( "binding_site_occupancies.wig", genome )
-    for index, value in enumerate(true_density[0].values()[0]):
-        if value > 0.25:
-            rpy.r.abline( v=index, col='black', lty=2  )
-    
-    rpy.r("par(mfg=c(1,1))")
-    for bp_index in mut_indexes:
-        rpy.r.abline( v=bp_index, col='red', lty=2  )
-    rpy.r("par(mfg=c(2,1))")
-    for bp_index in mut_indexes:
-        rpy.r.abline( v=bp_index, col='red', lty=2  )
+        
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        for bp_index in mut_indexes:
+            rpy.r.abline( v=bp_index, col='red', lty=2  )
 
     # x=7700, y=0.5,
     rpy.r("""legend( x=50, y=0.49,
@@ -629,7 +650,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[] ):
 
 if __name__ == '__main__':
     paired_end=False
-    NUM_MUTS = 3
+    NUM_MUTS = 0
     
     if False:
         test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )
@@ -639,11 +660,12 @@ if __name__ == '__main__':
             pass
 
     if True:
-        mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end )
-        map_with_bowtie( paired_end )
-        map_with_statmap( paired_end=paired_end )
-        call_peaks()
-        plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes )
+        #mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end, polymorphic=False )
+        #map_with_bowtie( paired_end )
+        #map_with_statmap( paired_end=paired_end )
+        # call_peaks()
+        mut_indexes = []
+        plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes, polymorphic=False )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
         if False and sc.CLEANUP:

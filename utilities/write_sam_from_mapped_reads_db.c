@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "utility_common.h"
+
 #include "../src/mapped_read.h"
 #include "../src/genome.h"
 #include "../src/sam.h"
@@ -9,20 +11,6 @@
 
 /* make it possible to link */
 int min_num_hq_bps = -1;
-
-
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        exit( -1 );
-    }
-    return tmp;
-}
 
 void usage()
 {
@@ -45,13 +33,9 @@ int main( int argc, char** argv )
         exit( 1 );
     }
 
-
     /* Load the genome */
     struct genome_data* genome;
-    init_genome( &genome );
-    FILE* genome_fp = open_check_error( "genome.fa", "r" );
-    add_chrs_from_fasta_file( genome,  genome_fp );
-    // BUG Why does it segfault when I close the file handle?
+    load_genome_from_disk( &genome, GENOME_FNAME );
     
     /* load the mapped read db */
     char* mpd_rd_fname = "mapped_reads.db";
@@ -60,26 +44,11 @@ int main( int argc, char** argv )
 
     /* load the rawreads */
     struct rawread_db_t* raw_rdb;
-    init_rawread_db( &raw_rdb );
-    
-    /* try to open the single end file to see if the reads are single ended */
-    FILE* tmp = fopen( "reads.unpaired", "r" );
-    if( tmp != NULL )
+    populate_rawread_db( &raw_rdb, "reads.unpaired", "reads.pair1", "reads.pair2" );
+    if( NULL == raw_rdb )
     {
-        fclose( tmp );
-
-        add_single_end_reads_to_rawread_db(
-            raw_rdb, "reads.unpaired", FASTQ 
-        );
-    } 
-    /* else, assume the reads are paired */
-    else {
-        add_paired_end_reads_to_rawread_db(
-            raw_rdb, 
-            "reads.pair1",
-            "reads.pair2",
-            FASTQ 
-        );
+        fprintf( stderr, "FATAL       :  Can not load raw reads.\n" );
+        exit( 1 );
     }
     
     write_mapped_reads_to_sam( raw_rdb, mpd_rdb, genome, true, false, stdout );

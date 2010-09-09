@@ -128,6 +128,8 @@ bootstrap_traces_from_mapped_reads(
         const struct mapped_read_location* const loc)
 )
 {        
+    global_fl_dist = reads_db->fl_dist;
+    
     /* First, zero the trace to be summed into */
     zero_traces( traces );
     

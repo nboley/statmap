@@ -19,6 +19,10 @@
 #define MIN_TRACE_FNAME "min_trace.wig"
 
 // Samples output 
+
+#define SAM_MARGINAL_OFNAME "mapped_reads.sam"
+#define SAM_MARGINAL_NC_OFNAME "mapped_reads.nc.sam"
+
 // Bootstrap 
 #define SAVE_BOOTSTRAP_SAMPLES true
 #define SAVE_AGGREGATED_BOOTSTRAP_SAMPLES (false && SAVE_BOOTSTRAP_SAMPLES)

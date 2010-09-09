@@ -27,7 +27,7 @@ CALL_PEAKS_PATH = '../bin/call_peaks'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -419,7 +419,7 @@ def test_sequence_finding( read_len, rev_comp = False ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -o %s\
+    call = "%s -g tmp.genome -s -r tmp.fastq -s -o %s\
                              -t 1 " % ( STATMAP_PATH, output_directory )
     
     print >> stdout, re.sub( "\s+", " ", call)
@@ -525,7 +525,7 @@ def test_paired_end_reads( read_len ):
     reads_of_1.close()
     reads_of_2.close()
 
-    call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq -o %s \
+    call = "%s -g tmp.genome -s -1 tmp.1.fastq -2 tmp.2.fastq -o %s \
                                -t 1 " % ( STATMAP_PATH, output_directory)
         
     print >> stdout, re.sub( "\s+", " ", call)
@@ -603,7 +603,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -o %s \
+    call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
                              -t %i " % ( STATMAP_PATH, output_directory, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
@@ -692,7 +692,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -o %s \
+    call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
                              -p %e -t %i " % ( STATMAP_PATH, output_directory, min_penalty, n_threads )
         
     print >> stdout, re.sub( "\s+", " ", call)
@@ -846,7 +846,7 @@ def test_snps( read_len, num_snps = 10 ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -r tmp.fastq -s tmp.snpcov -o %s \
+    call = "%s -g tmp.genome -s -r tmp.fastq -s tmp.snpcov -o %s \
                              -p %.2f -m %.2f \
                              -t 1 " % ( STATMAP_PATH, output_directory, -10.0, 0.50 )
         

@@ -302,7 +302,7 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:p:m:s:f:l:a:w:t:q:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:v:f:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -342,12 +342,15 @@ parse_arguments( int argc, char** argv )
         case 'o': // output directory
             args.output_directory = optarg;
             break;
-
+        case 's': // whether to write sam files or not
+            args.sam_output_fname = SAM_MARGINAL_OFNAME;
+            break;
+        
         case 'a': // the assay type
             assay_name = optarg;
             break;
 
-        case 's': // snp input file
+        case 'v': // snp input file
             args.snpcov_fname = optarg;
             break;
         case 'f': // fragment length file
@@ -846,20 +849,25 @@ map_marginal( args_t* args,
                     ((float)(stop-start))/CLOCKS_PER_SEC );
     
     /* write the mapped reads to SAM */
-    start = clock();
-    fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-    FILE* sam_ofp = NULL;
-    if ( false == is_nc ) {
-        sam_ofp = fopen( "mapped_reads.sam", "w+" );
-    } else {
-        sam_ofp = fopen( "mapped_reads.NC.sam", "w+" );
+    /* Dont do this anymore - it wastes time and for big runs,
+       it's easier to just run the supplementary script */
+    if( args->sam_output_fname != NULL )
+    {
+        start = clock();
+        fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
+        FILE* sam_ofp = NULL;
+        if ( false == is_nc ) {
+            sam_ofp = fopen( SAM_MARGINAL_OFNAME, "w+" );
+        } else {
+            sam_ofp = fopen( SAM_MARGINAL_NC_OFNAME, "w+" );
+        }
+        write_mapped_reads_to_sam( 
+            rdb, *mpd_rds_db, genome, false, false, sam_ofp );
+        fclose( sam_ofp );    
+        stop = clock();
+        fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
+                ((float)(stop-start))/CLOCKS_PER_SEC );
     }
-    write_mapped_reads_to_sam( 
-        rdb, *mpd_rds_db, genome, false, false, sam_ofp );
-    fclose( sam_ofp );    
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
     
     return;
 }

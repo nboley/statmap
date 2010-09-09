@@ -307,8 +307,11 @@ aggregate_over_wiggles(
     int i;
 
     /* BUG!!! HORRIBLE HACK */
-    char** chr_names = malloc(sizeof(char*)*100);
-    char** track_names = malloc(sizeof(char*)*100);
+    char** chr_names = calloc(100, sizeof(char*));
+    char** track_names = calloc(100, sizeof(char*));
+    track_names[0] = NULL;
+    track_names[1] = NULL;
+    assert( track_names[0] == NULL );
     
     /* we implement this as a merge sort. 
        First, we read lines from each until we have a chr and position.

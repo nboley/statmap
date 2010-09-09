@@ -28,7 +28,7 @@ def aggregate_over_wigs_in_dir( directory, output_fname, aggregate_type, suffix=
     # build the list of argumens
     args = [ aggregate_over_wiggles_exec, aggregate_type  ]
     args.extend( fns )
-
+    
     # open the output file
     f = open( output_fname, "w" )
     try: 
