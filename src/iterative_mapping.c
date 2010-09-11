@@ -157,7 +157,7 @@ bootstrap_traces_from_mapped_reads(
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
 
-        if( i%1000000 == 0 )
+        if( i > 0 && i%1000000 == 0 )
         {
             fprintf( stderr, "NOTICE      :  Read %i reads in bootstrap\n", i );
         }
