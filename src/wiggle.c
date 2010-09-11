@@ -585,7 +585,7 @@ write_wiggle_from_trace_to_stream(
                     fprintf( os, "%i\t%e\n", k+1, 
                              traces->traces[trace_index][j][k] );
                 
-                if( global_counter%1000000 == 0 )
+                if( global_counter%10000000 == 0 )
                     fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
             }
         }
