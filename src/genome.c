@@ -501,8 +501,13 @@ add_chrs_from_fasta_file(
             }
         }        
 
-        assert(isalpha(bp));
-        chr[i] = bp;
+        if( !isalpha(bp))
+        {
+            fprintf( stderr, "ERROR           : Unrecognized character '%c' - ignoring\n", bp );
+            
+        } else {
+            chr[i] = bp;
+        }
         i++;        
     }
     
