@@ -1587,6 +1587,8 @@ take_chipseq_sample_wnc(
     enum bool random_start )
 
 {
+    global_fl_dist = chip_mpd_rds_db->fl_dist;
+
     /* traces and track names to store the 2 marginal densities */
     struct trace_t* ip_trace;
     struct trace_t* nc_trace;
