@@ -513,9 +513,9 @@ parse_arguments( int argc, char** argv )
         if( args.pair1_NC_reads_fnames != NULL )
         {
             safe_copy_into_output_directory( 
-                args.pair1_NC_reads_fnames, args.output_directory, "reads.NC.pair2" );
+                args.pair1_NC_reads_fnames, args.output_directory, "reads.NC.pair1" );
             
-            if( args.pair2_NC_reads_fnames != NULL )
+            if( args.pair2_NC_reads_fnames == NULL )
             {
                 fprintf( stderr, "FATAL     : The NC reads must be paired for a paired experiment.\n" );
                 exit( 1 );

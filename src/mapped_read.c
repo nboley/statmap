@@ -334,9 +334,12 @@ mapped_read_from_candidate_mapping_arrays(
         {
             /* if the chrs mismatch, since these are sorted, we know that
              * there is no need to continue */
-            if( r2_array[j].chr > r2_array[i].chr )
+            if( r2_array[j].chr > r1_array[i].chr )
                 break;
-
+            
+            if( r2_array[j].chr != r1_array[i].chr )
+                continue;
+            
             /* Determine which of the candidate mappings corresponds 
                with the first pair */
             candidate_mapping* first_read = NULL;
@@ -349,6 +352,8 @@ mapped_read_from_candidate_mapping_arrays(
                 first_read = r2_array + j;
                 second_read = r1_array + i;
             }
+            
+            assert( first_read->chr == second_read->chr );
             
             int rv = join_two_candidate_mappings( first_read, second_read, &loc );
             /* if the location is valid ( non-zero probability ) */

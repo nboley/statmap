@@ -1,15 +1,18 @@
+-28) Do I need strand specific densities for paired end chip seq?
 -27) Fix bug in iterative mapping bector operations that uses incorrectly shifted chipseq trace
 -26.9) Fix failure to free calculated chipseq densities in chipseq_bs_density
 -26) Fix the hack in map_marginal that uses the is_nc flag. ( What's better? )
 -25) COPY estimated_fl_dist into the output directory
 -24) simple repeat analysis, with an eye towards item -23
--23) PSEDUO locations - speed up repeats
+H -23) PSEDUO locations - speed up repeats
+  ( Review this code - needs to be faster and more efficient in iterative. Currently,
+    we just expand this into mapped reads ( but we pbly shouldnt )
 -22.5) make the mapped_locaiton type smaller - maybe half floats?
--22) Fix the bootstrap aggregation code
+X -22) Fix the bootstrap aggregation code
 -21) Make random number generation actually uniform by stopping  rand()%MODULO usage
 -20.1) FIX the chr name hack in the wiggle aggregation code. Currently, we 
        hard coded the max number of chr names to be 100. That is realy really DIRTY
--20.01) use vector operations for trace aggregation
+X -20.01) use vector operations for trace aggregation
 -20.001) FIX not accounting for the tag length in fl dist density ( build_chipseq_bs_density ) 
          ALSO, at the same time, look for a better place to put that density
 X -20) Make DEFAULT output use timestamp

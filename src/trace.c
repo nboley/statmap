@@ -432,4 +432,3 @@ aggregate_over_traces(  struct trace_t* update_trace,
 
     return;
 }
-

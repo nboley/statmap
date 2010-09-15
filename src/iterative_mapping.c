@@ -152,10 +152,14 @@ bootstrap_traces_from_mapped_reads(
         /* read a mapping into the struct */
         struct mapped_read_t r;
         r.read_id = *((unsigned long*) read_start);
+
         read_start += sizeof(unsigned long)/sizeof(char);
         r.num_mappings = *((unsigned short*) read_start);
+
         read_start += sizeof(unsigned short)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
+        
+        r.free_locations = false;
 
         if( i > 0 && i%1000000 == 0 )
         {
@@ -1013,15 +1017,23 @@ update_chipseq_trace_expectation_from_location(
     if( (flag&IS_PAIRED) != 0 )
     {
         const float scale = (1.0/(stop-start));
+
+        int trace_index;
+        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        {
+            trace_index = 0;
+        } else {
+            trace_index = 1;
+        }
         
         for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
         {
             /* lock the spinlocks */
             #ifdef LOCK_TRACES
                 #ifdef USE_MUTEX
-                pthread_mutex_lock( traces->locks[0][ chr_index ] + k );
+                pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
                 #else
-                pthread_spin_lock( traces->locks[0][ chr_index ] + k );
+                pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
                 #endif
             #endif
         
@@ -1034,16 +1046,16 @@ update_chipseq_trace_expectation_from_location(
                 assert( chr_index < traces->num_chrs );
                 assert( j < traces->trace_lengths[chr_index] );
                 
-                traces->traces[0][chr_index][j] 
+                traces->traces[trace_index][chr_index][j] 
                     += scale*cond_prob;
             }
 
             /* unlock the spinlocks */
             #ifdef LOCK_TRACES
                 #ifdef USE_MUTEX
-                pthread_mutex_unlock( traces->locks[0][ chr_index ] + k );
+                pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
                 #else
-                pthread_spin_unlock( traces->locks[0][ chr_index ] + k );
+                pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
                 #endif
             #endif
         }
@@ -1196,7 +1208,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             for( j = start; j <= stop; j++ )
             {
                 assert( j < traces->trace_lengths[chr_index] );
-                window_density += traces->traces[0][chr_index][j];
+                window_density += traces->traces[0][chr_index][j]
+                                  + traces->traces[1][chr_index][j];
             }
 
             /* 
