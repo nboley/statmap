@@ -36,11 +36,24 @@ OR
 
 In addition, there are several optional input types
 
--n - snips as a snpcov file
+-c : Specifies negative control data ( only used with the Chip Seq assay type )
+
+OR
+
+-3 : Specifies pair 1 negative control data ( only Chip Seq )
+-4 : Specifies pair 2 negative control data ( only Chip Seq )
 
 ===== Arguments ====================================================================
 
 Required Arguments:
+
+CURRENTLY NONE
+
+Suggested Arguments:
+
+-o : directory to write output to.
+
+Optional Arguments:
 
 -p : The minimum match penalty.
 
@@ -58,8 +71,6 @@ That is, if we find a sequence with a match penalty of -6, but we have already
 observed a sequence with a match penalty of -2, then we will only return the
 new sequence if -m is >= 4. It defaults to -2.1, which is sufficient to map  
 duplicate reads with 1 high quality mismatch.
-
-Optional Arguments:
 
 -a : The type of the underlying assay.
 
@@ -111,7 +122,7 @@ Arguments that you probably dont want to touch unless you know what you are doin
 
 ===== Output ========================================================================
 
-Stamtmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min ), in
+Statmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min ), in
 which it stores all of the mapping results. The list of saved output depends on the 
 command line parameters. 
 
@@ -126,24 +137,14 @@ The ouput files can be divided into several categories:
 WIGGLE:
 
 Wiggle tracks are assay dependent. For instance, CAGE reads returns two tracks - 
-a forward stranded track and a reverse stranded track, whereas chip-seq just
+a forward stranded track and a reverse stranded track, whereas paired chip-seq just
 returns read densities on one strand. 
 
+marginal_mapping_(fwd/bkwd).wig - 
 
-marginal_mapping.wig - 
-
-Stores an estiamte of the expectation of the posterior read density under the 
+Stores an estimate of the expectation of the posterior read density under the 
 uniform prior assumption on the reference genome. That is, if a read maps equally
 well to two positions, we set the 'probability' that it came from each to 0.5
-
-relaxed_mapping.wig - 
-
-The read density after the lhd was maximized from the marginal starting location.
-This is probably the best estiamte of read density, but there will be significant 
-variance. Ie, if one is running a chip-seq experiment as exploration for candidate
-regions for an additional assay, this is probably the best file to use. However, 
-for use with ( for instance ) a peak caller, repeats will probably give higher
-numbers of false positives.
 
 starting_samples/sample_X.wig -
 
@@ -158,7 +159,8 @@ results from different runs, you are not sampling deeply enough. )
 
 starting_samples/meta_info.csv -
 
-Store meta information about each sample. For now, this is only the likelihood.
+Store meta information about each starting sample. For now, this is only the 
+likelihood.
 
 samples/sample_X.wig -
 
@@ -173,6 +175,17 @@ samples/meta_info.csv -
 
 Store meta information about each sample. For now, this is only the likelihood.
 
+bootstrap_samples/all_traces/sampleX/bssampleY.wig
+
+Stores a bootstrap sample from local maximum X, bootstrap sample Y.
+
+
+============ GENERATE THESE WITH ./utilities/build_aggregates.py =====================
+
+bootstrap_samples/(min/max)_traces
+
+Store wiggles aggregated over each of the bootstrap samples. 
+
 min_read_density.wig - 
 
 Stores the minimum over all samples. This is a very conservative lower bound on the 
@@ -182,6 +195,12 @@ max_read_density.wig -
 
 Stores the maximum over all samples. This is a very conservative upper bound on the 
 read density.
+
+======================================================================================
+
+============ GENERATE SAM WITH mapped_reads_into_sam =================================
+
+WARNING - SAM files can get very big WARNING
 
 SAM:
 
@@ -202,6 +221,8 @@ XP - stores the probability, after relaxation, that a read came from this locati
 Furthermore, for paired end reads, statmap only reports reads that can be paired.
 ( This is, at least, against the spirit of the SAM format, but I dont really see the
   point of retaining unpaired reads ).
+
+=====================================================================================
 
 SNPCOV:
 
@@ -255,8 +276,8 @@ Furthermore, there are several functions that can be called to run specific test
 simulate_chipseq.py:
 
 This simulates to explore the variance estimates by simulating a chip-seq experiment, 
-with a paralog and plotting the starting location and updated read densities in the files 
-starting_samples.png and relaxed_samples.png.
+with a paralog and plotting the starting location and updated read densities in 
+bootstrap_samples.png.
 
 
 

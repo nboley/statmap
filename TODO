@@ -93,7 +93,7 @@ X 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed ra
    for reads that have varying sizes. )
 9) Check the atoi, atof formatting in parse args. 
 10) Change the node type to an enum
-11) allow mapping of N's
+X 11) allow mapping of N's
 12) Allow mapping of really short reads
 X 13) Create candidate_mappings.h ( and, maybe, mapped_locations.h )
 X    Currently, mapped_locations, candidate_mappings, and mapped_reads are all in mapped_location.h/c
@@ -101,8 +101,8 @@ X    This is a bit confusing, and a pretty large file. I should probably split t
 X    seperate files. 
 13b) Do the smae as 13 excpet with db_interface.c, which is way confusing. 
 14)  Check for duplicates in the snp coverage file
-15)  Add code to iteratively map directly from a sam file
-15b) Write code to produce a mappings_db from a sam file
+O 15)  Add code to iteratively map directly from a sam file
+O 15b) Write code to produce a mappings_db from a sam file
 16) Allow reference genomes from multiple files
 17) Write config file parser, and use it
 18) Add optimization to filter impossible paired end reads 
