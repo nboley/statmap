@@ -51,7 +51,6 @@ int main( int argc, char** argv )
     if( num_threads <= 0 )
         num_threads = 1;
     fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
-    
 
     min_num_hq_bps = 10;
     /* END parse arguments */
@@ -84,6 +83,8 @@ int main( int argc, char** argv )
 
     if( assay_type == CHIP_SEQ )
         build_chipseq_bs_density( IP_mpd_rdb->fl_dist );
+
+    assert( IP_mpd_rdb->fl_dist != NULL );
     
     /* load the rawreads */
     struct rawread_db_t* raw_rdb;
@@ -115,6 +116,15 @@ int main( int argc, char** argv )
         mmap_mapped_reads_db( mpd_NC_rdb );
         fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
         index_mapped_reads_db( mpd_NC_rdb );
+
+        /* load the fragment length distribution estimate */
+        FILE* frag_len_fp = open_check_error( "estimated_fl_dist.txt", "r" );
+        build_fl_dist_from_file( mpd_NC_rdb, frag_len_fp );
+        fclose(frag_len_fp);
+        
+        if( assay_type == CHIP_SEQ )
+            build_chipseq_bs_density( mpd_NC_rdb->fl_dist );
+
     }
     
     

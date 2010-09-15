@@ -14,7 +14,7 @@ import gzip
 import tests as sc # for simulation code
 
 NUM_READS = 1000
-NUM_SAMPLES = 10
+NUM_SAMPLES = 25
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -534,7 +534,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     density_max = 1.0 # max( density[0].max(), density[1].max() )
     rpy.r.plot( (), main='Paternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
     rpy.r.plot( (), main='Maternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
-    # rpy.r.plot( (), main='', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
+    #rpy.r.plot( (), main='', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
 
     def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
         for index, key in enumerate(genome.keys()):
@@ -548,37 +548,72 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
             if len( wiggle_density ) > 3 and wiggle_density[3].has_key( key ):
                 rpy.r.points( -1*wiggle_density[3][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         
-    def plot_wiggles( dir, color  ):
+    def plot_wiggles( dir, color, lty=1, lwd=0.5, filter=""  ):
         fnames = []
         os.chdir(dir)
         for file in os.listdir("./"):
-            if fnmatch.fnmatch(file, '*.wig'):
+            if fnmatch.fnmatch(file, '*%s.wig' % filter):
                 fnames.append( file )
                 
         for fname in fnames:
             density = parse_wig( fname, genome )
             plot_wiggle( density, color )
         os.chdir(curr_dir)
+
+    density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
+    plot_wiggle( density, 'dark green', lty=1, lwd=2 )
+
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        for bp_index in mut_indexes:
+            rpy.r.abline( v=bp_index, col='red', lty=2  )
+
+    return
     
-   
+    """
+    density = parse_wig( "./smo_chipseq_sim/samples/sample%i.ip.wig" % sample_num, genome )
+    plot_wiggle( density, 'black', lwd=1 )
+
+    density = parse_wig( "./smo_chipseq_sim/samples/sample%i.nc.wig" % sample_num, genome )
+    plot_wiggle( density, 'black', lty=3, lwd=1 )
+    """
+
+    # plot_wiggles( "./smo_chipseq_sim/samples", 'black', lty=1, lwd=1, filter=".ip" )
+    # plot_wiggles( "./smo_chipseq_sim/samples", 'gray', lty=3, lwd=1, filter=".nc" )
+
+    plot_wiggles( "./smo_chipseq_sim/samples/", 'gray', lty=3, lwd=1, filter=".nc" )
+    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'green', lty=1, lwd=0.5, filter=".ip" )
+    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
+    plot_wiggles( "./smo_chipseq_sim/samples/", 'black', lty=1, lwd=0.5, filter=".ip" )
+
+
+    nf = 0.4
+    density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
+    plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
+        rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
+
+    """
+    density = parse_wig( "./smo_chipseq_sim/bootstrap_samples/min_traces/sample%i.ip.wig" % sample_num, genome )
+    plot_wiggle( density, 'green', lwd=1 )
+
+    density = parse_wig( "./smo_chipseq_sim/bootstrap_samples/max_traces/sample%i.ip.wig" % sample_num, genome )
+    plot_wiggle( density, 'orange', lwd=1 )
+    """
+
     rpy.r("par(mfg=c(2,1))")
     true_density = parse_wig( "true_read_coverage.wig", genome )    
     plot_wiggle( true_density, 'black', lty=3, lwd=3 )
-
-
-    density = parse_wig( "./smo_chipseq_sim/samples/sample1.ip.wig", genome )
-    plot_wiggle( density, 'blue', lwd=1 )
     
-    # plot_wiggles( "./bootstrapped_samples/", 'black' )
-    # plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/all_traces/sample1/", 'black' )
+    for index in xrange(len(genome)):
+        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        for bp_index in mut_indexes:
+            rpy.r.abline( v=bp_index, col='red', lty=2  )
 
-    
-    density = parse_wig( "bssample_min.wig", genome )
-    plot_wiggle( density, 'green', lwd=1 )
+    return;
 
-    density = parse_wig( "bssample_max.wig", genome )
-    plot_wiggle( density, 'orange', lwd=1 )
-    
     # parse bowtie out
     """
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
@@ -653,7 +688,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
 
 if __name__ == '__main__':
     paired_end=False
-    NUM_MUTS = 2
+    NUM_MUTS = 3
     
     if False:
         test_cage_region( NUM_MUTS, "relaxed_%i_marginal.wig" % NUM_MUTS, iterative=False )
@@ -664,10 +699,11 @@ if __name__ == '__main__':
 
     if True:
         #mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end, polymorphic=True )
+        #print mut_indexes
         #map_with_bowtie( paired_end )
         #map_with_statmap( paired_end=paired_end )
         #call_peaks()
-        mut_indexes = [ 450, 750, 3100 ]
+        mut_indexes = [ 1327, 3755, 261 ]
         plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes, polymorphic=True )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")

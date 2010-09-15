@@ -628,11 +628,16 @@ update_mapping(
         
         if( num_iterations > 0 &&
             ( 
-                ( num_iterations == 1 
+                ( 
+                  num_iterations == 1 
                   || num_iterations%25 == 0 
-                  || (ut_stop.tv_sec-nt_start.tv_sec) > 30 )
+                  || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
+                )
                 || rv.max_change < max_prb_change_for_convergence
-                || pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL )
+                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL 
+                     && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
+                   )
+                )
             )
         {
             fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
@@ -645,8 +650,11 @@ update_mapping(
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
-                     || pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL )
+                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL 
+                     && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
+                   )
                 )
+              )
                 break;
         }        
 
@@ -1588,6 +1596,7 @@ take_chipseq_sample_wnc(
 
 {
     global_fl_dist = chip_mpd_rds_db->fl_dist;
+    assert( global_fl_dist != NULL );
 
     /* traces and track names to store the 2 marginal densities */
     struct trace_t* ip_trace;

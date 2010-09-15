@@ -8,7 +8,7 @@
 
 void usage()
 {
-    fprintf(stderr, "Usage: ./call_peaks output_directory > called_peaks.wig\n");
+    fprintf(stderr, "Usage: ./call_peaks output_directory [ sample_num  ]\n");
 }
 
 int num_threads = -1;
@@ -17,7 +17,7 @@ int min_num_hq_bps = -1;
 int 
 main( int argc, char** argv )
 {
-    if( argc != 2 )
+    if( argc < 2 || argc > 3 )
     {
         usage();
         exit( -1 );
@@ -43,7 +43,20 @@ main( int argc, char** argv )
     struct genome_data* genome;
     load_genome_from_disk( &genome, GENOME_FNAME );
 
-    call_peaks( genome );
+    /* if we didnt enter a sample number, assume we mean all samples */
+    if( argc == 2 )
+    {
+        call_peaks( genome );
+    } else {
+        int sample_num = atoi( argv[2] );
+        
+        /* build the file name */
+        char buffer[100];
+        sprintf( buffer, "sample%i", sample_num );
+        
+        call_peaks_at_local_maxima( genome, buffer );
+    }
+
 
     free_genome( genome );
     free( curr_wd );
