@@ -521,36 +521,15 @@ call_peaks_from_wiggles(
     return;
 }
 
-
-/* this isnt implemented yet - I have no need */
-#if 0
-extern void
-load_wiggle_into_trace(
-    /* the trace to init and store the data into */
-    struct trace_t* trace,
-    /* contains the chr names and lengths */
-    struct genome_data* genome;
-
-    /* fp's for each wiggle - each must contain exactly one track */
-    FILE** ifs,
-    /* the number of wiggle files */
-    int num_wigs
-)
-{
-    /* Not yet implemented - ( I dont need it for anything ) */
-    assert( false );
-}
-#endif
-
 extern void
 write_wiggle_from_trace_to_stream( 
     struct trace_t* traces,
     
     /* These are usually chr names */
-    char** scaffold_names,
+    // char** scaffold_names,
     /* The names of the various tracks */
     /* Use null for the indexes */
-    char** track_names,
+    // char** track_names,
     
     FILE* os, /* output stream */                           
     const double filter_threshold )
@@ -562,7 +541,8 @@ write_wiggle_from_trace_to_stream(
     for( track_index = 0; track_index < traces->num_tracks; track_index++ )
     {
         /* Print out the header */
-        fprintf( os, "track type=wiggle_0 name=%s\n", track_names[track_index] );
+        fprintf( os, "track type=wiggle_0 name=%s\n", 
+                 traces->track_names[track_index] );
 
         for( j = 0; j < traces->num_chrs; j++ )
         {
@@ -571,10 +551,10 @@ write_wiggle_from_trace_to_stream(
                 continue;
             
             /* Print out the new chr start line */
-            if( scaffold_names == NULL ) {
+            if( traces->chr_names == NULL ) {
                 fprintf( os, "variableStep chrom=%i\n", j );
             } else {
-                fprintf( os, "variableStep chrom=%s\n", scaffold_names[j] );
+                fprintf( os, "variableStep chrom=%s\n", traces->chr_names[j] );
             }
             
             for( k = 0; k < traces->chr_lengths[j]; k++ )
@@ -596,13 +576,6 @@ write_wiggle_from_trace_to_stream(
 
 extern void
 write_wiggle_from_trace( struct trace_t* traces,
-
-                         /* These are usually chr names */
-                         char** scaffold_names,
-                         /* The names of the various tracks */
-                         /* Use null for the indexes */
-                         char** track_names,
-                         
                          const char* output_fname,                           
                          const double filter_threshold )
 {    
@@ -615,8 +588,7 @@ write_wiggle_from_trace( struct trace_t* traces,
         exit( -1 );
     }
     
-    write_wiggle_from_trace_to_stream( 
-        traces, scaffold_names, track_names, wfp, filter_threshold );
+    write_wiggle_from_trace_to_stream( traces, wfp, filter_threshold );
     
     fclose( wfp );
 }

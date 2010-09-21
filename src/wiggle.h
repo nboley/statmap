@@ -59,13 +59,6 @@ load_wiggle_into_trace(
 extern void
 write_wiggle_from_trace_to_stream( 
     struct trace_t* traces,
-    
-    /* These are usually chr names */
-    char** scaffold_names,
-    /* The names of the various tracks */
-    /* Use null for the indexes */
-    char** track_names,
-    
     FILE* os, /* output stream */                           
     const double filter_threshold 
 );
@@ -73,13 +66,6 @@ write_wiggle_from_trace_to_stream(
 extern void
 write_wiggle_from_trace( 
     struct trace_t* traces,
-    
-    /* These are usually chr names */
-    char** scaffold_names,
-    /* The names of the various tracks */
-    /* Use null for the indexes */
-    char** track_names,
-    
     const char* output_fname,                           
     const double filter_threshold 
 );

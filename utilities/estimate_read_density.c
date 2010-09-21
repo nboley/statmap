@@ -143,7 +143,6 @@ sample_relaxed_mapping(
         
         write_wiggle_from_trace( 
             starting_trace, 
-            genome->chr_names, track_names,
             wiggle_ofname, max_prb_change_for_convergence );
         
         stop = clock();

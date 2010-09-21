@@ -101,11 +101,7 @@ int main( int argc, char** argv )
     );    
     
     write_wiggle_from_trace_to_stream(
-        trace, 
-        genome->chr_names, scaffold_names,
-        stdout,
-        0.01
-    );
+        trace, stdout, 0.01 );
     goto cleanup;
 
 cleanup:

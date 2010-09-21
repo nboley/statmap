@@ -200,8 +200,6 @@ update_chipseq_mapping_wnc(
     
     struct genome_data* genome,
     
-    char** track_names,
-    
     float max_prb_change_for_convergence,
     /* true if we should use a random start - otherwise, we use uniform */
     enum bool random_start 

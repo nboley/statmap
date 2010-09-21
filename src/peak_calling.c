@@ -212,8 +212,7 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     
     sprintf( fname, "%s/sample%i.wig", CALLED_PEAKS_OUTPUT_DIRECTORY, sample_id );
     FILE* ofp = open_check_error( fname, "w" );
-    write_wiggle_from_trace_to_stream( 
-        trace, genome->chr_names, track_names, ofp, 0.0 );
+    write_wiggle_from_trace_to_stream( trace, ofp, 0.0 );
     fclose( ofp );
     
     close_traces( trace );

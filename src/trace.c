@@ -447,7 +447,7 @@ aggregate_over_traces(  struct trace_t* update_trace,
     return;
 }
 
-void
+static void
 write_trace_header_to_stream( struct trace_t* trace, FILE* os )
 {
     /* a counter for for loops  */
@@ -492,9 +492,123 @@ write_trace_header_to_stream( struct trace_t* trace, FILE* os )
     return;
 }
 
+static void
+load_trace_header_from_stream( struct trace_t* trace, FILE* is )
+{
+    /* return values of gets */
+    int rv;
+    
+    /* a counter for for loops  */
+    int i;
+    
+    /* write the magic number */
+    char MN[6];
+    rv = fread( MN, 6, sizeof(char), is );
+    assert( 6 == rv );
+    assert( 0 == strcmp( MN, TRACE_MAGIC_NUMBER ) );
+    
+    /** find the number of tracks */
+    rv = fread( &(trace->num_tracks), sizeof(int), 1, is );
+    assert( 1 == rv );
+    
+    /** read the track data */
+    /* read the track name lengths */
+    size_t track_name_lengths[trace->num_tracks];
+    rv = fread( track_name_lengths, sizeof(size_t), trace->num_tracks, is );
+    assert( trace->num_tracks == rv );
+
+    trace->track_names = calloc( sizeof(char*), trace->num_tracks );
+    for( i = 0; i < trace->num_tracks; i++ )
+    {
+        trace->track_names[i] = calloc( sizeof(char), track_name_lengths[i] + 1 );
+        rv = fread( trace->track_names + i, sizeof(char), track_name_lengths[i], is );
+        assert( track_name_lengths[i] == (unsigned int) rv );
+    }
+    
+    /** read the chromosomes data */
+    /* read the num of chromosomes */
+    rv = fread( &(trace->num_chrs), sizeof(int), 1, is );
+    assert( rv == 1 );
+
+    /* read the chr name lengths */
+    size_t chr_name_lengths[trace->num_chrs];
+    rv = fread( chr_name_lengths, sizeof(size_t), trace->num_chrs, is );
+    assert( trace->num_chrs == rv );
+
+    /* read the chr names */
+    trace->chr_names = calloc( sizeof(char*), trace->num_chrs );
+    for( i = 0; i < trace->num_chrs; i++ )
+    {
+        trace->chr_names[i] = calloc( sizeof(char), chr_name_lengths[i] + 1 );
+        rv = fread( trace->chr_names + i, sizeof(char), chr_name_lengths[i], is );
+        assert( chr_name_lengths[i] == (unsigned int) rv );
+    }
+    
+    /* read the chr lengths */
+    rv = fread( trace->chr_lengths, sizeof(unsigned int), trace->num_chrs, is );
+    assert( trace->num_chrs == rv );
+
+    return;
+}
+
 void
 write_trace_to_stream( struct trace_t* trace, FILE* os )
 {
     write_trace_header_to_stream( trace, os );
+
+    int i;
+    for( i = 0; i < trace->num_tracks; i++ )
+    {
+        int j;
+        for( j = 0; j < trace->num_chrs; j++ )
+        {
+            /* write the array from track i, chr j */
+            fwrite( trace->traces[i][j], 
+                    sizeof(TRACE_TYPE), trace->chr_lengths[j],
+                    os );
+        }
+    }
+    
     return;
+}
+
+void
+write_trace_to_file( struct trace_t* trace, char* fname )
+{
+    FILE* fp = fopen( fname, "w" );
+    write_trace_to_stream( trace, fp );
+    fclose(fp);
+}
+
+void
+load_trace_from_stream( struct trace_t** trace, FILE* is )
+{
+    *trace = malloc( sizeof( struct trace_t ) );
+    
+    load_trace_header_from_stream( *trace, is );
+
+    int i;
+    for( i = 0; i < (*trace)->num_tracks; i++ )
+    {
+        int j;
+        for( j = 0; j < (*trace)->num_chrs; j++ )
+        {
+            /* read the array from track i, chr j */            
+            (*trace)->traces[i][j] = 
+                malloc( sizeof(TRACE_TYPE)*((*trace)->chr_lengths[j]) );
+            fread( (*trace)->traces[i][j], 
+                    sizeof(TRACE_TYPE), (*trace)->chr_lengths[j],
+                    is );
+        }
+    }
+    
+    return;
+}
+
+void
+load_trace_from_file( struct trace_t** trace, char* fname )
+{
+    FILE* fp = fopen( fname, "r" );
+    load_trace_from_stream( trace, fp );
+    fclose(fp);
 }

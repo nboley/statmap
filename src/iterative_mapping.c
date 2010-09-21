@@ -820,7 +820,6 @@ sample_random_traces(
 
             write_wiggle_from_trace(
                 sample_trace, 
-                genome->chr_names, track_names,
                 buffer, max_prb_change_for_convergence );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
@@ -843,7 +842,6 @@ sample_random_traces(
 
             write_wiggle_from_trace( 
                 sample_trace, 
-                genome->chr_names, track_names,
                 buffer, max_prb_change_for_convergence );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
@@ -885,7 +883,6 @@ sample_random_traces(
                     
                     write_wiggle_from_trace( 
                         sample_trace, 
-                        genome->chr_names, track_names,
                         buffer, max_prb_change_for_convergence );
                 }    
             }
@@ -1502,8 +1499,6 @@ update_chipseq_mapping_wnc(
     
     struct genome_data* genome,
 
-    char** track_names,
-    
     float max_prb_change_for_convergence,
     /* true if we should use a random start - otherwise, we use uniform */
     enum bool random_start )
@@ -1530,8 +1525,10 @@ update_chipseq_mapping_wnc(
     
     /* initialize the trace that we will store the expectation in */
     /* it has dimension 2 - for the negative and positive stranded reads */
-    init_trace( genome, ip_trace, 2, track_names );
-    init_trace( genome, nc_trace, 2, track_names );    
+    char* ip_track_names[2] = {"IP_fwd_strand", "IP_bkwd_strand"};
+    init_trace( genome, ip_trace, 2, ip_track_names );
+    char* nc_track_names[2] = {"NC_fwd_strand", "NC_bkwd_strand"};
+    init_trace( genome, nc_trace, 2, nc_track_names );    
 
     if( false == random_start )
     {
@@ -1617,18 +1614,11 @@ take_chipseq_sample_wnc(
     /* traces and track names to store the 2 marginal densities */
     struct trace_t* ip_trace;
     struct trace_t* nc_trace;
-
-    char* track_names[4] = {
-        "IP_fwd_strand_fragment_coverage",
-        "IP_bkwd_strand_fragment_coverage",
-        "NC_fwd_strand_fragment_coverage",
-        "NC_bkwd_strand_fragment_coverage"
-    };
     
     /* jointly update the mappings */
     update_chipseq_mapping_wnc(  chip_mpd_rds_db, &ip_trace,
                                  NC_mpd_rds_db, &nc_trace,
-                                 genome, track_names, 
+                                 genome, 
                                  max_prb_change_for_convergence,
                                  random_start ); 
            
@@ -1641,14 +1631,10 @@ take_chipseq_sample_wnc(
     {
         char wig_fname[100];
         sprintf( wig_fname, "%ssample%i.ip.wig", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_wiggle_from_trace( ip_trace, genome->chr_names, 
-                                 track_names, wig_fname,
-                                 MAX_PRB_CHANGE_FOR_CONVERGENCE );
+        write_wiggle_from_trace( ip_trace, wig_fname, MAX_PRB_CHANGE_FOR_CONVERGENCE );
                 
         sprintf( wig_fname, "%ssample%i.nc.wig", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_wiggle_from_trace( nc_trace, genome->chr_names, 
-                                 track_names + 2, wig_fname,
-                                 MAX_PRB_CHANGE_FOR_CONVERGENCE );
+        write_wiggle_from_trace( nc_trace, wig_fname, MAX_PRB_CHANGE_FOR_CONVERGENCE );
 
         /* write the lhd to the meta info folder */
         double log_lhd = calc_log_lhd( 
@@ -1696,16 +1682,14 @@ take_chipseq_sample_wnc(
                          BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
 
                 write_wiggle_from_trace( 
-                    ip_trace, genome->chr_names, track_names,
-                    buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                    ip_trace, buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
 
                 /* write out the NC */
                 sprintf( buffer, "%ssample%i/bssample%i.nc.wig", 
                          BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
                         
                 write_wiggle_from_trace( 
-                    nc_trace, genome->chr_names, track_names + 2,
-                    buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                    nc_trace, buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
             }    
         }
         fprintf( stderr, " 100%%\n");
@@ -1798,7 +1782,6 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
     
     write_wiggle_from_trace( 
         uniform_trace, 
-        genome->chr_names, track_names,
         "relaxed_mapping.wig", max_prb_change_for_convergence );
     
     stop = clock();

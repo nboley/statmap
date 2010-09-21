@@ -1,7 +1,6 @@
 #ifndef TRACE_H
 #define TRACE_H
 
-
 #define TRACE_TYPE float
 
 #define TRACE_MAGIC_NUMBER "BTRACE"
@@ -82,5 +81,22 @@ aggregate_over_traces(  struct trace_t* update_trace,
                         const struct trace_t* const other_trace,
                         TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
     );
+
+/****************************************************************
+ * Pickling and Unpickling 
+ *
+ ****************************************************************/
+
+void
+write_trace_to_stream( struct trace_t* trace, FILE* os );
+
+void
+write_trace_to_file( struct trace_t* trace, char* fname );
+
+void
+load_trace_from_stream( struct trace_t** trace, FILE* is );
+
+void
+load_trace_from_file( struct trace_t** trace, char* fname );
 
 #endif // #define TRACE_H
