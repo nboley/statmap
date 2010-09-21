@@ -89,18 +89,18 @@ int main( int argc, char** argv )
         exit( 1 );
     }
 
+    char* scaffold_names[2] = {"FWD", "BKWD"};
+
     /* initialize the traces to write to */
     struct trace_t* trace = NULL;
-    init_traces( genome, &trace, 2 );
+    init_trace( genome, &trace, 2, scaffold_names );
 
     build_random_starting_trace( 
         trace, genome, mpd_rdb,
         update_chipseq_trace_expectation_from_location,
         update_chipseq_mapped_read_prbs
     );
-    
-    char* scaffold_names[2] = {"FWD", "BKWD"};
-    
+        
     write_wiggle_from_trace_to_stream(
         trace, 
         genome->chr_names, scaffold_names,

@@ -1011,7 +1011,7 @@ update_traces_from_read_densities(
             assert( cond_prob >= -0.0001 );
             assert( stop >= start );            
             assert( chr_index < traces->num_chrs );
-            assert( traces->trace_lengths[chr_index] >= stop );
+            assert( traces->chr_lengths[chr_index] >= stop );
 
             unsigned int k = 0;
             for( k = start; k < stop; k++ )

@@ -557,12 +557,12 @@ write_wiggle_from_trace_to_stream(
 {    
     unsigned int global_counter = 0;
 
-    int trace_index, j;
+    int track_index, j;
     unsigned int k;
-    for( trace_index = 0; trace_index < traces->num_traces; trace_index++ )
+    for( track_index = 0; track_index < traces->num_tracks; track_index++ )
     {
         /* Print out the header */
-        fprintf( os, "track type=wiggle_0 name=%s\n", track_names[trace_index] );
+        fprintf( os, "track type=wiggle_0 name=%s\n", track_names[track_index] );
 
         for( j = 0; j < traces->num_chrs; j++ )
         {
@@ -577,13 +577,13 @@ write_wiggle_from_trace_to_stream(
                 fprintf( os, "variableStep chrom=%s\n", scaffold_names[j] );
             }
             
-            for( k = 0; k < traces->trace_lengths[j]; k++ )
+            for( k = 0; k < traces->chr_lengths[j]; k++ )
             {
                 global_counter += 1;
                 
-                if( traces->traces[trace_index][j][k] > filter_threshold )
+                if( traces->traces[track_index][j][k] > filter_threshold )
                     fprintf( os, "%i\t%e\n", k+1, 
-                             traces->traces[trace_index][j][k] );
+                             traces->traces[track_index][j][k] );
                 
                 if( global_counter > 0  && global_counter%10000000 == 0 )
                     fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
@@ -632,9 +632,11 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     
     const double filter_threshold = 1e-6;
 
+    char* track_names[2] = {"FWD", "BKWD"};
+    
     /* build and update the chr traces */
     struct trace_t* traces;
-    init_traces( genome, &traces, 2 );
+    init_trace( genome, &traces, 2, track_names  );
     
     struct mapped_read_t* rd;
 
@@ -675,7 +677,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
             continue;
 
         fprintf( fwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
+        for( j = 0; j < traces->chr_lengths[i]; j++ )
             if( traces->traces[0][i][j] >= filter_threshold )
                 fprintf( fwd_wfp, "%i\t%e\n", j+1, traces->traces[0][i][j] );
     }
@@ -690,7 +692,7 @@ write_marginal_mapped_reads_to_stranded_wiggles(
             continue;
 
         fprintf( bkwd_wfp, "variableStep chrom=%s\n", genome->chr_names[i] );
-        for( j = 0; j < traces->trace_lengths[i]; j++ )
+        for( j = 0; j < traces->chr_lengths[i]; j++ )
             if( traces->traces[1][i][j] >= filter_threshold )
                 fprintf( bkwd_wfp, "%i\t%e\n", j+1, -traces->traces[1][i][j] );
     }

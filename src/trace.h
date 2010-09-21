@@ -4,6 +4,8 @@
 
 #define TRACE_TYPE float
 
+#define TRACE_MAGIC_NUMBER "BTRACE"
+
 /* Trace spinlock granularity */
 /* How many basepairs are grouped together for a single lock */
 #define TM_GRAN 5000
@@ -15,9 +17,13 @@ struct genome_data;
 #define USE_SPINLOCK
 
 struct trace_t {
-    int num_traces;
+    int num_tracks;
+    char** track_names;
+    
     int num_chrs;
-    unsigned int* trace_lengths;
+    char** chr_names;
+    unsigned int* chr_lengths;
+    
     /* num_traces X num_chrs matrix */
     TRACE_TYPE*** traces;
 
@@ -30,12 +36,13 @@ struct trace_t {
 
 /* build an mmapped array to store the density */
 TRACE_TYPE*
-init_trace( size_t size );
+init_trace_array( size_t size );
 
 void
-init_traces( struct genome_data* genome,
-             struct trace_t** traces,
-             const int num_traces );
+init_trace( struct genome_data* genome,
+            struct trace_t** traces,
+            const int num_traces,
+            char** track_names );
 
 void
 copy_trace_data( struct trace_t* traces,

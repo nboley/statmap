@@ -107,7 +107,7 @@ sample_relaxed_mapping(
     fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
     
     /* initialize the trace that we will store the expectation in */
-    init_traces( genome, &starting_trace, trace_size );
+    init_trace( genome, &starting_trace, trace_size, track_names );
     if( use_random_start == true )
     {
         fprintf(stderr, "DEBUG       :  Building Random Starting Trace.\n" );

@@ -219,7 +219,7 @@ bootstrap_traces_from_mapped_reads(
     
     if( num_error_reads > 0 )
     {
-        fprintf( stderr, "ERROR      :  %i reads ( out of %i ) had errors in which the cum dist didnt add up to 1. \n", 
+        fprintf( stderr, "ERROR      :  %i reads ( out of %lu ) had errors in which the cum dist didnt add up to 1. \n", 
                  num_error_reads, reads_db->num_mmapped_reads );
     }
     
@@ -805,7 +805,7 @@ sample_random_traces(
         printf( "Starting Sample %i\n", i+1 );
 
         struct trace_t* sample_trace;
-        init_traces( genome, &sample_trace, num_tracks );
+        init_trace( genome, &sample_trace, num_tracks, track_names );
 
         build_random_starting_trace( 
             sample_trace, genome, rdb, 
@@ -1007,7 +1007,7 @@ update_chipseq_trace_expectation_from_location(
     
     /* Make sure the reference genome is correct */            
     assert( chr_index < traces->num_chrs );
-    assert( traces->trace_lengths[chr_index] >= stop );
+    assert( traces->chr_lengths[chr_index] >= stop );
     
     /* iteration variable */
     unsigned int k;
@@ -1044,7 +1044,7 @@ update_chipseq_trace_expectation_from_location(
             for( j = LR_start; j < LR_stop; j++ )
             {
                 assert( chr_index < traces->num_chrs );
-                assert( j < traces->trace_lengths[chr_index] );
+                assert( j < traces->chr_lengths[chr_index] );
                 
                 traces->traces[trace_index][chr_index][j] 
                     += scale*cond_prob;
@@ -1073,12 +1073,12 @@ update_chipseq_trace_expectation_from_location(
             /* prevent overrunning the trace bounadry - this is fancy to avoid the 
                fact that the indexes are unsigned */
             window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
-            window_stop = MIN( stop, traces->trace_lengths[chr_index] );
+            window_stop = MIN( stop, traces->chr_lengths[chr_index] );
             trace_index = 1;
         } else {
             window_start = start;
             window_stop = MIN( start + global_fl_dist->max_fl, 
-                               traces->trace_lengths[chr_index] );
+                               traces->chr_lengths[chr_index] );
             trace_index = 0;
         }
 
@@ -1207,7 +1207,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
         {
             for( j = start; j <= stop; j++ )
             {
-                assert( j < traces->trace_lengths[chr_index] );
+                assert( j < traces->chr_lengths[chr_index] );
                 window_density += traces->traces[0][chr_index][j]
                                   + traces->traces[1][chr_index][j];
             }
@@ -1347,7 +1347,7 @@ void update_CAGE_trace_expectation_from_location(
     
     /* Make sure the reference genome is correct */            
     assert( chr_index < traces->num_chrs );
-    assert( traces->trace_lengths[chr_index] >= stop );
+    assert( traces->chr_lengths[chr_index] >= stop );
 
     assert( cond_prob >= 0.0 );
     
@@ -1435,7 +1435,7 @@ update_CAGE_mapped_read_prbs(
                 trace = traces->traces[1];
             }
             
-            unsigned int stop = MIN( traces->trace_lengths[chr_index], start + WINDOW_SIZE );
+            unsigned int stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
             for( j = start; j < stop; j++ )
             {
                 window_density += trace[chr_index][j];
@@ -1501,6 +1501,9 @@ update_chipseq_mapping_wnc(
     struct trace_t** nc_trace,
     
     struct genome_data* genome,
+
+    char** track_names,
+    
     float max_prb_change_for_convergence,
     /* true if we should use a random start - otherwise, we use uniform */
     enum bool random_start )
@@ -1527,8 +1530,8 @@ update_chipseq_mapping_wnc(
     
     /* initialize the trace that we will store the expectation in */
     /* it has dimension 2 - for the negative and positive stranded reads */
-    init_traces( genome, ip_trace, 2 );
-    init_traces( genome, nc_trace, 2 );    
+    init_trace( genome, ip_trace, 2, track_names );
+    init_trace( genome, nc_trace, 2, track_names );    
 
     if( false == random_start )
     {
@@ -1625,7 +1628,8 @@ take_chipseq_sample_wnc(
     /* jointly update the mappings */
     update_chipseq_mapping_wnc(  chip_mpd_rds_db, &ip_trace,
                                  NC_mpd_rds_db, &nc_trace,
-                                 genome, max_prb_change_for_convergence,
+                                 genome, track_names, 
+                                 max_prb_change_for_convergence,
                                  random_start ); 
            
     /* write the joint mappings to a single wiggle */
@@ -1780,7 +1784,7 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
     fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
     
     /* initialize the trace that we will store the expectation in */
-    init_traces( genome, &uniform_trace, trace_size );
+    init_trace( genome, &uniform_trace, trace_size, track_names );
     set_trace_to_uniform( uniform_trace, 1 );
     
     error = update_mapping (

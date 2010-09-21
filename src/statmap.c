@@ -518,6 +518,7 @@ parse_arguments( int argc, char** argv )
             if( args.pair2_NC_reads_fnames == NULL )
             {
                 fprintf( stderr, "FATAL     : The NC reads must be paired for a paired experiment.\n" );
+                assert( false );
                 exit( 1 );
             }
             

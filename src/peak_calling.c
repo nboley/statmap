@@ -179,11 +179,13 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
         perror( "Could not convert directory name id" );
         exit( 1 );
     }   
-     
+
+    char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};     
+    
     /* init the trace */
     struct trace_t* trace;
     /* two tracks correspond to pos and neg strands */
-    init_traces( genome, &trace, 2 );
+    init_trace( genome, &trace, 2, track_names );
     zero_traces( trace );
     
     int bi; /* bootstrap index */
@@ -207,8 +209,6 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     
     apply_to_trace( trace, calc_pvalue );
     apply_to_trace( trace, subtract_from_1 );
-    
-    char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};
     
     sprintf( fname, "%s/sample%i.wig", CALLED_PEAKS_OUTPUT_DIRECTORY, sample_id );
     FILE* ofp = open_check_error( fname, "w" );
