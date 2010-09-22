@@ -5,7 +5,7 @@ compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	mapped_reads_into_wiggle estimate_read_density call_peaks \
 	bootstrap_wiggles_from_mapped_reads build_random_start_from_mapped_reads \
-	aggregate_over_traces
+	aggregate_over_traces convert_trace_into_wiggle
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -29,6 +29,12 @@ aggregate_over_wiggles : aggregate_over_wiggles.c
 aggregate_over_traces : aggregate_over_traces.c
 	$(compiler) $(compile_options) -o aggregate_over_traces aggregate_over_traces.c ../src/trace.o
 	cp aggregate_over_traces ../bin/
+
+convert_trace_into_wiggle : convert_trace_into_wiggle.c
+	$(compiler) $(compile_options) -o convert_trace_into_wiggle convert_trace_into_wiggle.c \
+	../src/trace.o 
+	cp aggregate_over_traces ../bin/
+
 
 mapped_reads_into_sam : mapped_reads_into_sam.c
 	$(compiler) $(compile_options) -o mapped_reads_into_sam write_sam_from_mapped_reads_db.c \

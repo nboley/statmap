@@ -86,6 +86,26 @@ aggregate_over_traces(  struct trace_t* update_trace,
     );
 
 /****************************************************************
+ * Wiggle IO
+ *
+ ****************************************************************/
+
+extern void
+write_wiggle_from_trace_to_stream( 
+    struct trace_t* traces,
+    FILE* os, /* output stream */                           
+    const double filter_threshold 
+);
+
+extern void
+write_wiggle_from_trace( 
+    struct trace_t* traces,
+    const char* output_fname,                           
+    const double filter_threshold 
+);
+
+
+/****************************************************************
  * Pickling and Unpickling 
  *
  ****************************************************************/

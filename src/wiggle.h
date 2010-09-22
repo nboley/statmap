@@ -40,34 +40,5 @@ call_peaks_from_wiggles(
     struct trace_t* trace
     );
 
-#if 0
-/* TODO - implement this */
-extern void
-load_wiggle_into_trace(
-    /* the trace to init and store the data into */
-    struct trace_t* trace,
-    /* contains the chr names and lengths */
-    struct genome_data* genome;
-
-    /* fp's for each wiggle - each must contain exactly one track */
-    FILE** ifs,
-    /* the number of wiggle files */
-    int num_wigs
-);
-#endif
-
-extern void
-write_wiggle_from_trace_to_stream( 
-    struct trace_t* traces,
-    FILE* os, /* output stream */                           
-    const double filter_threshold 
-);
-
-extern void
-write_wiggle_from_trace( 
-    struct trace_t* traces,
-    const char* output_fname,                           
-    const double filter_threshold 
-);
 
 #endif // #define WIGGLE_H

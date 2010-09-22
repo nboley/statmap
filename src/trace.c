@@ -18,6 +18,20 @@
 #include "trace.h"
 #include "genome.h"
 
+static FILE* 
+open_check_error( char* fname, char* file_mode )
+{
+    FILE* tmp;
+    tmp = fopen( fname, file_mode );
+    if( tmp == NULL )
+    {
+        fprintf( stderr, "Error opening '%s\n'", fname );
+        assert( false );
+        exit( -1 );
+    }
+    return tmp;
+}
+
 /* get the correct mutex index to access the specified position */
 /* this is slow - it should probably be done as a macro in hot areas */
 int
@@ -485,6 +499,85 @@ aggregate_over_traces(  struct trace_t* update_trace,
 
 /******************************************************************
  *
+ * Wiggle output code
+ *
+ */
+
+extern void
+write_wiggle_from_trace_to_stream( 
+    struct trace_t* traces,
+    
+    /* These are usually chr names */
+    // char** scaffold_names,
+    /* The names of the various tracks */
+    /* Use null for the indexes */
+    // char** track_names,
+    
+    FILE* os, /* output stream */                           
+    const double filter_threshold )
+{    
+    unsigned int global_counter = 0;
+
+    int track_index, j;
+    unsigned int k;
+    for( track_index = 0; track_index < traces->num_tracks; track_index++ )
+    {
+        /* Print out the header */
+        fprintf( os, "track type=wiggle_0 name=%s\n", 
+                 traces->track_names[track_index] );
+
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            /* skip the pseudo chr */
+            if( j == PSEUDO_LOC_CHR_INDEX )
+                continue;
+            
+            /* Print out the new chr start line */
+            if( traces->chr_names == NULL ) {
+                fprintf( os, "variableStep chrom=%i\n", j );
+            } else {
+                fprintf( os, "variableStep chrom=%s\n", traces->chr_names[j] );
+            }
+            
+            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            {
+                global_counter += 1;
+                
+                if( traces->traces[track_index][j][k] > filter_threshold )
+                    fprintf( os, "%i\t%e\n", k+1, 
+                             traces->traces[track_index][j][k] );
+                
+                if( global_counter > 0  && global_counter%10000000 == 0 )
+                    fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
+            }
+        }
+    }
+    
+    return;
+}
+
+extern void
+write_wiggle_from_trace( struct trace_t* traces,
+                         const char* output_fname,                           
+                         const double filter_threshold )
+{    
+    FILE* wfp = fopen( output_fname, "a" );
+    if( wfp == NULL )
+    {
+        perror( "FATAL        : Could not open wiggle file for writing " );
+        fprintf( stderr, "Filename: %s\n", output_fname );
+        assert( 0 );
+        exit( -1 );
+    }
+    
+    write_wiggle_from_trace_to_stream( traces, wfp, filter_threshold );
+    
+    fclose( wfp );
+}
+
+
+/******************************************************************
+ *
  * Trace marshalling/unmarshalling code
  *
  */
@@ -659,7 +752,7 @@ load_trace_from_stream( struct trace_t** trace, FILE* is )
 void
 load_trace_from_file( struct trace_t** trace, char* fname )
 {
-    FILE* fp = fopen( fname, "r" );
+    FILE* fp = open_check_error( fname, "r" );
     load_trace_from_stream( trace, fp );
     fclose(fp);
 }
