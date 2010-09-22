@@ -11,7 +11,7 @@ objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
 	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o
 
-all: statmap
+all: statmap trace.so
 
 statmap : $(objects)
 	$(compiler) -o statmap \
@@ -127,6 +127,11 @@ wiggle.h: trace.h
 trace.o: trace.c trace.h
 	$(compiler) $(compile_options) -fopenmp -c trace.c
 
+# build the trace as a shared object
+trace.so: trace.c trace.h 
+	$(compiler) $(compile_options) -fpic -shared -Wl,-soname,libtrace.so.1 -o libtrace.so \
+	trace.c
+
 trace.h:
 
 fragment_length.o: fragment_length.c fragment_length.h
@@ -150,3 +155,4 @@ dna_sequence.h : config.h
 clean :
 	-rm $(objects)
 	-rm statmap
+	-rm libtrace.so
