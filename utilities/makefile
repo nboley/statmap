@@ -5,8 +5,7 @@ compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	mapped_reads_into_wiggle estimate_read_density call_peaks \
 	bootstrap_wiggles_from_mapped_reads build_random_start_from_mapped_reads \
-	
-	
+	aggregate_over_traces
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -26,6 +25,10 @@ aggregate_over_wiggles : aggregate_over_wiggles.c
 	../src/wiggle.o \
 	-lm -pthread
 	cp aggregate_over_wiggles ../bin/
+
+aggregate_over_traces : aggregate_over_traces.c
+	$(compiler) $(compile_options) -o aggregate_over_traces aggregate_over_traces.c ../src/trace.o
+	cp aggregate_over_traces ../bin/
 
 mapped_reads_into_sam : mapped_reads_into_sam.c
 	$(compiler) $(compile_options) -o mapped_reads_into_sam write_sam_from_mapped_reads_db.c \
@@ -108,6 +111,7 @@ call_peaks.c :
 .PHONY : clean
 clean :
 	-rm aggregate_over_wiggles
+	-rm aggregate_over_traces
 	-rm mapped_reads_into_sam
 	-rm mapped_reads_into_wiggle
 	-rm estimate_read_density

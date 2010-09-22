@@ -319,7 +319,8 @@ close_traces( struct trace_t* traces )
                 }
             }
 
-            free( traces->locks[i][j] );
+            // BUG ( memory leak ) should this be freed??!?!?
+            // free( traces->locks[i][j] );
         }
         free( traces->traces[i] );                          
         free( traces->locks[i] );
@@ -482,6 +483,12 @@ aggregate_over_traces(  struct trace_t* update_trace,
     return;
 }
 
+/******************************************************************
+ *
+ * Trace marshalling/unmarshalling code
+ *
+ */
+
 static void
 write_trace_header_to_stream( struct trace_t* trace, FILE* os )
 {
@@ -538,7 +545,7 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     
     /* write the magic number */
     char MN[6];
-    rv = fread( MN, 6, sizeof(char), is );
+    rv = fread( MN, sizeof(char), 6, is );
     assert( 6 == rv );
     assert( 0 == strcmp( MN, TRACE_MAGIC_NUMBER ) );
     
@@ -556,7 +563,9 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     for( i = 0; i < trace->num_tracks; i++ )
     {
         trace->track_names[i] = calloc( sizeof(char), track_name_lengths[i] + 1 );
-        rv = fread( trace->track_names + i, sizeof(char), track_name_lengths[i], is );
+        rv = fread( trace->track_names[i], sizeof(char), track_name_lengths[i], is );
+        /* make sure that the terminating NULL is present */
+        trace->track_names[i][track_name_lengths[i]] = '\0';
         assert( track_name_lengths[i] == (unsigned int) rv );
     }
     
@@ -575,11 +584,14 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     for( i = 0; i < trace->num_chrs; i++ )
     {
         trace->chr_names[i] = calloc( sizeof(char), chr_name_lengths[i] + 1 );
-        rv = fread( trace->chr_names + i, sizeof(char), chr_name_lengths[i], is );
+        rv = fread( trace->chr_names[i], sizeof(char), chr_name_lengths[i], is );
+        /* sxplicitly set the NULL terminating char */
+        trace->chr_names[i][chr_name_lengths[i]] = '\0';
         assert( chr_name_lengths[i] == (unsigned int) rv );
     }
     
     /* read the chr lengths */
+    trace->chr_lengths = calloc( sizeof(unsigned int), trace->num_chrs );
     rv = fread( trace->chr_lengths, sizeof(unsigned int), trace->num_chrs, is );
     assert( trace->num_chrs == rv );
 
@@ -622,10 +634,14 @@ load_trace_from_stream( struct trace_t** trace, FILE* is )
     
     load_trace_header_from_stream( *trace, is );
 
+    init_trace_locks( *trace );
+
     int i;
+    (*trace)->traces = calloc( sizeof(TRACE_TYPE*), (*trace)->num_tracks  );
     for( i = 0; i < (*trace)->num_tracks; i++ )
     {
         int j;
+        (*trace)->traces[i] = calloc( sizeof(TRACE_TYPE*), (*trace)->num_chrs  );
         for( j = 0; j < (*trace)->num_chrs; j++ )
         {
             /* read the array from track i, chr j */            

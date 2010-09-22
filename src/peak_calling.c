@@ -13,6 +13,10 @@
 #include "../src/trace.h"
 #include "../src/genome.h"
 
+static inline TRACE_TYPE 
+sum( const TRACE_TYPE a, const TRACE_TYPE b )
+{    return a + b; }
+
 void
 parse_meta_info( FILE* mi_fp, double** lhds )
 {
