@@ -13,12 +13,6 @@
 #include "../src/trace.h"
 #include "../src/genome.h"
 
-/* 
-   A bit of a hack - store the lhds in a gloally accessible variable so that 
-   I can use the wiggle aggregation framework 
-*/
-double* global_lhd_weights;
-
 void
 parse_meta_info( FILE* mi_fp, double** lhds )
 {
@@ -76,19 +70,6 @@ open_check_error( char* fname, char* file_mode )
     return tmp;
 }
 
-float 
-wig_lines_weighted_sum( 
-    const struct wig_line_info* lines, const int ub, const int num_wigs  )
-{
-    assert( num_wigs > 0 );
-    
-    float sum = 0;
-    int i;
-    for( i = 0; i <= ub; i++ )
-        sum += ( ( global_lhd_weights[ lines[i].file_index ] )*lines[i].value );
-    
-    return sum;
-}
 
 /* 
    Calculate the probability of observing >= cnt counts given that
@@ -165,6 +146,34 @@ double subtract_from_1( double cnt )
 }
 
 void
+update_ip_is_gt_nc_counts_from_traces( 
+    struct trace_t* ip_trace, 
+    struct trace_t* nc_trace, 
+    struct trace_t* peaks_trace )
+{
+    int i;
+    for( i = 0; i < peaks_trace->num_tracks; i++ )
+    {
+        int j;
+        for( j = 0; j < peaks_trace->num_chrs; j++ )
+        {
+            unsigned int k;
+            for( k = 0; k < peaks_trace->chr_lengths[j]; k++ )
+            {
+                if( ip_trace->traces[i][j][k] > nc_trace->traces[i][j][k] )
+                {
+                    peaks_trace->traces[i][j][k] += 1;
+                } else if( ip_trace->traces[i][j][k] == nc_trace->traces[i][j][k] ) {
+                    peaks_trace->traces[i][j][k] += 0.5;
+                } 
+            }
+        }
+    }
+    
+    return;
+}
+
+void
 call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname ) 
 {
     /* buffer for output/input filenames */
@@ -183,39 +192,39 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};     
     
     /* init the trace */
-    struct trace_t* trace;
+    struct trace_t* peaks_trace;
     /* two tracks correspond to pos and neg strands */
-    init_trace( genome, &trace, 2, track_names );
-    zero_traces( trace );
+    init_trace( genome, &peaks_trace, 2, track_names );
+    zero_traces( peaks_trace );
     
     int bi; /* bootstrap index */
     for( bi = 0; bi < NUM_BOOTSTRAP_SAMPLES; bi++ )
     {
-        /* open the IP wiggle file */
+        /* open the IP trace file */
         sprintf( fname, "%s/%s/bssample%i.ip.wig", 
                  BOOTSTRAP_SAMPLES_ALL_PATH, samples_dname, bi+1 );
-        FILE* ip_wig = open_check_error( fname, "r" ); 
+        struct trace_t* ip_trace;
+        load_trace_from_file( &ip_trace, fname );
         
-        /* open the NC wiggle file */
+        /* open the NC trace file */
         sprintf( fname, "%s/%s/bssample%i.nc.wig", 
                  BOOTSTRAP_SAMPLES_ALL_PATH, samples_dname, bi+1 );
-        FILE* nc_wig = open_check_error( fname, "r" ); 
+        struct trace_t* nc_trace;
+        load_trace_from_file( &nc_trace, fname );
         
-        call_peaks_from_wiggles( ip_wig, nc_wig, genome, trace );
+        update_ip_is_gt_nc_counts_from_traces( ip_trace, nc_trace, peaks_trace );        
         
-        fclose( ip_wig );
-        fclose( nc_wig );
+        close_traces( ip_trace );
+        close_traces( nc_trace );
     }
     
-    apply_to_trace( trace, calc_pvalue );
-    apply_to_trace( trace, subtract_from_1 );
+    apply_to_trace( peaks_trace, calc_pvalue );
+    apply_to_trace( peaks_trace, subtract_from_1 );
     
-    sprintf( fname, "%s/sample%i.wig", CALLED_PEAKS_OUTPUT_DIRECTORY, sample_id );
-    FILE* ofp = open_check_error( fname, "w" );
-    write_wiggle_from_trace_to_stream( trace, ofp, 0.0 );
-    fclose( ofp );
+    sprintf( fname, "%s/sample%i.bin.trace", CALLED_PEAKS_OUTPUT_DIRECTORY, sample_id );
+    write_trace_to_file( peaks_trace, fname );
     
-    close_traces( trace );
+    close_traces( peaks_trace );
     
     return;
 }
@@ -225,8 +234,8 @@ call_peaks( struct genome_data* genome )
 {
     /* open and parse the meta info ( the likelihoods ) */
     FILE* meta_info_fp = open_check_error( RELAXED_SAMPLES_META_INFO_FNAME, "r" );
-    global_lhd_weights = NULL;
-    parse_meta_info( meta_info_fp, &global_lhd_weights );
+    double* lhd_weights = NULL;
+    parse_meta_info( meta_info_fp, &lhd_weights );
     fclose( meta_info_fp );
 
     DIR *dp;
@@ -257,23 +266,30 @@ call_peaks( struct genome_data* genome )
     (void) closedir (dp);
 
     /** Combine all of the peaks */
-    /* open all of the wiggles */
-    FILE** fps = malloc( sizeof(FILE*)*num_samples );
+    /* open a trace to aggregate over */
+    char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};
+    struct trace_t* peaks_trace;
+    init_trace( genome, &peaks_trace, 2, track_names );
+    zero_traces( peaks_trace );    
+    
+    float lhds_sum = 0;
+    
     int i;
+    /* aggregate them into a 'final' wiggle */
     for( i = 0; i < num_samples; i++ )
     {
         char fname[500];
         sprintf( fname, "%s/sample%i.wig", CALLED_PEAKS_OUTPUT_DIRECTORY, i+1 );
-        fps[i] = open_check_error( fname, "r" );
+
+        struct trace_t* local_peaks;
+        load_trace_from_file( &local_peaks, fname );
+        multiply_trace_by_scalar( local_peaks, lhd_weights[i] );
+        aggregate_over_traces( peaks_trace, local_peaks, sum );
+        lhds_sum += lhd_weights[i];
+        close_traces( local_peaks );
     }
+    /* renormalize by the lhds */
+    divide_trace_by_sum( peaks_trace, lhds_sum );
     
-    /* aggregate them into a 'final' wiggle */
-    FILE* peaks_fp = open_check_error( JOINED_CALLED_PEAKS_FNAME, "w" );
-    aggregate_over_wiggles( fps, num_samples, peaks_fp, 0, wig_lines_weighted_sum );
-    fclose( peaks_fp );
     
-    /* close the sample wig fp's */
-    for( i = 0; i < num_samples; i++ )
-        fclose( fps[i] );
-    free( fps );
 }

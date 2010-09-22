@@ -40,6 +40,66 @@ init_trace_array( size_t size  )
     return chr_trace;
 }
 
+void
+init_trace_locks( struct trace_t* trace )
+{
+    /* allocate space for the locks */
+    #ifdef USE_MUTEX
+    trace->locks = malloc(sizeof(pthread_mutex_t**)*trace->num_tracks);
+    #else
+    trace->locks = malloc(sizeof(pthread_spinlock_t**)*trace->num_tracks);
+    #endif
+    
+    assert( trace->locks != NULL );
+    
+    /* Allocate space for the pointers to the chr's individual traces and the locks */
+    int i;
+    for( i = 0; i < trace->num_tracks; i++ )
+    {
+        /* Store the trace mutex pointers */
+        #ifdef USE_MUTEX
+        trace->locks[i] = malloc( trace->num_chrs*sizeof(pthread_mutex_t*) );
+        #else
+        trace->locks[i] = malloc( trace->num_chrs*sizeof(pthread_spinlock_t*) );
+        #endif        
+        assert( trace->locks[i] != NULL );
+        
+        /* initialize each chr */
+        int j;
+        for( j = 0; j < trace->num_chrs; j++ )
+        {            
+            /* initialize the locks */
+            int locks_len = trace->chr_lengths[j]/TM_GRAN;
+            if( trace->chr_lengths[j] % TM_GRAN > 0 )
+                locks_len += 1;
+            
+            #ifdef USE_MUTEX
+            trace->locks[i][j] = malloc( locks_len*sizeof(pthread_mutex_t) );
+            #else
+            trace->locks[i][j] = malloc( locks_len*sizeof(pthread_spinlock_t) );
+            #endif        
+            
+            int k;
+            for( k = 0; k < locks_len; k++ )
+            {
+                #ifdef USE_MUTEX
+                int error = pthread_mutex_init( trace->locks[i][j] + k, 0 );
+                #else
+                int error = pthread_spin_init( trace->locks[i][j] + k, 0 );
+                #endif        
+                
+                
+                if( error != 0 )
+                {
+                    perror( "Failed to initialize lock in init_trace" );
+                    exit( -1 );
+                }
+            }
+        }
+    }
+
+}
+
 /* Build mmapped arrays for all of the chrs ***/
 void
 init_trace( struct genome_data* genome,
@@ -79,15 +139,6 @@ init_trace( struct genome_data* genome,
         strcpy( (*traces)->chr_names[i], genome->chr_names[i] );
         
     }
-
-    /* allocate space for the locks */
-    #ifdef USE_MUTEX
-    (*traces)->locks = malloc(sizeof(pthread_mutex_t**)*num_tracks);
-    #else
-    (*traces)->locks = malloc(sizeof(pthread_spinlock_t**)*num_tracks);
-    #endif
-    
-    assert( (*traces)->locks != NULL );
     
     /* Allocate space for the pointers to the chr's individual traces and the locks */
     for( i = 0; i < num_tracks; i++ )
@@ -95,14 +146,6 @@ init_trace( struct genome_data* genome,
         /* Store the pointers for the chrs */
         (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE*) );
         assert( (*traces)->traces[i] != NULL );
-
-        /* Store the trace mutex pointers */
-        #ifdef USE_MUTEX
-        (*traces)->locks[i] = malloc( (*traces)->num_chrs*sizeof(pthread_mutex_t*) );
-        #else
-        (*traces)->locks[i] = malloc( (*traces)->num_chrs*sizeof(pthread_spinlock_t*) );
-        #endif        
-        assert( (*traces)->locks[i] != NULL );
         
         /* initialize each chr */
         int j;
@@ -113,37 +156,11 @@ init_trace( struct genome_data* genome,
             
             assert( (*traces)->traces[i][j] != NULL );
             memset( (*traces)->traces[i][j], 0, 
-                    sizeof(TRACE_TYPE)*(*traces)->chr_lengths[j] );
-            
-            /* initialize the locks */
-            int locks_len = (*traces)->chr_lengths[j]/TM_GRAN;
-            if( (*traces)->chr_lengths[j] % TM_GRAN > 0 )
-                locks_len += 1;
-            
-            #ifdef USE_MUTEX
-            (*traces)->locks[i][j] = malloc( locks_len*sizeof(pthread_mutex_t) );
-            #else
-            (*traces)->locks[i][j] = malloc( locks_len*sizeof(pthread_spinlock_t) );
-            #endif        
-            
-            int k;
-            for( k = 0; k < locks_len; k++ )
-            {
-                #ifdef USE_MUTEX
-                int error = pthread_mutex_init( (*traces)->locks[i][j] + k, 0 );
-                #else
-                int error = pthread_spin_init( (*traces)->locks[i][j] + k, 0 );
-                #endif        
-                
-                
-                if( error != 0 )
-                {
-                    perror( "Failed to initialize lock in init_trace" );
-                    exit( -1 );
-                }
-            }
+                    sizeof(TRACE_TYPE)*(*traces)->chr_lengths[j] );            
         }
     }
+    
+    init_trace_locks( *traces );
     
     return;
 }
@@ -328,6 +345,24 @@ divide_trace_by_sum( struct trace_t* traces, double value )
             for( k = 0; k < traces->chr_lengths[j]; k++ )
             {
                 traces->traces[i][j][k] /= value;
+            }
+        }
+    }
+    return;
+}
+
+void
+multiply_trace_by_scalar( struct trace_t* traces, double value )
+{
+    int i, j;
+    unsigned int k;
+    for( i = 0; i < traces->num_tracks; i++ )
+    {
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            {
+                traces->traces[i][j][k] *= value;
             }
         }
     }

@@ -816,12 +816,10 @@ sample_random_traces(
         if( SAVE_STARTING_SAMPLES )
         {
             char buffer[100];
-            sprintf( buffer, "%ssample%i.wig", STARTING_SAMPLES_PATH, i+1 );
-
-            write_wiggle_from_trace(
-                sample_trace, 
-                buffer, max_prb_change_for_convergence );
+            sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, i+1 );
             
+            write_trace_to_file( sample_trace, buffer );
+                        
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
             fprintf( ss_mi, "%i,%e\n", i+1, log_lhd );
             fflush( ss_mi );
@@ -838,11 +836,9 @@ sample_random_traces(
         if( SAVE_SAMPLES )
         {
             char buffer[100];
-            sprintf( buffer, "%ssample%i.wig", RELAXED_SAMPLES_PATH, i+1 );
+            sprintf( buffer, "%ssample%i.bin.trace", RELAXED_SAMPLES_PATH, i+1 );
 
-            write_wiggle_from_trace( 
-                sample_trace, 
-                buffer, max_prb_change_for_convergence );
+            write_trace_to_file( sample_trace, buffer );
             
             double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
             fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
@@ -878,92 +874,18 @@ sample_random_traces(
                 
                 if( SAVE_BOOTSTRAP_SAMPLES )
                 {
-                    sprintf( buffer, "%ssample%i/bssample%i.wig", 
+                    sprintf( buffer, "%ssample%i/bssample%i.bin.trace", 
                              BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
                     
-                    write_wiggle_from_trace( 
-                        sample_trace, 
-                        buffer, max_prb_change_for_convergence );
+                    write_trace_to_file( sample_trace, buffer );                    
                 }    
             }
             fprintf( stderr, " 100%%\n");
         }
         
-        if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
-        {
-            char buffer[200];
-            FILE** fps = malloc(sizeof(FILE*)*NUM_BOOTSTRAP_SAMPLES);
-            
-            int j;
-            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-            {
-                sprintf( buffer, "%ssample%i/bssample%i.wig", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
-                fps[j] = fopen( buffer, "r" );
-            }
-
-            /* make the MIN aggregates */
-            sprintf( buffer, "%ssample%i.wig", 
-                     BOOTSTRAP_SAMPLES_MIN_PATH, i+1 );
-            FILE* ofp = fopen( buffer, "w" );
-            aggregate_over_wiggles( 
-                fps, NUM_BOOTSTRAP_SAMPLES, ofp, FLT_EPSILON, wig_lines_min  );
-            fclose( ofp );
-            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-                fseek( fps[j], 0, SEEK_SET );
-            
-            /* make the MAX aggregates */
-            sprintf( buffer, "%ssample%i.wig", 
-                     BOOTSTRAP_SAMPLES_MAX_PATH, i+1 );
-            ofp = fopen( buffer, "w" );
-            aggregate_over_wiggles( 
-                fps, NUM_BOOTSTRAP_SAMPLES, ofp, FLT_EPSILON, wig_lines_max  );
-            fclose( ofp );
-            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-                fclose( fps[j] );
-            
-            free( fps );
-        }
-        
         close_traces( sample_trace );
     }
-
-    if( SAVE_AGGREGATED_BOOTSTRAP_SAMPLES )
-    {
-        char buffer[200];
-        FILE** fps = malloc(sizeof(FILE*)*num_samples);
-        
-        int j;
-
-        /* make the MIN aggregates */
-        for( j = 0; j < num_samples; j++ )
-        {
-            sprintf( buffer, "%ssample%i.wig", BOOTSTRAP_SAMPLES_MIN_PATH, j+1 );
-            fps[j] = fopen( buffer, "r" );
-            assert( fps[j] != NULL );
-        }
-        FILE* ofp = fopen( MIN_TRACE_FNAME, "w" );
-        aggregate_over_wiggles( fps, num_samples, ofp, FLT_EPSILON, wig_lines_min  );
-        fclose( ofp );
-        for( j = 0; j < num_samples; j++ )
-            fclose( fps[j] );
-        
-        /* make the MAX aggregates */
-        for( j = 0; j < num_samples; j++ )
-        {
-            sprintf( buffer, "%ssample%i.wig", BOOTSTRAP_SAMPLES_MAX_PATH, j+1 );
-            fps[j] = fopen( buffer, "r" );
-            assert( fps[j] != NULL );
-        }
-        ofp = fopen( MAX_TRACE_FNAME, "w" );
-        aggregate_over_wiggles( fps, num_samples, ofp, FLT_EPSILON, wig_lines_max  );
-        fclose( ofp );
-        for( j = 0; j < num_samples; j++ )
-            fclose( fps[j] );
-        
-        free( fps );
-    }
-
+    
     /* Create the meta data csv's */
     if( SAVE_STARTING_SAMPLES )
         fclose(ss_mi);
@@ -1630,11 +1552,11 @@ take_chipseq_sample_wnc(
     if( SAVE_SAMPLES )
     {
         char wig_fname[100];
-        sprintf( wig_fname, "%ssample%i.ip.wig", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_wiggle_from_trace( ip_trace, wig_fname, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+        sprintf( wig_fname, "%ssample%i.ip.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
+        write_trace_to_file( ip_trace, wig_fname );
                 
-        sprintf( wig_fname, "%ssample%i.nc.wig", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_wiggle_from_trace( nc_trace, wig_fname, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+        sprintf( wig_fname, "%ssample%i.nc.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
+        write_trace_to_file( ip_trace, wig_fname );
 
         /* write the lhd to the meta info folder */
         double log_lhd = calc_log_lhd( 
@@ -1678,18 +1600,16 @@ take_chipseq_sample_wnc(
             if( SAVE_BOOTSTRAP_SAMPLES )
             {
                 /* write out the IP */
-                sprintf( buffer, "%ssample%i/bssample%i.ip.wig", 
+                sprintf( buffer, "%ssample%i/bssample%i.ip.bin.trace", 
                          BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
 
-                write_wiggle_from_trace( 
-                    ip_trace, buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+                write_trace_to_file( ip_trace, buffer );
 
                 /* write out the NC */
-                sprintf( buffer, "%ssample%i/bssample%i.nc.wig", 
+                sprintf( buffer, "%ssample%i/bssample%i.nc.bin.trace", 
                          BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
-                        
-                write_wiggle_from_trace( 
-                    nc_trace, buffer, MAX_PRB_CHANGE_FOR_CONVERGENCE );
+
+                write_trace_to_file( nc_trace, buffer );                        
             }    
         }
         fprintf( stderr, " 100%%\n");
@@ -1780,9 +1700,7 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
         update_reads
     );
     
-    write_wiggle_from_trace( 
-        uniform_trace, 
-        "relaxed_mapping.wig", max_prb_change_for_convergence );
+    write_trace_to_file( uniform_trace, "relaxed_mapping.bin.trace" );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 

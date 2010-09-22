@@ -62,6 +62,9 @@ void
 divide_trace_by_sum( struct trace_t* traces, double value );
 
 void
+multiply_trace_by_scalar( struct trace_t* traces, double value );
+
+void
 normalize_traces( struct trace_t* traces );
 
 double
