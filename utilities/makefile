@@ -118,6 +118,7 @@ call_peaks.c :
 clean :
 	-rm aggregate_over_wiggles
 	-rm aggregate_over_traces
+	-rm convert_trace_into_wiggle
 	-rm mapped_reads_into_sam
 	-rm mapped_reads_into_wiggle
 	-rm estimate_read_density
