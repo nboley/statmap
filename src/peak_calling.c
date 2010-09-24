@@ -288,7 +288,7 @@ call_peaks( struct genome_data* genome )
         struct trace_t* local_peaks;
         load_trace_from_file( &local_peaks, fname );
         multiply_trace_by_scalar( local_peaks, lhd_weights[i] );
-        aggregate_over_traces( peaks_trace, local_peaks, sum );
+        aggregate_over_trace_pairs( peaks_trace, local_peaks, sum );
         lhds_sum += lhd_weights[i];
         close_traces( local_peaks );
     }

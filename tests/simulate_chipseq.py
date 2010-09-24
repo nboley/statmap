@@ -189,6 +189,9 @@ def parse_wig( fname, genome ):
     fp.close()
     return tracks
 
+def parse_trace( fname ):
+    return trace.load_trace_from_file( fname  )
+
 def parse_bwtout( fname, genome, paired_end ):
     fp = open( fname )
     tracks = [ {}, {} ]
@@ -463,7 +466,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
                 fnames.append( file )
                 
         for fname in fnames:
-            density = parse_wig( fname, genome )
+            density = parse_trace( fname, genome )
             plot_wiggle( density, color )
         os.chdir(curr_dir)
 
@@ -474,7 +477,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
     
     rpy.r("par(mfg=c(2,1))")
-    true_density = parse_wig( "true_read_coverage.wig", genome )    
+    true_density = parse_trace( "true_read_coverage.wig", genome )    
     plot_wiggle( true_density, 'black', lty=3, lwd=3 )
     
     for index in xrange(len(genome)):
@@ -496,23 +499,23 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     
     # marginal mapping
     """
-    density = parse_wig( "./smo_chipseq_sim/marginal_mappings_fwd.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_fwd.wig", genome )
     plot_wiggle( density, 'blue' )
 
-    density = parse_wig( "./smo_chipseq_sim/marginal_mappings_bkwd.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_bkwd.wig", genome )
     plot_wiggle( density, 'blue' )
     """
     
-    density = parse_wig( "./smo_chipseq_sim/max_trace.ip.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/max_trace.ip.wig", genome )
     plot_wiggle( density, 'blue' )
     
-    density = parse_wig( "./smo_chipseq_sim/min_trace.ip.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/min_trace.ip.wig", genome )
     plot_wiggle( density, 'red' )
 
     # plot the called peak p-values
 
     nf = 0.4
-    density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
     plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
     for index in xrange(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
@@ -521,7 +524,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
 
     
     """
-    density = parse_wig( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
     if len( density ) > 0:
         rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     if len( density ) > 1:

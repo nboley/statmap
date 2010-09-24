@@ -80,10 +80,19 @@ void
 apply_to_trace( struct trace_t* traces, double (*fun)(double) );
 
 void
-aggregate_over_traces(  struct trace_t* update_trace, 
-                        const struct trace_t* const other_trace,
-                        TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
-    );
+aggregate_over_trace_pairs(  
+    struct trace_t* update_trace, 
+    const struct trace_t* const other_trace,
+    TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
+);
+
+void
+aggregate_over_traces_from_fnames(  
+    char** fnames,
+    int num_files,
+    struct trace_t** agg_trace,
+    TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
+);
 
 /****************************************************************
  * Wiggle IO

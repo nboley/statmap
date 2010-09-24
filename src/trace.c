@@ -468,10 +468,10 @@ apply_to_trace( struct trace_t* traces, double (*fun)(double) )
 /* traces must be the same dimension */
 /* This function applies an aggregate to every basepair in the traces */
 void
-aggregate_over_traces(  struct trace_t* update_trace, 
-                        const struct trace_t* const other_trace,
-                        TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
-                     )
+aggregate_over_trace_pairs(  struct trace_t* update_trace, 
+                             const struct trace_t* const other_trace,
+                             TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
+                          )
 {
     int trace_index, chr;
     unsigned int bp;
@@ -494,6 +494,31 @@ aggregate_over_traces(  struct trace_t* update_trace,
         }
     }
 
+    return;
+}
+
+void
+aggregate_over_traces_from_fnames(  
+    char** fnames,
+    int num_files,
+    struct trace_t** agg_trace,
+    TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
+)
+{
+    /* initalize the trace that we will aggregate over from the first file */    
+    load_trace_from_file( agg_trace, fnames[0] );
+    
+    int i;
+    for( i = 1; i < num_files; i++ )
+    {
+        char* fname = fnames[i];
+        
+        struct trace_t* curr_trace;
+        load_trace_from_file( &curr_trace, fname );
+        aggregate_over_trace_pairs( *agg_trace, curr_trace, aggregate );
+        close_traces( curr_trace );
+    }
+    
     return;
 }
 
@@ -638,10 +663,13 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     
     /* write the magic number */
     char MN[7];
+    memset( MN, 0, sizeof(char)*7 );
     rv = fread( MN, sizeof(char), 6, is );
-    MN[6] = '\0';
-    assert( 6 == rv );
-    assert( 0 == strcmp( MN, TRACE_MAGIC_NUMBER ) );
+    if( 6 != rv || 0 != strcmp( MN, TRACE_MAGIC_NUMBER ))
+    {
+        fprintf( stderr, "FATAL           : Mismatched bin trace header ( rv: %i, header: '%s')\n", rv, MN );
+        assert( 0 );
+    }
     
     /** find the number of tracks */
     rv = fread( &(trace->num_tracks), sizeof(int), 1, is );

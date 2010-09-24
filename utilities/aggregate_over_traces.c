@@ -45,7 +45,7 @@ main( int argc, char** argv )
     {
         struct trace_t* curr_trace;
         load_trace_from_file( &curr_trace, argv[i+3] );
-        aggregate_over_traces( update_trace, curr_trace, agg_fn );
+        aggregate_over_trace_pairs( update_trace, curr_trace, agg_fn );
         close_traces( curr_trace );
     }
     
