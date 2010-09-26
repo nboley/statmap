@@ -11,6 +11,9 @@ import re
 import subprocess
 import gzip
 
+sys.path.insert( 0, "../python_lib/" )
+import trace
+
 import tests as sc # for simulation code
 
 NUM_READS = 1000
@@ -47,7 +50,7 @@ tf_conc = 1e-12
 
 class frag_len_generator_t():
     def __init__( self ):
-        self.sizes = range( 400, 801 )
+        self.sizes = list(range( 400, 801))
         
         # sapply( 400:800, function(x)pnorm( x, 600, 100 ) )
         self.weights = [
@@ -124,7 +127,7 @@ def build_chipseq_region(  ):
 
 def score_binding_sites( region, motif ):
     scores = [0]*800
-    for i in xrange( 800, len(region) - 800 - len(motif) ):
+    for i in range( 800, len(region) - 800 - len(motif) ):
         score1 = sum( bcd_motif[j][bp_index[bp]] for j, bp in enumerate(region[i:(i+len(motif))]) )
         score2 = sum( bcd_motif[j][bp_index[comp[bp]]] for j, bp in enumerate(region[i:(i+len(motif))][::-1]) )
         scores.append( max( score1, score2 ) )
@@ -140,7 +143,7 @@ def build_cum_array( items ):
     for item in items:
         curr_sum += item
         new_list.append( curr_sum )
-    for i in xrange( len( new_list ) ):
+    for i in range( len( new_list ) ):
         new_list[i] /= curr_sum
     new_list.append( 1.0 )
     return array.array( 'f', new_list )
@@ -152,7 +155,7 @@ def build_fragments( region, bind_prbs, num ):
     
     fragments = []
 
-    for i in xrange( num ):
+    for i in range( num ):
         # choose a random binding site
         bs_index = bisect.bisect_left( cum_array, random.random() )
         # determine the fragment length for this read
@@ -180,7 +183,7 @@ def parse_wig( fname, genome ):
             chr_name = line.strip().split("=")[1]
             curr_chr_name = chr_name
             # append a new chr array
-            tracks[-1][chr_name] = numpy.zeros(len(genome.values()[len(tracks[-1])-1])+1)
+            tracks[-1][chr_name] = numpy.zeros(len(list(genome.values())[len(tracks[-1])-1])+1)
         # assume this is a variable step line
         else:
             data = line.strip().split("\t")
@@ -195,7 +198,7 @@ def parse_trace( fname ):
 def parse_bwtout( fname, genome, paired_end ):
     fp = open( fname )
     tracks = [ {}, {} ]
-    for index, chr_name in enumerate( genome.keys() ):
+    for index, chr_name in enumerate( list(genome.keys()) ):
         tracks[0][chr_name] = numpy.zeros(len(genome[chr_name])+1)
         tracks[1][chr_name] = numpy.zeros(len(genome[chr_name])+1)
     while True:
@@ -248,7 +251,7 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     mutated_chr2L_maternal = array.array( 'c', chr2L_maternal )
     
     # mutated num_mutations random indexes
-    rand_indexes = random.sample( xrange(len(mutated_chr2L_maternal)), num_mutations )
+    rand_indexes = random.sample( range(len(mutated_chr2L_maternal)), num_mutations )
     for rand_index in rand_indexes:
         curr_bp = mutated_chr2L_maternal[ rand_index ]
         valid_bps = [ bp for bp in bps if bp != curr_bp ]
@@ -335,7 +338,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, 
     mutated_chr2L = array.array( 'c', chr2L )
     
     # mutate num_mutations random indexes
-    rand_indexes = random.sample( xrange(len(mutated_chr2L )), num_mutations )
+    rand_indexes = random.sample( range(len(mutated_chr2L )), num_mutations )
     for rand_index in rand_indexes:
         curr_bp = mutated_chr2L[ rand_index ]
         valid_bps = [ bp for bp in bps if bp != curr_bp ]
@@ -389,18 +392,18 @@ def map_with_statmap( iterative=True, paired_end=True ):
         call += " -a i"
         
     # run statmap
-    print re.sub( "\s+", " ", call)    
+    print(re.sub( "\s+", " ", call))    
     ret_code = subprocess.call( call, shell=True )    
     if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
+        print("TEST FAILED - statmap call returned error code ", ret_code)
         sys.exit( -1 )
     
     # run the aggregation generation code
     call = [ "../utilities/build_aggregates.py", "smo_chipseq_sim" ]
-    print >> sc.stdout, " ".join( call )
+    print(" ".join( call ), file=sc.stdout)
     ret_code = subprocess.call( call  )
     if ret_code != 0:
-        print "TEST FAILED - aggregation call returned error code ", ret_code
+        print("TEST FAILED - aggregation call returned error code ", ret_code)
         sys.exit( -1 )
         
     return
@@ -408,8 +411,8 @@ def map_with_statmap( iterative=True, paired_end=True ):
 def call_peaks( ):
     ret_code = subprocess.call( "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH, shell=True )    
     if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        print "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH
+        print("TEST FAILED - statmap call returned error code ", ret_code)
+        print("%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH)
         sys.exit( -1 )
     
 
@@ -447,15 +450,15 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
         rpy.r.plot( (), main='', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
 
     def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
-        for index, key in enumerate(genome.keys()):
+        for index, key in enumerate(list(genome.keys())):
             rpy.r("par(mfg=c(%i,1))" % (index+1))
-            if len( wiggle_density ) > 0 and wiggle_density[0].has_key( key ):
+            if len( wiggle_density ) > 0 and key in wiggle_density[0]:
                 rpy.r.points( wiggle_density[0][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 1 and wiggle_density[1].has_key( key ):
+            if len( wiggle_density ) > 1 and key in wiggle_density[1]:
                 rpy.r.points( -1*wiggle_density[1][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
-            if len( wiggle_density ) > 2 and wiggle_density[2].has_key( key ):
+            if len( wiggle_density ) > 2 and key in wiggle_density[2]:
                 rpy.r.points( wiggle_density[2][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-            if len( wiggle_density ) > 3 and wiggle_density[3].has_key( key ):
+            if len( wiggle_density ) > 3 and key in wiggle_density[3]:
                 rpy.r.points( -1*wiggle_density[3][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
         
     def plot_wiggles( dir, color, lty=1, lwd=0.5, filter=""  ):
@@ -477,10 +480,10 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
     
     rpy.r("par(mfg=c(2,1))")
-    true_density = parse_trace( "true_read_coverage.wig", genome )    
+    true_density = parse_wig( "true_read_coverage.wig", genome )    
     plot_wiggle( true_density, 'black', lty=3, lwd=3 )
     
-    for index in xrange(len(genome)):
+    for index in range(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         for bp_index in mut_indexes:
             rpy.r.abline( v=bp_index, col='red', lty=2  )
@@ -489,49 +492,49 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
     plot_wiggle( density, 'dark green', lty=1, lwd=2 )
     
-    for index in xrange(len(genome)):
+    for index in range(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         true_density = parse_wig( "binding_site_occupancies.wig", genome )
-        for index, value in enumerate(true_density[0].values()[0]):
+        for index, value in enumerate(list(true_density[0].values())[0]):
             if value > 0.50:
                 rpy.r.abline( v=index, col='black', lty=2, lwd=1  )
     
     
     # marginal mapping
     """
-    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_fwd.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_fwd.bin.trace" )
     plot_wiggle( density, 'blue' )
 
-    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_bkwd.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/marginal_mappings_bkwd.bin.trace" )
     plot_wiggle( density, 'blue' )
     """
     
-    density = parse_trace( "./smo_chipseq_sim/max_trace.ip.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/max_trace.ip.bin.trace" )
     plot_wiggle( density, 'blue' )
     
-    density = parse_trace( "./smo_chipseq_sim/min_trace.ip.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/min_trace.ip.bin.trace" )
     plot_wiggle( density, 'red' )
 
     # plot the called peak p-values
 
     nf = 0.4
-    density = parse_trace( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/called_peaks/peaks.bin.trace" )
     plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
-    for index in xrange(len(genome)):
+    for index in range(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
         rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
 
     
     """
-    density = parse_trace( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
+    density = parse_trace( "./smo_chipseq_sim/relaxed_mapping.bin.trace" )
     if len( density ) > 0:
         rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     if len( density ) > 1:
         rpy.r.points( -1*density[1]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
     """
         
-    for index in xrange(len(genome)):
+    for index in range(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         for bp_index in mut_indexes:
             rpy.r.abline( v=bp_index, col='red', lty=2  )

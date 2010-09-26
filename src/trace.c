@@ -752,6 +752,8 @@ write_trace_to_file( struct trace_t* trace, char* fname )
 void
 load_trace_from_stream( struct trace_t** trace, FILE* is )
 {
+    size_t rv;
+    
     *trace = malloc( sizeof( struct trace_t ) );
     
     load_trace_header_from_stream( *trace, is );
@@ -769,9 +771,10 @@ load_trace_from_stream( struct trace_t** trace, FILE* is )
             /* read the array from track i, chr j */            
             (*trace)->traces[i][j] = 
                 malloc( sizeof(TRACE_TYPE)*((*trace)->chr_lengths[j]) );
-            fread( (*trace)->traces[i][j], 
+            rv = fread( (*trace)->traces[i][j], 
                     sizeof(TRACE_TYPE), (*trace)->chr_lengths[j],
                     is );
+            assert( rv == (*trace)->chr_lengths[j] );
         }
     }
     

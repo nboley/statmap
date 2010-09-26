@@ -205,13 +205,13 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     for( bi = 0; bi < NUM_BOOTSTRAP_SAMPLES; bi++ )
     {
         /* open the IP trace file */
-        sprintf( fname, "%s/%s/bssample%i.ip.wig", 
+        sprintf( fname, "%s/%s/bssample%i.ip.bin.trace", 
                  BOOTSTRAP_SAMPLES_ALL_PATH, samples_dname, bi+1 );
         struct trace_t* ip_trace;
         load_trace_from_file( &ip_trace, fname );
         
         /* open the NC trace file */
-        sprintf( fname, "%s/%s/bssample%i.nc.wig", 
+        sprintf( fname, "%s/%s/bssample%i.nc.bin.trace", 
                  BOOTSTRAP_SAMPLES_ALL_PATH, samples_dname, bi+1 );
         struct trace_t* nc_trace;
         load_trace_from_file( &nc_trace, fname );
@@ -283,7 +283,7 @@ call_peaks( struct genome_data* genome )
     for( i = 0; i < num_samples; i++ )
     {
         char fname[500];
-        sprintf( fname, "%s/sample%i.wig", CALLED_PEAKS_OUTPUT_DIRECTORY, i+1 );
+        sprintf( fname, "%s/sample%i.bin.trace", CALLED_PEAKS_OUTPUT_DIRECTORY, i+1 );
 
         struct trace_t* local_peaks;
         load_trace_from_file( &local_peaks, fname );
