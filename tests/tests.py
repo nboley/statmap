@@ -4,7 +4,7 @@ import sys
 import numpy
 import string
 import random
-
+from itertools import izip
 from operator import itemgetter
 import bisect 
 import gzip    
@@ -15,7 +15,7 @@ import array
 import os
 import shutil
 import subprocess
-import io
+import StringIO
 import tempfile
 
 import numpy
@@ -42,21 +42,18 @@ CLEANUP = True
 
 bps = [ 'a', 'A', 'c', 'C', 'g', 'G', 't', 'T', 'n', 'N' ]
 bps_set = set( [ 'a', 'A', 'c', 'C', 'g', 'G', 't', 'T'] )
-bp_complement = { 'a': 't', 'A': 'T', 'c': 'g', 'C': 'G', 'g': 'c', 'G': 'C', 't': 'a', 'T': 'A'}
+bp_complement = {'a': 't', 'A': 'T', 'c': 'g', 'C': 'G', 'g': 'c', 'G': 'C', 't': 'a', 'T': 'A'}
 
 # build the translation table, for building the random genome
-from_str = ''.join( str(i) for i in range( 10 )).encode()
+from_str = ''.join( str(i) for i in range( 10 ))
 to_str = ''.join(bps)
-print( from_str, to_str )
-# translation_table = string.maketrans( from_str, to_str  )
-translation_table = str.maketrans( bp_complement  )
+translation_table = string.maketrans( from_str, to_str  )
 
 # build a translation table for the rev complement
 from_str = ''.join(bps[:-2])
 to_str = ''.join( bp_complement[bp] for bp in from_str )
-print( from_str, to_str )
-# rev_comp_table = str.maketrans( from_str, to_str  )
-rev_comp_table = str.maketrans( from_str, to_str  )
+rev_comp_table = string.maketrans( from_str, to_str  )
+
 
 #### Data Types ########
 
@@ -134,7 +131,7 @@ def calc_mutation_probs_from_solexa_string( quality_string ):
 
 def mutate_solexa_read( read, quality_string ):
     rv = []
-    for bp, char in zip( read, quality_string ):
+    for bp, char in izip( read, quality_string ):
         if random.random() > calc_mutation_prob_from_solexa_char( char ):
             rv.append( bp )
         else:
@@ -153,7 +150,7 @@ def get_error_strs_from_fastq( fastq_iterator ):
 
 def calc_penalty( ref_seq, seq, error_str ):
     penalty = 0
-    for bp, bp_ref, error_char in zip(seq, ref_seq, error_str):
+    for bp, bp_ref, error_char in izip(seq, ref_seq, error_str):
         mut_prob = calc_mutation_prob_from_solexa_char( error_char )
         if bp.upper() == bp_ref.upper():
             penalty += math.log10( 1 - mut_prob )
@@ -163,7 +160,7 @@ def calc_penalty( ref_seq, seq, error_str ):
     return penalty
 
 def generate_solexa_error_strs_from_sample( population, num ):
-    for loop in range( num ):
+    for loop in xrange( num ):
         sample = random.sample( population, 1 )
         yield sample[0]
 
@@ -204,17 +201,17 @@ def write_genome_to_fasta( genome, fasta_fp, num_repeats=1 ):
     # the maximum length, in bp's, of each fasta line
     FA_LL = 50
     
-    for chr_name in list(genome.keys()):
+    for chr_name in genome.keys():
         fasta_fp.write( ">%s\n" % chr_name)
         
         seq = genome[chr_name]*num_repeats
         chr_size = len(seq)
 
-        for start, stop in zip( \
-                range(0,chr_size,FA_LL), \
-                range(FA_LL,chr_size+FA_LL+1,FA_LL) \
+        for start, stop in izip( \
+                xrange(0,chr_size,FA_LL), \
+                xrange(FA_LL,chr_size+FA_LL+1,FA_LL) \
             ):
-            fasta_fp.write( seq[start:stop].decode() )
+            fasta_fp.write( seq[start:stop] )
             fasta_fp.write( "\n" )
     
     return
@@ -225,14 +222,14 @@ def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
     # calculate the genome lengths sum, to make
     # sure that our samples are uniform in the 
     # chr length
-    chr_names = list(genome.keys())
+    chr_names = genome.keys()
     chr_names.sort()
     chr_lens = [ len(genome[key]) for key in chr_names ]
     # subtract frag len  to account for the missing sample range at the end
-    chr_lens_cdr = [ sum(chr_lens[:i])-frag_len for i in range(len(genome)+1) ]
+    chr_lens_cdr = [ sum(chr_lens[:i])-frag_len for i in xrange(len(genome)+1) ]
     chr_lens_cdr[0] = 0
     chr_lens_cdr = numpy.array( chr_lens_cdr )
-    for loop in range( nsamples ):
+    for loop in xrange( nsamples ):
         rnd_num = random.randint( 0, chr_lens_cdr[-1] - 1  )
         chr_index = chr_lens_cdr.searchsorted( rnd_num  ) - 1
         rnd_bp = random.randint( 0, chr_lens[chr_index] - frag_len - 1 )
@@ -245,15 +242,15 @@ def build_snps_from_genome( genome, num ):
     # calculate the genome lengths sum, to make
     # sure that our samples are uniform in the 
     # chr length
-    chr_names = list(genome.keys())
+    chr_names = genome.keys()
     chr_names.sort()
     chr_lens = [ len(genome[key]) for key in chr_names ]
-    chr_lens_cdr = [ sum(chr_lens[:i]) for i in range(len(genome)+1) ]
+    chr_lens_cdr = [ sum(chr_lens[:i]) for i in xrange(len(genome)+1) ]
     chr_lens_cdr[0] = 0
     chr_lens_cdr = numpy.array( chr_lens_cdr )
     # sample all of the chr's
     samples = set()
-    for loop in range( num ):
+    for loop in xrange( num ):
         rnd_num = random.randint( 0, chr_lens_cdr[-1] - 1  )
         chr_index = chr_lens_cdr.searchsorted( rnd_num  ) - 1
         # make sure that we dont get duplicates
@@ -271,7 +268,7 @@ def build_snps_from_genome( genome, num ):
     return snps
 
 def write_snps_to_snpcov_file( snps, genome, fname  ):
-    chr_names = list(genome.keys())
+    chr_names = genome.keys()
     chr_names.sort()
     
     fp = open( fname, "w" )
@@ -375,8 +372,8 @@ def build_expected_map_locations_from_repeated_genome( \
     truth, chr_len, num_repeats, paired_reads ):
     if paired_reads == True:
         for start, stop in truth:            
-            read_starts = [ start + i*chr_len for i in range(num_repeats) ]
-            read_stops = [ start + i*chr_len for i in range(num_repeats) ]
+            read_starts = [ start + i*chr_len for i in xrange(num_repeats) ]
+            read_stops = [ start + i*chr_len for i in xrange(num_repeats) ]
             
             truth_locs = set()
             for s in read_starts:
@@ -387,8 +384,8 @@ def build_expected_map_locations_from_repeated_genome( \
     
     if paired_reads == False:
         for start, stop in truth:            
-            read_starts = [ start + i*chr_len for i in range(num_repeats) ]
-            read_stops = [ start + i*chr_len for i in range(num_repeats) ]
+            read_starts = [ start + i*chr_len for i in xrange(num_repeats) ]
+            read_stops = [ start + i*chr_len for i in xrange(num_repeats) ]
         return set( read_starts ), set( read_stops )
     
 ###
@@ -425,12 +422,12 @@ def test_sequence_finding( read_len, rev_comp = False ):
     call = "%s -g tmp.genome -s -r tmp.fastq -s -o %s\
                              -t 1 " % ( STATMAP_PATH, output_directory )
     
-    print(re.sub( "\s+", " ", call), file=stdout)
+    print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     # ret_code = ( os.system( call ) >> 8 )
     if ret_code != 0:
-        raise ValueError("TEST FAILED: statmap call returned error code '%s'" % str( ret_code ))
+        raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
         
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -439,21 +436,22 @@ def test_sequence_finding( read_len, rev_comp = False ):
     sam_fp.seek(0)
 
     if len(fragments) != total_num_reads:
-        raise ValueError("Mapping returned too few reads.")
+        raise ValueError, "Mapping returned too few reads."
     
     
-    for reads_data, truth in zip( iter_sam_reads( sam_fp ), fragments ):
+    for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != 1:
-            raise ValueError("Mapping returned too many results.")
+            raise ValueError, "Mapping returned too many results."
         
         loc = ( reads_data[0][2], int(reads_data[0][3]) )
         
         # make sure the chr and start locations are identical
         if loc[0] != truth[0] \
            or loc[1] != truth[1]:
-            raise ValueError("Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  ))
+            raise ValueError, \
+                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
     
@@ -468,13 +466,13 @@ def test_fivep_sequence_finding( ):
     rls = [ 15, 25, 50, 75  ]
     for rl in rls:
         test_sequence_finding( rl, False )
-        print("PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl)
+        print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_threep_sequence_finding( ):
     rls = [ 15, 75  ]
     for rl in rls:
         test_sequence_finding( rl, True ) 
-        print("PASS: Reverse Mapping %i BP test. ( Statmap appears to be mapping 3', perfect reads correctly )" % rl)
+        print "PASS: Reverse Mapping %i BP test. ( Statmap appears to be mapping 3', perfect reads correctly )" % rl
 
 def test_short_sequences():
     failed_lengths = []
@@ -482,13 +480,13 @@ def test_short_sequences():
     for rl in rls:
         try:
             test_sequence_finding( rl, False )
-        except Exception as inst:
+        except Exception, inst:
             failed_lengths.append( rl )
     if len( failed_lengths ) == 0:
-        print("PASS: Short Read Mapping Passed All Index Lengths ( %s )" % ' '.join( map( str, rls ) )) 
+        print "PASS: Short Read Mapping Passed All Index Lengths ( %s )" % ' '.join( map( str, rls ) ) 
     else:
-        print("FAIL: Short Read Mapping Failed for Index Lengths: %s ( of %s )" \
-            % ( ' '.join( map( str, failed_lengths ) ), ' '.join( map( str, rls ) ) )) 
+        print "FAIL: Short Read Mapping Failed for Index Lengths: %s ( of %s )" \
+            % ( ' '.join( map( str, failed_lengths ) ), ' '.join( map( str, rls ) ) ) 
         sys.exit( -1 )
 ###
 # Test to make sure that we are correctly finding paired end reads. 
@@ -530,11 +528,11 @@ def test_paired_end_reads( read_len ):
     call = "%s -g tmp.genome -s -1 tmp.1.fastq -2 tmp.2.fastq -o %s \
                                -t 1 " % ( STATMAP_PATH, output_directory)
         
-    print(re.sub( "\s+", " ", call), file=stdout)
+    print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print("TEST FAILED - statmap call returned error code ", ret_code)
+        print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -544,21 +542,22 @@ def test_paired_end_reads( read_len ):
     sam_fp.seek(0)
 
     if len(fragments) != total_num_reads:
-        raise ValueError("Mapping returned too few reads (%i/%i)." % ( total_num_reads, len(fragments) ))
+        raise ValueError, "Mapping returned too few reads (%i/%i)." % ( total_num_reads, len(fragments) )
         
-    for reads_data, truth in zip( iter_sam_reads( sam_fp ), fragments ):
+    for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != 2:
-            print(reads_data)
-            raise ValueError("Mapping returned too many results.")
+            print reads_data
+            raise ValueError, "Mapping returned too many results."
         
         loc = ( reads_data[0][2], int(reads_data[0][3]) )
         
         # make sure the chr and start locations are identical
         if loc[0] != truth[0] \
            or loc[1] != truth[1]:
-            raise ValueError("Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  ))
+            raise ValueError, \
+                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
 
@@ -573,7 +572,7 @@ def test_paired_end_sequence_finding( ):
     rls = [ 25, 75  ]
     for rl in rls:
         test_paired_end_reads( rl ) 
-        print("PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl)
+        print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
@@ -584,7 +583,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
 
     ###### Prepare the data for the test ############################################
     # build a random genome
-    r_genome = build_random_genome( [GENOME_LEN]*n_chrs, list(map( str, list(range( 1, n_chrs+1)) )) )
+    r_genome = build_random_genome( [GENOME_LEN]*n_chrs, map( str, range( 1, n_chrs+1 ) ) )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
@@ -607,11 +606,11 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
                              -t %i " % ( STATMAP_PATH, output_directory, n_threads )
         
-    print(re.sub( "\s+", " ", call), file=stdout)
+    print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print("TEST FAILED - statmap call returned error code ", ret_code)
+        print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -620,23 +619,24 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     sam_fp.seek(0)
 
     if len(fragments)*n_dups != total_num_reads:
-        raise ValueError("Mapping returned too few reads.")
+        raise ValueError, "Mapping returned too few reads."
     
     
-    for reads_data, truth in zip( iter_sam_reads( sam_fp ), fragments ):
+    for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != n_dups:
-            raise ValueError("Mapping returned incorrect number of results.")
+            raise ValueError, "Mapping returned incorrect number of results."
         
         
-        locs = [ (reads_data[i][2], int(reads_data[i][3])) for i in range(len(reads_data)) ]
+        locs = [ (reads_data[i][2], int(reads_data[i][3])) for i in xrange(len(reads_data)) ]
         
         # make sure the chr and start locations are identical
         for i, loc in enumerate( locs ):
             if loc[0] != truth[0] \
                or loc[1]%GENOME_LEN != truth[1]:
-                raise ValueError("Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1]%GENOME_LEN, truth[0], truth[1], truth[2]  ))
+                raise ValueError, \
+                    "Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
+                    % ( loc[0], loc[1]%GENOME_LEN, truth[0], truth[1], truth[2]  )
     sam_fp.close()
 
     ###### Cleanup the created files ###############################################
@@ -649,14 +649,14 @@ def test_repeat_sequence_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
         test_duplicated_reads( rl, n_chrs=3, n_dups=5, gen_len=1000, n_threads=1 ) 
-        print("PASS: Multi-Chr and Repeated Chr Mapping %i BP Test. ( Statmap appears to be mapping multiple genome and chr with heavy perfect repeats correctly )" % rl)
+        print "PASS: Multi-Chr and Repeated Chr Mapping %i BP Test. ( Statmap appears to be mapping multiple genome and chr with heavy perfect repeats correctly )" % rl
 
 def test_lots_of_repeat_sequence_finding( ):
     rls = [ 16, ]
     for rl in rls:
         # setting n_threads to -1 makes it deafult to the number of avialable cores
         test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100 ) 
-        print("PASS: lots of repeat seqs ( %i ) %i BP Test. ( This tests a genome with lots and lots of repeats ( pbly mostly corner cases )  )" % ( 4000, rl ))
+        print "PASS: lots of repeat seqs ( %i ) %i BP Test. ( This tests a genome with lots and lots of repeats ( pbly mostly corner cases )  )" % ( 4000, rl )
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
@@ -695,11 +695,11 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
                              -p %e -t %i " % ( STATMAP_PATH, output_directory, min_penalty, n_threads )
         
-    print(re.sub( "\s+", " ", call), file=stdout)
+    print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print("TEST FAILED - statmap call returned error code ", ret_code)
+        print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -715,7 +715,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
     unmappable_fp.close()
 
-    all_read_ids = set(map(str, list(range(100))))
+    all_read_ids = set(map(str, range(100)))
     all_read_ids = all_read_ids - mapped_read_ids
     all_read_ids = all_read_ids - unmappable_reads_set
     all_read_ids = list(all_read_ids)
@@ -723,19 +723,19 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     all_read_ids.sort( )
 
     if len(fragments) != total_num_reads + num_unmappable_reads:
-        raise ValueError("Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
-            % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) ))
+        raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
+            % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
 
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
-    unmapped_reads = set( map( str, range( 100 ) ) ).difference( unmappable_reads_set.union( set(mapped_reads_dict.keys()) ) )
+    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference( unmappable_reads_set.union( set(mapped_reads_dict.keys()) ) )
     if len( unmapped_reads ) != 0:
-          raise ValueError(" We are missing '%s' from the set of mappable reads. " % str( unmapped_reads ))
+          raise ValueError, " We are missing '%s' from the set of mappable reads. " % str( unmapped_reads )
 
     for mapped_reads in iter_sam_reads(sam_fp):
         while mutated_reads[index].mut_seq in unmappable_reads_strs:
-            print("Unmappable %i" % cnted_unmappable_reads)
+            print "Unmappable %i" % cnted_unmappable_reads
             cnted_unmappable_reads += 1
             index += 1
         
@@ -744,20 +744,21 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
 
         index += 1
         
-        locs = [ (mapped_reads[i][2], int(mapped_reads[i][3])) for i in range(len(mapped_reads)) ]
+        locs = [ (mapped_reads[i][2], int(mapped_reads[i][3])) for i in xrange(len(mapped_reads)) ]
         
         # make sure the chr and start locations are identical
         for i, loc in enumerate( locs ):
             if loc[0] != truth[0] \
                or loc[1] != truth[1]:
-                print("INDEX: ", index, index-num_unmappable_reads)
-                print(mutated_read)
-                print("Truth:", truth)
-                print(r_genome[truth[0]][truth[1]:(truth[1]+rl)].upper())
-                print(mapped_reads)
-                print(r_genome[loc[0]][loc[1]:(loc[1]+rl)].upper())
-                raise ValueError("Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  ))
+                print "INDEX: ", index, index-num_unmappable_reads
+                print mutated_read
+                print "Truth:", truth
+                print r_genome[truth[0]][truth[1]:(truth[1]+rl)].upper()
+                print mapped_reads
+                print r_genome[loc[0]][loc[1]:(loc[1]+rl)].upper()
+                raise ValueError, \
+                    "Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
+                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
 
@@ -771,7 +772,7 @@ def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
         test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
-        print("PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl)
+        print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
         # FIXME - do the work to fix these tests
         #test_dirty_reads( rl, n_threads=1, min_penalty=-1 ) 
         #print "PASS: Dirty Read (-1 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
@@ -782,10 +783,10 @@ def test_multithreaded_mapping( ):
         try: 
             test_dirty_reads( rl, n_threads=2 ) 
         except:
-            print("FAIL: Multi-Threaded Read Mapping %i BP Test Failed." % rl)
+            print "FAIL: Multi-Threaded Read Mapping %i BP Test Failed." % rl
             raise
         else:
-            print("PASS: Multi-Threaded Read Mapping %i BP Test. ( Statmap appears to be mapping correctly with multiple threads )" % rl)
+            print "PASS: Multi-Threaded Read Mapping %i BP Test. ( Statmap appears to be mapping correctly with multiple threads )" % rl
 ###
 # Test to make sure that we are correctly indexing and finding snps
 def test_snps( read_len, num_snps = 10 ):
@@ -804,7 +805,7 @@ def test_snps( read_len, num_snps = 10 ):
             assert r_genome[ snp[0] ][snp[1]].upper() != snp[3].upper()
             assert r_genome[ snp[0] ][snp[1]].upper() == snp[2].upper()
     except:
-        print(r_genome[ snp[0] ][snp[1]], snp)
+        print r_genome[ snp[0] ][snp[1]], snp
         raise
     
     write_snps_to_snpcov_file( snps, r_genome, "tmp.snpcov"  )
@@ -819,7 +820,7 @@ def test_snps( read_len, num_snps = 10 ):
     ref_snps = [0]*num_snps
     alt_snps = [0]*num_snps
     # mutate the snps
-    for index, (read, fragment) in enumerate(list(zip(reads, fragments))):
+    for index, (read, fragment) in enumerate(zip(reads, fragments)):
         for snp_index, snp in enumerate(snps):
             # if this read covers the snp
             if snp[0] == fragment[0] \
@@ -849,12 +850,12 @@ def test_snps( read_len, num_snps = 10 ):
                              -p %.2f -m %.2f \
                              -t 1 " % ( STATMAP_PATH, output_directory, -10.0, 0.50 )
         
-    print(re.sub( "\s+", " ", call), file=stdout)
+    print >> stdout, re.sub( "\s+", " ", call)
     
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     # ret_code = ( os.system( call ) >> 8 )
     if ret_code != 0:
-        print("TEST FAILED - statmap call returned error code ", ret_code)
+        print "TEST FAILED - statmap call returned error code ", ret_code
         sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -863,24 +864,25 @@ def test_snps( read_len, num_snps = 10 ):
     sam_fp.seek(0)
     
     if len(fragments) != total_num_reads:
-        raise ValueError("Mapping returned too few reads. ( %i / %i )" % ( total_num_reads, len(fragments) ))
+        raise ValueError, "Mapping returned too few reads. ( %i / %i )" % ( total_num_reads, len(fragments) )
             
-    for loop, (reads_data, truth) in enumerate( zip( iter_sam_reads( sam_fp ), fragments ) ):
+    for loop, (reads_data, truth) in enumerate( izip( iter_sam_reads( sam_fp ), fragments ) ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != 1:
-            raise ValueError("Mapping returned too many results.")
+            raise ValueError, "Mapping returned too many results."
 
         if int(reads_data[0][0]) != loop:
-            raise ValueError("Key %i (%i) is off ( a read was probably skipped )" % ( loop, int(reads_data[0][0]) ))
+            raise ValueError, "Key %i (%i) is off ( a read was probably skipped )" % ( loop, int(reads_data[0][0]) )
         
         loc = ( reads_data[0][2], int(reads_data[0][3]) )
         
         # make sure the chr and start locations are identical
         if loc[0] != truth[0] \
            or loc[1] != truth[1]:
-            print(reads_data)
-            raise ValueError("Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  ))
+            print reads_data
+            raise ValueError, \
+                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     
     sam_fp.close()
 
@@ -889,11 +891,11 @@ def test_snps( read_len, num_snps = 10 ):
     snp_fp = open( "./%s/updated_snp_cnts.snp" % output_directory )
     lines = list( snp_fp )
     snp_fp.close()
-    for line_num, (line, ref_cnt, alt_cnt) in enumerate(list(zip( lines[1:], ref_snps, alt_snps))):
-        data = list(map( int, line.strip().split("\t")[-2:] ))
+    for line_num, (line, ref_cnt, alt_cnt) in enumerate(zip( lines[1:], ref_snps, alt_snps)):
+        data = map( int, line.strip().split("\t")[-2:] )
         if data[0] != ref_cnt or data[1] != alt_cnt:
-            print(line.strip(), data, [ref_cnt, alt_cnt])
-            raise ValueError("The wrong number of snps was discovered ( %s vs %s ) " % ( data, [ref_cnt, alt_cnt] ))
+            print line.strip(), data, [ref_cnt, alt_cnt]
+            raise ValueError, "The wrong number of snps was discovered ( %s vs %s ) " % ( data, [ref_cnt, alt_cnt] )
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
@@ -907,7 +909,7 @@ def test_snp_finding( ):
     rls = [ 25, ]
     for rl in rls:
         test_snps( rl )
-        print("PASS: SNP Mapping %i BP Test. ( Statmap appears to be mapping perfect SNPs correctly )" % rl)
+        print "PASS: SNP Mapping %i BP Test. ( Statmap appears to be mapping perfect SNPs correctly )" % rl
 
 
 if False:
@@ -916,7 +918,7 @@ if False:
     frag_len = 200
     paired = False
     chr_sizes = [450]*num_chrs
-    chr_names = [ "chr%i" % i for i in range( num_chrs )  ]
+    chr_names = [ "chr%i" % i for i in xrange( num_chrs )  ]
     
     assert all( frag_len < chr_len for chr_len in chr_sizes )
     
@@ -937,19 +939,19 @@ if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
     if True:
-        print("Starting test_fivep_sequence_finding()")
+        print "Starting test_fivep_sequence_finding()"
         test_fivep_sequence_finding()
-        print("Starting test_threep_sequence_finding()")
+        print "Starting test_threep_sequence_finding()"
         test_threep_sequence_finding()
-        print("Starting test_paired_end_sequence_finding()")
+        print "Starting test_paired_end_sequence_finding()"
         test_paired_end_sequence_finding( )
-        print("Starting test_repeat_sequence_finding()")
+        print "Starting test_repeat_sequence_finding()"
         test_repeat_sequence_finding()
-        print("Starting test_mutated_read_finding()")
+        print "Starting test_mutated_read_finding()"
         test_mutated_read_finding()
-        print("Starting test_multithreaded_mapping()")
+        print "Starting test_multithreaded_mapping()"
         test_multithreaded_mapping( )
-        print("Starting test_snp_finding()")
+        print "Starting test_snp_finding()"
     # test_snp_finding()
     
     # We skip this test because statmap can't currently
@@ -958,5 +960,5 @@ if __name__ == '__main__':
     # test_short_sequences()
     
     if RUN_SLOW_TESTS:
-        print("[SLOW] Starting test_lots_of_repeat_sequence_finding()")
+        print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
         test_lots_of_repeat_sequence_finding( )
