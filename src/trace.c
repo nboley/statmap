@@ -667,7 +667,7 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     rv = fread( MN, sizeof(char), 6, is );
     if( 6 != rv || 0 != strcmp( MN, TRACE_MAGIC_NUMBER ))
     {
-        fprintf( stderr, "FATAL           : Mismatched bin trace header ( rv: %i, header: '%s')\n", rv, MN );
+        fprintf( stderr, "FATAL           : Mismatched bin trace header ( rv: %i, header: '%s' )\n", rv, MN );
         assert( 0 );
     }
     
@@ -787,11 +787,4 @@ load_trace_from_file( struct trace_t** trace, char* fname )
     FILE* fp = open_check_error( fname, "r" );
     load_trace_from_stream( trace, fp );
     fclose(fp);
-}
-
-void
-test_print( char* val  )
-{
-    printf( "Value: %s\n", val );
-    return;
 }

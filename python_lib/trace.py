@@ -142,9 +142,7 @@ def load_c_trace_from_file( fname  ):
 def load_trace_from_file( fname  ):
     c_trace_p = c_void_p()    
     data = trace_o.load_trace_from_file( byref(c_trace_p), c_char_p(fname) )
-    print( data )
     c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
-    
     return trace_t( c_trace_p )
 
 

@@ -14,7 +14,7 @@ def usage():
 
 # aggregate over every file in the passed directory
 def aggregate_over_traces_in_dir( directory, output_fname, aggregate_type, suffix=".bin.trace" ):
-    """Aggregate over all of the trcaes in a diretory.
+    """Aggregate over all of the traces in a diretory.
     
     Suffix is a bit of a hack. I sometimes need to aggregate over *just* the nc
     ( negative control ) or ip ( immino-precipitate ) traces - this provides
@@ -65,8 +65,6 @@ if __name__ == "__main__":
         os.path.abspath( os.path.split(sys.argv[0])[0] ), "aggregate_over_traces" \
     )
     os.chdir(output_dir)
-
-    print aggregate_exec
     
     # aggregate over the bootstrap samples
     aggregate_over_bs_samples( )

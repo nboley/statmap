@@ -195,6 +195,9 @@ def parse_wig( fname, genome ):
     return tracks
 
 def parse_trace( fname ):
+    if fname.endswith(".wig" ):
+        print fname
+        assert False
     return trace.load_trace_from_file( fname  )
 
 def parse_bwtout( fname, genome, paired_end ):
@@ -462,27 +465,44 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
                 rpy.r.points( wiggle_density[2][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
             if len( wiggle_density ) > 3 and wiggle_density[3].has_key( key ):
                 rpy.r.points( -1*wiggle_density[3][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
-        
-    def plot_wiggles( dir, color, lty=1, lwd=0.5, filter=""  ):
+
+    def plot_trace( density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
+        # plot the IP traces
+        for track_name in density.keys():
+            for index, chr_name in enumerate(genome.keys()):
+                rpy.r("par(mfg=c(%i,1))" % (index+1))
+                # change the line type for NC
+                curr_lwd = lwd
+                curr_lty = lty
+                if track_name.startswith("NC"):
+                    curr_lwd /= 2
+                    curr_lty = 3
+                # change the multiplicative factor for neg vs pos stranded data
+                mult_factor = -1 if track_name.find( "bkwd" ) != -1 else 1
+                rpy.r.points( mult_factor*density[track_name][chr_name]*norm_factor, 
+                              type='l', col=color, main='', xlab='', ylab='', 
+                              lty=lty, lwd=lwd )
+    
+    def plot_traces( dir, color, lty=1, lwd=0.5, filter=""  ):
         fnames = []
         os.chdir(dir)
         for file in os.listdir("./"):
-            if fnmatch.fnmatch(file, '*%s.wig' % filter):
+            if fnmatch.fnmatch(file, '*%s.bin.trace' % filter):
                 fnames.append( file )
                 
         for fname in fnames:
-            density = parse_trace( fname, genome )
-            plot_wiggle( density, color )
+            density = parse_trace( fname )
+            plot_trace( density, color )
         os.chdir(curr_dir)
 
-    plot_wiggles( "./smo_chipseq_sim/samples/", 'gray', lty=3, lwd=1, filter=".nc" )
-    plot_wiggles( "./smo_chipseq_sim/samples/", 'black', lty=1, lwd=0.5, filter=".ip" )
+    plot_traces( "./smo_chipseq_sim/samples/", 'gray', lty=3, lwd=1, filter=".nc" )
+    plot_traces( "./smo_chipseq_sim/samples/", 'black', lty=1, lwd=0.5, filter=".ip" )
 
-    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'green', lty=1, lwd=0.5, filter=".ip" )
-    plot_wiggles( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
+    plot_traces( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'green', lty=1, lwd=0.5, filter=".ip" )
+    plot_traces( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
     
     rpy.r("par(mfg=c(2,1))")
-    true_density = parse_trace( "true_read_coverage.wig" )    
+    true_density = parse_wig( "true_read_coverage.wig", genome )    
     plot_wiggle( true_density, 'black', lty=3, lwd=3 )
     
     for index in xrange(len(genome)):
@@ -491,8 +511,8 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
             rpy.r.abline( v=bp_index, col='red', lty=2  )
 
     # parse bowtie out
-    density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
-    plot_wiggle( density, 'dark green', lty=1, lwd=2 )
+    # density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
+    # plot_wiggle( density, 'dark green', lty=1, lwd=2 )
     
     for index in xrange(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
@@ -511,17 +531,17 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     plot_wiggle( density, 'blue' )
     """
     
-    density = parse_trace( "./smo_chipseq_sim/max_trace.ip.wig", genome )
-    plot_wiggle( density, 'blue' )
+    density = parse_trace( "./smo_chipseq_sim/max_trace.ip.bin.trace" )
+    plot_trace( density, 'blue' )
     
-    density = parse_trace( "./smo_chipseq_sim/min_trace.ip.wig", genome )
-    plot_wiggle( density, 'red' )
+    density = parse_trace( "./smo_chipseq_sim/min_trace.ip.bin.trace" )
+    plot_trace( density, 'red' )
 
     # plot the called peak p-values
 
     nf = 0.4
-    density = parse_trace( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
-    plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
+    #density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
+    #plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
     for index in xrange(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
@@ -556,7 +576,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
 
 
 if __name__ == '__main__':
-    paired_end=True
+    paired_end=False
     NUM_MUTS = 3
     
     if False:
