@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include "config.h"
 #include "statmap.h"
@@ -166,8 +167,16 @@ populate_read_from_fastq_file(
     int read_len = strlen( read );
 
     /*** get the next read name - we discard this */
-    return_code = fscanf( input_file, "+%*s\n" );
+    /* We can't use  
+       return_code = fscanf( input_file, "+%*s\n" );       
+       because, if the line is just +\n, it wont find a string and will
+       skip to the next line. Therefore, we use this messy while loop.
+       TODO - make the assert a real error.
+    */
 
+    assert( '+' == getc( input_file)  );
+    while( '\n' != getc( input_file  ) );
+    
     /*** get the quality score */
     return_code = fscanf( input_file, "%s\n", quality );
 
