@@ -8,7 +8,6 @@ except ImportError:
     from collections import MutableMapping
 
     class OrderedDict(dict, MutableMapping):
-
         # Methods with direct access to underlying attributes
 
         def __init__(self, *args, **kwds):

@@ -1,3 +1,4 @@
+-29) FIX SEGFAULT WHEN NO FRAG LEN DISTRIBUTION PASSED
 -28) Do I need strand specific densities for paired end chip seq?
 -27) Fix bug in iterative mapping bector operations that uses incorrectly shifted chipseq trace
 -26.9) Fix failure to free calculated chipseq densities in chipseq_bs_density
@@ -25,7 +26,7 @@ M ( MOVED TO USING MAX CHANGE )
 X -15) Write code to parse and store prior fragment length distribution
 X -15b) Write code to infer fragment lengths forom uniquely mapped paired end reads
 X -15c) Actually start using the inferred fragment length distribution
--15d) Fix and write tests for single end chipseq reads
+X-15d) Fix and write tests for single end chipseq reads
 X -14) write method to reset read conditional prbs
 X -13) use locking, threads for iterative mapping
 X -12) write lhd code

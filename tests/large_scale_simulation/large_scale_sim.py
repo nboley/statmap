@@ -1,8 +1,13 @@
 from math import exp
-
+import random
 import numpy
-
+from scipy import signal
 import rpy
+import sys
+
+BLOCK_SAMPLE_SIZE = 100000/100
+NUM_SAMPLES = 100000
+SEQ_LEN = 35
 
 bps = ['A', 'C', 'G', 'T', 'N' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N' }
@@ -115,7 +120,7 @@ def parse_wig( fname, chr_len ):
     density = density_fwd
     for lin_num, line in enumerate(fp):
         if lin_num%1000000 == 0:
-            print lin_num
+            print >> sys.stderr, "Parsed Through Line: ", lin_num
         if line.startswith('track'):
             density = density_bkwd
         elif line.startswith('variable'):
@@ -134,23 +139,78 @@ def make_cum_dist( array ):
         array[index] = sum
     array = array/sum
     return array
+
+def block_sample_density( density ):
+    """Block sample frm the trace.
+
+    """
+    length = len( density )
+    new_density = numpy.zeros( length  )
+    for loop in xrange( 1, (length / BLOCK_SAMPLE_SIZE) ):
+        start_loc = random.randint( 0, length - BLOCK_SAMPLE_SIZE  )
+        new_density[((loop-1)*BLOCK_SAMPLE_SIZE):(loop*BLOCK_SAMPLE_SIZE)] \
+           = density[start_loc:(start_loc+BLOCK_SAMPLE_SIZE)]
+    return new_density/new_density.sum()
+
+def smooth_signal( input_sig, window):
+    rv = signal.convolve( input_sig, window )[ 0:len(input_sig) ]
+    return rv/rv.sum()
     
-fwd_den, bkwd_den = parse_wig( "random_dnase_sample_chr2L_short.wig", 49950  )
-fwd_den = fwd
+def sample_from_density_mixture( densities, mix_params ):
+    assert( round( sum( mix_params ), 5 ) == 1.0 )
+    # mixture params cumsum
+    mpcs = numpy.array( mix_params ).cumsum()
+    cumsums = [ density.cumsum() for density in densities ]
+    
+    for loop in xrange( NUM_SAMPLES ):
+        index = mpcs.searchsorted( random.random() )
+        bp_index = cumsums[index].searchsorted( random.random() )
+        yield bp_index
+    return
+        
+    # pick an index at random
 
-region = build_chipseq_region( "chr2L_short.fa" )
-bind_site_scores = score_binding_sites( region, bcd_motif )
+if __name__ == "__main__":
+    fwd_den, bkwd_den = parse_wig( "./data/random_dnase_sample_chr2L_short.wig", 49950  )
+    
+    region = build_chipseq_region( "./data/chr2L_short.fa" )
+    bind_site_scores = score_binding_sites( region, bcd_motif )
+    bs_density = block_sample_density( fwd_den )
 
-print len( fwd_den ), len( bind_site_scores )
+    joint_dist = bs_density*bind_site_scores
+    joint_dist = joint_dist/joint_dist.sum()
+    
+    # smooth all of the signals
+    joint_dist = smooth_signal( joint_dist, signal.gaussian( 200, 50 ) )
+    bs_density = smooth_signal( bs_density, signal.gaussian( 200, 50 ) )
 
-joint_dist = fwd_den*bind_site_scores
-joint_dist = joint_dist/joint_dist.sum()
+    #bind_site_scores_cum = make_cum_dist( bind_site_scores )
+    DEBUG_READS = True
+    
+    if DEBUG_READS: poss = []
+    for loop, pos in enumerate( \
+        sample_from_density_mixture( [joint_dist, bs_density], [0.1, 0.9]  ) ):
+        seq = region[ pos:(pos+SEQ_LEN)  ]
+        print "@%i" % loop
+        print seq
+        print "+"
+        print "h"*len( seq )
 
-#bind_site_scores_cum = make_cum_dist( bind_site_scores )
+        if DEBUG_READS: poss.append( pos )
+        
 
-rpy.r.png( "test.png" )
-rpy.r.plot( fwd_den, type='l', main='', xlab='', ylab='' )
-rpy.r.lines( bind_site_scores, type='l', col='red' )
-rpy.r.dev_off()
-
-# make_cum_dist( bkwd_den )
+    
+    if DEBUG_READS:
+        sampled_density = numpy.zeros( len( fwd_den ) )    
+        for pos in poss:
+            sampled_density[ pos:(pos+SEQ_LEN)  ] += 1
+        sampled_density = sampled_density/sampled_density.sum()
+    
+        rpy.r.png( "test.png" )
+        rpy.r.plot( bs_density[1:30000], type='l', main='', xlab='', ylab='', ylim=(0,max(bs_density.max(), joint_dist.max())) )
+        rpy.r.lines( joint_dist[1:30000], type='l', col='blue' )
+        rpy.r.lines( sampled_density[1:30000], type='l', col='red' )
+        rpy.r.dev_off()
+    
+    
+    # make_cum_dist( bkwd_den )
