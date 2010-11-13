@@ -137,7 +137,8 @@ def score_binding_sites( region, motif ):
     return array.array( 'f', scores )
 
 def assign_bind_prbs( scores ):
-    return array.array( 'f', [ tf_conc*exp( score  )/( 1 + tf_conc*exp( score  ) ) for score in scores] )
+    return array.array( 'f', [ tf_conc*exp( score  )/( 1 + tf_conc*exp( score  ) )
+                               for score in scores] )
 
 def build_cum_array( items ):
     new_list = []
