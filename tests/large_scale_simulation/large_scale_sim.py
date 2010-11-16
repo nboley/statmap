@@ -11,15 +11,23 @@ SEQ_LEN = 35
 
 # save the true wiggle so that we can get statistics on how accurately we are detecting binding sites of different strengths
 TRUTH_WIG = open('./data/truth_file.wig','w')
+CONTROL_WIG = open('./data/control_file.wig','w')
 
 # save the exact location of each read so we can get statistics on how accurately each read is placed
 TRUTH_TXT = open('./data/truth_fastq.txt','w')
+CONTROL_TXT = open('./data/control_fastq.txt','w')
 
+# Command line parameters
 input_bed = sys.argv[1]
 input_chrm = sys.argv[2]
 chrm_length = int(sys.argv[3])
 chrm_name = sys.argv[4]
 frag_length = open(sys.argv[5])
+output_prefix = sys.argv[6]
+
+# save the simulated reads
+OUTPUT_IP = open('./data/' + output_prefix + '_IP.fastq','w')
+OUTPUT_CONTROL = open('./data/' + output_prefix + '_CONTROL.fastq','w')
 
 bps = ['A', 'C', 'G', 'T', 'N' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N' }
@@ -135,7 +143,6 @@ def block_sample_wiggle( wiggle ):
         start_loc = random.randint( 0, length - BLOCK_SAMPLE_SIZE  )
         new_density.extend(wiggle[start_loc:(start_loc+BLOCK_SAMPLE_SIZE)])
     new_density = numpy.asarray(new_density[0:length])
-    #print new_density.sum()
     return new_density/new_density.sum()
     
 
@@ -157,16 +164,16 @@ def sample_from_density_mixture( densities, mix_params ):
         
 
 def sample_from_density( density ):
-    # mixture params cumsum
     cumsum = density.cumsum()
     bp_index = cumsum.searchsorted( random.random() )
     return bp_index
 
 
 
-def print_wig( wig ):
+def print_wig( wig, outfile ):
     for bp,score in enumerate(wig):
-        print >>TRUTH_WIG, chrm_name + '\t' + str(bp) + '\t' + str(bp) + '\t' + str(score)
+        print >>outfile, chrm_name + '\t' + str(bp) + '\t' + str(bp) + '\t' + str(score)
+    outfile.close()
     return
 
 
@@ -187,7 +194,8 @@ if __name__ == "__main__":
     joint_dist = bs_density*bind_site_scores
     joint_dist = joint_dist/joint_dist.sum()
     
-    print_wig(joint_dist)
+    print_wig(joint_dist, TRUTH_WIG)
+    print_wig(bs_density, CONTROL_WIG)
     
     # NOTE FROM BEN:    The following smoothing makes it conceptually tricky to 
     #                   select the strandedness of reads.  Instead we'll do this
@@ -218,21 +226,47 @@ if __name__ == "__main__":
         # and the frag_dist input by the user is off by -1 (is 1 too short). 
         #frag = region[frag_start:frag_end]
         #frag_flip = ''.join( [ comp[bp] for bp in region[ frag_end:frag_start:-1 ] ] )  
-        #strand = '+'
         if numpy.random.rand() > 0.5:
             seq = region[ frag_start:(frag_start+SEQ_LEN) ]
             print >>TRUTH_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_start) + '\t' + str(frag_start+SEQ_LEN) + '\t' + '+'
         else:
             seq = ''.join( [ comp[bp] for bp in region[ frag_end:(frag_end-SEQ_LEN):-1 ] ] )  
             print >>TRUTH_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_end) + '\t' + str(frag_end-SEQ_LEN) + '\t' + '-'
-            #strand = '-'
 
-        print "@%i" % loop
-        print seq
-        print "+%i" % loop  
-        print "h"*len( seq )
+        print >>OUTPUT_IP, "@%i" % loop
+        print >>OUTPUT_IP, seq
+        print >>OUTPUT_IP, "+%i" % loop  
+        print >>OUTPUT_IP, "h"*len( seq )
 
         if DEBUG_READS: poss.append( pos )
+
+    for loop, pos in enumerate( sample_from_density_mixture( [joint_dist, bs_density], [0.0, 1.0]  ) ):
+
+        # select a fragment length from the input distribution:
+        curr_frag_length = sample_from_density(fl_den)
+
+        # select a position on the fragment for the center of the binding site under uniformity:
+        # (note that the above assumption, uniformity, is something we can mess with to check stability and robustness)
+        b_pos = int(numpy.random.randint(0,curr_frag_length))
+        frag_start = pos - b_pos
+        frag_end = pos + b_pos + curr_frag_length
+
+        # select strand with 50/50 chance:
+        # Note that python's [) intervals mean that an artificial binding-site width of 1 has been induced,
+        # and the frag_dist input by the user is off by -1 (is 1 too short). 
+        #frag = region[frag_start:frag_end]
+        #frag_flip = ''.join( [ comp[bp] for bp in region[ frag_end:frag_start:-1 ] ] )  
+        if numpy.random.rand() > 0.5:
+            seq = region[ frag_start:(frag_start+SEQ_LEN) ]
+            print >>CONTROL_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_start) + '\t' + str(frag_start+SEQ_LEN) + '\t' + '+'
+        else:
+            seq = ''.join( [ comp[bp] for bp in region[ frag_end:(frag_end-SEQ_LEN):-1 ] ] )  
+            print >>CONTROL_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_end) + '\t' + str(frag_end-SEQ_LEN) + '\t' + '-'
+
+        print >>OUTPUT_CONTROL, "@%i" % loop
+        print >>OUTPUT_CONTROL, seq
+        print >>OUTPUT_CONTROL, "+%i" % loop  
+        print >>OUTPUT_CONTROL, "h"*len( seq )
         
 
     
