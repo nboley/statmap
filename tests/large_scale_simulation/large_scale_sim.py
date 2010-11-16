@@ -23,8 +23,8 @@ OUTPUT_CONTROL = open('./data/' + output_prefix + '_CONTROL.fastq','w')
 
 
 # save the true wiggle so that we can get statistics on how accurately we are detecting binding sites of different strengths
-TRUTH_WIG = open('./data/' + output_prefix '_IP_truth.wig','w')
-CONTROL_WIG = open('./data/' + output_prefix '_CONTROL_truth.wig','w')
+TRUTH_WIG = open('./data/' + output_prefix + '_IP_truth.wig','w')
+CONTROL_WIG = open('./data/' + output_prefix + '_CONTROL_truth.wig','w')
 
 # save the exact location of each read so we can get statistics on how accurately each read is placed
 TRUTH_TXT = open('./data/' + output_prefix + '_IP_truth_fastq.txt','w')
