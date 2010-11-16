@@ -222,6 +222,10 @@ if __name__ == "__main__":
         b_pos = int(numpy.random.randint(0,curr_frag_length))
         frag_start = pos - b_pos
         frag_end = pos + b_pos + curr_frag_length
+        if frag_start < 0:
+            continue
+        if frag_end >= chrm_length:
+            continue
 
         # select strand with 50/50 chance:
         # Note that python's [) intervals mean that an artificial binding-site width of 1 has been induced,
@@ -252,6 +256,10 @@ if __name__ == "__main__":
         b_pos = int(numpy.random.randint(0,curr_frag_length))
         frag_start = pos - b_pos
         frag_end = pos + b_pos + curr_frag_length
+        if frag_start < 0:
+            continue
+        if frag_end >= chrm_length:
+            continue
 
         # select strand with 50/50 chance:
         # Note that python's [) intervals mean that an artificial binding-site width of 1 has been induced,
@@ -260,10 +268,10 @@ if __name__ == "__main__":
         #frag_flip = ''.join( [ comp[bp] for bp in region[ frag_end:frag_start:-1 ] ] )  
         if numpy.random.rand() > 0.5:
             seq = region[ frag_start:(frag_start+SEQ_LEN) ]
-            print >>CONTROL_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_start) + '\t' + str(frag_start+SEQ_LEN) + '\t' + '+'
+            print >>CONTROL_TXT, '@' + str(loop) + '.control' + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_start) + '\t' + str(frag_start+SEQ_LEN) + '\t' + '+'
         else:
             seq = ''.join( [ comp[bp] for bp in region[ frag_end:(frag_end-SEQ_LEN):-1 ] ] )  
-            print >>CONTROL_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_end) + '\t' + str(frag_end-SEQ_LEN) + '\t' + '-'
+            print >>CONTROL_TXT, '@' + str(loop) + '.control' + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_end) + '\t' + str(frag_end-SEQ_LEN) + '\t' + '-'
 
         print >>OUTPUT_CONTROL, "@%i" % loop
         print >>OUTPUT_CONTROL, seq
