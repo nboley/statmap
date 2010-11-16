@@ -8,6 +8,8 @@ import sys
 BLOCK_SAMPLE_SIZE = 10000
 NUM_SAMPLES = 100000
 SEQ_LEN = 35
+MIX = 0.3
+
 
 # Command line parameters
 input_bed = sys.argv[1]
@@ -16,6 +18,7 @@ chrm_length = int(sys.argv[3])
 chrm_name = sys.argv[4]
 frag_length = open(sys.argv[5])
 output_prefix = sys.argv[6]
+
 
 # save the simulated reads
 OUTPUT_IP = open('./data/' + output_prefix + '_IP.fastq','w')
@@ -212,7 +215,7 @@ if __name__ == "__main__":
     DEBUG_READS = False
     
     if DEBUG_READS: poss = []
-    for loop, pos in enumerate( sample_from_density_mixture( [joint_dist, bs_density], [0.1, 0.9]  ) ):
+    for loop, pos in enumerate( sample_from_density_mixture( [joint_dist, bs_density], [MIX, 1-MIX]  ) ):
 
         # select a fragment length from the input distribution:
         curr_frag_length = sample_from_density(fl_den)
