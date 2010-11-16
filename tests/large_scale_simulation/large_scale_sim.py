@@ -5,9 +5,21 @@ from scipy import signal
 import rpy
 import sys
 
-BLOCK_SAMPLE_SIZE = 100000/100
+BLOCK_SAMPLE_SIZE = 10000
 NUM_SAMPLES = 100000
 SEQ_LEN = 35
+
+# save the true wiggle so that we can get statistics on how accurately we are detecting binding sites of different strengths
+TRUTH_WIG = open('./data/truth_file.wig','w')
+
+# save the exact location of each read so we can get statistics on how accurately each read is placed
+TRUTH_TXT = open('./data/truth_fastq.txt','w')
+
+input_bed = sys.argv[1]
+input_chrm = sys.argv[2]
+chrm_length = int(sys.argv[3])
+chrm_name = sys.argv[4]
+frag_length = open(sys.argv[5])
 
 bps = ['A', 'C', 'G', 'T', 'N' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N' }
@@ -24,74 +36,22 @@ bcd_motif = [
     [-2.535381,   -0.893484,    0.000000,   -1.141034, -1000]
 ]
 
-tf_conc = 1e-12
+tf_conc = 1e-14
 
-class frag_len_generator_t():
-    def __init__( self ):
-        self.sizes = range( 400, 801 )
-        
-        # sapply( 400:800, function(x)pnorm( x, 600, 100 ) )
-        self.weights = [
-            0.00000000, 0.02329547, 0.02385176, 0.02441919, 0.02499790, 0.02558806,
-            0.02618984, 0.02680342, 0.02742895, 0.02806661, 0.02871656, 0.02937898,
-            0.03005404, 0.03074191, 0.03144276, 0.03215677, 0.03288412, 0.03362497,
-            0.03437950, 0.03514789, 0.03593032, 0.03672696, 0.03753798, 0.03836357,
-            0.03920390, 0.04005916, 0.04092951, 0.04181514, 0.04271622, 0.04363294,
-            0.04456546, 0.04551398, 0.04647866, 0.04745968, 0.04845723, 0.04947147,
-            0.05050258, 0.05155075, 0.05261614, 0.05369893, 0.05479929, 0.05591740,
-            0.05705343, 0.05820756, 0.05937994, 0.06057076, 0.06178018, 0.06300836,
-            0.06425549, 0.06552171, 0.06680720, 0.06811212, 0.06943662, 0.07078088,
-            0.07214504, 0.07352926, 0.07493370, 0.07635851, 0.07780384, 0.07926984,
-            0.08075666, 0.08226444, 0.08379332, 0.08534345, 0.08691496, 0.08850799,
-            0.09012267, 0.09175914, 0.09341751, 0.09509792, 0.09680048, 0.09852533,
-            0.10027257, 0.10204232, 0.10383468, 0.10564977, 0.10748770, 0.10934855,
-            0.11123244, 0.11313945, 0.11506967, 0.11702320, 0.11900011, 0.12100048,
-            0.12302440, 0.12507194, 0.12714315, 0.12923811, 0.13135688, 0.13349951,
-            0.13566606, 0.13785657, 0.14007109, 0.14230965, 0.14457230, 0.14685906,
-            0.14916995, 0.15150500, 0.15386423, 0.15624765, 0.15865525, 0.16108706,
-            0.16354306, 0.16602325, 0.16852761, 0.17105613, 0.17360878, 0.17618554,
-            0.17878638, 0.18141125, 0.18406013, 0.18673294, 0.18942965, 0.19215020,
-            0.19489452, 0.19766254, 0.20045419, 0.20326939, 0.20610805, 0.20897009,
-            0.21185540, 0.21476388, 0.21769544, 0.22064995, 0.22362729, 0.22662735,
-            0.22965000, 0.23269509, 0.23576250, 0.23885207, 0.24196365, 0.24509709,
-            0.24825223, 0.25142890, 0.25462691, 0.25784611, 0.26108630, 0.26434729,
-            0.26762889, 0.27093090, 0.27425312, 0.27759532, 0.28095731, 0.28433885,
-            0.28773972, 0.29115969, 0.29459852, 0.29805597, 0.30153179, 0.30502573,
-            0.30853754, 0.31206695, 0.31561370, 0.31917751, 0.32275811, 0.32635522,
-            0.32996855, 0.33359782, 0.33724273, 0.34090297, 0.34457826, 0.34826827,
-            0.35197271, 0.35569125, 0.35942357, 0.36316935, 0.36692826, 0.37069998,
-            0.37448417, 0.37828048, 0.38208858, 0.38590812, 0.38973875, 0.39358013,
-            0.39743189, 0.40129367, 0.40516513, 0.40904588, 0.41293558, 0.41683384,
-            0.42074029, 0.42465457, 0.42857628, 0.43250507, 0.43644054, 0.44038231,
-            0.44433000, 0.44828321, 0.45224157, 0.45620469, 0.46017216, 0.46414361,
-            0.46811863, 0.47209683, 0.47607782, 0.48006119, 0.48404656, 0.48803353,
-            0.49202169, 0.49601064, 0.50000000, 0.50398936, 0.50797831, 0.51196647,
-            0.51595344, 0.51993881, 0.52392218, 0.52790317, 0.53188137, 0.53585639,
-            0.53982784, 0.54379531, 0.54775843, 0.55171679, 0.55567000, 0.55961769,
-            0.56355946, 0.56749493, 0.57142372, 0.57534543, 0.57925971, 0.58316616,
-            0.58706442, 0.59095412, 0.59483487, 0.59870633, 0.60256811, 0.60641987,
-            0.61026125, 0.61409188, 0.61791142, 0.62171952, 0.62551583, 0.62930002,
-            0.63307174, 0.63683065, 0.64057643, 0.64430875, 0.64802729, 0.65173173,
-            0.65542174, 0.65909703, 0.66275727, 0.66640218, 0.67003145, 0.67364478,
-            0.67724189, 0.68082249, 0.68438630, 0.68793305, 0.69146246, 0.69497427,
-            0.69846821, 0.70194403, 0.70540148, 0.70884031, 0.71226028, 0.71566115,
-            0.71904269, 0.72240468, 0.72574688, 0.72906910, 0.73237111, 0.73565271,
-            0.73891370, 0.74215389, 0.74537309, 0.74857110, 0.75174777, 0.75490291,
-            0.75803635, 0.76114793, 0.76423750, 0.76730491, 0.77035000, 0.77337265,
-            0.77637271, 0.77935005, 0.78230456, 0.78523612, 0.78814460, 0.79102991,
-            0.79389195, 0.79673061, 0.79954581, 0.80233746, 0.80510548, 0.80784980,
-            0.81057035, 0.81326706, 0.81593987, 0.81858875, 0.82121362, 0.82381446,
-            0.82639122, 0.82894387, 0.83147239, 0.83397675, 0.83645694, 0.83891294,
-            0.84134475, 0.84375235, 0.84613577, 0.84849500, 0.85083005, 0.85314094,
-            0.85542770, 0.85769035, 0.85992891, 0.86214343, 0.86433394, 0.86650049,
-            0.86864312, 0.87076189, 0.87285685, 0.87492806, 0.87697560, 0.87899952,
-            0.88099989, 0.88297680, 0.88493033, 0.88686055, 0.88876756, 0.89065145,
-            0.89251230, 0.89435023, 0.89616532, 0.89795768, 0.89972743, 0.90147467,
-            0.90319952, 1.00000000
-        ]
-    
-    def sample_frag_len( self ):
-        return self.sizes[ bisect.bisect_left( self.weights, random.random() ) ]
+
+def parse_frag_length( fid ):
+    data = []
+    mx = 0
+    for line in fid:
+        d = line.strip().split('\t')
+        data.append(d)
+        d[0] = int(d[0])
+        if d[0] > mx:
+            mx = d[0]
+    frag_dist = numpy.zeros( mx+1 )
+    for d in data:
+        frag_dist[d[0]] = float(d[1])
+    return frag_dist
 
 def score_binding_sites( region, motif ):
     scores = [0]*800
@@ -132,6 +92,19 @@ def parse_wig( fname, chr_len ):
     fp.close()
     return density_fwd, density_bkwd
 
+def parse_bed( fname, chr_len ):
+    # assumes data is unstranded.  Fine while doing DNase, should be generalized later.
+    # although probably not necessary for this paper
+    fp = open( fname )
+    density = numpy.zeros( chr_len )
+    for line in fp:
+        data = line.strip().split('\t')
+        chrm, start, end, name, signal = data[0:5]  
+        if chrm == chrm_name:
+            density[int(start):int(end)+1] += float(signal)
+    fp.close()
+    return density
+    
 def make_cum_dist( array ):
     sum = 0
     for index, entry in enumerate( array ):
@@ -152,6 +125,20 @@ def block_sample_density( density ):
            = density[start_loc:(start_loc+BLOCK_SAMPLE_SIZE)]
     return new_density/new_density.sum()
 
+def block_sample_wiggle( wiggle ):
+    """Block sample from the trace.
+    coded a little diffeerently to make sure the length comes out right.
+    """
+    length = len( wiggle )
+    new_density = []
+    for ind in xrange(0, int(numpy.ceil((length + BLOCK_SAMPLE_SIZE) / BLOCK_SAMPLE_SIZE)) ):
+        start_loc = random.randint( 0, length - BLOCK_SAMPLE_SIZE  )
+        new_density.extend(wiggle[start_loc:(start_loc+BLOCK_SAMPLE_SIZE)])
+    new_density = numpy.asarray(new_density[0:length])
+    #print new_density.sum()
+    return new_density/new_density.sum()
+    
+
 def smooth_signal( input_sig, window):
     rv = signal.convolve( input_sig, window )[ 0:len(input_sig) ]
     return rv/rv.sum()
@@ -168,32 +155,81 @@ def sample_from_density_mixture( densities, mix_params ):
         yield bp_index
     return
         
-    # pick an index at random
+
+def sample_from_density( density ):
+    # mixture params cumsum
+    cumsum = density.cumsum()
+    bp_index = cumsum.searchsorted( random.random() )
+    return bp_index
+
+
+
+def print_wig( wig ):
+    for bp,score in enumerate(wig):
+        print >>TRUTH_WIG, chrm_name + '\t' + str(bp) + '\t' + str(bp) + '\t' + str(score)
+    return
+
 
 if __name__ == "__main__":
-    fwd_den, bkwd_den = parse_wig( "./data/random_dnase_sample_chr2L_short.wig", 49950  )
-    
-    region = build_chipseq_region( "./data/chr2L_short.fa" )
+    #fwd_den, bkwd_den = parse_wig( input_bed, chrm_length  )
+    fl_den = parse_frag_length( frag_length )
+    den = parse_bed( input_bed, chrm_length  )
+    region = build_chipseq_region( input_chrm )
     bind_site_scores = score_binding_sites( region, bcd_motif )
-    bs_density = block_sample_density( fwd_den )
-
+    #print sum( score > 0.2 for score in bind_site_scores )
+    #sys.exit()
+    #print fwd_den
+    #sys.exit()
+    bs_density = block_sample_wiggle( den )
+    #print bs_density
+    #sys.exit()
+    #print len(bs_density), len(bind_site_scores)
     joint_dist = bs_density*bind_site_scores
     joint_dist = joint_dist/joint_dist.sum()
     
+    print_wig(joint_dist)
+    
+    # NOTE FROM BEN:    The following smoothing makes it conceptually tricky to 
+    #                   select the strandedness of reads.  Instead we'll do this
+    #                   explicitely at read-generation time (see below).  This 
+    #                   will also make it explicite to play with the uniformity
+    #                   assumption regarding fragmentation.  
     # smooth all of the signals
-    joint_dist = smooth_signal( joint_dist, signal.gaussian( 200, 50 ) )
-    bs_density = smooth_signal( bs_density, signal.gaussian( 200, 50 ) )
+    #joint_dist = smooth_signal( joint_dist, signal.gaussian( 200, 50 ) )
+    #bs_density = smooth_signal( bs_density, signal.gaussian( 200, 50 ) )
 
     #bind_site_scores_cum = make_cum_dist( bind_site_scores )
-    DEBUG_READS = True
+    DEBUG_READS = False
     
     if DEBUG_READS: poss = []
-    for loop, pos in enumerate( \
-        sample_from_density_mixture( [joint_dist, bs_density], [0.1, 0.9]  ) ):
-        seq = region[ pos:(pos+SEQ_LEN)  ]
+    for loop, pos in enumerate( sample_from_density_mixture( [joint_dist, bs_density], [0.1, 0.9]  ) ):
+
+        # select a fragment length from the input distribution:
+        curr_frag_length = sample_from_density(fl_den)
+
+        # select a position on the fragment for the center of the binding site under uniformity:
+        # (note that the above assumption, uniformity, is something we can mess with to check stability and robustness)
+        b_pos = int(numpy.random.randint(0,curr_frag_length))
+        frag_start = pos - b_pos
+        frag_end = pos + b_pos + curr_frag_length
+
+        # select strand with 50/50 chance:
+        # Note that python's [) intervals mean that an artificial binding-site width of 1 has been induced,
+        # and the frag_dist input by the user is off by -1 (is 1 too short). 
+        #frag = region[frag_start:frag_end]
+        #frag_flip = ''.join( [ comp[bp] for bp in region[ frag_end:frag_start:-1 ] ] )  
+        #strand = '+'
+        if numpy.random.rand() > 0.5:
+            seq = region[ frag_start:(frag_start+SEQ_LEN) ]
+            print >>TRUTH_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_start) + '\t' + str(frag_start+SEQ_LEN) + '\t' + '+'
+        else:
+            seq = ''.join( [ comp[bp] for bp in region[ frag_end:(frag_end-SEQ_LEN):-1 ] ] )  
+            print >>TRUTH_TXT, '@' + str(loop) + '\t' + seq + '\t' + chrm_name + '\t' + str(frag_end) + '\t' + str(frag_end-SEQ_LEN) + '\t' + '-'
+            #strand = '-'
+
         print "@%i" % loop
         print seq
-        print "+"
+        print "+%i" % loop  
         print "h"*len( seq )
 
         if DEBUG_READS: poss.append( pos )
