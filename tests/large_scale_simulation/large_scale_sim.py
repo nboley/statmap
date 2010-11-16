@@ -9,14 +9,6 @@ BLOCK_SAMPLE_SIZE = 10000
 NUM_SAMPLES = 100000
 SEQ_LEN = 35
 
-# save the true wiggle so that we can get statistics on how accurately we are detecting binding sites of different strengths
-TRUTH_WIG = open('./data/truth_file.wig','w')
-CONTROL_WIG = open('./data/control_file.wig','w')
-
-# save the exact location of each read so we can get statistics on how accurately each read is placed
-TRUTH_TXT = open('./data/truth_fastq.txt','w')
-CONTROL_TXT = open('./data/control_fastq.txt','w')
-
 # Command line parameters
 input_bed = sys.argv[1]
 input_chrm = sys.argv[2]
@@ -28,6 +20,16 @@ output_prefix = sys.argv[6]
 # save the simulated reads
 OUTPUT_IP = open('./data/' + output_prefix + '_IP.fastq','w')
 OUTPUT_CONTROL = open('./data/' + output_prefix + '_CONTROL.fastq','w')
+
+
+# save the true wiggle so that we can get statistics on how accurately we are detecting binding sites of different strengths
+TRUTH_WIG = open('./data/' + output_prefix '_IP_truth.wig','w')
+CONTROL_WIG = open('./data/' + output_prefix '_CONTROL_truth.wig','w')
+
+# save the exact location of each read so we can get statistics on how accurately each read is placed
+TRUTH_TXT = open('./data/' + output_prefix + '_IP_truth_fastq.txt','w')
+CONTROL_TXT = open('./data/' + output_prefix + '_CONTROL_truth_fastq.txt','w')
+
 
 bps = ['A', 'C', 'G', 'T', 'N' ]
 comp = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N' }
