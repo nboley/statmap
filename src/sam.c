@@ -25,6 +25,8 @@ fprintf_nonpaired_mapped_read_as_sam(
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
     const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+
+    assert( cond_prob <= 1.0 );
     
     int rd_len = MAX( start, stop )
                   - MIN( start, stop );
@@ -113,6 +115,12 @@ fprintf_paired_mapped_read_as_sam(
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
     const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
 
+    if( cond_prob > 1.0 )
+    {
+        printf( "ERROR: %e\t%e\n", cond_prob, seq_error );
+    }
+    assert( cond_prob <= 1.0 );
+    
     assert( start < stop );
 
     /* Print out the read 1 sam line */

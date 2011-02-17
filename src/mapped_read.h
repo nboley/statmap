@@ -255,7 +255,7 @@ static inline void
 set_cond_prob_in_mapped_read_location( 
     struct mapped_read_location* loc, float value )
 { 
-    // assert( value >= 0 );
+    assert( value == -1 || ( value >= 0 && value <= 1 ) );
     loc->cond_prob = ML_PRB_TYPE_from_float( value ); 
 }
  

@@ -105,73 +105,15 @@ reset_read_cond_probs( struct mapped_read_t* rd )
     for( i = 0; i < rd->num_mappings; i++ )
     {
         set_cond_prob_in_mapped_read_location( 
-            rd->locations + i,
-            get_cond_prob_from_mapped_read_location(rd->locations + i)
-               /prb_sum 
+            rd->locations + i, prbs[i]/prb_sum
         );
+        
+        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= 0 );
     }
     
     free( prbs );
     
     return;
-};
-
-void
-re_weight_read_cond_prb_by_fl( struct mapped_read_t* r,
-                               struct fragment_length_dist_t* fl_dist  )
-{
-    /* If the fl dist is NULL, assume equal weights for every possible fragment */
-    if( NULL != fl_dist )
-        return;
-
-    int i;
-    /* 
-     * Store the total proability mass of paired end reads. 
-     * This only matters if there is a mixture of paired and 
-     * unpaired reads - ( this should be very rare, to the extent
-     * that I'm raising an assertion earlier. But *this* code should
-     * work. ) I use it so that single end reads dont have too much 
-     * weight in the re-weighting.
-     */
-    double sum_paired_weight = 0;
-    double fl_weights_sum = 0;
-    /* For pass one, update the weights */
-    for( i = 0; i < r->num_mappings; i++ )
-    {
-        /* ignore single ended reads */
-        if( !(get_flag_from_mapped_read_location(r->locations + i)&IS_PAIRED) )
-            continue;
-        
-        sum_paired_weight += 
-            get_cond_prob_from_mapped_read_location( r->locations + i );
-        /* we know this is safe because each thread has it's own read */
-        const double fl_prb = get_fl_prb(  
-            fl_dist, get_fl_from_mapped_read_location( r->locations + i ) );
-        
-        set_cond_prob_in_mapped_read_location( 
-            r->locations + i,
-            get_cond_prob_from_mapped_read_location( r->locations + i)*fl_prb
-        );
-        
-        fl_weights_sum += get_cond_prob_from_mapped_read_location( r->locations + i);
-    }
-    
-    /* For pass two, renormalize the weights */
-    for( i = 0; i < r->num_mappings; i++ )
-    {
-        /* ignore single ended reads */
-        if( !(get_flag_from_mapped_read_location(r->locations + i)&IS_PAIRED) )
-            continue;
-        
-        set_cond_prob_in_mapped_read_location(
-            r->locations + i,
-            get_cond_prob_from_mapped_read_location( r->locations + i )
-               *fl_weights_sum*sum_paired_weight
-        );
-        
-        assert( get_cond_prob_from_mapped_read_location(r->locations + i) >= -0.0001 );
-    }            
-
 };
 
 int 
@@ -598,7 +540,7 @@ build_mapped_read_from_paired_candidate_mappings(
     );
 
     /* join the second pseudo location locations */
-    prob_sum = mapped_read_from_CMA_and_pseudo_CMA(
+    prob_sum += mapped_read_from_CMA_and_pseudo_CMA(
         mappings->mappings + p1_stop,
         p2_start - p1_stop,
         mappings->mappings + p1_start,
@@ -716,17 +658,26 @@ build_mapped_read_from_candidate_mappings(
         return;
     
     /* store the sum of the marginal probabilities */
-    double prob_sum = 0;
+    double prob_sum;
 
     /* this assumes all reads are either paired or not */
     if( mappings->mappings[0].rd_type == SINGLE_END )
     {
-        prob_sum += build_mapped_read_from_unpaired_candidate_mappings( 
+        prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
             genome->ps_locs, mappings, *mpd_rd );
     } else {
-        prob_sum += build_mapped_read_from_paired_candidate_mappings( 
+        prob_sum = build_mapped_read_from_paired_candidate_mappings( 
             genome, mappings, *mpd_rd );
     }    
+    
+    /* If there are no proper mappings ( this can happen if, 
+       for instance, only one pair maps ) free the read and return */
+    if( 0 == prob_sum )
+    {
+        free_mapped_read( *mpd_rd );
+        *mpd_rd = NULL;
+        return;
+    }
     
     int i;
     /* set the conditional probabilites - just renormalize */

@@ -682,11 +682,13 @@ join_all_candidate_mappings( candidate_mappings_db* cand_mappings_db,
         
         build_mapped_read_from_candidate_mappings( 
             genome, mappings, &mpd_rd, read_key );
+
+        /* if we were actual able to build a mapped read with > 0 prb */
+        if( NULL != mpd_rd ) {
+            add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
+            free_mapped_read( mpd_rd );
+        }
         
-        add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
-
-        free_mapped_read( mpd_rd );
-
         free_candidate_mappings( mappings );
 
         /* Get the reads */
