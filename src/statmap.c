@@ -1110,6 +1110,11 @@ main( int argc, char** argv )
     /* parse and sanity check arguments */
     args_t args = parse_arguments( argc, argv );
     
+    /* write the arguments to a file */
+    FILE* arg_fp = fopen( "config.dat", "w" );
+    fwrite( &args, sizeof(args_t), 1, arg_fp );
+    fclose( arg_fp  );
+    
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args );

@@ -8,21 +8,36 @@
 #include "../src/genome.h"
 #include "../src/sam.h"
 #include "../src/rawread.h"
+#include "../src/config_parsing.h"
 
 /* make it possible to link */
 int min_num_hq_bps = -1;
 
+int num_threads = 1;
+
 void usage()
 {
-    fprintf( stderr, "Usage: ./mapped_reads_to_sam output_directory\n" );
+    fprintf( stderr, "Usage: ./mapped_reads_to_sam output_directory [sample_number]\n" );
 }
 
 int main( int argc, char** argv )
 {
-    if( argc != 2 )
+    if( argc != 2 && argc != 3 )
     {
         usage();
         exit(1);
+    }
+
+    int sample_num = -1;
+
+    if( argc == 3 ) {
+        sample_num = atoi( argv[2] );
+        
+        if( sample_num <= 0 ) {
+            usage();
+            fprintf( stderr, "ERROR    : Invalid Sample Number %i\n", sample_num );
+            exit(1);
+        }
     }
 
     /* change to the output directory */
@@ -33,6 +48,12 @@ int main( int argc, char** argv )
         exit( 1 );
     }
 
+    /* load the configuration data */
+    args_t* args;
+    read_config_file_from_disk( &args );
+
+    printf( "ASSAY TYPE  :  %i\n", args->assay_type );
+    
     /* Load the genome */
     struct genome_data* genome;
     load_genome_from_disk( &genome, GENOME_FNAME );
@@ -49,16 +70,47 @@ int main( int argc, char** argv )
     {
         fprintf( stderr, "FATAL       :  Can not load raw reads.\n" );
         exit( 1 );
+    }    
+    
+    /* If we specified a marginal desnity */
+    if( sample_num > -1 ) {
+        /* first, load the fl dist */
+        FILE* fl_dist_fp = NULL;
+        fl_dist_fp = fopen( "estimated_fl_dist.txt", "r"  );
+        init_fl_dist_from_file( &(mpd_rdb->fl_dist), fl_dist_fp );
+        fclose( fl_dist_fp  );
+
+        
+        /* load the trace that stores the marginal read 
+           density that we are interested in */
+        struct trace_t* traces;
+        char traces_fname[500];
+        sprintf( traces_fname, "./samples/sample%i.ip.bin.trace", sample_num );
+        printf( "TRACE FNAME :  %s\n", traces_fname );
+        load_trace_from_file( &traces, traces_fname  );
+
+        /* update the read conditional probabilities based upon the assay
+           and the correct trace */
+        update_cond_prbs_from_trace_and_assay_type( 
+            mpd_rdb, traces, genome, args->assay_type );
+
+        close_traces( traces );
+    } /* otherwise, we assume a uniform marginal read density. */
+      else {
+          /* this resets the conditional under a uniform prior */
+          reset_all_read_cond_probs( mpd_rdb );
     }
+        
     
     write_mapped_reads_to_sam( raw_rdb, mpd_rdb, genome, true, false, stdout );
     
     goto cleanup;
     
 cleanup:
+    free( args );
     free_genome( genome );
     close_mapped_reads_db( mpd_rdb );
-    close_rawread_db( raw_rdb );
+    close_rawread_db( raw_rdb );    
 
     return 0;
 }

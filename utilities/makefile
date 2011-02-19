@@ -1,6 +1,6 @@
 compiler = gcc
 #compile_options = -fast
-compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64
+compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64 --short-enums
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	mapped_reads_into_wiggle estimate_read_density call_peaks \
@@ -41,6 +41,7 @@ mapped_reads_into_sam : mapped_reads_into_sam.c
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o  ../src/pseudo_location.o \
 	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/iterative_mapping.o \
 	-lm -pthread
 	cp mapped_reads_into_sam ../bin/
 

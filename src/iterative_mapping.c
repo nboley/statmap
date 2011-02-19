@@ -46,7 +46,6 @@ union f4vector
 };
 #endif
 
-
 struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
@@ -1490,7 +1489,8 @@ update_chipseq_mapping_wnc(
             nc_rdb, *ip_trace, 
             update_chipseq_mapped_read_prbs
         );
-    
+
+    #if 0 
     /* update the NC reads from the ip marginal density */
     update_traces_from_mapped_reads( 
         nc_rdb, *nc_trace, 
@@ -1503,7 +1503,7 @@ update_chipseq_mapping_wnc(
         ip_rdb, *ip_trace, 
         update_chipseq_trace_expectation_from_location
     );
-    
+    #endif 
     /* 
        now we have two traces - one is the NC and one is the IP. They are 
        mapped from the same marginal read density, so we should be able
@@ -1706,23 +1706,6 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
     fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
             ((float)(stop-start))/CLOCKS_PER_SEC );
     
-    /* If users want to do this, why not just call the utility? */
-    #if 0 
-        /* write the mapped reads to SAM */
-        start = clock();
-        fprintf(stderr, "NOTICE      :  Writing relaxed mapped reads to SAM file.\n" );
-        
-        FILE* sam_ofp = fopen( "mapped_reads_relaxed.sam", "w+" );
-        write_mapped_reads_to_sam( 
-            rawread_db, rdb, genome, false, false, sam_ofp );
-        fclose( sam_ofp );    
-        
-        stop = clock();
-        fprintf(stderr, 
-                "PERFORMANCE :  Wrote relaxed mapped reads to sam in %.2lf seconds\n", 
-                ((float)(stop-start))/CLOCKS_PER_SEC );
-    #endif
-    
     error = sample_random_traces(
         rdb, genome, 
         trace_size, track_names,
@@ -1740,6 +1723,50 @@ cleanup:
     close_traces( uniform_trace );
     
     return 0;    
+}
+
+void
+update_cond_prbs_from_trace_and_assay_type(  
+    struct mapped_reads_db* rdb, 
+    struct trace_t* traces,
+    struct genome_data* genome,
+    enum assay_type_t assay_type
+    )
+{
+    struct update_mapped_read_rv_t 
+        (*update_reads)( const struct trace_t* const traces, 
+                         const struct mapped_read_t* const r  )
+        = NULL;
+
+    switch( assay_type )
+    {
+    case CAGE:
+        update_reads = update_CAGE_mapped_read_prbs;
+        break;
+    
+    case CHIP_SEQ:
+        update_reads = update_chipseq_mapped_read_prbs;
+        break;
+    
+    default:
+        fprintf( stderr, "ERROR       :  Unrecognized assay type (%i). Did you mix statmap versions?\n", assay_type);
+        exit(1);
+    }
+    
+    /* BUG!!! */
+    /* Set the global fl dist */
+    global_fl_dist = rdb->fl_dist;
+    global_genome = genome;
+
+    update_mapped_reads_from_trace(
+        rdb, traces, update_reads
+    );
+    
+    goto cleanup;
+
+cleanup:
+    
+    return;        
 }
 
 
