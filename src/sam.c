@@ -515,6 +515,7 @@ write_mapped_reads_to_sam(
         if( mapped_rd != NULL 
             && mapped_rd->num_mappings > 0 )
         {
+            /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
                 reset_read_cond_probs( mapped_rd );
 

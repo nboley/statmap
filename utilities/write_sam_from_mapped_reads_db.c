@@ -12,7 +12,6 @@
 
 /* make it possible to link */
 int min_num_hq_bps = -1;
-
 int num_threads = 1;
 
 void usage()
@@ -52,7 +51,7 @@ int main( int argc, char** argv )
     args_t* args;
     read_config_file_from_disk( &args );
 
-    printf( "ASSAY TYPE  :  %i\n", args->assay_type );
+    fprintf( stderr, "ASSAY TYPE  :  %i\n", args->assay_type );
     
     /* Load the genome */
     struct genome_data* genome;
@@ -72,37 +71,40 @@ int main( int argc, char** argv )
         exit( 1 );
     }    
     
+    enum bool reset_cond_prbs = true;
+    
     /* If we specified a marginal desnity */
     if( sample_num > -1 ) {
+        /* tell the sam printing code to not reset the cond prbs */
+        reset_cond_prbs = false;
+        
         /* first, load the fl dist */
         FILE* fl_dist_fp = NULL;
         fl_dist_fp = fopen( "estimated_fl_dist.txt", "r"  );
         init_fl_dist_from_file( &(mpd_rdb->fl_dist), fl_dist_fp );
         fclose( fl_dist_fp  );
-
+        build_chipseq_bs_density( mpd_rdb->fl_dist );
         
         /* load the trace that stores the marginal read 
            density that we are interested in */
         struct trace_t* traces;
         char traces_fname[500];
         sprintf( traces_fname, "./samples/sample%i.ip.bin.trace", sample_num );
-        printf( "TRACE FNAME :  %s\n", traces_fname );
+        fprintf( stderr, "TRACE FNAME :  %s\n", traces_fname );
         load_trace_from_file( &traces, traces_fname  );
 
         /* update the read conditional probabilities based upon the assay
            and the correct trace */
+        mmap_mapped_reads_db( mpd_rdb );
+        index_mapped_reads_db( mpd_rdb );
         update_cond_prbs_from_trace_and_assay_type( 
             mpd_rdb, traces, genome, args->assay_type );
 
         close_traces( traces );
-    } /* otherwise, we assume a uniform marginal read density. */
-      else {
-          /* this resets the conditional under a uniform prior */
-          reset_all_read_cond_probs( mpd_rdb );
     }
         
-    
-    write_mapped_reads_to_sam( raw_rdb, mpd_rdb, genome, true, false, stdout );
+    write_mapped_reads_to_sam( 
+        raw_rdb, mpd_rdb, genome, reset_cond_prbs, false, stdout );
     
     goto cleanup;
     

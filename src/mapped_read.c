@@ -767,6 +767,9 @@ close_mapped_reads_db( struct mapped_reads_db* rdb )
     if( rdb->fl_dist != NULL )
         free_fl_dist( rdb->fl_dist );
     
+    if( rdb->mmapped_reads_starts != NULL )
+        free( rdb->mmapped_reads_starts );
+    
     free( rdb );
     return;
 }
@@ -918,6 +921,12 @@ void
 reset_all_read_cond_probs( struct mapped_reads_db* rdb )
                            
 {
+    if( NULL == rdb->mmapped_data ) {
+        perror( "ERROR       :  Mapped Read must be indexed to be writable." );
+        perror( "            :  This is not a user error, it is a bug." );
+        exit( 1 );
+    }
+
     rewind_mapped_reads_db( rdb );
     struct mapped_read_t* r;
 
