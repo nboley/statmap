@@ -15,6 +15,7 @@ int min_num_hq_bps = -1;
 #include "utility_common.h"
 
 #include "../src/statmap.h"
+#include "../src/config_parsing.h"
 #include "../src/trace.h"
 #include "../src/wiggle.h"
 #include "../src/sam.h"

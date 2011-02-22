@@ -7,6 +7,7 @@ int num_threads = -1;
 int min_num_hq_bps = -1;
 
 #include "../src/config.h"
+#include "../src/config_parsing.h"
 #include "../src/statmap.h"
 #include "../src/trace.h"
 #include "../src/wiggle.h"

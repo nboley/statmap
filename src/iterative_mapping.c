@@ -22,6 +22,7 @@
 #include <float.h>
 
 #include "statmap.h"
+#include "config_parsing.h"
 #include "iterative_mapping.h"
 #include "mapped_read.h"
 #include "trace.h"
@@ -38,7 +39,7 @@
 
 #ifdef USE_VEC_OPERATIONS
 typedef float v4sf __attribute__ ((vector_size(16) ));
-
+                  
 union f4vector 
 {
     v4sf v;
@@ -1490,7 +1491,6 @@ update_chipseq_mapping_wnc(
             update_chipseq_mapped_read_prbs
         );
 
-    #if 0 
     /* update the NC reads from the ip marginal density */
     update_traces_from_mapped_reads( 
         nc_rdb, *nc_trace, 
@@ -1503,7 +1503,7 @@ update_chipseq_mapping_wnc(
         ip_rdb, *ip_trace, 
         update_chipseq_trace_expectation_from_location
     );
-    #endif 
+    
     /* 
        now we have two traces - one is the NC and one is the IP. They are 
        mapped from the same marginal read density, so we should be able

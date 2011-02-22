@@ -48,7 +48,7 @@ int main( int argc, char** argv )
     }
 
     /* load the configuration data */
-    args_t* args;
+    struct args_t* args;
     read_config_file_from_disk( &args );
 
     fprintf( stderr, "ASSAY TYPE  :  %i\n", args->assay_type );
@@ -56,7 +56,7 @@ int main( int argc, char** argv )
     /* Load the genome */
     struct genome_data* genome;
     load_genome_from_disk( &genome, GENOME_FNAME );
-    
+
     /* load the mapped read db */
     char* mpd_rd_fname = "mapped_reads.db";
     struct mapped_reads_db* mpd_rdb;
@@ -70,7 +70,7 @@ int main( int argc, char** argv )
         fprintf( stderr, "FATAL       :  Can not load raw reads.\n" );
         exit( 1 );
     }    
-    
+
     enum bool reset_cond_prbs = true;
     
     /* If we specified a marginal desnity */

@@ -4,7 +4,6 @@
 #define STATMAP_H
 
 #include "config.h"
-#include "config_parsing.h"
 
 struct genome_data;
 
@@ -15,9 +14,10 @@ extern int num_trace_tracks;
 extern char** trace_track_names;
 
 
-/* fwd declaration for the rawread db type */
+/* fwd declarations */
 struct rawread_db_t;
-
+struct args_t;
+enum input_file_type_t;
 
 void usage();
 
@@ -32,8 +32,8 @@ void usage();
  *
  */
 
-input_file_type_t
-guess_input_file_type( args_t* args );
+enum input_file_type_t
+guess_input_file_type( struct args_t* args );
 
 /*
  * Guess the optimal indexed sequence length.
@@ -43,25 +43,25 @@ guess_input_file_type( args_t* args );
  *
  */
 int
-guess_optimal_indexed_seq_len( args_t* args);
+guess_optimal_indexed_seq_len( struct args_t* args);
 
-args_t
+struct args_t
 parse_arguments( int argc, char** argv );
 
 struct mapped_reads_db;
 
 void
-map_marginal( args_t* args, 
+map_marginal( struct args_t* args, 
               struct genome_data* genome,
               struct rawread_db_t* rdb,
               struct mapped_reads_db** mpd_rds_db,
               enum bool is_nc );
 
 void
-build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db );
+build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db );
 
 void
-iterative_mapping( args_t* args, 
+iterative_mapping( struct args_t* args, 
                    struct genome_data* genome,
                    struct mapped_reads_db* mpd_rds_db );
 

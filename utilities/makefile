@@ -41,7 +41,7 @@ mapped_reads_into_sam : mapped_reads_into_sam.c
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
 	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o  ../src/pseudo_location.o \
 	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
-	../src/iterative_mapping.o \
+	../src/iterative_mapping.o ../src/config_parsing.o \
 	-lm -pthread
 	cp mapped_reads_into_sam ../bin/
 

@@ -9,7 +9,8 @@ compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unr
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
-	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o
+	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o \
+	  config_parsing.o
 
 all: statmap trace.so
 
@@ -127,7 +128,7 @@ wiggle.h: trace.h
 trace.o: trace.c trace.h
 	$(compiler) $(compile_options) -fopenmp -c trace.c
 
-# build the trace as a shared object
+# build the trace as a shared object so that python can load it
 trace.so: trace.c trace.h 
 	$(compiler) $(compile_options) -fpic -shared -Wl,-soname,libtrace.so.1 -o libtrace.so \
 	trace.c
@@ -149,6 +150,11 @@ dna_sequence.o : dna_sequence.c dna_sequence.h
 	$(compiler) $(compile_options) -c dna_sequence.c
 
 dna_sequence.h : config.h
+
+config_parsing.h : 
+
+config_parsing.o : config_parsing.c config_parsing.h
+	$(compiler) $(compile_options) -c config_parsing.c
 
 ### Clean Rules
 .PHONY : clean

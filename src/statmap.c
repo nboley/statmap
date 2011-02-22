@@ -21,6 +21,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include "config_parsing.h"
 #include "statmap.h"
 #include "mapped_read.h"
 #include "find_candidate_mappings.h"
@@ -89,10 +90,10 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
     return;
 }
 
-input_file_type_t
-guess_input_file_type( args_t* args )
+enum input_file_type_t
+guess_input_file_type( struct args_t* args )
 {
-    input_file_type_t input_file_type = UNKNOWN;
+    enum input_file_type_t input_file_type = UNKNOWN;
 
     // Store the minimum and max qual scores among
     // every observed basepair.
@@ -220,7 +221,7 @@ guess_input_file_type( args_t* args )
 
 
 int
-guess_optimal_indexed_seq_len( args_t* args)
+guess_optimal_indexed_seq_len( struct args_t* args)
 {
     int seq_len = -1;
 
@@ -250,7 +251,7 @@ guess_optimal_indexed_seq_len( args_t* args)
     return seq_len;
 }
 
-args_t
+struct args_t
 parse_arguments( int argc, char** argv )
 {
     int error;
@@ -259,7 +260,7 @@ parse_arguments( int argc, char** argv )
      * initialize the structure that stores all of the 
      * configuration options.
      */
-    args_t args;
+    struct args_t args;
     
     args.genome_fname = NULL;
     args.genome_index_fname = NULL;
@@ -710,7 +711,7 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
-void load_genome( struct genome_data** genome, args_t* args )
+void load_genome( struct genome_data** genome, struct args_t* args )
 {
     int rv;
     
@@ -774,7 +775,7 @@ void load_genome( struct genome_data** genome, args_t* args )
 }
 
 void
-map_marginal( args_t* args, 
+map_marginal( struct args_t* args, 
               struct genome_data* genome, 
               struct rawread_db_t* rdb,
               struct mapped_reads_db** mpd_rds_db,
@@ -874,7 +875,7 @@ map_marginal( args_t* args,
 }
 
 void
-build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db )
+build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
 {
     /* estimate the fragment length distribution */
     /* if necessary. and if there are paired reads */
@@ -902,7 +903,7 @@ build_fl_dist( args_t* args, struct mapped_reads_db* mpd_rds_db )
 }
 
 void
-iterative_mapping( args_t* args, 
+iterative_mapping( struct args_t* args, 
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
@@ -934,7 +935,7 @@ iterative_mapping( args_t* args,
 }
 
 void
-map_generic_data(  args_t* args )
+map_generic_data(  struct args_t* args )
 {
     struct genome_data* genome;
     
@@ -972,7 +973,7 @@ map_generic_data(  args_t* args )
 }
 
 void
-map_chipseq_data(  args_t* args )
+map_chipseq_data(  struct args_t* args )
 {
     struct genome_data* genome;
 
@@ -1108,11 +1109,11 @@ main( int argc, char** argv )
     srand ( time(NULL) );
     
     /* parse and sanity check arguments */
-    args_t args = parse_arguments( argc, argv );
+    struct args_t args = parse_arguments( argc, argv );
     
     /* write the arguments to a file */
     FILE* arg_fp = fopen( "config.dat", "w" );
-    fwrite( &args, sizeof(args_t), 1, arg_fp );
+    fwrite( &args, sizeof(struct args_t), 1, arg_fp );
     fclose( arg_fp  );
     
     if( args.assay_type == CHIP_SEQ )
