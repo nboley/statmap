@@ -2,7 +2,7 @@ from math import exp
 import random
 import numpy
 from scipy import signal
-import rpy
+#import rpy
 import sys
 
 BLOCK_SAMPLE_SIZE = 10000
