@@ -12,7 +12,7 @@ MIX = 0.3
 
 
 # Command line parameters
-input_bed = sys.argv[1]
+input_dnase = sys.argv[1]
 input_chrm = sys.argv[2]
 chrm_length = int(sys.argv[3])
 chrm_name = sys.argv[4]
@@ -185,15 +185,14 @@ def print_wig( wig, outfile ):
 if __name__ == "__main__":
     #fwd_den, bkwd_den = parse_wig( input_bed, chrm_length  )
     fl_den = parse_frag_length( frag_length )
-    den = parse_bed( input_bed, chrm_length  )
+    fwd_den, rev_den = parse_wig( input_dnase, chrm_length  )
     region = build_chipseq_region( input_chrm )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     #print sum( score > 0.2 for score in bind_site_scores )
     #sys.exit()
     #print fwd_den
     #sys.exit()
-    bs_density = block_sample_wiggle( den )
-    #print bs_density
+    bs_density = block_sample_wiggle( fwd_den )
     #sys.exit()
     #print len(bs_density), len(bind_site_scores)
     joint_dist = bs_density*bind_site_scores
