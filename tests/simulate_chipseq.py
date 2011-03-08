@@ -543,6 +543,8 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     nf = 0.4
     #density = parse_wig( "./smo_chipseq_sim/called_peaks/peaks.wig", genome )
     #plot_wiggle( density, 'red', lwd=2, norm_factor=nf )
+    density = parse_trace( "./smo_chipseq_sim/called_peaks/sample1.bin.trace" )
+    plot_trace( density, 'red', lwd=2, norm_factor=nf )
     for index in xrange(len(genome)):
         rpy.r("par(mfg=c(%i,1))" % (index+1))
         rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )

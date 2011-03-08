@@ -2,7 +2,6 @@ from math import exp
 import random
 import numpy
 from scipy import signal
-#import rpy
 import sys
 
 BLOCK_SAMPLE_SIZE = 10000
@@ -283,6 +282,8 @@ if __name__ == "__main__":
 
     
     if DEBUG_READS:
+        import rpy
+
         sampled_density = numpy.zeros( len( fwd_den ) )    
         for pos in poss:
             sampled_density[ pos:(pos+SEQ_LEN)  ] += 1
