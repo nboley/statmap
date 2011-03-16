@@ -278,8 +278,6 @@ if __name__ == "__main__":
         print >>OUTPUT_CONTROL, seq
         print >>OUTPUT_CONTROL, "+%i" % loop  
         print >>OUTPUT_CONTROL, "h"*len( seq )
-        
-
     
     if DEBUG_READS:
         import rpy

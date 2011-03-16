@@ -38,9 +38,11 @@ int main( int argc, char** argv )
     /* load the configuration data */
     struct args_t* args;
     read_config_file_from_disk( &args );
-    
+
+    /* // DEBUG 
     fprintf( stderr, "ASSAY TYPE  :  %i\n", args->assay_type );
     fprintf( stderr, "NC MPD RDB  :  %p\n", args->NC_rdb );
+    */
 
     /* default to using the marginal distribution, encoded with sample number 0 */
     int sample_num = -1;
@@ -139,7 +141,8 @@ int main( int argc, char** argv )
             sprintf( traces_fname, "./samples/sample%i.nc.bin.trace", sample_num );
         }
         
-        fprintf( stderr, "TRACE FNAME :  %s\n", traces_fname );
+        // DEBUG
+        // fprintf( stderr, "TRACE FNAME :  %s\n", traces_fname );
         load_trace_from_file( &traces, traces_fname  );
 
         /* update the read conditional probabilities based upon the assay

@@ -1,1 +1,13 @@
 Stores scripts that are useful in conjunction with statmap.
+
+sample_mapping - runs the iterative algorithm from a random start location, and adds it to the sample list
+
+mapped_reads_into_sam - write the mapped reads to stdout as a sam file
+
+build_index - builds a genome ( from a fasta file ) and indexes it
+
+call_peaks - call peaks on every sample ( requires a chip-seq experiment )
+
+aggregate_over_wiggles/traces - aggregate over wiggle or trace ( ie, take the max over two traces )
+
+covert_trace_into_wiggle - write the binary trace out to stdout as a wiggle
