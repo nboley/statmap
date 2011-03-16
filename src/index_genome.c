@@ -1684,6 +1684,8 @@ load_ondisk_index( char* index_fname, struct index_t** index )
 void
 build_ondisk_index( struct index_t* index, char* ofname  )
 {
+    size_t total_freed_memory = 0;
+
     /* first, calculate the size of the tree in bytes */
     size_t index_size = sizeof_tree( index );
 
@@ -1766,6 +1768,11 @@ build_ondisk_index( struct index_t* index, char* ofname  )
         size_t node_size = calc_node_size(
             curr_node->node_type, *(curr_node->node_ref));
         memcpy( curr_pos, *(curr_node->node_ref), node_size);
+        /* free the memory */
+        memset( *(curr_node->node_ref), 0, node_size );
+        free_node( *(curr_node->node_ref), curr_node->node_type);
+        total_freed_memory += node_size;
+
         /* update the parent pointer */
         *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
         
@@ -1822,6 +1829,8 @@ build_ondisk_index( struct index_t* index, char* ofname  )
             index_size + HEADER_SIZE );
 
     close( fdout );
+
+    fprintf( stderr, "==================================FREED %zu BYTES\n", total_freed_memory );    
     
     return;
 }
