@@ -1769,9 +1769,10 @@ build_ondisk_index( struct index_t* index, char* ofname  )
             curr_node->node_type, *(curr_node->node_ref));
         memcpy( curr_pos, *(curr_node->node_ref), node_size);
         /* free the memory */
-        memset( *(curr_node->node_ref), 0, node_size );
+        // memset( *(curr_node->node_ref), 0, node_size );
         free_node( *(curr_node->node_ref), curr_node->node_type);
         total_freed_memory += node_size;
+        // fprintf( stderr, "==================================FREED %zu BYTES\n", total_freed_memory );    
 
         /* update the parent pointer */
         *(curr_node->node_ref) = curr_pos - (size_t)OD_index;
@@ -1829,8 +1830,6 @@ build_ondisk_index( struct index_t* index, char* ofname  )
             index_size + HEADER_SIZE );
 
     close( fdout );
-
-    fprintf( stderr, "==================================FREED %zu BYTES\n", total_freed_memory );    
     
     return;
 }
