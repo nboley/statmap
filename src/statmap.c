@@ -656,6 +656,11 @@ parse_arguments( int argc, char** argv )
         /* if we cant determine the number of threads, set it to 1 */
         if( num_threads <= 0 )
             num_threads = 1;
+        
+        /* never set the number of threads to more than 8, by default */
+        if( num_threads > 8 )
+            num_threads = 8;
+        
         fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
     } else {
         num_threads = args.num_threads;
@@ -728,7 +733,7 @@ void load_genome( struct genome_data** genome, struct args_t* args )
     assert( rv == 9 );
     
     /* if there isnt a binary index, assume its fasta and build the binary index */
-    if( 0 != strcmp( magic_number, "SM_OD_GEN" ) )
+    if( 0 != strncmp( magic_number, "SM_OD_GEN", 9 ) )
     {
         fseek( genome_fp, 0, SEEK_SET ); 
         printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
