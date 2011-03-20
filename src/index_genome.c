@@ -1660,16 +1660,31 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     
     fclose( index_fp );
 
+    /* store the index */
+    void* OD_index;
+    
+    #define DONT_MMAP_INDEX
+    #ifdef MMAP_INDEX
     int fd;
     if ((fd = open(index_fname, O_RDONLY )) < 0)
         fprintf(stderr, "FATAL     : can't create %s for reading", index_fname);
     
-    void* OD_index;
     if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
                              // index_size + sizeof(size_t) + sizeof(char), 
                           PROT_READ,
                           MAP_SHARED, fd, 0)) == (caddr_t) -1)
         fprintf(stderr, "FATAL     : mmap error for index file");
+    #else
+    FILE* fp = NULL;
+    fp = fopen( index_fname, "r"  );
+    if( fp == NULL )
+        perror("Could not open index file.");
+    
+    OD_index = calloc( index_size + HEADER_SIZE, 1  );
+    long res = fread( OD_index, 1, index_size + HEADER_SIZE, fp );
+    fprintf( stderr, "DEBUG       :  Read %u bytes ( out of %u + %u )\n", res, HEADER_SIZE, index_size );
+    fclose( fp );
+    #endif
     
     index_offset = ((size_t) OD_index) + HEADER_SIZE; 
              // sizeof(size_t) + sizeof(char) + sizeof( unsigned char );
@@ -1701,7 +1716,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
     }
     
     /* go to the location corresponding to the last byte */
-    if (lseek (fdout, index_size - 1, SEEK_SET) == -1)
+    if (lseek (fdout, HEADER_SIZE + index_size - 1, SEEK_SET) == -1)
     {
         perror("FATAL       :  lseek error");
         exit( 1 );
