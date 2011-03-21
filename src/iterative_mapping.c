@@ -33,7 +33,7 @@
 #include "fragment_length.h"
 #include "sam.h"
 
-#define USE_VEC_OPERATIONS
+#define DONT_USE_VEC_OPERATIONS
 #define LOCK_TRACES
 
 

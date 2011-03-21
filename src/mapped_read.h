@@ -255,7 +255,7 @@ static inline void
 set_cond_prob_in_mapped_read_location( 
     struct mapped_read_location* loc, float value )
 { 
-    assert( value == -1 || ( value >= 0 && value <= 1 ) );
+    assert( value == -1 || ( value >= -0.000001 && value <= 1.00001 ) );
     loc->cond_prob = ML_PRB_TYPE_from_float( value ); 
 }
  
@@ -266,7 +266,7 @@ set_cond_prob_in_mapped_read_location(
 
 struct mapped_read_t {
     unsigned long read_id;
-    unsigned int num_mappings;
+    unsigned short num_mappings;
     /* the database that this read is in - useful because the 
        DB often conatains meta data ( ie, frag len dist ) */
     struct mapped_reads_db* rdb;
