@@ -242,9 +242,12 @@ find_candidate_mappings( void* params )
             for( j = 0; j < mappings->length; j++ )
             {
                 /* recheck location */
-                
+                // (mappings->mappings + j)->recheck
                 
                 /* recheck penalty */
+
+
+
                 /* 
                  * We always need to do this because of the way the search queue
                  * handles poor branches. If our brnach prediction fails we could

@@ -13,6 +13,8 @@
 #include "candidate_mapping.h"
 #include "rawread.h"
 
+typedef unsigned int MPD_RD_NUM_MAPPINGS_T;
+
 struct fragment_length_dist_t;
 struct genome_data;
 struct rawread_db_t;
@@ -265,8 +267,8 @@ set_cond_prob_in_mapped_read_location(
  */
 
 struct mapped_read_t {
-    unsigned long read_id;
-    unsigned short num_mappings;
+    unsigned int read_id;
+    MPD_RD_NUM_MAPPINGS_T num_mappings;
     /* the database that this read is in - useful because the 
        DB often conatains meta data ( ie, frag len dist ) */
     struct mapped_reads_db* rdb;

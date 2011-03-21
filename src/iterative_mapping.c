@@ -154,9 +154,9 @@ bootstrap_traces_from_mapped_reads(
         r.read_id = *((unsigned long*) read_start);
 
         read_start += sizeof(unsigned long)/sizeof(char);
-        r.num_mappings = *((unsigned short*) read_start);
+        r.num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
 
-        read_start += sizeof(unsigned short)/sizeof(char);
+        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
         
         r.free_locations = false;

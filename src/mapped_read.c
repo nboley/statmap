@@ -19,6 +19,8 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+
+
 /*************************************************************************
  *
  *  Mapped Reads
@@ -67,7 +69,7 @@ add_location_to_mapped_read(
         rd->locations, (rd->num_mappings)*sizeof(struct mapped_read_location)  );
     if( rd->locations == NULL )
     {
-        fprintf(stderr, "FATAL       :  Memory allocation error ( size %lu )\n", (rd->num_mappings)*sizeof(struct mapped_read_location) );
+        fprintf(stderr, "FATAL       :  Memory allocation error ( size %zu )\n", (rd->num_mappings)*sizeof(struct mapped_read_location) );
         assert( false );
         exit( -1 );
     }
@@ -862,9 +864,9 @@ get_next_read_from_mapped_reads_db(
         (*rd)->read_id = *((unsigned long*) read_start);
 
         read_start += sizeof(unsigned long)/sizeof(char);
-        (*rd)->num_mappings = *((unsigned short*) read_start);
+        (*rd)->num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
 
-        read_start += sizeof(unsigned short)/sizeof(char);
+        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
 
         (*rd)->locations = (struct mapped_read_location*) read_start;
         (*rd)->free_locations = false;
@@ -1111,8 +1113,8 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
         /* read a mapping into the struct */
         /* skip the read ID */
         read_start += sizeof(unsigned long)/sizeof(char);
-        unsigned short num_mappings = *((unsigned short*) read_start);
-        read_start += sizeof(unsigned short)/sizeof(char);
+        MPD_RD_NUM_MAPPINGS_T num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
+        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
         /* skip the array of mapped locations */
         read_start += (num_mappings)*(sizeof(struct mapped_read_location)/sizeof(char));
     }

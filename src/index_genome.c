@@ -139,9 +139,6 @@ add_pmatch( potential_match_stack* stack,
             const int node_level, const int max_num_levels,
             const float penalty, const float min_match_penalty, const float max_penalty_diff)
 {
-    /* TODO - lock access to the stack ( or move to berkeley db? ) */
-    /* BUG!!!! change growth factor and catch memory corruption */
-
     /* if necessary, increase the available size */
     // Assert guaranteed by type definition
     // assert( pmatch_stack_length( stack ) >= 0 );
@@ -1695,8 +1692,8 @@ load_ondisk_index( char* index_fname, struct index_t** index )
         perror("Could not open index file.");
     
     OD_index = calloc( index_size + HEADER_SIZE, 1  );
-    long res = fread( OD_index, 1, index_size + HEADER_SIZE, fp );
-    fprintf( stderr, "DEBUG       :  Read %u bytes ( out of %u + %u )\n", res, HEADER_SIZE, index_size );
+    size_t res = fread( OD_index, 1, index_size + HEADER_SIZE, fp );
+    fprintf( stderr, "DEBUG       :  Read %zu bytes ( out of %u + %u )\n", res, HEADER_SIZE, index_size );
     fclose( fp );
     #endif
     
