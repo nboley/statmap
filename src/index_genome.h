@@ -281,7 +281,12 @@ search_index( struct index_t* index,
               mapped_locations* results,
 
               struct rawread* r,
-              float* bp_mut_rates
+              float* bp_mut_rates,
+
+              float* lookuptable_position,
+              float* inverse_lookuptable_position,
+              float* reverse_lookuptable_position,
+              float* reverse_inverse_lookuptable_position
     );
 
 size_t

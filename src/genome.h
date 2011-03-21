@@ -54,6 +54,9 @@ add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  struct 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
 
+char* 
+find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc );
+
 extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );
 

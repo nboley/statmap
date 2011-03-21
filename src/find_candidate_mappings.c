@@ -92,6 +92,17 @@ find_candidate_mappings( void* params )
         {
             struct rawread* r = reads[j];
 
+            /* Build the quality lookup tables */
+            float* lookuptable_position = malloc(sizeof(float)*r->length);
+            float* inverse_lookuptable_position = malloc(sizeof(float)*r->length);
+            float* reverse_lookuptable_position = malloc(sizeof(float)*r->length);
+            float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
+            build_lookup_table_from_rawread(
+                r, 
+                lookuptable_position, inverse_lookuptable_position,
+                reverse_lookuptable_position, reverse_inverse_lookuptable_position
+            );
+
             /* If we are logging, print the read */
             if( log_fp != NULL ) {
                 pthread_mutex_lock( log_fp_mutex );
@@ -115,7 +126,12 @@ find_candidate_mappings( void* params )
                           results,
 
                           r,
-                          bp_mut_rates
+                          bp_mut_rates,
+
+                          lookuptable_position,
+                          inverse_lookuptable_position,
+                          reverse_lookuptable_position,
+                          reverse_inverse_lookuptable_position
                 );
 
             /* increment the number of reads that mapped */
@@ -155,7 +171,10 @@ find_candidate_mappings( void* params )
 
             /**** TODO - get rid of this requirement */
             /* Assert that subseqs are false */
-            assert( template_candidate_mapping.subseq_len == r->length );
+            assert( template_candidate_mapping.subseq_len <= r->length );
+            // BUG BUG BUG BUG BUG
+            // IN THE MIDDLE OF DOING THIS - FOR NOW KEEP THE CHECK
+            assert( template_candidate_mapping.subseq_len <= r->length );
 
             /***** COPY information from the index lookup into the result set
              * build and populate an array of candidate_mapping's. 
@@ -241,13 +260,27 @@ find_candidate_mappings( void* params )
             int j;
             for( j = 0; j < mappings->length; j++ )
             {
-                /* recheck location */
-                // (mappings->mappings + j)->recheck
+                /* if the recheck is RECHECK_FULL|PENALTY|LOCATION */
+                if( (mappings->mappings + j)->recheck < 3 ) {
+                    /* recheck location */
+                    /* recheck penalty */
+                    char* genome_seq = find_seq_ptr( 
+                        genome, (mappings->mappings + j)->chr, (mappings->mappings + j)->start_bp );
+                    
+                    float rechecked_penalty = recheck_penalty( 
+                        genome_seq, 
+                        // char* observed,
+                        r->char_seq,
+                        // const int seq_length,
+                        r->length,
+                        lookuptable_position,
+                        inverse_lookuptable_position,
+                        bp_mut_rates
+                    );
+                    
+                    (mappings->mappings + j)->penalty = rechecked_penalty;
+                }
                 
-                /* recheck penalty */
-
-
-
                 /* 
                  * We always need to do this because of the way the search queue
                  * handles poor branches. If our brnach prediction fails we could

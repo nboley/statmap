@@ -364,6 +364,14 @@ find_chr_index( struct genome_data* genome, const char* const chr_name )
     return -1;
 }
 
+char* 
+find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc )
+{
+    assert( chr_index < genome->num_chrs );
+    assert( loc < genome->chr_lens[chr_index] );
+    return genome->chrs[chr_index] + loc;
+}
+
 void
 add_chr_to_genome( char* chr_name, 
                    char* chr_str, 
