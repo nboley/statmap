@@ -65,7 +65,7 @@ int main( int argc, char** argv )
         if( USE_IP < 0 ) {
             usage();
             fprintf( stderr, "ERROR    : Invalid use IP flag (%i) - expecting 0 ( for use negative control ) or 1 ( for use ip )\n", sample_num );
-            fprintf( stderr, "HINT     : This experiment used a negative control - you need to specify which reads to output.\n", sample_num );
+            fprintf( stderr, "HINT     : This experiment used a negative control - you need to specify which reads to output.\n" );
             exit(1);
         }
     } else {

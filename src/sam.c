@@ -333,7 +333,7 @@ fprintf_mapped_read_to_sam(
 {
     assert( expand_pseudo_locations == false );
 
-    int i = 0;
+    size_t i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
         /* if this is a paired end read */

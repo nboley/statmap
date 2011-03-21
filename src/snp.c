@@ -331,7 +331,7 @@ update_snp_estimates_from_candidate_mappings(
     rewind_mapped_reads_db( rdb );
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {
-        int i;
+        size_t i;
         for( i = 0; i < rd->num_mappings; i++ )
         {
             struct mapped_read_location* loc = rd->locations + i;

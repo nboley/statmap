@@ -59,6 +59,8 @@ void
 add_location_to_mapped_read( 
     struct mapped_read_t* rd, struct mapped_read_location* loc )
 {
+    assert( (rd->num_mappings + 1) > rd->num_mappings );
+
     /* Allocate new space for the location */
     rd->num_mappings += 1;
     rd->locations = realloc( 
@@ -90,7 +92,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
     
     /* prevent divide by zero */
     double prb_sum = ML_PRB_MIN;
-    int i;
+    size_t i;
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
@@ -119,7 +121,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
 int 
 write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
 {
-    int num = 0;
+    size_t num = 0;
 
     num = fwrite( &(read->read_id), sizeof( read->read_id ), 1, of );
     if( num != 1 )
@@ -679,7 +681,7 @@ build_mapped_read_from_candidate_mappings(
         return;
     }
     
-    int i;
+    size_t i;
     /* set the conditional probabilites - just renormalize */
     for( i = 0; i < (*mpd_rd)->num_mappings; i++ )
     {
