@@ -1683,7 +1683,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
                              // index_size + sizeof(size_t) + sizeof(char), 
                           PROT_READ,
-                          MAP_SHARED, fd, 0)) == (caddr_t) -1)
+                          MAP_SHARED|MAP_POPULATE, fd, 0)) == (caddr_t) -1)
         fprintf(stderr, "FATAL     : mmap error for index file");
     #else
     FILE* fp = NULL;

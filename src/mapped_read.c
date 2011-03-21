@@ -62,7 +62,7 @@ add_location_to_mapped_read(
     struct mapped_read_t* rd, struct mapped_read_location* loc )
 {
     assert( (rd->num_mappings + 1) > rd->num_mappings );
-
+    
     /* Allocate new space for the location */
     rd->num_mappings += 1;
     rd->locations = realloc( 
