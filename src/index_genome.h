@@ -296,6 +296,10 @@ sizeof_tree( struct index_t* index );
 
 /* fwd declaration for the index type */
 struct index_t;
+
+void
+free_ondisk_index( struct index_t* index );
+
 void
 load_ondisk_index( char* index_fname, struct index_t** index );
 

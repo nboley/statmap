@@ -23,6 +23,8 @@
 /* This must be added to all pointers */
 static size_t index_offset = 0;
 
+#define DONT_MMAP_INDEX
+
 /******************************************************************************/
 /* Memory function for  building the index      */
 /******************************************************************************/
@@ -1608,6 +1610,19 @@ sort_ODI_stack( struct ODI_stack* stack )
 #define HEADER_SIZE ( 1 + 1 + sizeof(size_t) )
 
 void
+free_ondisk_index( struct index_t* index ) {
+    if( index->index != NULL ) {
+        free( index->index );
+    } else {
+        #ifndef MMAP_INDEX
+        free( (void*)(index_offset - HEADER_SIZE) );
+        #endif
+    }
+    
+    return;
+}
+
+void
 load_ondisk_index( char* index_fname, struct index_t** index )
 {
     int rv;
@@ -1663,7 +1678,6 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     /* store the index */
     void* OD_index;
     
-    #define DONT_MMAP_INDEX
     #ifdef MMAP_INDEX
     int fd;
     if ((fd = open(index_fname, O_RDONLY )) < 0)

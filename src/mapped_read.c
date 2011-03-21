@@ -65,7 +65,7 @@ add_location_to_mapped_read(
         rd->locations, (rd->num_mappings)*sizeof(struct mapped_read_location)  );
     if( rd->locations == NULL )
     {
-        fprintf(stderr, "FATAL       :  Memory allocation error ( size %lu )\n", );
+        fprintf(stderr, "FATAL       :  Memory allocation error ( size %lu )\n", (rd->num_mappings)*sizeof(struct mapped_read_location) );
         assert( false );
         exit( -1 );
     }

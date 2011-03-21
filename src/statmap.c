@@ -1066,6 +1066,7 @@ map_chipseq_data(  struct args_t* args )
     /* Free the genome index */
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    free_ondisk_index( genome->index );
     
     /* if there is no negative control, we use the same iterative 
        scheme as the generic version. iterative_mapping takes care of 
