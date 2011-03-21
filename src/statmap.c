@@ -90,6 +90,35 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
     return;
 }
 
+static void
+safe_link_into_output_directory( char* fname, char* output_dir, char* output_fname )
+{
+    int error;
+
+    char* realpath_buffer = realpath( output_dir, NULL );
+    assert( NULL != realpath_buffer );
+
+    char* input_realpath_buffer = realpath( fname, NULL );
+    assert( NULL != realpath_buffer );
+
+    char buffer[500];
+    sprintf( buffer, "ln -s %s %s/%s", input_realpath_buffer, realpath_buffer, output_fname );
+    fprintf(stderr, "NOTICE      :  Linking '%s' to the output directory\n",  fname );
+    error = system( buffer );
+    if (WIFSIGNALED(error) &&
+        (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+    {
+        fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+        perror( "Link failure");
+        assert( false );
+        exit( -1 );
+    }
+    
+    free( realpath_buffer );
+    
+    return;
+}
+
 enum input_file_type_t
 guess_input_file_type( struct args_t* args )
 {
@@ -766,9 +795,9 @@ void load_genome( struct genome_data** genome, struct args_t* args )
         write_genome_to_disk( *genome, GENOME_FNAME  );
     } else {
         /* copy the genome into the output directory */
-        safe_copy_into_output_directory( 
+        safe_link_into_output_directory( 
             args->genome_fname, "./", GENOME_FNAME );
-        safe_copy_into_output_directory( 
+        safe_link_into_output_directory( 
             args->genome_index_fname, "./", GENOME_INDEX_FNAME );
         
         load_genome_from_disk( genome, GENOME_FNAME );
