@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "quality.h"
 #include "rawread.h"
@@ -402,6 +403,7 @@ bp_code( const char letter )
     }
 
     fprintf(stderr, "PANIC - Error converting '%c' in recheck\n", letter );
+    assert( false );
     exit( -1 );
 }
 
@@ -417,7 +419,9 @@ recheck_penalty( char* reference,
     float penalty = 0;
     for( i = 0; i < seq_length; i++ )
     {
-        if( reference[i] == observed[i] )
+        char ref = toupper( reference[i] );
+        char obs = toupper( observed[i] );
+        if( ref == obs )
         {
             penalty = penalty 
                 + n_inverse_lookuptable_position[ i ] ;

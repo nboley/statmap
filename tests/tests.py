@@ -27,7 +27,7 @@ CALL_PEAKS_PATH = '../bin/call_peaks'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
+P_STATMAP_INPUT = True
 if not P_STATMAP_INPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()

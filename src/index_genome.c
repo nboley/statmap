@@ -1333,7 +1333,7 @@ search_index( struct index_t* index,
     if( fwd_seq == NULL )
     {
         // fprintf(stderr, "Could Not Translate: %s\n", r->char_seq);
-        goto cleanup_table;
+        return;
     }
     assert( fwd_seq != NULL );
     
@@ -1371,13 +1371,6 @@ search_index( struct index_t* index,
     free( fwd_seq );
     free( bkwd_seq );
     free( tmp_read );
-
-cleanup_table:
-
-    free( lookuptable_position );
-    free( inverse_lookuptable_position );
-    free( reverse_lookuptable_position );
-    free( reverse_inverse_lookuptable_position );
 
     return;
 };

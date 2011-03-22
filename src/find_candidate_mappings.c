@@ -174,7 +174,7 @@ find_candidate_mappings( void* params )
             assert( template_candidate_mapping.subseq_len <= r->length );
             // BUG BUG BUG BUG BUG
             // IN THE MIDDLE OF DOING THIS - FOR NOW KEEP THE CHECK
-            assert( template_candidate_mapping.subseq_len <= r->length );
+            assert( template_candidate_mapping.subseq_len == r->length );
 
             /***** COPY information from the index lookup into the result set
              * build and populate an array of candidate_mapping's. 
@@ -267,8 +267,21 @@ find_candidate_mappings( void* params )
                     char* genome_seq = find_seq_ptr( 
                         genome, (mappings->mappings + j)->chr, (mappings->mappings + j)->start_bp );
                     
+                    char* mut_genome_seq = NULL;
+                    mut_genome_seq = malloc(sizeof(char)*(r->length+1));
+                    assert( mut_genome_seq != NULL ); 
+                    
+                    if( BKWD == (mappings->mappings + j)->rd_strnd )
+                    {
+                        rev_complement_read( genome_seq, mut_genome_seq, r->length );
+                    } else {
+                        memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
+                        mut_genome_seq[r->length] = '\0';
+                    }
+                    
+                    
                     float rechecked_penalty = recheck_penalty( 
-                        genome_seq, 
+                        mut_genome_seq, 
                         // char* observed,
                         r->char_seq,
                         // const int seq_length,
@@ -279,6 +292,15 @@ find_candidate_mappings( void* params )
                     );
                     
                     (mappings->mappings + j)->penalty = rechecked_penalty;
+                    
+                    /*
+                    fprintf( stderr, "%i\t%.15s\t%.15s\t%.2f\n", 
+                             (mappings->mappings + j)->rd_strnd, 
+                             r->char_seq, mut_genome_seq, 
+                             rechecked_penalty );
+                    */
+                    
+                    free( mut_genome_seq );
                 }
                 
                 /* 
@@ -315,6 +337,12 @@ find_candidate_mappings( void* params )
 
             /* cleanup the unmarshalled reads */
             free_rawread( r );
+
+            /* free the mutation lookup tables */
+            free( lookuptable_position );
+            free( inverse_lookuptable_position );
+            free( reverse_lookuptable_position );
+            free( reverse_inverse_lookuptable_position );
         }
     }
 

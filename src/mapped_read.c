@@ -112,7 +112,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
             rd->locations + i, prbs[i]/prb_sum
         );
         
-        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= 0 );
+        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= -0.001 );
     }
     
     free( prbs );
