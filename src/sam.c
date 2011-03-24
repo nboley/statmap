@@ -502,7 +502,7 @@ write_mapped_reads_to_sam(
         mappings_db, 
         &mapped_rd
     );
-    
+
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd1, &rd2 );
 

@@ -275,7 +275,7 @@ struct mapped_read_t {
     struct mapped_reads_db* rdb;
     enum bool free_locations;
     struct mapped_read_location* locations;
-} __attribute__((__packed__));
+}; // BUG WTF? weird segfault with this __attribute__((__packed__));
 
 typedef struct {
     size_t size;
