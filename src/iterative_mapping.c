@@ -151,9 +151,9 @@ bootstrap_traces_from_mapped_reads(
                 
         /* read a mapping into the struct */
         struct mapped_read_t r;
-        r.read_id = *((unsigned long*) read_start);
+        r.read_id = *((MPD_RD_ID_T*) read_start);
 
-        read_start += sizeof(unsigned long)/sizeof(char);
+        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
         r.num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
 
         read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);

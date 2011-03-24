@@ -14,6 +14,7 @@
 #include "rawread.h"
 
 typedef unsigned int MPD_RD_NUM_MAPPINGS_T;
+typedef unsigned int MPD_RD_ID_T;
 
 struct fragment_length_dist_t;
 struct genome_data;
@@ -169,7 +170,7 @@ struct mapped_read_location {
     
     ML_PRB_TYPE seq_error;
     ML_PRB_TYPE cond_prob;
-} __attribute__((__packed__)) ;
+} __attribute__((__packed__));
 
 /* 
  * small, inline functions for setting and accessing the items
@@ -267,14 +268,14 @@ set_cond_prob_in_mapped_read_location(
  */
 
 struct mapped_read_t {
-    unsigned int read_id;
+    MPD_RD_ID_T read_id;
     MPD_RD_NUM_MAPPINGS_T num_mappings;
     /* the database that this read is in - useful because the 
        DB often conatains meta data ( ie, frag len dist ) */
     struct mapped_reads_db* rdb;
     enum bool free_locations;
     struct mapped_read_location* locations;
-};
+} __attribute__((__packed__));
 
 typedef struct {
     size_t size;

@@ -368,7 +368,21 @@ char*
 find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc )
 {
     assert( chr_index < genome->num_chrs );
-    assert( loc < genome->chr_lens[chr_index] );
+    assert( chr_index == PSEUDO_LOC_CHR_INDEX 
+            || loc < genome->chr_lens[chr_index] );
+
+    /* if this is a pseudo chromosome, we need to 
+       get the sequence associated with it. Since
+       the sequence for every location associated with 
+       a pseudo location is the same, it is sufficient to 
+       just get the sequence of the first location.
+    */
+    if( chr_index == PSEUDO_LOC_CHR_INDEX ) {
+        GENOME_LOC_TYPE* ps_loc = &(genome->ps_locs->locs[loc].locs[0]);
+        chr_index = ps_loc->chr;
+        loc = ps_loc->loc;
+    }
+
     return genome->chrs[chr_index] + loc;
 }
 

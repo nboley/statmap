@@ -65,6 +65,7 @@ add_location_to_mapped_read(
     
     /* Allocate new space for the location */
     rd->num_mappings += 1;
+    
     rd->locations = realloc( 
         rd->locations, (rd->num_mappings)*sizeof(struct mapped_read_location)  );
     if( rd->locations == NULL )
@@ -511,6 +512,8 @@ build_mapped_read_from_paired_candidate_mappings(
     /* If we are done, return ( note that we dont have any 
        mapped paired end 2's so no paired ends mapped ) */
     if( -1 == p1_stop ) {
+        /* make sure that the number of reads is 0 */
+        assert( mpd_rd->num_mappings == 0);
         return 0;
     }
     
@@ -861,9 +864,9 @@ get_next_read_from_mapped_reads_db(
         char* read_start = rdb->mmapped_reads_starts[current_read_id];
         
         /* read a mapping into the struct */
-        (*rd)->read_id = *((unsigned long*) read_start);
+        (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
 
-        read_start += sizeof(unsigned long)/sizeof(char);
+        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
         (*rd)->num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
 
         read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
@@ -916,7 +919,7 @@ get_next_read_from_mapped_reads_db(
             exit( -1 );
         }
     }
-    
+
     return 0;
 }
 
@@ -1112,7 +1115,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
 
         /* read a mapping into the struct */
         /* skip the read ID */
-        read_start += sizeof(unsigned long)/sizeof(char);
+        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
         MPD_RD_NUM_MAPPINGS_T num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
         read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
         /* skip the array of mapped locations */

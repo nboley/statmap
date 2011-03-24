@@ -124,7 +124,7 @@ add_candidate_mapping( candidate_mappings* mappings,
     /* Note that this copies the mapping */
     (mappings->mappings)[mappings->length] = (*mapping);
     mappings->length++;
-
+    
     return;
 }
 
