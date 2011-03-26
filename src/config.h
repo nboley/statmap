@@ -55,6 +55,7 @@
 
 #define GENOME_FNAME "genome.bin"
 #define GENOME_INDEX_FNAME "genome.bin.index"
+#define GENOME_INDEX_PSLOCS_FNAME "genome.bin.index.pslocs"
 
 /**** determine how the letters are packed       ****/
 

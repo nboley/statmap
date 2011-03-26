@@ -1,3 +1,20 @@
+-30) there is a newly introduced correctness bug in the pseudo_locations code
+     for index probes that are less than the index length. The problem is that
+     the pseudo locations are generted off of the index probe length, in which
+     the penalties have to be identical. But, if the probe is shorter, then
+     the penalties may be different. One solution is to build a seperate set
+     of pseudo locations for each experiment ( base on the read length ) but this
+     is problematic for experiments with mixed read lengths - something I was 
+     reall hoping to avoid. The other easy-ish solution is to simply break the 
+     pseudo locations out in the candidate mapping step, but this will result in 
+     the same inefficiencies that I had before. Probably the best solution is to 
+     find the maximum sequence length, and then build the pseudo locations from
+     that ( which will lead to inefficiencies again if that is much longer than
+     a bunch of short reads. Like, for instance, if we tried to mix a 454 and
+     illumina experiment ) but it's best. However, that's a big pain and I have more
+     pressing issues and the correction is *small* if the probe length is pretty 
+     close to the read length so, for now, I'm going to accept the error misestimation.
+     ( ALSO, it would be nice to have a unit test which catches this )
 -29) FIX SEGFAULT WHEN NO FRAG LEN DISTRIBUTION PASSED
 -28) Do I need strand specific densities for paired end chip seq?
 -27) Fix bug in iterative mapping bector operations that uses incorrectly shifted chipseq trace

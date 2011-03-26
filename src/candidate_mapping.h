@@ -83,9 +83,9 @@ typedef struct __attribute__((packed))__{
      * much longer and could cross multiple junctions, this need not 
      * be the case 
      */
-    READ_POSITION subseq_offset;
+    // READ_POSITION subseq_offset;
     /* The length of the underlying sub match */
-    READ_POSITION subseq_len;     
+    // READ_POSITION subseq_len;     
 } candidate_mapping;
 
 
@@ -104,7 +104,8 @@ init_candidate_mappings( candidate_mappings** mappings );
 
 candidate_mapping
 init_candidate_mapping_from_template( struct rawread* rp, 
-                                      int indexed_seq_len, 
+                                      // int subseq_offset,
+                                      // int indexed_seq_len, 
                                       float max_penalty_spread );
 
 /* add a copy of a candidate mapping */

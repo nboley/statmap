@@ -144,7 +144,7 @@ init_pmatch_stack( potential_match_stack** stack );
 void
 free_pmatch_stack( potential_match_stack* stack );
 
-inline size_t
+size_t
 pmatch_stack_length( potential_match_stack* pmatch );
 
 inline potential_match_stack*
@@ -272,22 +272,6 @@ find_matches_from_root( struct index_t* index,
                         
                         float* lookuptable_bp
 );
-
-void
-search_index( struct index_t* index, 
-              
-              float min_match_penalty,
-              float max_penalty_spread,
-              mapped_locations* results,
-
-              struct rawread* r,
-              float* bp_mut_rates,
-
-              float* lookuptable_position,
-              float* inverse_lookuptable_position,
-              float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position
-    );
 
 size_t
 size_of_snode( );

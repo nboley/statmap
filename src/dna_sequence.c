@@ -115,9 +115,10 @@ rev_complement_read( char* read, char* mut_read, int seq_len )
             break;
         case 'N':
         case 'n':
-            fprintf(stderr, "Unable to translate %c\n", bp);
-            return 5;
+            mut_read[seq_len-1-i] = 'N';
+            break;
         default:
+            fprintf(stderr, "Unable to translate %c\n", bp);
             return 5;
         }
     }

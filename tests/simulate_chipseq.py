@@ -19,7 +19,7 @@ import tests as sc # for simulation code
 
 
 NUM_READS = 1000
-NUM_SAMPLES = 2
+NUM_SAMPLES = 5
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
 
@@ -382,16 +382,24 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, 
     return rand_indexes
 
 def map_with_statmap( iterative=True, paired_end=True ):
+    # build the index
+    call = "%s tmp.genome 20 tmp.genome.bin" % sc.BUILD_INDEX_PATH
+    print re.sub( "\s+", " ", call)
+    ret_code = subprocess.call( call, shell=True )    
+    if ret_code != 0:
+        print "TEST FAILED - build_index call returned error code ", ret_code
+        sys.exit( -1 )    
+    
     if paired_end:
-        call = "%s -g tmp.genome -1 tmp.1.fastq -2 tmp.2.fastq \
-                                 -3 tmp.nc.1.fastq -4 tmp.nc.2.fastq \
-                                 -o smo_chipseq_sim -q 0 \
-                                 -n %i -f ./data/fl_dist.txt\
+        call = "%s -g tmp.genome.bin -1 tmp.1.fastq -2 tmp.2.fastq \
+                                     -3 tmp.nc.1.fastq -4 tmp.nc.2.fastq \
+                                     -o smo_chipseq_sim -q 0 \
+                                     -n %i -f ./data/fl_dist.txt\
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     else:
-        call = "%s -g tmp.genome -r tmp.1.fastq -c tmp.nc.1.fastq \
-                                 -o smo_chipseq_sim -q 0 \
-                                 -n %i -f ./data/fl_dist.txt\
+        call = "%s -g tmp.genome.bin -r tmp.1.fastq -c tmp.nc.1.fastq \
+                                     -o smo_chipseq_sim -q 0 \
+                                     -n %i -f ./data/fl_dist.txt\
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     
     if iterative:

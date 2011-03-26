@@ -21,6 +21,7 @@ import tempfile
 import numpy
 
 STATMAP_PATH = '../src/statmap'
+BUILD_INDEX_PATH = '../utilities/build_index'
 CALL_PEAKS_PATH = '../bin/call_peaks'
 
 #################################################################################################
@@ -392,7 +393,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False ):
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
 
     rl = read_len
@@ -419,15 +420,32 @@ def test_sequence_finding( read_len, rev_comp = False ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -s -r tmp.fastq -s -o %s\
+    if indexed_seq_len == None:
+        call = "%s -g tmp.genome -s -r tmp.fastq -s -o %s\
                              -t 1 " % ( STATMAP_PATH, output_directory )
-    
-    print >> stdout, re.sub( "\s+", " ", call)
-    
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    # ret_code = ( os.system( call ) >> 8 )
-    if ret_code != 0:
-        raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+
+    # otherwise, we want to test the index with index probe lengths different than the actual read len
+    else:
+        assert indexed_seq_len <= read_len
+        # first, build the genome
+        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
+        print >> stdout, re.sub( "\s+", " ", call)
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" % str( ret_code )
+
+
+        call = "%s -g tmp.genome.bin -s -r tmp.fastq -s -o %s\
+                             -t 1 " % ( STATMAP_PATH, output_directory )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+        
         
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -488,6 +506,22 @@ def test_short_sequences():
         print "FAIL: Short Read Mapping Failed for Index Lengths: %s ( of %s )" \
             % ( ' '.join( map( str, failed_lengths ) ), ' '.join( map( str, rls ) ) ) 
         sys.exit( -1 )
+
+def test_build_index():
+    rls = [ 25, 50, 75  ]
+    for rl in rls:
+        test_sequence_finding( rl, False, rl )
+        print "PASS: Build Index w/ Forward Mapping %i BP Test. ( Statmap appears to be externally building/loading index correctly )" % rl
+
+def test_short_index_probe():
+    rls = [ 25, 50, 75  ]
+    for rl in rls:
+        test_sequence_finding( rl, False, 20 )
+        print "PASS: Short Index Probe (20 bp) w/ Forward Mapping %i BP Test. ( Statmap appears to be correctly mapping reads with an index with a shorter index probe )" % rl
+        test_sequence_finding( rl, True, 20 )
+        print "PASS: Short Index Probe (20 bp) w/ Backward Mapping %i BP Test. ( Statmap appears to be correctly mapping reads with an index with a shorter index probe )" % rl
+
+
 ###
 # Test to make sure that we are correctly finding paired end reads. 
 def test_paired_end_reads( read_len ):
@@ -603,11 +637,17 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
-                             -t %i " % ( STATMAP_PATH, output_directory, n_threads )
-        
+    # first, build the genome
+    call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, read_len - 2 )
     print >> stdout, re.sub( "\s+", " ", call)
-    
+    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+    if ret_code != 0:
+        raise ValueError, "TEST FAILED: build_index call returned error code '%s'" % str( ret_code )
+
+    # actually map the reads
+    call = "%s -g tmp.genome.bin -s -r tmp.fastq -o %s \
+                                 -t %i " % ( STATMAP_PATH, output_directory, n_threads )
+    print >> stdout, re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
         print "TEST FAILED - statmap call returned error code ", ret_code
@@ -951,7 +991,10 @@ if __name__ == '__main__':
         test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
         test_multithreaded_mapping( )
-        print "Starting test_snp_finding()"
+        print "Starting test_build_index()"
+        test_build_index( )
+        print "Starting test_index_probe()"
+        test_short_index_probe()
     # test_snp_finding()
     
     # We skip this test because statmap can't currently

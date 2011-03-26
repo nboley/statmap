@@ -788,17 +788,17 @@ void load_genome( struct genome_data** genome, struct args_t* args )
             int status;
             wait( &status );
         }
-
-        FILE* fp = fopen( "pseudo_locations.txt", "r" );
-        assert( NULL != fp );
-        load_pseudo_locations( fp, &((*genome)->ps_locs) );
-        write_genome_to_disk( *genome, GENOME_FNAME  );
     } else {
         /* copy the genome into the output directory */
         safe_link_into_output_directory( 
             args->genome_fname, "./", GENOME_FNAME );
         safe_link_into_output_directory( 
             args->genome_index_fname, "./", GENOME_INDEX_FNAME );
+        
+        char pseudo_loc_ofname[500];
+        sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
+        safe_link_into_output_directory( 
+            pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
         
         load_genome_from_disk( genome, GENOME_FNAME );
     }

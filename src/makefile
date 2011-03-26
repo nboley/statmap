@@ -1,6 +1,7 @@
 compiler = gcc
 
-compile_options = -O3 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+# compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compile_options = -O3 -g -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 --short-enums
 # compile_options = -fast
 
 # -ftree-vectorize
@@ -18,7 +19,7 @@ statmap : $(objects)
 	$(compiler) -o statmap \
 	$(objects) \
 	$(compile_options) \
-	-lm -lpthread -fopenmp #  -fprofile-arcs
+	-lm -lpthread # -fopenmp #  -fprofile-arcs
 	cp statmap ../bin/
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
@@ -48,7 +49,7 @@ peak_calling.o : peak_calling.c wiggle.h trace.h genome.h
 #
 
 iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h snp.h genome.h fragment_length.h
-	$(compiler) $(compile_options) --openmp -c iterative_mapping.c
+	$(compiler) $(compile_options) -c iterative_mapping.c # --openmp
 
 iterative_mapping.h : config.h genome.h trace.h
 #############################################################################
@@ -126,7 +127,7 @@ wiggle.h: trace.h
 
 # Store traces across the gnome ( like wiggles )
 trace.o: trace.c trace.h
-	$(compiler) $(compile_options) -fopenmp -c trace.c
+	$(compiler) $(compile_options) -c trace.c # -fopenmp 
 
 # build the trace as a shared object so that python can load it
 trace.so: trace.c trace.h 

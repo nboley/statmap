@@ -14,6 +14,183 @@
 #include "quality.h"
 #include "index_genome.h"
 #include "snp.h"
+#include "mapped_location.h"
+
+int
+find_optimal_subseq_offset( 
+    struct rawread* r,
+    /* store the desired subsequences length */
+    int subseq_len
+) {
+    assert( subseq_len <= r->length );
+    
+    /* XXX for now, we just use the first subseq_len characters,
+       so the offset is always 0 */
+    return 0;
+};
+
+void
+search_index( struct index_t* index, 
+              
+              float min_match_penalty,
+              float max_penalty_spread,
+              mapped_locations** results,
+
+              struct rawread* r,
+              float* bp_mut_rates,
+
+              float* lookuptable_position,
+              float* inverse_lookuptable_position,
+              float* reverse_lookuptable_position,
+              float* reverse_inverse_lookuptable_position
+    )
+{
+    /**** Prepare the read for the index search */
+    /* 
+       first, we need to find the subseq of the read that we want to 
+       probe the index for. This is controlled by the index->seq_length.
+    */
+    int subseq_offset = find_optimal_subseq_offset( r, index->seq_length );
+    int subseq_length = index->seq_length;
+    
+    /* Store a copy of the read */
+    /* This read has N's replaced with A's, and might be RC'd */
+    char* sub_read = calloc(subseq_length + 1, sizeof(char));
+    assert( sub_read != NULL );
+    /* note that the NULL ending is pre-set from the calloc */
+    memcpy( sub_read, r->char_seq + subseq_offset, sizeof(char)*(subseq_length) );
+    
+    /** Deal with the read on the fwd strand */
+    /* Store the translated sequences here */
+    LETTER_TYPE *fwd_seq;
+    fwd_seq = translate_seq( sub_read, subseq_length, &fwd_seq );
+    /* If we couldnt translate it */
+    if( fwd_seq == NULL )
+    {
+        // fprintf(stderr, "Could Not Translate: %s\n", r->char_seq);
+        return;
+    }
+    assert( fwd_seq != NULL );
+    
+    /** Deal with the read on the opposite strand */
+    LETTER_TYPE *bkwd_seq;
+    char* tmp_read = calloc(subseq_length + 1, sizeof(char));
+    rev_complement_read( sub_read, tmp_read, subseq_length );
+    bkwd_seq = translate_seq( tmp_read, subseq_length, &bkwd_seq );
+    // BUG why did I have this here?
+    //replace_ns_inplace( tmp_read, r->length );
+    assert( bkwd_seq != NULL );
+
+    init_mapped_locations( results );
+    (*results)->subseq_len = subseq_length;
+    (*results)->subseq_offset = subseq_offset;
+    
+    /* map the full read */
+    find_matches_from_root( index, 
+                            
+                            min_match_penalty,
+                            max_penalty_spread,
+                            *results,
+
+                            /* length of the reads */
+                            subseq_length,
+                            
+                            /* the fwd stranded sequence */
+                            fwd_seq, 
+                            lookuptable_position,
+                            inverse_lookuptable_position,
+                            
+                            /* the bkwd stranded sequence */
+                            bkwd_seq, 
+                            reverse_lookuptable_position,
+                            reverse_inverse_lookuptable_position,
+                            
+                            bp_mut_rates
+        );
+    
+    /* Free the allocated memory */
+    free( fwd_seq );
+    free( bkwd_seq );
+
+    free( sub_read );
+    free( tmp_read );
+
+    return;
+};
+
+
+static inline void 
+recheck_location( struct genome_data* genome, 
+                  struct rawread* r, candidate_mapping* loc,
+                  const float* const lookuptable_position,
+                  const float* const inverse_lookuptable_position,
+                  const float* const reverse_lookuptable_position,
+                  const float* const reverse_inverse_lookuptable_position,
+                  const float* const bp_mut_rates
+)
+{
+    const float* correct_lookuptable_position = NULL;
+    const float* correct_inverse_lookuptable_position = NULL;
+    
+    /* find a pointer to the sequence at this genomic location */
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp,
+        r->length
+    );
+                    
+    /* if the genome_seq pointer is null, the sequence isn't valid
+       for some reason ( ie, it falls off the end of the chromosome). 
+       In such cases, mark the location as invalid and continue */
+    if( NULL == genome_seq )
+    {
+        loc->recheck = INVALID;
+        return;
+    }
+                    
+    char* mut_genome_seq = NULL;
+    mut_genome_seq = malloc(sizeof(char)*(r->length+1));
+    assert( mut_genome_seq != NULL ); 
+                    
+    if( BKWD == loc->rd_strnd )
+    {
+        rev_complement_read( genome_seq, mut_genome_seq, r->length );
+        correct_lookuptable_position = reverse_lookuptable_position;
+        correct_inverse_lookuptable_position = reverse_inverse_lookuptable_position;
+    } else {
+        memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
+        mut_genome_seq[r->length] = '\0';
+        correct_lookuptable_position = lookuptable_position;
+        correct_inverse_lookuptable_position = inverse_lookuptable_position;
+    }
+    
+    float rechecked_penalty = recheck_penalty( 
+        mut_genome_seq, 
+        // char* observed,
+        r->char_seq,
+        // const int seq_length,
+        r->length,
+        correct_lookuptable_position,
+        correct_inverse_lookuptable_position,
+        bp_mut_rates
+    );
+
+    /*
+     * DEBUG
+    printf( "%.2f\t%.2f\t%i\n", loc->penalty, rechecked_penalty, (loc->rd_strnd == BKWD) );
+    printf( "%.*s\t%.*s\t%.*s\n", 
+            r->length, r->char_seq, 
+            r->length, genome_seq, 
+            r->length, mut_genome_seq );
+     */
+    
+    loc->penalty = rechecked_penalty;
+    
+    free( mut_genome_seq );
+}
+
 
 /* TODO - revisit the read length vs seq length distinction */
 /* 
@@ -35,8 +212,6 @@ find_candidate_mappings( void* params )
     int thread_id = td->thread_id;
 
     struct genome_data* genome = td->genome;
-    FILE* log_fp = td->log_fp;
-    pthread_mutex_t* log_fp_mutex = td->log_fp_mutex;
     
     unsigned int* mapped_cnt = td->mapped_cnt;
     pthread_mutex_t* mapped_cnt_mutex = td->mapped_cnt_mutex;
@@ -51,7 +226,6 @@ find_candidate_mappings( void* params )
     /* The minimum difference between the lowest penalty read and a
        valid read, set <= -1 to disable */
     float max_penalty_spread = td->max_penalty_spread;
-    int max_subseq_len = td->max_subseq_len;
 
     /* END parameter 'recreation' */
 
@@ -103,27 +277,15 @@ find_candidate_mappings( void* params )
                 reverse_lookuptable_position, reverse_inverse_lookuptable_position
             );
 
-            /* If we are logging, print the read */
-            if( log_fp != NULL ) {
-                pthread_mutex_lock( log_fp_mutex );
-                fprintf(log_fp, "%li:  %s\t%.*s\t%.*s", 
-                        readkey, r->name, 
-                        r->length, r->char_seq, 
-                        r->length, r->error_str );
-                fflush( log_fp );
-                pthread_mutex_unlock( log_fp_mutex );
-            }
-                
             /**** go to the index for mapping locations */
-            mapped_locations *results;
-            init_mapped_locations( &results );
+            mapped_locations *results = NULL;
 
             search_index( genome->index, 
 
                           min_match_penalty,
                           max_penalty_spread,
 
-                          results,
+                          &results,
 
                           r,
                           bp_mut_rates,
@@ -134,48 +296,20 @@ find_candidate_mappings( void* params )
                           reverse_inverse_lookuptable_position
                 );
 
-            /* increment the number of reads that mapped */
-            /* 
-             *  FIXME - this isnt locked with the read key, 
-             *  so the mapped cnt and cnt may be out of sync
-             *  due to the threads. That is, when we print out
-             *  status reports they are typically off by a read 
-             *  or 2.
-             *  
-             *  FIXME - Also, what is the cost of these locks? I wonder if,
-             *  since the counts are off anyways, it may be better 
-             *  to let them accumulate and then update them out 
-             *  every, for instance, 100 reads.
-             *  
-             */
-            pthread_mutex_lock( mapped_cnt_mutex );
-            *mapped_cnt += ( results->length > 0 ) ? true : false;
-            pthread_mutex_unlock( mapped_cnt_mutex );
-
-            if( log_fp != NULL ) {
-                pthread_mutex_lock( log_fp_mutex );
-                fprintf(log_fp, "\t%i\t%e\n", 
-                        (int) results->length, 
-                        readkey/(((double)(clock()-start))/CLOCKS_PER_SEC) ); 
-
-                fflush( log_fp );
-                pthread_mutex_unlock( log_fp_mutex );
-            }
-
+            int subseq_len = results->subseq_len;
+            int subseq_offset = results->subseq_offset;
+            
             /****** Prepare the template candidate_mapping objects ***********/
             candidate_mapping template_candidate_mapping 
                 = init_candidate_mapping_from_template( 
-                    r, max_subseq_len, max_penalty_spread 
+                    r, max_penalty_spread 
             );
             assert( template_candidate_mapping.rd_type != 0 );
 
             /**** TODO - get rid of this requirement */
             /* Assert that subseqs are false */
-            assert( template_candidate_mapping.subseq_len <= r->length );
-            // BUG BUG BUG BUG BUG
-            // IN THE MIDDLE OF DOING THIS - FOR NOW KEEP THE CHECK
-            assert( template_candidate_mapping.subseq_len == r->length );
-
+            assert( subseq_len <= r->length );
+            
             /***** COPY information from the index lookup into the result set
              * build and populate an array of candidate_mapping's. 
              */        
@@ -214,8 +348,19 @@ find_candidate_mappings( void* params )
 
                 /* set the chr */
                 template_candidate_mapping.chr = (result->location).chr;
+
                 /* set the location */
-                template_candidate_mapping.start_bp = (result->location).loc;
+                int read_location = (result->location).loc;
+                if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
+                    read_location -= subseq_offset;
+                    
+                    if( result->strnd == BKWD ) {
+                        read_location -= ( r->length - subseq_len );
+                    }
+                } 
+                
+                template_candidate_mapping.start_bp = read_location;
+                
                 /* set the penalty */
                 template_candidate_mapping.penalty = result->penalty;
 
@@ -257,52 +402,35 @@ find_candidate_mappings( void* params )
              * ( This is possible if the path search went awry, and we found 
              *   a low quality read before a high quality read )
              */
+
+
+            /* first, if necessary, recheck the locations */
             int j;
             for( j = 0; j < mappings->length; j++ )
             {
-                /* if the recheck is RECHECK_FULL|PENALTY|LOCATION */
-                if( (mappings->mappings + j)->recheck < 3 ) {
-                    /* recheck location */
-                    /* recheck penalty */
-                    char* genome_seq = find_seq_ptr( 
-                        genome, (mappings->mappings + j)->chr, (mappings->mappings + j)->start_bp );
-                    
-                    char* mut_genome_seq = NULL;
-                    mut_genome_seq = malloc(sizeof(char)*(r->length+1));
-                    assert( mut_genome_seq != NULL ); 
-                    
-                    if( BKWD == (mappings->mappings + j)->rd_strnd )
-                    {
-                        rev_complement_read( genome_seq, mut_genome_seq, r->length );
-                    } else {
-                        memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
-                        mut_genome_seq[r->length] = '\0';
+                /*  if the location doesnt need to be rechecked, then continue */
+                if( true ) // OR probe length is less than index length
+                {
+                    recheck_location( genome, r, mappings->mappings + j,
+                                      lookuptable_position,
+                                      inverse_lookuptable_position,
+                                      reverse_lookuptable_position,
+                                      reverse_inverse_lookuptable_position,
+                                      bp_mut_rates
+                        );
+
+                    /* we may need to update the max penalty */
+                    if( (mappings->mappings + j)->penalty > max_penalty ) {
+                        max_penalty = (mappings->mappings + j)->penalty;
                     }
-                    
-                    
-                    float rechecked_penalty = recheck_penalty( 
-                        mut_genome_seq, 
-                        // char* observed,
-                        r->char_seq,
-                        // const int seq_length,
-                        r->length,
-                        lookuptable_position,
-                        inverse_lookuptable_position,
-                        bp_mut_rates
-                    );
-                    
-                    (mappings->mappings + j)->penalty = rechecked_penalty;
-                    
-                    /*
-                    fprintf( stderr, "%i\t%.15s\t%.15s\t%.2f\n", 
-                             (mappings->mappings + j)->rd_strnd, 
-                             r->char_seq, mut_genome_seq, 
-                             rechecked_penalty );
-                    */
-                    
-                    free( mut_genome_seq );
                 }
-                
+            }
+
+            for( j = 0; j < mappings->length; j++ )
+            {
+                /* this should be optimized out */
+                candidate_mapping* loc = mappings->mappings + j;
+
                 /* 
                  * We always need to do this because of the way the search queue
                  * handles poor branches. If our brnach prediction fails we could
@@ -311,17 +439,39 @@ find_candidate_mappings( void* params )
                  * may not belong, but it isnt removed in the index searching method.
                  */
                 /* I set the safe bit to 1e-6, which is correct for a float */
-                if(  max_penalty_spread > -0.00001 
-                     &&
-                     ( (mappings->mappings + j)->penalty 
-                       < ( max_penalty - max_penalty_spread ) ) )
+                                
+                /* we check max_penalty_spread > -0.00001 to make sure that the
+                   likelihood ratio threshold is actually active */
+                if(  max_penalty_spread > -0.00001  ) 
                 {
-                    (mappings->mappings + j)->recheck = INVALID;
-                } else {
-                    (mappings->mappings + j)->recheck = VALID;
+                    if(   loc->penalty < ( max_penalty - max_penalty_spread ) )
+                    {
+                        loc->recheck = INVALID;
+                    } 
                 }
+                
+                /* make sure that the penalty isn't too low */
+                if( loc->penalty < min_match_penalty  )
+                {
+                    loc->recheck = INVALID;
+                } 
+
+                /* if it's passed all of the tests, it must be valid */
+                if( loc->recheck != INVALID )
+                    loc->recheck = VALID;                
             }
 
+            /* increment the number of reads that mapped, if any pass the rechecks */
+            for( j = 0; j < mappings->length; j++ ) {
+                if( (mappings->mappings + j)->recheck == VALID )
+                {
+                    pthread_mutex_lock( mapped_cnt_mutex );
+                    *mapped_cnt += 1;
+                    pthread_mutex_unlock( mapped_cnt_mutex );
+                    break;
+                }
+            }
+            
             /****** add the results to the database ******/
             /* BUG - assert the readnames are identical */
             /* BUG - why is this mutex necessary? */

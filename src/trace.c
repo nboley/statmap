@@ -8,11 +8,9 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
-#include <omp.h>
 #include <errno.h>
 #include <float.h>
 #include <pthread.h>
-#include <omp.h>
 
 #include "config.h"
 #include "trace.h"

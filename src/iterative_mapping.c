@@ -17,7 +17,7 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
-#include <omp.h>
+// #include <omp.h>
 #include <errno.h>
 #include <float.h>
 
@@ -63,45 +63,45 @@ update_stranded_read_start_density_from_location(
     
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
-        /*
+        
         #ifdef USE_MUTEX
         pthread_mutex_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
         #else
         pthread_spin_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
         #endif
-        */
         
-        #pragma omp atomic
+        
+        // #pragma omp atomic
         traces->traces[1][chr_index][start] += cond_prob;
         // traces->traces[1][chr_index][start] += cond_prob;
 
-        /*
+        
         #ifdef USE_MUTEX
         pthread_mutex_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
         #else
         pthread_spin_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
         #endif
-        */
+        
     } else {
-        /*
+        
         #ifdef USE_MUTEX
         pthread_mutex_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
         #else
         pthread_spin_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
         #endif
-        */
+        
 
-        #pragma omp atomic
+        // #pragma omp atomic
         traces->traces[0][chr_index][start] += cond_prob;        
         // traces->traces[0][chr_index][start] += cond_prob;
 
-        /*
+        
         #ifdef USE_MUTEX
         pthread_mutex_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
         #else
         pthread_spin_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
         #endif
-        */
+        
     }
     
     return;

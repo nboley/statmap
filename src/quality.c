@@ -99,6 +99,12 @@ for i in range(0, len(qs), npc ):
  *
  */
 
+/* 
+   the probability of observing obs given that the ref basepair is unobservable. 
+   this is just log10( 0.25 ) - the N gives us 0 information. 
+*/
+static const double N_penalty = -0.60206;
+
 static const double 
 logodds_lookuptable_score[ 68 ] = {
     -1.193e-01, -1.455e-01, -1.764e-01, -2.124e-01,
@@ -421,19 +427,28 @@ recheck_penalty( char* reference,
     {
         char ref = toupper( reference[i] );
         char obs = toupper( observed[i] );
-        if( ref == obs )
+        
+        /* if it's an N, put in a max penalty substitution */
+        if( ref == 'N' || obs == 'N' )
         {
-            penalty = penalty 
-                + n_inverse_lookuptable_position[ i ] ;
+            penalty += N_penalty;
         } else {
-            penalty = penalty 
-                + n_lookuptable_position[ i ];
-            
-            int bp_lookup = bp_code( reference[i] );
-            bp_lookup = (bp_lookup << 2);
-            bp_lookup += bp_code( observed[i] );
-            
-            penalty += n_lookuptable_bp[ bp_lookup ];
+            if( ref == obs )
+            {
+                /* the marginal probability of a match */
+                penalty = penalty 
+                    + n_inverse_lookuptable_position[ i ] ;
+            } else {
+                /* the marginal penalty of a mismatch */
+                penalty += n_lookuptable_position[ i ];
+                
+                /* make the bp specific correction */
+                int bp_lookup = bp_code( ref );
+                bp_lookup = (bp_lookup << 2);
+                bp_lookup += bp_code( obs );
+                
+                penalty += n_lookuptable_bp[ bp_lookup ];
+            }
         }
     }
     

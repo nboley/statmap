@@ -35,7 +35,6 @@ init_candidate_mappings( candidate_mappings** mappings )
 
 candidate_mapping
 init_candidate_mapping_from_template( struct rawread* rp, 
-                                      int indexed_seq_len, 
                                       float max_penalty_spread )
 {
     /****** initialize the mapped_location info that we know  ******/
@@ -51,13 +50,13 @@ init_candidate_mapping_from_template( struct rawread* rp,
      * is not equal to read length, then we need to do a recheck.
      */
     /* TODO - allow for subsequences */        
-    cand_map.subseq_offset = 0;
-    cand_map.subseq_len = MIN( rp->length,  indexed_seq_len );
-
+    /*
+    cand_map.subseq_offset = subseq_offset;
+    cand_map.subseq_len = indexed_seq_len;
+    */
+    
     /* if read length <= seq_length, then a recheck is unnecessary */
-    if( indexed_seq_len < rp->length ) {
-        cand_map.recheck = RECHECK_LOCATION;
-    } else if( max_penalty_spread > -0.1 ) {
+    if( max_penalty_spread > -0.1 ) {
         cand_map.recheck = RECHECK_PENALTY;
     } else {
         cand_map.recheck = VALID;
@@ -145,8 +144,8 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
-    printf("Subseq Off:   %u\n", mapping->subseq_offset);
-    printf("Subseq Len:   %u\n", mapping->subseq_len);
+    // printf("Subseq Off:   %u\n", mapping->subseq_offset);
+    // printf("Subseq Len:   %u\n", mapping->subseq_len);
     printf("\n");
     return;
 }

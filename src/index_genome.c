@@ -127,7 +127,7 @@ scale_penalty( float penalty, // potential_match_stack* stack,
     return rv;
 }
 
-inline size_t
+size_t
 pmatch_stack_length( potential_match_stack* pmatch )
 {
     return (pmatch->last_index - pmatch->first_index);
@@ -336,6 +336,9 @@ init_tree( struct index_t** index, int seq_length )
     (*index)->index = tree_root;
     (*index)->index_type = TREE;
     (*index)->seq_length = seq_length;
+    
+    (*index)->ps_locs = NULL;
+    init_pseudo_locations( &((*index)->ps_locs) );
 }
 
 inline dynamic_node*
@@ -1299,83 +1302,6 @@ find_matches_from_root( struct index_t* index,
     ); 
 }
 
-void
-search_index( struct index_t* index, 
-              
-              float min_match_penalty,
-              float max_penalty_spread,
-              mapped_locations* results,
-
-              struct rawread* r,
-              float* bp_mut_rates,
-
-              float* lookuptable_position,
-              float* inverse_lookuptable_position,
-              float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position
-    )
-{
-    /**** Prepare the read for the index search */
-    
-    /* Store a copy of the read */
-    /* This read has N's replaced with A's, and might be RC'd */
-    char* tmp_read = calloc(r->length + 1, sizeof(char));
-    assert( tmp_read != NULL );
-    memcpy( tmp_read, r->char_seq, sizeof(char)*(r->length) );
-    /* note that the NULL ending is pre-set from the calloc */
-    replace_ns_inplace( tmp_read, r->length );
-
-    /** Deal with the read on the fwd strand */
-    /* Store the translated sequences here */
-    LETTER_TYPE *fwd_seq;
-    fwd_seq = translate_seq( r->char_seq, r->length, &fwd_seq );
-    /* If we couldnt translate it */
-    if( fwd_seq == NULL )
-    {
-        // fprintf(stderr, "Could Not Translate: %s\n", r->char_seq);
-        return;
-    }
-    assert( fwd_seq != NULL );
-    
-    /** Deal with the read on the opposite strand */
-    LETTER_TYPE *bkwd_seq;
-    rev_complement_read( r->char_seq, tmp_read, r->length );
-    bkwd_seq = translate_seq( tmp_read, r->length, &bkwd_seq );
-    replace_ns_inplace( tmp_read, r->length );
-    assert( bkwd_seq != NULL );
-    
-    /* map the full read */
-    find_matches_from_root( index, 
-                            
-                            min_match_penalty,
-                            max_penalty_spread,
-                            results,
-
-                            /* length of the reads */
-                            r->length,
-                            
-                            /* the fwd stranded sequence */
-                            fwd_seq, 
-                            lookuptable_position,
-                            inverse_lookuptable_position,
-                            
-                            /* the bkwd stranded sequence */
-                            bkwd_seq, 
-                            reverse_lookuptable_position,
-                            reverse_inverse_lookuptable_position,
-                            
-                            bp_mut_rates
-        );
-    
-    /* Free the allocated memory */
-    free( fwd_seq );
-    free( bkwd_seq );
-    free( tmp_read );
-
-    return;
-};
-
-
 size_t
 size_of_snode( )
 {
@@ -1592,7 +1518,7 @@ sort_ODI_stack( struct ODI_stack* stack )
 
 /* the size of the index header */
 /* MAGIC_NUMBER + SEQ_LEN + INDEX_SIZE */
-#define HEADER_SIZE ( 1 + 1 + sizeof(size_t) )
+#define HEADER_SIZE ((size_t)( 1 + 1 + sizeof(size_t) ))
 
 void
 free_ondisk_index( struct index_t* index ) {
@@ -1681,7 +1607,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     
     OD_index = calloc( index_size + HEADER_SIZE, 1  );
     size_t res = fread( OD_index, 1, index_size + HEADER_SIZE, fp );
-    fprintf( stderr, "DEBUG       :  Read %zu bytes ( out of %u + %u )\n", res, HEADER_SIZE, index_size );
+    fprintf( stderr, "DEBUG       :  Read %zu bytes ( out of %zu + %zu )\n", res, HEADER_SIZE, index_size );
     fclose( fp );
     #endif
     
@@ -1691,6 +1617,14 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     /* the root of the tree is always at 0, before being offset 
        by index_offset */
     (*index)->index = 0;
+    
+    /* load the pseudo locations */
+    char pseudo_loc_ofname[500];
+    sprintf(pseudo_loc_ofname, "%s.pslocs", index_fname  );
+    FILE* ps_fp = fopen( pseudo_loc_ofname, "r" );
+    assert( NULL != ps_fp );
+    load_pseudo_locations( ps_fp, &((*index)->ps_locs) );
+    fclose( ps_fp );
     
     return;
 }
@@ -1844,6 +1778,23 @@ build_ondisk_index( struct index_t* index, char* ofname  )
             index_size + HEADER_SIZE );
 
     close( fdout );
+
+    /* write the pseudo locations to file */
+    char pseudo_loc_ofname[500];
+    sprintf(pseudo_loc_ofname, "%s.pslocs", ofname  );
+    FILE* ps_locs_of = fopen(pseudo_loc_ofname, "w");
+    if( NULL == ps_locs_of )
+    {
+        char buffer[500];
+        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
+        perror( buffer );
+        exit( -1 );
+    }
+    size_t size_written = 
+        write_pseudo_locations_to_file( index->ps_locs, ps_locs_of );
+    fprintf( stderr, "NOTICE      :  wrote %zu bytes to pseudo locs file.\n", 
+             size_written);
+    fclose(ps_locs_of);
     
     return;
 }

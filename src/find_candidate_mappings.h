@@ -6,6 +6,24 @@
 #include "genome.h"
 #include "rawread.h"
 #include "candidate_mapping.h"
+#include "mapped_location.h"
+
+void
+search_index( struct index_t* index, 
+              
+              float min_match_penalty,
+              float max_penalty_spread,
+              mapped_locations** results,
+
+              struct rawread* r,
+              float* bp_mut_rates,
+
+              float* lookuptable_position,
+              float* inverse_lookuptable_position,
+              float* reverse_lookuptable_position,
+              float* reverse_inverse_lookuptable_position
+    );
+
 
 struct single_map_thread_data {
     int thread_id;

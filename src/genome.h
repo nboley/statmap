@@ -21,6 +21,9 @@ struct index_t {
     enum INDEX_TYPE index_type;
     /* the length of a sequence in the index */
     int seq_length;
+
+    /* the pseudo locations info */
+    struct pseudo_locations_t* ps_locs;
 };
 
 struct static_node;
@@ -55,7 +58,8 @@ int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
 
 char* 
-find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc );
+find_seq_ptr( struct genome_data* genome, 
+              int chr_index, unsigned int loc, int read_len );
 
 extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );

@@ -523,7 +523,7 @@ build_mapped_read_from_paired_candidate_mappings(
         p1_start,
         mappings->mappings + p1_stop,
         p2_start - p1_stop,
-        genome->ps_locs,
+        genome->index->ps_locs,
         mpd_rd
     );
     
@@ -533,7 +533,7 @@ build_mapped_read_from_paired_candidate_mappings(
         p1_start,
         mappings->mappings + p2_start,
         mappings->length - p2_start,
-        genome->ps_locs,
+        genome->index->ps_locs,
         mpd_rd
     );
     
@@ -552,7 +552,7 @@ build_mapped_read_from_paired_candidate_mappings(
         p2_start - p1_stop,
         mappings->mappings + p1_start,
         p1_stop - p1_start,
-        genome->ps_locs,
+        genome->index->ps_locs,
         mpd_rd
     );
     
@@ -671,7 +671,7 @@ build_mapped_read_from_candidate_mappings(
     if( mappings->mappings[0].rd_type == SINGLE_END )
     {
         prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
-            genome->ps_locs, mappings, *mpd_rd );
+            genome->index->ps_locs, mappings, *mpd_rd );
     } else {
         prob_sum = build_mapped_read_from_paired_candidate_mappings( 
             genome, mappings, *mpd_rd );

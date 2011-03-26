@@ -237,10 +237,6 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     header.size += size_written;
     header.pseudo_locs_offset = header.snp_db_offset + size_written;
 
-    size_written = write_pseudo_locations_to_file( gen->ps_locs, ofp );
-    header.size += size_written;
-    // header.index_offset = header.pseudo_locs_offset + size_written;
-    
     /* write the updated header */
     fseek( ofp, 0, SEEK_SET );
     size_written = write_reference_data_header_to_disk( &header, ofp );
@@ -365,11 +361,27 @@ find_chr_index( struct genome_data* genome, const char* const chr_name )
 }
 
 char* 
-find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc )
+find_seq_ptr( struct genome_data* genome, 
+              int chr_index, unsigned int loc, int read_len )
 {
     assert( chr_index < genome->num_chrs );
+    
+    if( chr_index != PSEUDO_LOC_CHR_INDEX 
+        && loc + read_len > genome->chr_lens[chr_index] )
+        return NULL;
+
     assert( chr_index == PSEUDO_LOC_CHR_INDEX 
             || loc < genome->chr_lens[chr_index] );
+    
+    /* 
+       the pseudo locations need to be treated differently,
+       because we don't store the chromosome length ( because
+       that doesn't really mean anything. ) However, we do need
+       to make sure that the pseudo location *exists* 
+    */
+    
+    assert( chr_index != PSEUDO_LOC_CHR_INDEX 
+            || loc < (long) genome->index->ps_locs->num );    
 
     /* if this is a pseudo chromosome, we need to 
        get the sequence associated with it. Since
@@ -377,8 +389,9 @@ find_seq_ptr( struct genome_data* genome, int chr_index, unsigned int loc )
        a pseudo location is the same, it is sufficient to 
        just get the sequence of the first location.
     */
+    
     if( chr_index == PSEUDO_LOC_CHR_INDEX ) {
-        GENOME_LOC_TYPE* ps_loc = &(genome->ps_locs->locs[loc].locs[0]);
+        GENOME_LOC_TYPE* ps_loc = &(genome->index->ps_locs->locs[loc].locs[0]);
         chr_index = ps_loc->chr;
         loc = ps_loc->loc;
     }
@@ -666,7 +679,7 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                 loc.snp_coverage = 0;
                 
                 /* Add the sequence into the tree */
-                add_sequence(genome->index, genome->ps_locs, translation, seq_len, loc);
+                add_sequence(genome->index, genome->index->ps_locs, translation, seq_len, loc);
                 
                 free( translation );                                
             } else {
@@ -728,7 +741,7 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                     loc.snp_coverage = bm;
                     
                     /* Add the sequence into the tree */
-                    add_sequence(genome->index, genome->ps_locs, 
+                    add_sequence(genome->index, genome->index->ps_locs, 
                                  translation, seq_len, loc);
                     
                     free( translation );                
@@ -739,7 +752,11 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     free( tmp_seq );
 
     /* sort all of the pseudo locations */
-    sort_pseudo_locations( genome->ps_locs );
+    sort_pseudo_locations( genome->index->ps_locs );
+
+    /* We stop doing this, in favor of writing them to 
+       disk in the actual index file */
+    #if 0 
 
     FILE* ps_locs_of = fopen(PSEUDO_LOCATIONS_FNAME, "w");
     if( NULL == ps_locs_of )
@@ -749,8 +766,10 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
         perror( buffer );
         exit( -1 );
     }
-    fprint_pseudo_locations( ps_locs_of, genome->ps_locs );
+    fprint_pseudo_locations( ps_locs_of, genome->index->ps_locs );
     fclose(ps_locs_of);
+    
+    #endif
     
     return;
 }

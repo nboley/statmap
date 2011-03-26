@@ -135,6 +135,13 @@ write_pseudo_locations_to_file( struct pseudo_locations_t* ps_locs, FILE* of )
         return sizeof( int );
     }
     
+    /* write the size of the file. For now, we just put in a place holder
+       and, after we write everything, we will go back and fill it in */
+    rv = fwrite( &(size_written), sizeof(size_t), 1, of );
+    assert( rv == 1 );
+    size_written += sizeof( size_t );
+
+    /* write the number of pseudo locations */    
     rv = fwrite( &(ps_locs->num), sizeof(int), 1, of );
     assert( rv == 1 );
     size_written += sizeof( int );
@@ -151,6 +158,11 @@ write_pseudo_locations_to_file( struct pseudo_locations_t* ps_locs, FILE* of )
         size_written += ps_locs->locs[i].num*sizeof( GENOME_LOC_TYPE );
     }
 
+    /* seek back to the beggining and update the size written */
+    fseek( of, 0, SEEK_SET );
+    rv = fwrite( &(size_written), sizeof(size_t), 1, of );
+    assert( rv == 1 );
+    
     return size_written;
 }
 
@@ -167,6 +179,10 @@ load_pseudo_locations_from_mmapped_data(
     }
 
     init_pseudo_locations( ps_locs );
+
+    size_t size = 0;
+    size = *( (size_t*) data );
+    data += sizeof(size_t);
     
     (*ps_locs)->num = *( (int*) data );
     data += sizeof(int);
@@ -186,9 +202,29 @@ load_pseudo_locations_from_mmapped_data(
     return;
 }
 
+void
+load_pseudo_locations( 
+    FILE* fp, struct pseudo_locations_t** ps_locs )
+{
+    size_t size = 0;
+    size_t rv = 0;
+    fread( &size, sizeof(size_t), 1, fp );
+    assert( rv == 0 );
+    
+    char* data = malloc( size  );
+    assert( data != NULL );
+    fseek( fp, 0, SEEK_SET );
+    rv = fread( data, 1, size, fp );
+    assert( rv == size );
+    
+    load_pseudo_locations_from_mmapped_data( ps_locs, data );
+    
+    return;
+}
+
 
 void
-load_pseudo_locations( FILE* fp, struct pseudo_locations_t** ps_locs )
+load_pseudo_locations_from_text( FILE* fp, struct pseudo_locations_t** ps_locs )
 {
     int error;
     

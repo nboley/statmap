@@ -98,8 +98,13 @@ init_mapped_locations( mapped_locations** results )
     *results = malloc( sizeof(mapped_locations) );
     (*results)->locations = 
         malloc(RESULTS_GROWTH_FACTOR*sizeof(mapped_location));
+    
     (*results)->length = 0;
     (*results)->allocated_length = RESULTS_GROWTH_FACTOR;
+    
+    (*results)->subseq_len = -1;
+    (*results)->subseq_offset = -1;
+    
     return;
 }
 
@@ -107,6 +112,9 @@ init_mapped_locations( mapped_locations** results )
 void
 free_mapped_locations( mapped_locations* results )
 {
+    if( results == NULL )
+        return;
+    
     free( results->locations  );
     free( results  );
     return;
