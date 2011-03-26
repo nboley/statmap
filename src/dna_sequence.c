@@ -38,7 +38,7 @@ replace_ns_inplace( char* read, int seq_len )
 }
 
 
-inline int
+int
 calc_num_letters( const int seq_len )
 {
     if( seq_len % LETTER_LEN == 0 )
@@ -190,7 +190,7 @@ print_packed_sequence( LETTER_TYPE* seq, int seq_length )
     printf( "%s\n", conv_seq );
 }
 
-inline LETTER_TYPE* 
+LETTER_TYPE* 
 translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
 {
     unsigned short result_len, trans_val;
@@ -317,7 +317,7 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
     return *result;
 }
 
-inline LETTER_TYPE*
+ LETTER_TYPE*
 copy_first_k_basepairs( LETTER_TYPE* read, 
                         LETTER_TYPE** new_read, 
                         int read_len, int num_letters,
@@ -349,7 +349,7 @@ copy_first_k_basepairs( LETTER_TYPE* read,
     return *new_read;
 }
 
-inline LETTER_TYPE*
+ LETTER_TYPE*
 copy_last_k_basepairs(  LETTER_TYPE* read, 
                         LETTER_TYPE** new_read, 
                         int read_len, int k)
@@ -386,7 +386,7 @@ copy_last_k_basepairs(  LETTER_TYPE* read,
 }
 
 
-inline int 
+ int 
 cmp_letters( LETTER_TYPE letter1, LETTER_TYPE letter2 )
 {
     /* 
@@ -411,7 +411,7 @@ cmp_letters( LETTER_TYPE letter1, LETTER_TYPE letter2 )
     return 0;
 }
 
-inline int 
+ int 
 cmp_words(   LETTER_TYPE* seq1, 
              LETTER_TYPE* seq2, 
              const int num_letters )

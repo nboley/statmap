@@ -104,7 +104,7 @@ fprint_pmatch_stack( FILE* fp , potential_match_stack* s )
     fprintf( fp, "====END=====================================================\n");
 }
 
-inline float 
+ float 
 scale_penalty( float penalty, // potential_match_stack* stack, 
                int level,
                int max_num_levels,
@@ -133,7 +133,7 @@ pmatch_stack_length( potential_match_stack* pmatch )
     return (pmatch->last_index - pmatch->first_index);
 };
 
-inline potential_match_stack*
+ potential_match_stack*
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND strnd,
             const int node_level, const int max_num_levels,
@@ -277,7 +277,7 @@ print_dynamic_node( dynamic_node* node )
     void* children;
 */
 
-inline void init_static_node( static_node** node )
+ void init_static_node( static_node** node )
 {
     /* note that the calloc initializes the children to NULL */
     /* FIXME check for NULL */
@@ -289,7 +289,7 @@ inline void init_static_node( static_node** node )
     #endif
 }
 
-inline void init_dynamic_node( dynamic_node** node )
+ void init_dynamic_node( dynamic_node** node )
 {
     *node = tree_malloc(sizeof(unsigned short));
     set_dnode_num_children( *node, 0 );
@@ -341,7 +341,7 @@ init_tree( struct index_t** index, int seq_length )
     init_pseudo_locations( &((*index)->ps_locs) );
 }
 
-inline dynamic_node*
+ dynamic_node*
 add_child_to_dynamic_node( 
     dynamic_node* node, 
     LETTER_TYPE bp,
@@ -409,7 +409,7 @@ add_child_to_dynamic_node(
     return node;
 }
 
-inline void add_child_to_static_node( 
+ void add_child_to_static_node( 
     static_node* node,
     LETTER_TYPE bp
 )
@@ -513,7 +513,7 @@ void free_tree( struct index_t* index )
 
 /**** END CLEANUP functions ***************************************************/
 
-inline void 
+ void 
 build_static_node_from_dynamic_node( dynamic_node* dnode, 
                                      static_node** snode   )
 {
@@ -542,7 +542,7 @@ build_static_node_from_dynamic_node( dynamic_node* dnode,
     return;
 }
 
-inline void 
+ void 
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
@@ -717,7 +717,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
     return;
 }
 
-inline int 
+ int 
 find_child_index_in_dynamic_node ( 
     dynamic_node* node, 
     LETTER_TYPE bp
@@ -751,7 +751,7 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 */
 
 
-inline void 
+void 
 add_sequence( struct index_t* index,
               struct pseudo_locations_t* ps_locs,
               LETTER_TYPE* seq, const int seq_length,
@@ -969,7 +969,7 @@ add_sequence( struct index_t* index,
 }
 
 
-inline void 
+void 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 

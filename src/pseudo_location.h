@@ -10,7 +10,7 @@ struct pseudo_location_t {
     GENOME_LOC_TYPE* locs;
 };
 
-inline void
+void
 add_loc_to_pseudo_location( 
     struct pseudo_location_t* ps_loc, const GENOME_LOC_TYPE* const loc);
 

@@ -161,7 +161,7 @@ print_candidate_mappings( candidate_mappings* mappings )
 }
 
 
-inline int
+ int
 cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2 )
 {
 
@@ -217,7 +217,7 @@ int sort_candidate_mappings( candidate_mappings* mappings )
 
 /*** Generic Candidate Mappings DB Code *********************************************/
 
-static inline 
+static  
 FILE* open_check_error( char* fname, char* file_mode )
 {
     FILE* tmp;
@@ -375,7 +375,7 @@ close_candidate_mappings_db( candidate_mappings_db* db )
 }
 
 
-inline FILE*
+ FILE*
 determine_fp_from_candidate_mapping( 
     candidate_mapping* mapping, 
     candidate_mappings_db* db,
@@ -469,7 +469,7 @@ close_candidate_mappings_cursor(
     free( cursor );
 }
 
-static inline int
+static  int
 get_readname_from_stream( long* read_id, 
                           FILE* stream )
 {

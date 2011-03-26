@@ -6,7 +6,7 @@
 #include "config.h"
 #include "pseudo_location.h"
 
-static inline void* 
+static void* 
 realloc_CE( void* ptr, size_t size )
 {
     ptr = realloc( ptr, size );
@@ -63,14 +63,14 @@ cmp_genome_location( void* loc1, void* loc2 )
  */
 
 /* We assume that space has already been allocated for the struct */
-static inline void
+static  void
 init_pseudo_location( struct pseudo_location_t* loc )
 {
     loc->num = 0;
     loc->locs = NULL;
 }
 
-static inline void 
+static  void 
 free_pseudo_location( struct pseudo_location_t* loc )
 {
     if( NULL != loc->locs )
@@ -79,7 +79,7 @@ free_pseudo_location( struct pseudo_location_t* loc )
     return;
 }
 
-static inline void
+static  void
 sort_pseudo_location( struct pseudo_location_t* loc )
 {
     qsort( loc->locs, 
@@ -91,7 +91,7 @@ sort_pseudo_location( struct pseudo_location_t* loc )
     return;
 }
 
-inline void
+ void
 add_loc_to_pseudo_location( 
     struct pseudo_location_t* ps_loc, const GENOME_LOC_TYPE* const loc)
 {

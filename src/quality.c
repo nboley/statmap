@@ -317,7 +317,7 @@ print_lookup_table( float* lookuptable_position,
     }
 }
 
-inline float 
+ float 
 multiple_letter_penalty( const LETTER_TYPE* const reference,
                          const LETTER_TYPE* const observed,
                          const int start_position,
@@ -389,7 +389,7 @@ determine_bp_mut_rates( float** lookuptable_bp_ref )
     return;         
 }
 
-inline int 
+ int 
 bp_code( const char letter )
 {
     switch( letter )

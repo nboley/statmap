@@ -147,7 +147,7 @@ free_pmatch_stack( potential_match_stack* stack );
 size_t
 pmatch_stack_length( potential_match_stack* pmatch );
 
-inline potential_match_stack*
+ potential_match_stack*
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND stnd,
             const int node_level, const int max_num_levels,
@@ -169,13 +169,13 @@ tree_free( void* ptr );
 void
 print_dynamic_node( dynamic_node* node );
 
-inline void init_static_node( static_node** node );
+ void init_static_node( static_node** node );
 
-inline void init_dynamic_node( dynamic_node** node );
+ void init_dynamic_node( dynamic_node** node );
 
 extern void init_tree( struct index_t** index, int seq_length );
 
-inline dynamic_node*
+ dynamic_node*
 add_child_to_dynamic_node( 
     dynamic_node* node, 
     LETTER_TYPE bp,
@@ -183,7 +183,7 @@ add_child_to_dynamic_node(
     int num_letters
 );
 
-inline void add_child_to_static_node( 
+ void add_child_to_static_node( 
     static_node* node,
     LETTER_TYPE bp
 );
@@ -194,17 +194,17 @@ void free_node_and_children( void* node, char node_type );
 
 void free_tree( struct index_t* root );
 
-inline void 
+ void 
 build_static_node_from_dynamic_node( dynamic_node* dnode, 
                                      static_node** snode   );
 
-inline void 
+ void 
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
                                         LEVEL_TYPE level   );
 
-inline int 
+ int 
 find_child_index_in_dynamic_node ( 
     dynamic_node* node, 
     LETTER_TYPE bp
@@ -217,7 +217,7 @@ index_genome( struct genome_data* genome, int indexed_seq_len );
 find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 */
 
-inline void 
+ void 
 add_sequence( struct index_t* index, struct pseudo_locations_t* ps_locs, 
               LETTER_TYPE* seq, const int seq_length,
               GENOME_LOC_TYPE genome_loc );
@@ -230,7 +230,7 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
-inline void 
+ void 
 find_matches( void* node, 
               NODE_TYPE node_type, 
               int node_level, 

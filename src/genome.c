@@ -568,7 +568,7 @@ add_chrs_from_fasta_file(
  * Forward declaration for translate_sequence. I wanted to avoid including
  * DNA sequence.h for this single declaration 
  */
-inline LETTER_TYPE* 
+LETTER_TYPE* 
 translate_seq(char*, int num_letters, LETTER_TYPE** );
 
 extern void

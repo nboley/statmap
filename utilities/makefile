@@ -1,6 +1,6 @@
-compiler = gcc
+compiler = clang
 #compile_options = -fast
-compile_options = -O0 -g -Wall -Wextra --openmp -D_FILE_OFFSET_BITS=64 --short-enums
+compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	estimate_read_density call_peaks \
@@ -27,12 +27,13 @@ aggregate_over_wiggles : aggregate_over_wiggles.c
 	cp aggregate_over_wiggles ../bin/
 
 aggregate_over_traces : aggregate_over_traces.c
-	$(compiler) $(compile_options) -o aggregate_over_traces aggregate_over_traces.c ../src/trace.o
+	$(compiler) $(compile_options) -o aggregate_over_traces aggregate_over_traces.c ../src/trace.o \
+	-pthread
 	cp aggregate_over_traces ../bin/
 
 convert_trace_into_wiggle : convert_trace_into_wiggle.c
 	$(compiler) $(compile_options) -o convert_trace_into_wiggle convert_trace_into_wiggle.c \
-	../src/trace.o 
+	../src/trace.o -pthread
 	cp aggregate_over_traces ../bin/
 
 
