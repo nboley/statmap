@@ -1152,7 +1152,8 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* determine which trace to use */
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
-                window_start = MAX( stop-global_fl_dist->max_fl, 0 );
+                window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
+                // window_start = MAX( stop-global_fl_dist->max_fl, 0 );
                 window_stop = MIN( stop, global_genome->chr_lens[chr_index] );
             } else {
                 window_start = start;

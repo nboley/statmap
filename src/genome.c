@@ -380,8 +380,8 @@ find_seq_ptr( struct genome_data* genome,
        to make sure that the pseudo location *exists* 
     */
     
-    assert( chr_index != PSEUDO_LOC_CHR_INDEX 
-            || loc < (long) genome->index->ps_locs->num );    
+    assert( chr_index != (int) PSEUDO_LOC_CHR_INDEX 
+            || loc < (unsigned long) genome->index->ps_locs->num );    
 
     /* if this is a pseudo chromosome, we need to 
        get the sequence associated with it. Since
