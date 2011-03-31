@@ -40,11 +40,13 @@ void
 free_fl_dist( struct fragment_length_dist_t* fl_dist )
 {
     free( fl_dist->density );
-
-    /*
-    if( NULL != fl_dist->chipseq_bs_density )
+    
+    if( NULL != fl_dist->chipseq_bs_density ) 
+    {
         free( fl_dist->chipseq_bs_density );
-    */
+        free( fl_dist->rev_chipseq_bs_density );
+    }
+    
     
     free( fl_dist );
     

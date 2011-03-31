@@ -304,6 +304,8 @@ free_genome( struct genome_data* gen )
 {
     int i;
     
+    if( NULL == gen )
+        return;
     
     if( gen->is_mmapped == true )
     {
@@ -321,6 +323,11 @@ free_genome( struct genome_data* gen )
 
     if( gen->index != NULL )
     {
+        if( NULL != gen->index->ps_locs )
+        {
+            free_pseudo_locations( gen->index->ps_locs );
+        }
+
         free( gen->index );
     }
     
@@ -336,12 +343,7 @@ free_genome( struct genome_data* gen )
 
     if( gen->snp_db != NULL )
         free_snp_db( gen->snp_db );
-    
-    if( NULL != gen->ps_locs )
-    {
-        free_pseudo_locations( gen->ps_locs );
-    }
-    
+        
     free( gen );
 }
 

@@ -146,7 +146,6 @@ init_trace( struct genome_data* genome,
     {
         /* initialize the trace length, in bps */
         (*traces)->chr_lengths[i] = genome->chr_lens[i];
-
         (*traces)->chr_names[i] = malloc( (strlen(genome->chr_names[i])+1)*sizeof(char) );
         strcpy( (*traces)->chr_names[i], genome->chr_names[i] );
         
@@ -331,16 +330,22 @@ close_traces( struct trace_t* traces )
                 }
             }
 
-            // BUG ( memory leak ) should this be freed??!?!?
-            // free( traces->locks[i][j] );
+            /* I'm not sure why this cast is necessary, but it prevents 
+               a warning so Im keeping it */
+            free( (void*) traces->locks[i][j] );
         }
+        free( traces->chr_names[i] );
+        free( traces->track_names[i] );
         free( traces->traces[i] );                          
         free( traces->locks[i] );
     }
 
+    free( traces->chr_names );
+    free( traces->track_names );
     free( traces->chr_lengths );
     free( traces->traces );
     free( traces->locks );
+    
     free( traces );
 
     return;

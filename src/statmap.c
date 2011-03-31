@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <time.h>
+#include <sys/time.h> /* gettimeofday() */
+
 #include <getopt.h>
 #include <string.h>
 #include <limits.h>
@@ -115,6 +117,7 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
     }
     
     free( realpath_buffer );
+    free( input_realpath_buffer );
     
     return;
 }
@@ -816,7 +819,7 @@ map_marginal( struct args_t* args,
               enum bool is_nc )
 {
     /* store clock times - useful for benchmarking */
-    clock_t start, stop;    
+    struct timeval start, stop;
     
     /***** initialize the mappings dbs */
     
@@ -835,8 +838,6 @@ map_marginal( struct args_t* args,
     
     /***** END initialize the mappings dbs */
     
-    start = clock();
-    
     find_all_candidate_mappings( 
         genome,
         args->log_fp,
@@ -849,11 +850,12 @@ map_marginal( struct args_t* args,
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
-    start = clock();
+     gettimeofday( &start, NULL );
     join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db, genome );
-    stop = clock();
+    gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
     /*  close candidate mappings db */
     close_candidate_mappings_db( &candidate_mappings );
     
@@ -877,19 +879,20 @@ map_marginal( struct args_t* args,
     fclose( bkwd_wig_fp );
     
     /* write the mapped reads to SAM */
-    start = clock();
+     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
     write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
-    stop = clock();
+    gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
     
     /* write the mapped reads to SAM */
     /* Dont do this anymore - it wastes time and for big runs,
        it's easier to just run the supplementary script */
     if( args->sam_output_fname != NULL )
     {
-        start = clock();
+         gettimeofday( &start, NULL );
         fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
         FILE* sam_ofp = NULL;
         if ( false == is_nc ) {
@@ -900,9 +903,10 @@ map_marginal( struct args_t* args,
         write_mapped_reads_to_sam( 
             rdb, *mpd_rds_db, genome, false, false, sam_ofp );
         fclose( sam_ofp );    
-        stop = clock();
+        gettimeofday( &stop, NULL );
         fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                ((float)(stop-start))/CLOCKS_PER_SEC );
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
     }
     
     return;
@@ -974,17 +978,18 @@ map_generic_data(  struct args_t* args )
     struct genome_data* genome;
     
     /* store clock times - useful for benchmarking */
-    clock_t start, stop;    
+    struct timeval start, stop;    
     
     /***** Index the genome */
-    start = clock();
+    gettimeofday( &start, NULL );
     
     /* initialize the genome */
     load_genome( &genome, args );
     
-    stop = clock();
+    gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
         
     /***** END Genome processing */
     
@@ -1013,16 +1018,17 @@ map_chipseq_data(  struct args_t* args )
     struct genome_data* genome;
 
     /* store clock times - useful for benchmarking */
-    clock_t start, stop;    
+    struct timeval start, stop;    
     
     /***** Index the genome */
-    start = clock();
+    gettimeofday( &start, NULL );
     /* initialize the genome */
     load_genome( &genome, args );
-    stop = clock();
+    gettimeofday( &stop, NULL );
     
     fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    ((float)(stop-start))/CLOCKS_PER_SEC );
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
         
     /***** END Genome processing */
     

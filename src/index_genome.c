@@ -1530,6 +1530,11 @@ free_ondisk_index( struct index_t* index ) {
         #endif
     }
     
+    if( NULL != index->ps_locs ) {
+        free( index->ps_locs->locs );
+        free( index->ps_locs );
+    }
+    
     return;
 }
 
