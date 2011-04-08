@@ -69,8 +69,11 @@ int main( int argc, char** argv )
             exit(1);
         }
     } else {
+        assert( argc != 4 );
         if( argc == 3 ) {
             sample_num = atoi( argv[2] );
+        } else {
+            sample_num = 0;
         }
     }
     

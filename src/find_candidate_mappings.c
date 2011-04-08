@@ -59,6 +59,11 @@ search_index( struct index_t* index,
     assert( sub_read != NULL );
     /* note that the NULL ending is pre-set from the calloc */
     memcpy( sub_read, r->char_seq + subseq_offset, sizeof(char)*(subseq_length) );
+
+    /* prepare the results container */
+    init_mapped_locations( results );
+    (*results)->subseq_len = subseq_length;
+    (*results)->subseq_offset = subseq_offset;
     
     /** Deal with the read on the fwd strand */
     /* Store the translated sequences here */
@@ -80,10 +85,6 @@ search_index( struct index_t* index,
     // BUG why did I have this here?
     //replace_ns_inplace( tmp_read, r->length );
     assert( bkwd_seq != NULL );
-
-    init_mapped_locations( results );
-    (*results)->subseq_len = subseq_length;
-    (*results)->subseq_offset = subseq_offset;
     
     /* map the full read */
     find_matches_from_root( index, 
@@ -238,6 +239,10 @@ find_candidate_mappings( void* params )
     float* bp_mut_rates;
     determine_bp_mut_rates( &bp_mut_rates );
 
+    /* how often we print out the mapping status */
+    #define MAPPING_STATUS_GRANULARITY 100000
+    long prev_readkey = MAPPING_STATUS_GRANULARITY;
+
     /* The current read of interest */
     long readkey;
     struct rawread *r1, *r2;
@@ -253,8 +258,9 @@ find_candidate_mappings( void* params )
         /* We dont lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
-        if( readkey % 100000 == 0 && readkey > 0 )
+        if( readkey >= prev_readkey )
         {
+            prev_readkey += MAPPING_STATUS_GRANULARITY;
             fprintf(stderr, "DEBUG       :  Mapped %li reads, %i successfully\n", 
                     readkey, *mapped_cnt);
         }

@@ -274,7 +274,7 @@ guess_optimal_indexed_seq_len( struct args_t* args)
     populate_read_from_fastq_file( fp, &r, UNKNOWN );
     seq_len = r->length;
     fprintf( stderr, 
-             "NOTICE      :  Setting Indexed Read Length to '%i' BPS\n", 
+             "NOTICE      :  Setting Read Length to '%i' BPS\n", 
              seq_len );
     
     free_rawread( r );
@@ -859,6 +859,18 @@ map_marginal( struct args_t* args,
     /*  close candidate mappings db */
     close_candidate_mappings_db( &candidate_mappings );
     
+    /* write the non-mapping reads into their own fastq */
+    gettimeofday( &start, NULL );
+    fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
+    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
+    gettimeofday( &stop, NULL );
+    fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
+                    (float)(stop.tv_sec - start.tv_sec) 
+                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+
+
+    /* i dont want to do this anymore, you should just call the utility */
+    #if 0
     /* Write the mapped reads to file */
     fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
     
@@ -877,22 +889,13 @@ map_marginal( struct args_t* args,
         *mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
     fclose( fwd_wig_fp );
     fclose( bkwd_wig_fp );
-    
-    /* write the mapped reads to SAM */
-     gettimeofday( &start, NULL );
-    fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
-    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
-    gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-    
+        
     /* write the mapped reads to SAM */
     /* Dont do this anymore - it wastes time and for big runs,
        it's easier to just run the supplementary script */
     if( args->sam_output_fname != NULL )
     {
-         gettimeofday( &start, NULL );
+        gettimeofday( &start, NULL );
         fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
         FILE* sam_ofp = NULL;
         if ( false == is_nc ) {
@@ -908,6 +911,7 @@ map_marginal( struct args_t* args,
                     (float)(stop.tv_sec - start.tv_sec) 
                         + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
     }
+    #endif
     
     return;
 }

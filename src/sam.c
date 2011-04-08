@@ -64,7 +64,7 @@ fprintf_nonpaired_mapped_read_as_sam(
 
     /* print the actual sequence */
     fprintf( sam_fp, "%.*s\t", rd_len, seq );
-
+    
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", rd_len, phred_qualities );
 
@@ -506,8 +506,11 @@ write_mapped_reads_to_sam(
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd1, &rd2 );
 
-    while( rd1 != NULL ) 
+    while( rd1 != NULL
+           && mapped_rd != NULL ) 
     {    
+        assert( readkey == mapped_rd->read_id );
+        
         if( readkey > 0 && readkey%1000000 == 0 )
             fprintf( stderr, "NOTICE       : Written %li reads to sam\n", readkey );
         
@@ -537,12 +540,29 @@ write_mapped_reads_to_sam(
 
         get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2 );
+        
+        while( NULL != rd1 
+               && NULL != mapped_rd
+               && readkey < mapped_rd->read_id )
+        {
+            free_rawread( rd1 );
+            rd1 = NULL;
+            if( rd2 !=  NULL ) {
+                free_rawread( rd2 );
+                rd2 = NULL;
+            }
+            
+            get_next_read_from_rawread_db( 
+                rdb, &readkey, &rd1, &rd2 );
+        }
+        
     }
     
     goto cleanup;
 
 cleanup:
-    free_mapped_read( mapped_rd );
+    if( NULL != mapped_rd )
+        free_mapped_read( mapped_rd );
 
     /* Free the raw reads */
     if( rd1 != NULL )

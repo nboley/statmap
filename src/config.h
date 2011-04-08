@@ -5,6 +5,8 @@
 
 /****** configuration options                   ******/
 
+#define N_DEBUG
+
 // Candidate Mappings
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
