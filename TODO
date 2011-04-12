@@ -1,3 +1,9 @@
+-31) Adding rawreads to the DB also opens the unmappable files. This is probably
+     incorrect, and the sam code was overwriting these files. I fixed it quickly
+     by chaning the open mode to append, but the correct fix is to initialize a
+     new raw read db from a fastq file, and then have an open function. Too much
+     work for very little gain? Perhaps, but it would help when I want to have 
+     multiple read input files in the same directory. 
 -30) there is a newly introduced correctness bug in the pseudo_locations code
      for index probes that are less than the index length. The problem is that
      the pseudo locations are generted off of the index probe length, in which

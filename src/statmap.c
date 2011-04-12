@@ -771,6 +771,7 @@ void load_genome( struct genome_data** genome, struct args_t* args )
         printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
         init_genome( genome );
         add_chrs_from_fasta_file( *genome, genome_fp );
+        write_genome_to_disk( *genome, GENOME_FNAME  );
         
         pid_t pID = fork();
         /* create the index, and then exit */
@@ -850,7 +851,7 @@ map_marginal( struct args_t* args,
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
-     gettimeofday( &start, NULL );
+    gettimeofday( &start, NULL );
     join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db, genome );
     gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
@@ -868,51 +869,6 @@ map_marginal( struct args_t* args,
                     (float)(stop.tv_sec - start.tv_sec) 
                         + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
 
-
-    /* i dont want to do this anymore, you should just call the utility */
-    #if 0
-    /* Write the mapped reads to file */
-    fprintf(stderr, "NOTICE      :  Writing mapped reads to wiggle file.\n" );
-    
-    FILE* fwd_wig_fp = NULL;
-    FILE* bkwd_wig_fp = NULL;
-    if( false == is_nc )
-    {
-        fwd_wig_fp = fopen( "marginal_mappings_fwd.wig", "w" );
-        bkwd_wig_fp = fopen( "marginal_mappings_bkwd.wig", "w" );
-    } else {
-        fwd_wig_fp = fopen( "marginal_mappings_fwd.NC.wig", "w" );
-        bkwd_wig_fp = fopen( "marginal_mappings_bkwd.NC.wig", "w" );
-    }
-    
-    write_marginal_mapped_reads_to_stranded_wiggles( 
-        *mpd_rds_db, genome, fwd_wig_fp, bkwd_wig_fp );
-    fclose( fwd_wig_fp );
-    fclose( bkwd_wig_fp );
-        
-    /* write the mapped reads to SAM */
-    /* Dont do this anymore - it wastes time and for big runs,
-       it's easier to just run the supplementary script */
-    if( args->sam_output_fname != NULL )
-    {
-        gettimeofday( &start, NULL );
-        fprintf(stderr, "NOTICE      :  Writing mapped reads to SAM file.\n" );
-        FILE* sam_ofp = NULL;
-        if ( false == is_nc ) {
-            sam_ofp = fopen( SAM_MARGINAL_OFNAME, "w+" );
-        } else {
-            sam_ofp = fopen( SAM_MARGINAL_NC_OFNAME, "w+" );
-        }
-        write_mapped_reads_to_sam( 
-            rdb, *mpd_rds_db, genome, false, false, sam_ofp );
-        fclose( sam_ofp );    
-        gettimeofday( &stop, NULL );
-        fprintf(stderr, "PERFORMANCE :  Wrote mapped reads to sam in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-    }
-    #endif
-    
     return;
 }
 

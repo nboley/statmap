@@ -22,7 +22,11 @@ find_optimal_subseq_offset(
     /* store the desired subsequences length */
     int subseq_len
 ) {
+    if( subseq_len > r->length ) {
+        fprintf( stderr, "============ %i \t\t %i \n", subseq_len, r->length );
+    }
     assert( subseq_len <= r->length );
+    
     
     /* XXX for now, we just use the first subseq_len characters,
        so the offset is always 0 */

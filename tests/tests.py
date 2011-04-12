@@ -9,6 +9,8 @@ from operator import itemgetter
 import bisect 
 import gzip    
 
+from math import ceil
+
 import re
 import array
 
@@ -20,9 +22,58 @@ import tempfile
 
 import numpy
 
-STATMAP_PATH = '../src/statmap'
-BUILD_INDEX_PATH = '../utilities/build_index'
+STATMAP_PATH = '../bin/statmap'
+BUILD_SAM_PATH = '../bin/mapped_reads_into_sam'
+BUILD_INDEX_PATH = '../bin/build_index'
 CALL_PEAKS_PATH = '../bin/call_peaks'
+
+def map_with_statmap( read_fnames, output_dir, 
+                      min_penalty=-7.0, 
+                      num_threads=1, 
+                      indexed_seq_len=None  ):
+    # build the input fnames str
+    assert len( read_fnames ) in (1,2)
+    read_fname_str = None
+    if 1 == len( read_fnames ):
+        read_fname_str = "-r " + read_fnames[0]
+    else:
+        read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
+    
+    # if the indexed seq len is None, we will build the index seperately
+    if indexed_seq_len == None:
+        call = "%s -g tmp.genome %s -o %s -p %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" \
+                % str( ret_code )
+    else:
+        # first, build the genome
+        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
+        print >> stdout, re.sub( "\s+", " ", call)
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
+                % str( ret_code )
+
+
+        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+    
+    # build the sam file
+    call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
+    print >> stdout, re.sub( "\s+", " ", call)
+    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+    if ret_code != 0:
+        raise ValueError, "TEST FAILED: build_sam_from_mapped_reads call returned error code '%s'" \
+            % str( ret_code )
+        
+
 
 #################################################################################################
 ### verbosity level information 
@@ -350,13 +401,17 @@ def mutate_reads( reads, error_strs ):
     paired_end = (  isinstance( reads[0], tuple ) )
     n_error_strs = 2 if paired_end else 1
 
-    read_len = len( reads[0][0] ) if paired_end else len(reads[0])
-    error_str_len = len( error_strs[0] ) if paired_end else len(error_strs)
-    multiplier = (1 + read_len/error_str_len)
-    
     mutated_reads = []
     for read in reads:
         read_error_str = random.sample( error_strs, n_error_strs )
+
+        read_len = len( read[0] ) if paired_end else len(read)
+        error_str_len = len( read_error_str[0] ) if paired_end else len(read_error_str)
+        multiplier = (1 + float(read_len)/error_str_len )
+        if int(multiplier) < multiplier:
+            multiplier = int(multiplier) + 1
+        multiplier = int(multiplier)
+        
         if paired_end:
             err_str1 = (read_error_str[0]*multiplier)[:read_len]
             p1 = mutate_solexa_read( read[0], err_str1 )
@@ -367,6 +422,13 @@ def mutate_reads( reads, error_strs ):
             read_error_str = (read_error_str[0]*multiplier)[:read_len]
             mr = mutate_solexa_read( read, read_error_str )
             mutated_reads.append( mut_read_t(mr, read_error_str, read) )
+        try:
+            assert 1 == len( set( map( len, mutated_reads[-1]  ) ) ) 
+        except:
+            print mutated_reads[-1]
+            print multiplier, read_len, error_str_len, map( len, mutated_reads[-1]  )
+            import pdb
+            pdb.set_trace()
     return mutated_reads
 
 def build_expected_map_locations_from_repeated_genome( \
@@ -420,34 +482,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    if indexed_seq_len == None:
-        call = "%s -g tmp.genome -s -r tmp.fastq -s -o %s\
-                             -t 1 " % ( STATMAP_PATH, output_directory )
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+    ## Map the data
+    read_fnames = [ "tmp.fastq", ]
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len  )
 
-    # otherwise, we want to test the index with index probe lengths different than the actual read len
-    else:
-        assert indexed_seq_len <= read_len
-        # first, build the genome
-        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
-        print >> stdout, re.sub( "\s+", " ", call)
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" % str( ret_code )
-
-
-        call = "%s -g tmp.genome.bin -s -r tmp.fastq -s -o %s\
-                             -t 1 " % ( STATMAP_PATH, output_directory )
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
-        
-        
-    
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = sum( 1 for line in sam_fp )
@@ -559,15 +597,9 @@ def test_paired_end_reads( read_len ):
     reads_of_1.close()
     reads_of_2.close()
 
-    call = "%s -g tmp.genome -s -1 tmp.1.fastq -2 tmp.2.fastq -o %s \
-                               -t 1 " % ( STATMAP_PATH, output_directory)
-        
-    print >> stdout, re.sub( "\s+", " ", call)
-    
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
+    # map the reads
+    read_fnames = ( "tmp.1.fastq", "tmp.2.fastq" )
+    map_with_statmap( read_fnames, output_directory  )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -637,21 +669,11 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    # first, build the genome
-    call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, read_len - 2 )
-    print >> stdout, re.sub( "\s+", " ", call)
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    if ret_code != 0:
-        raise ValueError, "TEST FAILED: build_index call returned error code '%s'" % str( ret_code )
+    read_fnames = ( "tmp.fastq", )
+    map_with_statmap( read_fnames, output_directory, 
+                      num_threads = n_threads, 
+                      indexed_seq_len = read_len-2  )
 
-    # actually map the reads
-    call = "%s -g tmp.genome.bin -s -r tmp.fastq -o %s \
-                                 -t %i " % ( STATMAP_PATH, output_directory, n_threads )
-    print >> stdout, re.sub( "\s+", " ", call)
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
@@ -701,8 +723,9 @@ def test_lots_of_repeat_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i" % ( read_len, min_penalty, n_threads )
-    
+    output_directory = "smo_test_dirty_reads_%i_%i_%i" \
+        % ( read_len, min_penalty, n_threads )
+
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -714,7 +737,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
-
+    
     # mutate the reads by their error strings
     sample_file = gzip.open( './data/dirty_error_strs.fastq.gz' )
     error_strs = get_error_strs_from_fastq( sample_file )
@@ -732,15 +755,10 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -s -r tmp.fastq -o %s \
-                             -p %e -t %i " % ( STATMAP_PATH, output_directory, min_penalty, n_threads )
-        
-    print >> stdout, re.sub( "\s+", " ", call)
-    
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
+    read_fnames = ( "tmp.fastq", )
+    map_with_statmap( read_fnames, output_directory, 
+                      min_penalty = min_penalty,
+                      indexed_seq_len = read_len - 2  ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )

@@ -312,11 +312,11 @@ add_single_end_reads_to_rawread_db(
 
     strcpy( buffer, rifname );
     strcat( buffer, ".unmappable" );
-    rdb->unmappable_single_end_reads = open_check_error( buffer, "w" );
-
+    rdb->unmappable_single_end_reads = open_check_error( buffer, "a" );
+    
     strcpy( buffer, rifname );
     strcat( buffer, ".nonmapping" );
-    rdb->non_mapping_single_end_reads = open_check_error( buffer, "w" );
+    rdb->non_mapping_single_end_reads = open_check_error( buffer, "a" );
     
     /* For now, we only support fastq files */
     assert( iftype == FASTQ );

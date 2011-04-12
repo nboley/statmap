@@ -399,17 +399,16 @@ write_nonmapping_reads_to_fastq(
         rdb, &readkey, &rd1, &rd2 );
 
     while( rd1 != NULL ) 
-    {         
-        /* 
-         * If we couldnt map it anywhere,
-         * print out the read to the non-mapping
-         * fastq file. ( Theoretically, one could
-         * rerun these with lower penalties, or 
-         * re-align these to one another. )
-         */
-        /* We test for mapped read NULL in case the last read was unmappable */
-        if( mapped_rd == NULL 
-            || mapped_rd->num_mappings == 0 )
+    {    
+        /* if this read doesn't have an associated mapped reads */
+        if( mapped_rd == NULL
+            || ( mapped_rd != NULL
+                   && (
+                        readkey < mapped_rd->read_id
+                        || 0 == mapped_rd->num_mappings  
+                   )
+                )
+            )
         {
             /* If this is a single end read */
             if( rd2 == NULL )
@@ -438,21 +437,26 @@ write_nonmapping_reads_to_fastq(
                         rdb->non_mapping_paired_end_2_reads, rd2 );
                 }
             }
-        /* otherwise, print it out to the sam file */
-        } 
+        }
         
-        free_mapped_read( mapped_rd );
-        
+        /* if we need to get the next mapped read */
+        /* if mapped_rd is null, we are out of mapped reads */
+        if( mapped_rd != NULL
+            && readkey == mapped_rd->read_id )
+        {
+            free_mapped_read( mapped_rd );
+            error = get_next_read_from_mapped_reads_db( 
+                mappings_db, 
+                &mapped_rd
+            );
+        }
+
         /* Free the raw reads */
         free_rawread( rd1 );
         if( rd2 != NULL )
             free_rawread( rd2 );
-
-        error = get_next_read_from_mapped_reads_db( 
-            mappings_db, 
-            &mapped_rd
-        );
-
+        
+        /* we always get the next raw read */
         get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2 );
     }
@@ -460,14 +464,22 @@ write_nonmapping_reads_to_fastq(
     goto cleanup;
 
 cleanup:
-    free_mapped_read( mapped_rd );
+    if( NULL != mapped_rd )
+        free_mapped_read( mapped_rd );
 
     /* Free the raw reads */
     if( rd1 != NULL )
         free_rawread( rd1 );
     if( rd2 != NULL )
         free_rawread( rd2 );
-        
+
+    fflush( rdb->unmappable_single_end_reads );
+    fflush( rdb->non_mapping_single_end_reads );
+    fflush( rdb->unmappable_paired_end_1_reads );
+    fflush( rdb->unmappable_paired_end_2_reads );
+    fflush( rdb->non_mapping_paired_end_1_reads );
+    fflush( rdb->non_mapping_paired_end_2_reads );
+    
     return;
 }
 
