@@ -513,52 +513,8 @@ find_candidate_mappings( void* params )
 }
 
 void
-find_all_candidate_mappings( struct genome_data* genome,
-                             FILE* log_fp,
-                             struct rawread_db_t* rdb,
-
-                             candidate_mappings_db* mappings_db,
-                             float min_match_penalty,
-                             float max_penalty_spread,
-                             float max_seq_length
-
-    )
+spawn_threads( struct single_map_thread_data* td_template )
 {
-    clock_t start = clock();
-
-    /* 
-     * init mutexes to guard access to the log_fp, the fastq 'db', and
-     * the mappings db. They will be stored in the same structure as the 
-     * passed data
-     */
-
-    /* initialize the necessary mutex's */
-    pthread_mutex_t log_fp_mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_t mapped_cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_t mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-    /* put the search arguments into a structure */
-    struct single_map_thread_data td_template;
-    td_template.genome = genome;
-    
-    td_template.log_fp = log_fp;
-    td_template.log_fp_mutex = &log_fp_mutex;
-
-    unsigned int mapped_cnt = 0;
-    td_template.mapped_cnt = &mapped_cnt;
-    td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
-
-    td_template.rdb = rdb;
-    
-    td_template.mappings_db = mappings_db;
-    td_template.mappings_db_mutex = &mappings_db_mutex;
-    
-    td_template.min_match_penalty = min_match_penalty;
-    td_template.max_penalty_spread = max_penalty_spread;
-    td_template.max_subseq_len = max_seq_length;
-
-    /* initialize the threads */
-    
     long t;
     int rc;
     void* status;
@@ -570,7 +526,7 @@ find_all_candidate_mappings( struct genome_data* genome,
     
     for( t = 0; t < num_threads; t++ )
     {  
-        memcpy( tds+t,  &td_template, sizeof(td_template) );
+        memcpy( tds+t,  td_template, sizeof(struct single_map_thread_data) );
         tds[t].thread_id = t;
         
         pthread_attr_init(attrs + t);
@@ -605,6 +561,56 @@ find_all_candidate_mappings( struct genome_data* genome,
         }
         num_reads2 += (size_t) status;
     }
+}
+
+void
+find_all_candidate_mappings( struct genome_data* genome,
+                             FILE* log_fp,
+                             struct rawread_db_t* rdb,
+
+                             candidate_mappings_db* mappings_db,
+                             float min_match_penalty,
+                             float max_penalty_spread,
+                             float max_seq_length
+
+    )
+{
+    clock_t start = clock();
+
+    /* 
+     * init mutexes to guard access to the log_fp, the fastq 'db', and
+     * the mappings db. They will be stored in the same structure as the 
+     * passed data
+     */
+
+    /* initialize the necessary mutex's */
+    pthread_mutex_t log_fp_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t mapped_cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    /* put the search arguments into a structure */
+    struct single_map_thread_data td_template;
+    td_template.genome = genome;
+    
+    td_template.log_fp = log_fp;
+    td_template.log_fp_mutex = &log_fp_mutex;
+
+    unsigned int mapped_cnt = 0;
+    td_template.mapped_cnt = &mapped_cnt;
+    td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
+    td_template.max_readkey = READS_STEP_SIZE;
+
+    td_template.rdb = rdb;
+    
+    td_template.mappings_db = mappings_db;
+    td_template.mappings_db_mutex = &mappings_db_mutex;
+    
+    td_template.min_match_penalty = min_match_penalty;
+    td_template.max_penalty_spread = max_penalty_spread;
+    td_template.max_subseq_len = max_seq_length;
+
+    /* initialize the threads */
+    spawn_threads( &td_template );   
     
     /* Find all of the candidate mappings */    
     clock_t stop = clock();

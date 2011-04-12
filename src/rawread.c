@@ -415,9 +415,18 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     
 }
 
+readkey_t
+get_current_readkey( struct rawread_db_t* rdb )
+{
+    pthread_mutex_lock( rdb->lock );
+    return rdb->readkey;
+    pthread_mutex_unlock( rdb->lock );
+}
+
+
 int 
 get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, readkey_t* readkey,
     struct rawread** r1, struct rawread** r2 )
 {
     int rv = -10;
@@ -452,7 +461,7 @@ get_next_mappable_read_from_rawread_db(
 
 int
 get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, long* readkey, 
+    struct rawread_db_t* rdb, readkey_t* readkey, 
     struct rawread** r1, struct rawread** r2 )
 {
     pthread_mutex_lock( rdb->lock );

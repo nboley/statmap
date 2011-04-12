@@ -35,6 +35,7 @@ struct single_map_thread_data {
     
     unsigned int* mapped_cnt;
     pthread_mutex_t* mapped_cnt_mutex;
+    readkey_t max_readkey;
     
     candidate_mappings_db* mappings_db;
     pthread_mutex_t* mappings_db_mutex;

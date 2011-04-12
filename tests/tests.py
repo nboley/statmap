@@ -27,54 +27,6 @@ BUILD_SAM_PATH = '../bin/mapped_reads_into_sam'
 BUILD_INDEX_PATH = '../bin/build_index'
 CALL_PEAKS_PATH = '../bin/call_peaks'
 
-def map_with_statmap( read_fnames, output_dir, 
-                      min_penalty=-7.0, 
-                      num_threads=1, 
-                      indexed_seq_len=None  ):
-    # build the input fnames str
-    assert len( read_fnames ) in (1,2)
-    read_fname_str = None
-    if 1 == len( read_fnames ):
-        read_fname_str = "-r " + read_fnames[0]
-    else:
-        read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
-    
-    # if the indexed seq len is None, we will build the index seperately
-    if indexed_seq_len == None:
-        call = "%s -g tmp.genome %s -o %s -p %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" \
-                % str( ret_code )
-    else:
-        # first, build the genome
-        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
-        print >> stdout, re.sub( "\s+", " ", call)
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
-                % str( ret_code )
-
-
-        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
-    
-    # build the sam file
-    call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
-    print >> stdout, re.sub( "\s+", " ", call)
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    if ret_code != 0:
-        raise ValueError, "TEST FAILED: build_sam_from_mapped_reads call returned error code '%s'" \
-            % str( ret_code )
-        
-
-
 #################################################################################################
 ### verbosity level information 
 #
@@ -145,6 +97,52 @@ except AttributeError:
         mut_seq = property(itemgetter(0))
         err_str = property(itemgetter(1))        
         seq = property(itemgetter(2))
+
+def map_with_statmap( read_fnames, output_dir, 
+                      min_penalty=-7.0, 
+                      num_threads=1, 
+                      indexed_seq_len=None  ):
+    # build the input fnames str
+    assert len( read_fnames ) in (1,2)
+    read_fname_str = None
+    if 1 == len( read_fnames ):
+        read_fname_str = "-r " + read_fnames[0]
+    else:
+        read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
+    
+    # if the indexed seq len is None, we will build the index seperately
+    if indexed_seq_len == None:
+        call = "%s -g tmp.genome %s -o %s -p %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" \
+                % str( ret_code )
+    else:
+        # first, build the genome
+        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
+        print >> stdout, re.sub( "\s+", " ", call)
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
+                % str( ret_code )
+
+
+        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        print >> stdout, re.sub( "\s+", " ", call)    
+        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+        if ret_code != 0:
+            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+    
+    # build the sam file
+    call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
+    print >> stdout, re.sub( "\s+", " ", call)
+    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+    if ret_code != 0:
+        raise ValueError, "TEST FAILED: build_sam_from_mapped_reads call returned error code '%s'" \
+            % str( ret_code )
 
 
 ### SAM File parsing code

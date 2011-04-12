@@ -7,6 +7,8 @@
 
 #include "config.h"
 
+typedef long readkey_t;
+
 /* 
  * Define a struct to hold read data. 
  * 
@@ -93,7 +95,7 @@ struct rawread_db_t {
        will pull out the next read, and increment this. rewind will
        reset this to 0. 
     */
-    long readkey;
+    readkey_t readkey;
     /* We lock this mutex whenever we grab a read */
     pthread_mutex_t* lock; 
 
@@ -135,14 +137,17 @@ rewind_rawread_db( struct rawread_db_t* rdb );
 enum bool
 rawread_db_is_empty( struct rawread_db_t* rdb );
 
+readkey_t
+get_current_readkey( struct rawread_db_t* rdb );
+
 int
 get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, readkey_t* readkey,
     struct rawread** r1, struct rawread** r2 );
 
 int
 get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, long* readkey,
+    struct rawread_db_t* rdb, readkey_t* readkey,
     struct rawread** r1, struct rawread** r2 );
 
 /**************** END Raw Read DB **********************/
