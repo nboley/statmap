@@ -967,7 +967,7 @@ map_generic_data(  struct args_t* args )
         build_fl_dist( args, mpd_rds_db );
     }
 
-    close_mapped_reads_db( mpd_rds_db );
+    close_mapped_reads_db( &mpd_rds_db );
     
     return;
 }
@@ -1088,16 +1088,13 @@ map_chipseq_data(  struct args_t* args )
         }
     
         fclose( s_mi );
-    
-        munmap_mapped_reads_db( chip_mpd_rds_db );
-        munmap_mapped_reads_db( NC_mpd_rds_db );
     }
     
     goto cleanup;
 
 cleanup:    
-    close_mapped_reads_db( chip_mpd_rds_db );
-    close_mapped_reads_db( NC_mpd_rds_db );
+    close_mapped_reads_db( &chip_mpd_rds_db );
+    close_mapped_reads_db( &NC_mpd_rds_db );
 
     free_genome( genome );
     
@@ -1127,23 +1124,6 @@ main( int argc, char** argv )
     {
         map_generic_data( &args );
     }
-
-    /* If appropriate, print out the snp db */
-/* The snp code is kibnd of broken, and the negative control addition is breaking it more, 
-   so I am going to TODO it, if it out, and come back later. In a nutshelll, I think I 
-   am only going to allow snp counts for situations where there is actual paternal/maternal
-   info */
-#if 0 
-    if( args.snpcov_fp != NULL )
-    {
-        fprintf(stderr, "NOTICE      :  Updating SNP count estiamtes.\n" );
-        update_snp_estimates_from_candidate_mappings( mpd_rds_db, genome );
-        char* snp_fname = "updated_snp_cnts.snp";
-        FILE* snp_fp = fopen( snp_fname, "w" );
-        write_snps_to_file( snp_fp, genome );
-        fclose( snp_fp );
-    }
-#endif
     
     goto cleanup;
     

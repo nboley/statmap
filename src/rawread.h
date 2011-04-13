@@ -7,8 +7,7 @@
 
 #include "config.h"
 
-typedef long readkey_t;
-
+typedef unsigned int readkey_t;
 /* 
  * Define a struct to hold read data. 
  * 
@@ -137,18 +136,23 @@ rewind_rawread_db( struct rawread_db_t* rdb );
 enum bool
 rawread_db_is_empty( struct rawread_db_t* rdb );
 
-readkey_t
-get_current_readkey( struct rawread_db_t* rdb );
+/* 
+   if the next readkey would be greater than maqx readkey, then
+   dont return anything. negative values indicate that this should
+   be ignored 
+*/
 
 int
 get_next_mappable_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2 );
+    struct rawread** r1, struct rawread** r2,
+    long max_readkey );
 
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2 );
+    struct rawread** r1, struct rawread** r2,
+    long max_readkey );
 
 /**************** END Raw Read DB **********************/
 

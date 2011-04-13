@@ -12,13 +12,21 @@ struct fragment_length_dist_t {
     float* density;
     float* chipseq_bs_density;
     float* rev_chipseq_bs_density;
+
+    /* to user the vector operations, we need to 
+       make sure that the chipseq bs densities
+       are correctly aligned at 16 bytes. However, 
+       we still need to free the memory so, below,
+       we store the start of the allcd addresses */
+    float* chipseq_bs_density_start;
+    float* rev_chipseq_bs_density_start;
 };
 
 void
 init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl );
 
 void
-free_fl_dist( struct fragment_length_dist_t* fl_dist );
+free_fl_dist( struct fragment_length_dist_t** fl_dist );
 
 void
 init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp );

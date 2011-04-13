@@ -763,21 +763,28 @@ build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
 }
 
 void
-close_mapped_reads_db( struct mapped_reads_db* rdb )
+close_mapped_reads_db( struct mapped_reads_db** rdb )
+
 {
-    if( NULL == rdb )
+    if( NULL == *rdb )
         return;
     
-    munmap_mapped_reads_db( rdb );
-    fclose( rdb->fp );
+    munmap_mapped_reads_db( *rdb );
+    fclose( (*rdb)->fp );
 
-    if( rdb->fl_dist != NULL )
-        free_fl_dist( rdb->fl_dist );
+    if( (*rdb)->fl_dist != NULL ) {
+        free_fl_dist( &((*rdb)->fl_dist) );
+        (*rdb)->fl_dist = NULL;
+    }
+
+    if( (*rdb)->mmapped_reads_starts != NULL ) {
+        free( (*rdb)->mmapped_reads_starts );
+        (*rdb)->mmapped_reads_starts = NULL;
+    }
+
+    free( *rdb );
+    *rdb = NULL;
     
-    if( rdb->mmapped_reads_starts != NULL )
-        free( rdb->mmapped_reads_starts );
-    
-    free( rdb );
     return;
 }
 

@@ -165,13 +165,13 @@ int main( int argc, char** argv )
 cleanup:
     free_genome( genome );
 
-    close_mapped_reads_db( IP_mpd_rdb );
+    close_mapped_reads_db( &IP_mpd_rdb );
     close_rawread_db( raw_rdb );
 
     if( NULL != raw_NC_rdb )
     {
         close_rawread_db( raw_NC_rdb );
-        close_mapped_reads_db( mpd_NC_rdb );
+        close_mapped_reads_db( &mpd_NC_rdb );
     }
     
     return 0;

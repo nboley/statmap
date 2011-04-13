@@ -245,18 +245,17 @@ find_candidate_mappings( void* params )
 
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
-    long prev_readkey = MAPPING_STATUS_GRANULARITY;
+    readkey_t prev_readkey = MAPPING_STATUS_GRANULARITY;
 
     /* The current read of interest */
-    long readkey;
+    readkey_t readkey;
     struct rawread *r1, *r2;
     /* 
      * While there are still mappable reads in the read DB. All locking is done
-     * in the get next read functions 
+     * in the get next read functions. 
      */
-    while( EOF != 
-           get_next_mappable_read_from_rawread_db( 
-               rdb, &readkey, &r1, &r2 )  
+    while( EOF != get_next_mappable_read_from_rawread_db( 
+               rdb, &readkey, &r1, &r2, td->max_readkey )  
          ) 
     {                
         /* We dont lock mapped_cnt because it's read only and we dont 
@@ -265,7 +264,7 @@ find_candidate_mappings( void* params )
         if( readkey >= prev_readkey )
         {
             prev_readkey += MAPPING_STATUS_GRANULARITY;
-            fprintf(stderr, "DEBUG       :  Mapped %li reads, %i successfully\n", 
+            fprintf(stderr, "DEBUG       :  Mapped %ui reads, %i successfully\n", 
                     readkey, *mapped_cnt);
         }
         
@@ -610,11 +609,15 @@ find_all_candidate_mappings( struct genome_data* genome,
     td_template.max_subseq_len = max_seq_length;
 
     /* initialize the threads */
-    spawn_threads( &td_template );   
+    while( false == rawread_db_is_empty( rdb ) )
+    {
+        spawn_threads( &td_template );   
+        td_template.max_readkey += READS_STEP_SIZE;
+    }
     
     /* Find all of the candidate mappings */    
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%li) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
+    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%ui) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
             mapped_cnt, rdb->readkey, 
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)mapped_cnt)*CLOCKS_PER_SEC*3600)/(stop-start)

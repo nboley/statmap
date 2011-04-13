@@ -380,7 +380,7 @@ write_nonmapping_reads_to_fastq(
 {
     int error;
 
-    long readkey;
+    readkey_t readkey;
     
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
@@ -396,7 +396,7 @@ write_nonmapping_reads_to_fastq(
     );
     
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2 );
+        rdb, &readkey, &rd1, &rd2, -1 );
 
     while( rd1 != NULL ) 
     {    
@@ -458,7 +458,7 @@ write_nonmapping_reads_to_fastq(
         
         /* we always get the next raw read */
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2 );
+            rdb, &readkey, &rd1, &rd2, -1 );
     }
 
     goto cleanup;
@@ -500,7 +500,7 @@ write_mapped_reads_to_sam(
 
     int error;
 
-    long readkey;
+    readkey_t readkey;
     
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
@@ -516,7 +516,7 @@ write_mapped_reads_to_sam(
     );
 
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2 );
+        rdb, &readkey, &rd1, &rd2, -1 );
 
     while( rd1 != NULL
            && mapped_rd != NULL ) 
@@ -524,7 +524,7 @@ write_mapped_reads_to_sam(
         assert( readkey == mapped_rd->read_id );
         
         if( readkey > 0 && readkey%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %li reads to sam\n", readkey );
+            fprintf( stderr, "NOTICE       : Written %ui reads to sam\n", readkey );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 
@@ -551,7 +551,7 @@ write_mapped_reads_to_sam(
         );
 
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2 );
+            rdb, &readkey, &rd1, &rd2, -1 );
         
         while( NULL != rd1 
                && NULL != mapped_rd
@@ -565,7 +565,7 @@ write_mapped_reads_to_sam(
             }
             
             get_next_read_from_rawread_db( 
-                rdb, &readkey, &rd1, &rd2 );
+                rdb, &readkey, &rd1, &rd2, -1 );
         }
         
     }

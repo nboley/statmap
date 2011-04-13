@@ -22,6 +22,9 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
     (*fl_dist)->chipseq_bs_density = NULL;
     (*fl_dist)->rev_chipseq_bs_density = NULL;
 
+    (*fl_dist)->chipseq_bs_density_start = NULL;
+    (*fl_dist)->rev_chipseq_bs_density_start = NULL;
+
     (*fl_dist)->density = calloc( 1 + max_fl - min_fl + 1, sizeof(float)  );
     
     if( NULL == (*fl_dist)->density )
@@ -37,18 +40,23 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
 }
 
 void
-free_fl_dist( struct fragment_length_dist_t* fl_dist )
+free_fl_dist( struct fragment_length_dist_t** fl_dist )
 {
-    free( fl_dist->density );
+    free( (*fl_dist)->density );
+    (*fl_dist)->density = NULL;
     
-    if( NULL != fl_dist->chipseq_bs_density ) 
+    if( NULL != (*fl_dist)->chipseq_bs_density ) 
     {
-        free( fl_dist->chipseq_bs_density );
-        free( fl_dist->rev_chipseq_bs_density );
+        free( (*fl_dist)->chipseq_bs_density_start );
+        (*fl_dist)->chipseq_bs_density = NULL;
+        (*fl_dist)->chipseq_bs_density_start = NULL;
+        free( (*fl_dist)->rev_chipseq_bs_density_start );
+        (*fl_dist)->rev_chipseq_bs_density = NULL;
+        (*fl_dist)->rev_chipseq_bs_density_start = NULL;
     }
-    
-    
-    free( fl_dist );
+        
+    free( (*fl_dist) );
+    (*fl_dist) = NULL;
     
     return;
 }
@@ -249,7 +257,12 @@ cleanup:
 void
 build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
 {
+    /* below, we align to the 16 bit boundary so that we can make use of
+       the sse vector operations in iterative mapping.
+    */
+
     fl_dist->chipseq_bs_density = calloc( fl_dist->max_fl + 4, sizeof(float) );
+    fl_dist->chipseq_bs_density_start = fl_dist->chipseq_bs_density;
     /* align to the 16 byte boundary */
     int offset = ((size_t) fl_dist->chipseq_bs_density )%16;
     if( 0 != offset )
@@ -257,6 +270,7 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
             ((size_t) fl_dist->chipseq_bs_density ) + (16-offset) );
 
     fl_dist->rev_chipseq_bs_density = calloc( fl_dist->max_fl + 4, sizeof(float) );
+    fl_dist->rev_chipseq_bs_density_start = fl_dist->rev_chipseq_bs_density;
     /* align to the 16 byte boundary */
     offset = ((size_t) fl_dist->rev_chipseq_bs_density )%16;
     if( 0 != offset )
