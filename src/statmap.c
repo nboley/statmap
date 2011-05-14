@@ -1122,18 +1122,10 @@ main( int argc, char** argv )
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args );
-    }
-    
-    if( args.assay_type == UNKNOWN )
-    {
-        map_generic_data( &args );
     } else {
-
         map_generic_data( &args );
     }
-    
-    
-    
+       
     goto cleanup;
     
 cleanup:
