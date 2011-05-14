@@ -25,6 +25,7 @@ struct rawread {
     char* error_str;
     enum READ_END end;
     enum STRAND strand;
+    enum assay_type_t assay;
     // LETTER_TYPE* packed_seq;
     // float* penalties;
     // float* inverse_penalties; 
@@ -111,6 +112,7 @@ struct rawread_db_t {
     FILE* non_mapping_paired_end_2_reads;
 
     enum inputfile_type file_type;
+    enum assay_type_t assay;
 };
 
 void 
@@ -122,13 +124,15 @@ close_rawread_db( struct rawread_db_t* rdb );
 void
 add_single_end_reads_to_rawread_db( 
     struct rawread_db_t* rdb, char* rifname, 
-    enum inputfile_type iftype );
+    enum inputfile_type iftype,
+    enum assay_type_t assay );
 
 void
 add_paired_end_reads_to_rawread_db( 
     struct rawread_db_t* rdb,
     char* rifname1, char* rifname2,
-    enum inputfile_type iftype );
+    enum inputfile_type iftype,
+    enum assay_type_t assay );
 
 void
 rewind_rawread_db( struct rawread_db_t* rdb );

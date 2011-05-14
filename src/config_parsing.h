@@ -4,6 +4,7 @@
 #define CONFIG_PARSING_H
 
 #include <stdio.h>
+#include "config.h"
 
 enum input_file_type_t {
     // We have not specified the file type
@@ -45,22 +46,6 @@ enum input_file_type_t {
     MARKS_SOLEXA = 4
 };
 
-
-/*
- * The assay that generated these reads.
- * 
- * This only matters if we want to do 
- * iterative mapping, and for the wiggle
- * output type.
- *
- */
-enum assay_type_t {
-    // UNKNOWN = 0,
-    CAGE = 1,
-    CHIP_SEQ = 2
-};
-
-
 /* Store parsed options */
 struct args_t {
     char* genome_fname;
@@ -75,7 +60,6 @@ struct args_t {
     char* pair1_NC_reads_fnames;
     char* pair2_NC_reads_fnames;
     struct rawread_db_t* NC_rdb;
-
     char* snpcov_fname;
     FILE* snpcov_fp;
 

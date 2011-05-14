@@ -518,6 +518,21 @@ write_mapped_reads_to_sam(
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd1, &rd2, -1 );
 
+    while( NULL != rd1 
+           && NULL != mapped_rd
+           && readkey < mapped_rd->read_id )
+    {
+        free_rawread( rd1 );
+        rd1 = NULL;
+        if( rd2 !=  NULL ) {
+            free_rawread( rd2 );
+            rd2 = NULL;
+        }
+        
+        get_next_read_from_rawread_db( 
+            rdb, &readkey, &rd1, &rd2, -1 );
+    }
+
     while( rd1 != NULL
            && mapped_rd != NULL ) 
     {    

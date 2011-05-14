@@ -255,7 +255,7 @@ int main( int argc, char** argv )
         fclose( tmp );
 
         add_single_end_reads_to_rawread_db(
-            raw_rdb, "reads.unpaired", FASTQ 
+            raw_rdb, "reads.unpaired", FASTQ, assay_type
         );
     } 
     /* else, assume the reads are paired */
@@ -264,7 +264,8 @@ int main( int argc, char** argv )
             raw_rdb, 
             "reads.pair1",
             "reads.pair2",
-            FASTQ 
+            FASTQ,
+            assay_type
         );
     }
 
@@ -280,7 +281,7 @@ int main( int argc, char** argv )
         fclose(tmp);
         init_rawread_db( &raw_NC_rdb );
         add_single_end_reads_to_rawread_db(
-            raw_NC_rdb, "reads.NC.unpaired", FASTQ 
+            raw_NC_rdb, "reads.NC.unpaired", FASTQ, assay_type
         );
     }
 
@@ -290,7 +291,7 @@ int main( int argc, char** argv )
         fclose(tmp);
         init_rawread_db( &raw_NC_rdb );
         add_paired_end_reads_to_rawread_db(
-            raw_NC_rdb, "reads.NC.pair1", "reads.NC.pair2", FASTQ 
+            raw_NC_rdb, "reads.NC.pair1", "reads.NC.pair2", FASTQ, assay_type
         );
     }
 

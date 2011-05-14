@@ -297,7 +297,7 @@ close_rawread_db( struct rawread_db_t* rdb )
 void
 add_single_end_reads_to_rawread_db( 
     struct rawread_db_t* rdb, char* rifname, 
-    enum inputfile_type iftype )
+    enum inputfile_type iftype, enum assay_type_t assay )
 {
     /* Make sure that no files have been added yet */
     assert( rdb->paired_end_1_reads == NULL );
@@ -322,6 +322,8 @@ add_single_end_reads_to_rawread_db(
     assert( iftype == FASTQ );
     rdb->file_type = iftype;
     
+    rdb->assay = assay;
+    
     return;
 }
 
@@ -329,7 +331,8 @@ void
 add_paired_end_reads_to_rawread_db( 
     struct rawread_db_t* rdb,
     char* rifname1, char* rifname2,
-    enum inputfile_type iftype )
+    enum inputfile_type iftype,
+    enum assay_type_t assay )
 {
     char buffer[500];
     assert( strlen( rifname1 ) < 480 );
@@ -365,6 +368,9 @@ add_paired_end_reads_to_rawread_db(
     /* File Type */
     assert( iftype == FASTQ );
     rdb->file_type = iftype;
+    
+    rdb->assay = assay;
+    
     return;    
 }
 
@@ -487,6 +493,8 @@ get_next_read_from_rawread_db(
             pthread_mutex_unlock( rdb->lock );
             return EOF;
         }        
+
+        (*r1)->assay = rdb->assay;
     } 
     /* If the reads are paired */
     else {
@@ -511,6 +519,9 @@ get_next_read_from_rawread_db(
         
         /* if returned an EOF, then it should have been returned for r1 */
         assert( rv == 0 );
+        
+        (*r1)->assay = rdb->assay;
+        (*r2)->assay = rdb->assay;
     }
 
     /* increment the read counter */

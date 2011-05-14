@@ -477,6 +477,26 @@ parse_arguments( int argc, char** argv )
 
     /********* END CHECK REQUIRED ARGUMENTS ************************************/
 
+    /* set the assay type  */
+    if( assay_name != NULL )
+    {
+        switch (assay_name[0] )
+        {
+        case 'a':
+            args.assay_type = CAGE;
+            break;
+        case 'i':
+            args.assay_type = CHIP_SEQ;
+            break;
+        default:
+            fprintf(stderr, 
+                    "FATAL       :  Unrecognized Assay Type: '%s'\n", 
+                    assay_name );
+            assert( false );
+            exit( -1 );
+        }
+    }
+
     /* Make the output directory */
     if( args.output_directory == NULL )
     {
@@ -648,13 +668,13 @@ parse_arguments( int argc, char** argv )
     if( args.unpaired_reads_fnames != NULL )
     {
         add_single_end_reads_to_rawread_db(
-            args.rdb, "reads.unpaired", FASTQ 
+            args.rdb, "reads.unpaired", FASTQ, args.assay_type 
         );
         
         if( args.unpaired_NC_reads_fnames != NULL )
         {
             add_single_end_reads_to_rawread_db(
-                args.NC_rdb, "reads.NC.unpaired", FASTQ 
+                args.NC_rdb, "reads.NC.unpaired", FASTQ, args.assay_type
             );
         }
     } 
@@ -664,7 +684,8 @@ parse_arguments( int argc, char** argv )
             args.rdb, 
             "reads.pair1",
             "reads.pair2",
-            FASTQ 
+            FASTQ,
+            args.assay_type
         );
 
         if( args.pair1_NC_reads_fnames != NULL )
@@ -673,7 +694,8 @@ parse_arguments( int argc, char** argv )
                 args.NC_rdb, 
                 "reads.NC.pair1",
                 "reads.NC.pair2",
-                FASTQ 
+                FASTQ,
+                args.assay_type
             );
         }
     }
@@ -696,27 +718,6 @@ parse_arguments( int argc, char** argv )
         fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
     } else {
         num_threads = args.num_threads;
-    }
-
-
-    /* set the assay type  */
-    if( assay_name != NULL )
-    {
-        switch (assay_name[0] )
-        {
-        case 'a':
-            args.assay_type = CAGE;
-            break;
-        case 'i':
-            args.assay_type = CHIP_SEQ;
-            break;
-        default:
-            fprintf(stderr, 
-                    "FATAL       :  Unrecognized Assay Type: '%s'\n", 
-                    assay_name );
-            assert( false );
-            exit( -1 );
-        }
     }
 
     /* initialize the log file */
@@ -1123,7 +1124,12 @@ main( int argc, char** argv )
     if( args.assay_type == UNKNOWN )
     {
         map_generic_data( &args );
+    } else {
+
+        map_generic_data( &args );
     }
+    
+    
     
     goto cleanup;
     

@@ -101,7 +101,8 @@ except AttributeError:
 def map_with_statmap( read_fnames, output_dir, 
                       min_penalty=-7.0, 
                       num_threads=1, 
-                      indexed_seq_len=None  ):
+                      indexed_seq_len=None,
+                      assay=None):
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
     read_fname_str = None
@@ -114,6 +115,9 @@ def map_with_statmap( read_fnames, output_dir,
     if indexed_seq_len == None:
         call = "%s -g tmp.genome %s -o %s -p %.2f -t %i" \
             % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        if assay != None:
+            call += ( " -a " + assay )
+        
         print >> stdout, re.sub( "\s+", " ", call)    
         ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
         if ret_code != 0:
@@ -131,6 +135,8 @@ def map_with_statmap( read_fnames, output_dir,
 
         call = "%s -g tmp.genome.bin %s -o %s -p %.2f -t %i" \
             % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        if assay != None:
+            call += ( " -a " + assay )
         print >> stdout, re.sub( "\s+", " ", call)    
         ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
         if ret_code != 0:
@@ -354,42 +360,43 @@ def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
-def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout ):
+def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout, untemplated_gs_perc=0.0 ):
     for sample_num, seq in enumerate( samples_iter ):
+        num_untemplated_gs = 1 if random.random() < untemplated_gs_perc else 0
         error_str = 'h'*len(seq)
         of.write("@%s\n" % sample_num )
-        of.write(seq + "\n")
+        of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
-def build_paired_end_fastq_from_mutated_reads( mut_reads_iter, of1, of2 ):
+def build_paired_end_fastq_from_mutated_reads( mut_reads_iter, of1, of2, num_untemplated_gs=0 ):
     for sample_num, (sample, error_str, true_seq) in enumerate( mut_reads_iter ):
         sample_1, sample_2 = sample
         error_str_1, error_str_2 = error_str
         # write the first pair of the read
         of1.write("@%s/1\n" % sample_num )
-        of1.write(sample_1 + "\n")
+        of1.write('g'*num_untemplated_gs + sample_1[:(len(sample_1)-num_untemplated_gs)] + "\n")
         of1.write("+%s/1\n" % sample_num )
         of1.write(error_str_1 + "\n")
         
         # write the second pair of the read
         of2.write("@%s/2\n" % sample_num )
-        of2.write(sample_2 + "\n")
+        of2.write('g'*num_untemplated_gs + sample_2[:(len(sample_2)-num_untemplated_gs)] + "\n")
         of2.write("+%s/2\n" % sample_num )
         of2.write(error_str_2 + "\n")
     return
 
-def build_paired_end_fastq_from_seqs( sample_iter, of1, of2 ):
+def build_paired_end_fastq_from_seqs( sample_iter, of1, of2, num_untemplated_gs=0 ):
     for sample_num, (sample_1, sample_2) in enumerate( sample_iter ):
         # write the first pair of the read
         of1.write("@%s/1\n" % sample_num )
-        of1.write(sample_1 + "\n")
+        of1.write('g'*num_untemplated_gs + sample_1[:(len(sample_1)-num_untemplated_gs)] + "\n")
         of1.write("+%s/1\n" % sample_num )
         of1.write('h'*len(sample_1) + "\n")
         
         # write the second pair of the read
         of2.write("@%s/2\n" % sample_num )
-        of2.write(sample_2 + "\n")
+        of2.write('g'*num_untemplated_gs + sample_2[:(len(sample_2)-num_untemplated_gs)] + "\n")
         of2.write("+%s/2\n" % sample_num )
         of2.write('h'*len(sample_2) + "\n")
     return
@@ -453,7 +460,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None ):
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
 
     rl = read_len
@@ -477,12 +484,13 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None ):
     
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
+    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc )
     reads_of.close()
 
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len  )
+    assay = None if untemplated_gs_perc == 0.0 else 'a'
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len, assay=assay  )
 
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -503,10 +511,18 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None ):
         # make sure the chr and start locations are identical
         if loc[0] != truth[0] \
            or loc[1] != truth[1]:
-            raise ValueError, \
-                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
-    
+            # we need to special case an untemplated g that happens to correspond to a genomic g. 
+            # in such cases, we really can't tell what is correct.
+            if untemplated_gs_perc == 0.0 \
+               or loc[1] != truth[1] - 1 \
+               or ( reads_data[0][9][0] != 'g' or r_genome[truth[0]][truth[1]-1] not in 'Gg' ):
+               print reads_data
+               print truth
+               print reads_data[0][9][0]
+               print r_genome[truth[0]][truth[1]-1]
+               raise ValueError, \
+                    "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     sam_fp.close()
     
     ###### Cleanup the created files ###############################################
@@ -521,6 +537,12 @@ def test_fivep_sequence_finding( ):
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
+
+def test_untemplated_g_finding( ):
+    rls = [ 15, 25, 50, 75  ]
+    for rl in rls:
+        test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25 )
+        print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_threep_sequence_finding( ):
     rls = [ 15, 75  ]
@@ -1009,6 +1031,8 @@ if __name__ == '__main__':
         test_multithreaded_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
+        print "Starting test_untemplated_g_finding()"
+        test_untemplated_g_finding()
         print "Starting test_index_probe()"
         test_short_index_probe()
     # test_snp_finding()

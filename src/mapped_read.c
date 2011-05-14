@@ -386,6 +386,11 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                     
                     int rv = join_two_candidate_mappings( 
                         first_read, second_read, &loc );
+                    
+                    printf("Subseq Offset: %i\n", pseudo_array_1[i].subseq_offset );
+                    loc.position.start_pos -= pseudo_array_1[i].subseq_offset;
+
+
                     /* if the location is valid ( non-zero probability ) */
                     if( rv == 1 )
                     {
@@ -457,6 +462,9 @@ mapped_read_from_CMA_and_pseudo_CMA(
                 }
 
                 int rv = join_two_candidate_mappings( first_read, second_read, &loc );
+                printf("Subseq Offset: %i\n", first_read->subseq_offset );
+                loc.position.start_pos -= first_read->subseq_offset;
+                    
                 /* if the location is valid ( non-zero probability ) */
                 if( rv == 1 )
                 {
@@ -603,6 +611,9 @@ build_mapped_read_from_unpaired_candidate_mappings(
                 int rv = 
                     convert_unpaired_candidate_mapping_into_mapped_read( 
                         mappings->mappings + i, &loc );
+                
+                /* if this is a pseudo location, we need to make the offset correction */
+                loc.position.start_pos -= mappings->mappings[i].subseq_offset;
                 
                 /* if the conversion succeeded */
                 if( 1 == rv )

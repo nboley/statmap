@@ -83,7 +83,7 @@ typedef struct __attribute__((packed))__{
      * much longer and could cross multiple junctions, this need not 
      * be the case 
      */
-    // READ_POSITION subseq_offset;
+    READ_POSITION subseq_offset;
     /* The length of the underlying sub match */
     // READ_POSITION subseq_len;     
 } candidate_mapping;

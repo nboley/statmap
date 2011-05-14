@@ -16,6 +16,10 @@
 #include "snp.h"
 #include "mapped_location.h"
 
+const float untemplated_g_marginal_log_prb = -1.30103;
+
+#define MAX_NUM_UNTEMPLATED_GS 4
+
 int
 find_optimal_subseq_offset( 
     struct rawread* r,
@@ -30,6 +34,19 @@ find_optimal_subseq_offset(
     
     /* XXX for now, we just use the first subseq_len characters,
        so the offset is always 0 */
+    if( subseq_len == r->length )
+        return 0;
+
+    if( r->assay == CAGE )
+    {
+        if( r->length - MAX_NUM_UNTEMPLATED_GS < subseq_len )
+        {
+            fprintf(stderr, "FATAL        : CAGE experiments need indexes that have probe lengths at least 3 basepairs short, to account for templated G's." );
+            return 0;
+        }
+        return MAX_NUM_UNTEMPLATED_GS;
+    }
+    
     return 0;
 };
 
@@ -126,7 +143,9 @@ search_index( struct index_t* index,
 
 static inline void 
 recheck_location( struct genome_data* genome, 
-                  struct rawread* r, candidate_mapping* loc,
+                  struct rawread* r, 
+                  candidate_mapping* loc,
+                  int subseq_offset,
                   const float* const lookuptable_position,
                   const float* const inverse_lookuptable_position,
                   const float* const reverse_lookuptable_position,
@@ -134,6 +153,8 @@ recheck_location( struct genome_data* genome,
                   const float* const bp_mut_rates
 )
 {
+    float marginal_log_prb = 0;
+    
     const float* correct_lookuptable_position = NULL;
     const float* correct_inverse_lookuptable_position = NULL;
     
@@ -143,9 +164,49 @@ recheck_location( struct genome_data* genome,
         genome, 
         loc->chr, 
         loc->start_bp,
-        r->length
+        r->length,
+        subseq_offset
     );
-                    
+    
+    /* deal with untemplated G's */
+    struct rawread tmp_r;
+    int untemplated_g_offset = 0;
+    if( r->assay == CAGE )
+    {
+        /* we assume a g is untemplated if it is a g and doesnt match the genome */
+        while( untemplated_g_offset < MAX_NUM_UNTEMPLATED_GS
+               &&
+                ( r->char_seq[untemplated_g_offset] == 'G'
+                 || r->char_seq[untemplated_g_offset] == 'g' )
+               &&
+               ( genome_seq[untemplated_g_offset] != 'G'
+                 && genome_seq[untemplated_g_offset] != 'g' )
+            )
+        {
+            untemplated_g_offset += 1;
+        }
+        
+        if( untemplated_g_offset > 0 )
+        {
+            marginal_log_prb += untemplated_g_offset*untemplated_g_marginal_log_prb;
+            
+            memcpy( &tmp_r, r, sizeof( struct rawread ) );
+            
+            tmp_r.length -= untemplated_g_offset;
+            loc->start_bp += untemplated_g_offset;
+            
+            tmp_r.char_seq = r->char_seq + untemplated_g_offset;
+            tmp_r.error_str = r->error_str + untemplated_g_offset;
+            
+            r = &tmp_r;
+
+            /* we can scribble on this because the returned seq is just a pointer into
+               the already allocated genome - so there wasn't an alloc we need to free */
+            genome_seq += untemplated_g_offset;
+        }
+    }    
+    
+    
     /* if the genome_seq pointer is null, the sequence isn't valid
        for some reason ( ie, it falls off the end of the chromosome). 
        In such cases, mark the location as invalid and continue */
@@ -167,8 +228,8 @@ recheck_location( struct genome_data* genome,
     } else {
         memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
         mut_genome_seq[r->length] = '\0';
-        correct_lookuptable_position = lookuptable_position;
-        correct_inverse_lookuptable_position = inverse_lookuptable_position;
+        correct_lookuptable_position = lookuptable_position + untemplated_g_offset;
+        correct_inverse_lookuptable_position = inverse_lookuptable_position + untemplated_g_offset;
     }
     
     float rechecked_penalty = recheck_penalty( 
@@ -183,15 +244,15 @@ recheck_location( struct genome_data* genome,
     );
 
     /*
-     * DEBUG
+     // * DEBUG
     printf( "%.2f\t%.2f\t%i\n", loc->penalty, rechecked_penalty, (loc->rd_strnd == BKWD) );
     printf( "%.*s\t%.*s\t%.*s\n", 
             r->length, r->char_seq, 
             r->length, genome_seq, 
             r->length, mut_genome_seq );
-     */
+    */
     
-    loc->penalty = rechecked_penalty;
+    loc->penalty = rechecked_penalty + marginal_log_prb;
     
     free( mut_genome_seq );
 }
@@ -282,8 +343,10 @@ find_candidate_mappings( void* params )
             float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
             build_lookup_table_from_rawread(
                 r, 
-                lookuptable_position, inverse_lookuptable_position,
-                reverse_lookuptable_position, reverse_inverse_lookuptable_position
+                lookuptable_position, 
+                inverse_lookuptable_position,
+                reverse_lookuptable_position, 
+                reverse_inverse_lookuptable_position
             );
 
             /**** go to the index for mapping locations */
@@ -307,7 +370,7 @@ find_candidate_mappings( void* params )
 
             int subseq_len = results->subseq_len;
             int subseq_offset = results->subseq_offset;
-            
+                        
             /****** Prepare the template candidate_mapping objects ***********/
             candidate_mapping template_candidate_mapping 
                 = init_candidate_mapping_from_template( 
@@ -337,6 +400,13 @@ find_candidate_mappings( void* params )
             unsigned int i;
             for( i = 0; i < results->length; i++ )
             {
+                /* we have to reset this, because we scribble on it
+                   when we have a non-pseudo read, want to correct
+                   the position in place, and thus need to set the 
+                   offset to 0.  
+                */
+                subseq_offset = results->subseq_offset;
+
                 /* 
                  * I'm scribbling on the base relation, but it doesnt 
                  * matter because the add will copy it and then I will
@@ -358,14 +428,22 @@ find_candidate_mappings( void* params )
                 /* set the chr */
                 template_candidate_mapping.chr = (result->location).chr;
 
-                /* set the location */
+                /* set the location. We need to play with this a bit to account
+                   for index probes that are shorter than the read. */
                 int read_location = (result->location).loc;
                 if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
+                    /* we can't have a read that starts before location 0 */
+                    if( subseq_offset > read_location )
+                        continue;
+                    
                     read_location -= subseq_offset;
                     
                     if( result->strnd == BKWD ) {
-                        read_location -= ( r->length - subseq_len );
+                        read_location -= ( r->length - subseq_len - 2*subseq_offset );
                     }
+                    
+                    // since we've acounted for the offset, remove it.
+                    subseq_offset = 0;
                 } 
                 
                 template_candidate_mapping.start_bp = read_location;
@@ -388,7 +466,9 @@ find_candidate_mappings( void* params )
                     assert( 0 == result->location.snp_coverage );
                     template_candidate_mapping.snp_bitfield = 0;
                 }
-
+                
+                template_candidate_mapping.subseq_offset = subseq_offset;
+                
                 add_candidate_mapping( mappings, &template_candidate_mapping );
             }
 
@@ -421,13 +501,14 @@ find_candidate_mappings( void* params )
                 if( true ) // OR probe length is less than index length
                 {
                     recheck_location( genome, r, mappings->mappings + j,
+                                      subseq_offset,
                                       lookuptable_position,
                                       inverse_lookuptable_position,
                                       reverse_lookuptable_position,
                                       reverse_inverse_lookuptable_position,
                                       bp_mut_rates
                         );
-
+                    
                     /* we may need to update the max penalty */
                     if( (mappings->mappings + j)->penalty > max_penalty ) {
                         max_penalty = (mappings->mappings + j)->penalty;
@@ -562,6 +643,13 @@ spawn_threads( struct single_map_thread_data* td_template )
     }
 }
 
+
+/*
+ * Find all locations that a read could map to, given thresholds,
+ * reads, a genome and an index.
+ *
+ */
+
 void
 find_all_candidate_mappings( struct genome_data* genome,
                              FILE* log_fp,
@@ -597,7 +685,7 @@ find_all_candidate_mappings( struct genome_data* genome,
     unsigned int mapped_cnt = 0;
     td_template.mapped_cnt = &mapped_cnt;
     td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
-    td_template.max_readkey = READS_STEP_SIZE;
+    td_template.max_readkey = 0;
 
     td_template.rdb = rdb;
     
@@ -611,13 +699,13 @@ find_all_candidate_mappings( struct genome_data* genome,
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        spawn_threads( &td_template );   
         td_template.max_readkey += READS_STEP_SIZE;
+        spawn_threads( &td_template );
     }
     
     /* Find all of the candidate mappings */    
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%ui) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
+    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
             mapped_cnt, rdb->readkey, 
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)mapped_cnt)*CLOCKS_PER_SEC*3600)/(stop-start)

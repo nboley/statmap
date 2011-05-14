@@ -35,7 +35,7 @@ init_candidate_mappings( candidate_mappings** mappings )
 
 candidate_mapping
 init_candidate_mapping_from_template( struct rawread* rp, 
-                                      float max_penalty_spread )
+                                      float max_penalty_spread)
 {
     /****** initialize the mapped_location info that we know  ******/
     /* copy the candidate map location template */
@@ -51,9 +51,11 @@ init_candidate_mapping_from_template( struct rawread* rp,
      */
     /* TODO - allow for subsequences */        
     /*
-    cand_map.subseq_offset = subseq_offset;
     cand_map.subseq_len = indexed_seq_len;
+    cand_map.subseq_offset = rp->subseq_offset;
     */
+
+
     
     /* if read length <= seq_length, then a recheck is unnecessary */
     if( max_penalty_spread > -0.1 ) {

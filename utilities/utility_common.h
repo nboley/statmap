@@ -62,7 +62,7 @@ populate_rawread_db(
         fclose( tmp );
         init_rawread_db( raw_rdb );
         add_single_end_reads_to_rawread_db(
-            *raw_rdb, unpaired_fname, FASTQ 
+            *raw_rdb, unpaired_fname, FASTQ, UNKNOWN
         );
         
         return;
@@ -78,7 +78,8 @@ populate_rawread_db(
             *raw_rdb, 
             pair1_fname,
             pair2_fname,
-            FASTQ 
+            FASTQ,
+            UNKNOWN
         );
         
         return;
