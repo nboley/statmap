@@ -961,6 +961,9 @@ map_generic_data(  struct args_t* args )
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_ondisk_index( genome->index );
+
+    /* iterative mapping */
+    iterative_mapping( args, genome, mpd_rds_db );
     
     if( args->frag_len_fp != NULL ) {
         build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
