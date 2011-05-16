@@ -6,15 +6,16 @@ from rpy import r
 import numpy
 from math import log
 
-VERBOSE = False
+VERBOSE = True
 
-STATMAP_PATH = "/home/nboley/Desktop/statmap/trunk/bin/statmap"
-MAPPED_READS_INTO_SAM_PATH = "/home/nboley/Desktop/statmap/trunk/bin/mapped_reads_into_sam"
-OUTPUT_DIR = "mapped_output"
-GENOME_FNAME = "dros_genome.fa"
+STATMAP_PATH = "/users/nboley/statmap/trunk/bin/statmap"
+MAPPED_READS_INTO_SAM_PATH = "/users/nboley/statmap/trunk/bin/mapped_reads_into_sam"
+OUTPUT_DIR = "mapped_output_cage"
+GENOME_FNAME = "/media/scratch/genomes/drosophila/BDGP_5/dros_bdgp_5.fa"
+BINARY_GENOME_PATH = "/media/scratch/genomes/drosophila/BDGP_5/dros_bdgp_5.20.genome"
 QUAL_SHIFT = 50
 
-rc = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'  }
+rc = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'  }
 
 def est_prb_error_from_code( qual_code  ):
     return pow( 10, (float(ord(qual_code)) - 50)/-10 )
@@ -45,8 +46,8 @@ def map_data( fname ):
     """
     
     
-    call = "%s -g dros_genome.20.bin -s -r %s -s -o %s\
-                             -t 1 " % ( STATMAP_PATH, fname, OUTPUT_DIR )
+    call = "%s -g %s -s -r %s -s -o %s" \
+         % ( STATMAP_PATH, BINARY_GENOME_PATH, fname, OUTPUT_DIR )
     if VERBOSE:
         print >> stdout, re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -79,7 +80,7 @@ def parse_out_unique_basepairs( fp, genome ):
         cond_prob = float(data[-1].split(":")[-1])
         if cond_prob < 1.0:
             continue
-        genome_str = genome[ data[2] ][ int(data[3]):(int(data[3])+26)  ]
+        genome_str = genome[ data[2] ][ int(data[3]):(int(data[3])+len(data[9]))  ]
         if data[1] == '16':
             genome_str = rc_string( genome_str )
         for index, (ref_bp, seq_bp, qual) in \
@@ -116,6 +117,7 @@ def analyze_errors( sam_fp, genome  ):
     qual_est = {}
     for key in qual_keys:
         qual_est[key] = float(qual_agg_mismatch[key])/qual_agg_count[key]
+        print key, float(qual_agg_mismatch[key]), qual_agg_count[key]
     
     data1, data2 = zip(*[ \
                           ( log(est_prb_error_from_code(chr(key))), log(float(val)) ) \
@@ -126,6 +128,11 @@ def analyze_errors( sam_fp, genome  ):
             main='Pred vs Observed Error Rates', \
             xlab='Log Pred', ylab='Log Obs' )
     r.dev_off()
+
+    fp = open("quals.csv", "w")
+    for x, y in zip(data1, data2):
+        print >> fp, "%e,%e" % ( x,y )
+    fp.close()
     
     # now, fit the position model conditional on the error code estiamtes
     loc_agg_count = [0.0]*max_pos
@@ -139,13 +146,15 @@ def analyze_errors( sam_fp, genome  ):
         if ref != seq:
             loc_agg_mismatch[ pos-1 ] += 1
 
+    fp = open("pos.csv", "w")
     for loop in xrange(len(loc_agg_count)):
-        print loop-1, loc_agg_count[loop], loc_agg_mismatch[loop], loc_exp_mismatch[loop]
+        print >> fp, ",".join( map( str, (loop+1, loc_agg_count[loop], loc_agg_mismatch[loop], loc_exp_mismatch[loop]) ) )
+    fp.close()
     
     return 
 
 
-# map_data( "./bcd_dmel.fastq" )
+#map_data( "./error_rate_tests/cage.dros.lane1.trimmed.first1M.fastq" )
 genome = load_genome( )
 sam_fp = build_sam()
 

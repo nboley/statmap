@@ -322,7 +322,7 @@ find_candidate_mappings( void* params )
         /* We dont lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
-        if( readkey >= prev_readkey )
+        if( thread_id == 0 && readkey >= prev_readkey )
         {
             prev_readkey += MAPPING_STATUS_GRANULARITY;
             fprintf(stderr, "DEBUG       :  Mapped %ui reads, %i successfully\n", 
@@ -431,6 +431,8 @@ find_candidate_mappings( void* params )
                 /* set the location. We need to play with this a bit to account
                    for index probes that are shorter than the read. */
                 int read_location = (result->location).loc;
+                /* check for overflow error */
+                assert( read_location >= 0 );
                 if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
                     /* we can't have a read that starts before location 0 */
                     if( subseq_offset > read_location )
@@ -446,6 +448,16 @@ find_candidate_mappings( void* params )
                     subseq_offset = 0;
                 } 
                 
+                /* it's possible that the start could be less than zero if the read
+                   was mapped to the reverse strand and the probe was at the boundary. 
+                   If so, this is just a worthless index probe and it should be removed 
+                */
+                if( read_location < 0 )
+                    continue;
+                /* similarly, make sure the read doesn't move past the genome */
+                if( (unsigned int) read_location + r->length >= genome->chr_lens[(result->location).chr] )
+                    continue;
+
                 template_candidate_mapping.start_bp = read_location;
                 
                 /* set the penalty */

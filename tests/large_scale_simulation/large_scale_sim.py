@@ -5,7 +5,7 @@ from scipy import signal
 import sys
 
 BLOCK_SAMPLE_SIZE = 10000
-NUM_SAMPLES = 100000
+NUM_SAMPLES = 30000000
 SEQ_LEN = 35
 MIX = 0.3
 
@@ -111,7 +111,10 @@ def parse_bed( fname, chr_len ):
     density = numpy.zeros( chr_len )
     for line in fp:
         data = line.strip().split('\t')
-        chrm, start, end, name, signal = data[0:5]  
+        try:
+            chrm, start, end, name, signal = data[0:5]  
+        except ValueError:
+            chrm, start, end, signal = data[0:4]  
         if chrm == chrm_name:
             density[int(start):int(end)+1] += float(signal)
     fp.close()
@@ -184,7 +187,8 @@ def print_wig( wig, outfile ):
 if __name__ == "__main__":
     #fwd_den, bkwd_den = parse_wig( input_bed, chrm_length  )
     fl_den = parse_frag_length( frag_length )
-    fwd_den, rev_den = parse_wig( input_dnase, chrm_length  )
+    #fwd_den, rev_den = parse_wig( input_dnase, chrm_length  )
+    fwd_den = parse_bed( input_dnase, chrm_length  )
     region = build_chipseq_region( input_chrm )
     bind_site_scores = score_binding_sites( region, bcd_motif )
     #print sum( score > 0.2 for score in bind_site_scores )

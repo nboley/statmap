@@ -43,7 +43,7 @@ typedef struct __attribute__((packed))__{
     /* the chromosome code */
     unsigned char chr;
     /* the bp in genomic coordinates */
-    unsigned int start_bp;
+    int start_bp;
 
     /*** Info related to the read ***/
     /* If this is a normal, or paired end read */
