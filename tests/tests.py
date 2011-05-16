@@ -99,7 +99,7 @@ except AttributeError:
         seq = property(itemgetter(2))
 
 def map_with_statmap( read_fnames, output_dir, 
-                      min_penalty=-7.0, 
+                      min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
                       indexed_seq_len=None,
                       assay=None):
@@ -113,10 +113,10 @@ def map_with_statmap( read_fnames, output_dir,
     
     # if the indexed seq len is None, we will build the index seperately
     if indexed_seq_len == None:
-        call = "%s -g tmp.genome %s -o %s -p %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        call = "%s -g tmp.genome %s -o %s -p %.2f -m %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
         if assay != None:
-            call += ( " -a " + assay )
+            call += ( " -n 1 -a " + assay )
         
         print >> stdout, re.sub( "\s+", " ", call)    
         ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -133,10 +133,10 @@ def map_with_statmap( read_fnames, output_dir,
                 % str( ret_code )
 
 
-        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, num_threads )
+        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -m %.2f -t %i" \
+            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
         if assay != None:
-            call += ( " -a " + assay )
+            call += ( " -n 1 -a " + assay )
         print >> stdout, re.sub( "\s+", " ", call)    
         ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
         if ret_code != 0:
@@ -777,7 +777,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory, 
-                      min_penalty = min_penalty,
+                      min_penalty = min_penalty, max_penalty_spread=10,
                       indexed_seq_len = read_len - 2  ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -803,13 +803,25 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     if len(fragments) != total_num_reads + num_unmappable_reads:
         raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
             % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
-
+    
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
     unmapped_reads = set( map( str, xrange( 100 ) ) ).difference( unmappable_reads_set.union( set(mapped_reads_dict.keys()) ) )
     if len( unmapped_reads ) != 0:
-          raise ValueError, " We are missing '%s' from the set of mappable reads. " % str( unmapped_reads )
+        for key, entry in enumerate(mutated_reads):
+            print key, entry
+        for key, read in [ ( key, mutated_reads[ int(key) ] ) for key in unmapped_reads ]:
+            print key, read
+            print key, fragments[int(key)]
+            print key, r_genome[fragments[int(key)][0]][fragments[int(key)][1]:fragments[int(key)][2]]
+            
+            genome_seq = r_genome[fragments[int(key)][0]][fragments[int(key)][1]:fragments[int(key)][2]]
+            mut_seq = mutated_reads[int(key)][0]
+            for bp1, bp2 in zip( genome_seq.upper(), mut_seq  ):
+                print bp1, bp2
+            
+        raise ValueError, " We are missing '%s' from the set of mappable reads. " % str( unmapped_reads )
 
     for mapped_reads in iter_sam_reads(sam_fp):
         while mutated_reads[index].mut_seq in unmappable_reads_strs:
