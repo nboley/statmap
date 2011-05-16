@@ -50,7 +50,9 @@ typedef struct __attribute__((packed))__{
     enum READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
-
+    /* the length of the read that was trimmed */
+    char trimmed_len;
+    
     /*** Alternate Genome Info ***/
     /* if this covers a snp */
     enum bool does_cover_snp;

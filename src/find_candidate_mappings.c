@@ -140,6 +140,48 @@ search_index( struct index_t* index,
     return;
 };
 
+static inline void
+make_assay_specific_corrections( struct rawread* r, 
+                                 mapped_locations* results )
+{
+    /* for now, we only deal with cage here */
+    if( r->assay != CAGE )
+        return;
+    
+    unsigned int i;
+    unsigned int original_results_length = results->length;
+    for( i = 0; i < original_results_length; i++ )
+    {
+        mapped_location loc = results->locations[i];
+        
+        /* deal with untemplated G's */
+        int j;
+        for( j = 0; 
+             j < MAX_NUM_UNTEMPLATED_GS
+                 && ( r->char_seq[j] == 'G' || r->char_seq[j] == 'g' );
+             j++
+            )
+        {
+            GENOME_LOC_TYPE tmp_loc = loc.location;
+            
+            /* A location always needs to be greater than 0 */
+            if( tmp_loc.loc < (j+1) ) {
+                continue;
+            }
+            /* ELSE */
+            /* shift the genomic location */
+            tmp_loc.loc += (j+1);
+            
+            /* add this new location */
+            add_mapped_location( 
+                results, tmp_loc, loc.strnd, j+1, 
+                loc.penalty + (j+1)*untemplated_g_marginal_log_prb
+            );
+        }        
+    }
+    
+    return;
+}
 
 static inline void 
 recheck_location( struct genome_data* genome, 
@@ -160,52 +202,15 @@ recheck_location( struct genome_data* genome,
     
     /* find a pointer to the sequence at this genomic location */
     
+    int mapped_length = r->length - loc->trimmed_len;
+    
     char* genome_seq = find_seq_ptr( 
         genome, 
         loc->chr, 
         loc->start_bp,
-        r->length,
+        mapped_length,
         subseq_offset
-    );
-    
-    /* deal with untemplated G's */
-    struct rawread tmp_r;
-    int untemplated_g_offset = 0;
-    if( r->assay == CAGE )
-    {
-        /* we assume a g is untemplated if it is a g and doesnt match the genome */
-        while( untemplated_g_offset < MAX_NUM_UNTEMPLATED_GS
-               &&
-                ( r->char_seq[untemplated_g_offset] == 'G'
-                 || r->char_seq[untemplated_g_offset] == 'g' )
-               &&
-               ( genome_seq[untemplated_g_offset] != 'G'
-                 && genome_seq[untemplated_g_offset] != 'g' )
-            )
-        {
-            untemplated_g_offset += 1;
-        }
-        
-        if( untemplated_g_offset > 0 )
-        {
-            marginal_log_prb += untemplated_g_offset*untemplated_g_marginal_log_prb;
-            
-            memcpy( &tmp_r, r, sizeof( struct rawread ) );
-            
-            tmp_r.length -= untemplated_g_offset;
-            loc->start_bp += untemplated_g_offset;
-            
-            tmp_r.char_seq = r->char_seq + untemplated_g_offset;
-            tmp_r.error_str = r->error_str + untemplated_g_offset;
-            
-            r = &tmp_r;
-
-            /* we can scribble on this because the returned seq is just a pointer into
-               the already allocated genome - so there wasn't an alloc we need to free */
-            genome_seq += untemplated_g_offset;
-        }
-    }    
-    
+    );    
     
     /* if the genome_seq pointer is null, the sequence isn't valid
        for some reason ( ie, it falls off the end of the chromosome). 
@@ -228,16 +233,16 @@ recheck_location( struct genome_data* genome,
     } else {
         memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
         mut_genome_seq[r->length] = '\0';
-        correct_lookuptable_position = lookuptable_position + untemplated_g_offset;
-        correct_inverse_lookuptable_position = inverse_lookuptable_position + untemplated_g_offset;
+        correct_lookuptable_position = lookuptable_position + loc->trimmed_len;
+        correct_inverse_lookuptable_position = inverse_lookuptable_position + loc->trimmed_len;
     }
     
     float rechecked_penalty = recheck_penalty( 
         mut_genome_seq, 
         // char* observed,
-        r->char_seq,
+        r->char_seq + loc->trimmed_len,
         // const int seq_length,
-        r->length,
+        mapped_length,
         correct_lookuptable_position,
         correct_inverse_lookuptable_position,
         bp_mut_rates
@@ -378,8 +383,7 @@ find_candidate_mappings( void* params )
             );
             assert( template_candidate_mapping.rd_type != 0 );
 
-            /**** TODO - get rid of this requirement */
-            /* Assert that subseqs are false */
+            /* Mkae sure the "subseq" is acutally shorter than the read */
             assert( subseq_len <= r->length );
             
             /***** COPY information from the index lookup into the result set
@@ -397,6 +401,10 @@ find_candidate_mappings( void* params )
              */
             float max_penalty = min_match_penalty;
 
+            /* make an assay specific changes to the results. For instance, in CAGE,
+               we need to add extra reads for the untemplated g's */
+            make_assay_specific_corrections( r, results );
+                        
             unsigned int i;
             for( i = 0; i < results->length; i++ )
             {
@@ -436,8 +444,11 @@ find_candidate_mappings( void* params )
                 if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
                     /* we can't have a read that starts before location 0 */
                     if( subseq_offset > read_location )
+                    {
+                        printf("HERE!!! %i %i\n", subseq_offset, read_location);
                         continue;
-                    
+                    }
+
                     read_location -= subseq_offset;
                     
                     if( result->strnd == BKWD ) {
@@ -445,19 +456,9 @@ find_candidate_mappings( void* params )
                     }
                     
                     // since we've acounted for the offset, remove it.
-                    subseq_offset = 0;
+                    subseq_offset = 0;    
                 } 
-                
-                /* it's possible that the start could be less than zero if the read
-                   was mapped to the reverse strand and the probe was at the boundary. 
-                   If so, this is just a worthless index probe and it should be removed 
-                */
-                if( read_location < 0 )
-                    continue;
-                /* similarly, make sure the read doesn't move past the genome */
-                if( (unsigned int) read_location + r->length >= genome->chr_lens[(result->location).chr] )
-                    continue;
-
+                                
                 template_candidate_mapping.start_bp = read_location;
                 
                 /* set the penalty */
@@ -466,6 +467,19 @@ find_candidate_mappings( void* params )
                 /* if necessary, update the max observed penalty */
                 if( result->penalty > max_penalty )
                     max_penalty = result->penalty;
+
+                #if 0
+                /* it's possible that the start could be less than zero if the read
+                   was mapped to the reverse strand and the probe was at the boundary. 
+                   If so, this is just a worthless index probe and it should be removed 
+                */
+                if( read_location < 0 )
+                    continue;
+
+                /* similarly, make sure the read doesn't move past the genome */
+                if( (unsigned int) read_location + r->length >= genome->chr_lens[(result->location).chr] )
+                    continue;
+                #endif
 
                 if( result->location.covers_snp == 1 )
                 {
@@ -480,6 +494,8 @@ find_candidate_mappings( void* params )
                 }
                 
                 template_candidate_mapping.subseq_offset = subseq_offset;
+                
+                template_candidate_mapping.trimmed_len = result->trim_offset;
                 
                 add_candidate_mapping( mappings, &template_candidate_mapping );
             }

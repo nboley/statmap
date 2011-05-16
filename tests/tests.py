@@ -497,20 +497,22 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     total_num_reads = sum( 1 for line in sam_fp )
     sam_fp.seek(0)
 
-    if len(fragments) != total_num_reads:
-        raise ValueError, "Mapping returned too few reads."
+    if len(fragments) > total_num_reads:
+        raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
     
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
-        if len(reads_data) != 1:
+        if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
             raise ValueError, "Mapping returned too many results."
         
-        loc = ( reads_data[0][2], int(reads_data[0][3]) )
+        locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
         
         # make sure the chr and start locations are identical
-        if loc[0] != truth[0] \
-           or loc[1] != truth[1]:
+        # first, check that all chromosomes are the same *and*
+        # that the correct loc exists
+        if any( loc != truth[0] for loc in locs[0] ) \
+           or truth[1] not in locs[1]:
             # we need to special case an untemplated g that happens to correspond to a genomic g. 
             # in such cases, we really can't tell what is correct.
             if untemplated_gs_perc == 0.0 \
@@ -734,7 +736,7 @@ def test_repeat_sequence_finding( ):
         print "PASS: Multi-Chr and Repeated Chr Mapping %i BP Test. ( Statmap appears to be mapping multiple genome and chr with heavy perfect repeats correctly )" % rl
 
 def test_lots_of_repeat_sequence_finding( ):
-    rls = [ 16, ]
+    rls = [ 25, ]
     for rl in rls:
         # setting n_threads to -1 makes it deafult to the number of avialable cores
         test_duplicated_reads( rl, n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100 ) 
