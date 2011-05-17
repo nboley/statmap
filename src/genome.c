@@ -371,27 +371,22 @@ find_chr_index( struct genome_data* genome, const char* const chr_name )
 char* 
 find_seq_ptr( struct genome_data* genome, 
               int chr_index, unsigned int loc, 
-              int read_len, int subseq_offset )
+              int read_len )
 {
     assert( chr_index < genome->num_chrs );
-    assert( subseq_offset >= 0 );
     
     if( chr_index != PSEUDO_LOC_CHR_INDEX 
         && ( 
             loc + read_len > genome->chr_lens[chr_index]
-            // if the subseq would have started before 0
-            || loc < (unsigned int) subseq_offset 
             )
         ) 
     {
-        printf("HERE - %u\n", (unsigned int) subseq_offset );
         return NULL;
     }
 
     assert( chr_index == PSEUDO_LOC_CHR_INDEX 
             || ( 
                 loc < genome->chr_lens[chr_index]
-                && loc >= (unsigned int) subseq_offset 
             )
         );
     
@@ -419,7 +414,7 @@ find_seq_ptr( struct genome_data* genome,
         // fprintf( stderr, "%.20s\n", genome->chrs[chr_index] + loc );
     }
 
-    return genome->chrs[chr_index] + loc - subseq_offset;
+    return genome->chrs[chr_index] + loc;
 }
 
 void

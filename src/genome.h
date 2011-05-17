@@ -60,7 +60,7 @@ find_chr_index( struct genome_data* genome, const char* const chr_name );
 char* 
 find_seq_ptr( struct genome_data* genome, 
               int chr_index, unsigned int loc, 
-              int read_len, int subseq_offset );
+              int read_len );
 
 extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );
