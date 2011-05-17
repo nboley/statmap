@@ -11,7 +11,7 @@ objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
 	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o \
-	  config_parsing.o
+	  config_parsing.o error_correction.o
 
 all: statmap trace.so
 
@@ -109,6 +109,11 @@ pseudo_location.o : pseudo_location.c pseudo_location.h
 	$(compiler) $(compile_options) -c pseudo_location.c
 
 pseudo_location.h : config.h
+
+error_correction.o : error_correction.c error_correction.h
+	$(compiler) $(compile_options) -c error_correction.c
+
+error_correction.h :
 
 #############################################################################
 #
