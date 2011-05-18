@@ -15,6 +15,7 @@
 #include "index_genome.h"
 #include "snp.h"
 #include "mapped_location.h"
+#include "error_correction.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
@@ -431,6 +432,27 @@ find_candidate_mappings( void* params )
     #define MAPPING_STATUS_GRANULARITY 100000
     readkey_t prev_readkey = MAPPING_STATUS_GRANULARITY;
 
+    /*********** cache the candidate maping results **************************************/
+    /* cache the candidate mappings so that we can add them ( or not ) together at the 
+       end of this mapping. */
+    /* We do this so that we can update the error estimastes */
+    int curr_read_index = 0;
+    /* we need 2* the step size to accoutn for paired end reads */
+    candidate_mappings* candidate_mappings_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( candidate_mappings_cache, 0, 
+            sizeof( candidate_mappings* )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    struct rawread* rawreads_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( rawreads_cache, 0, 
+            sizeof( struct rawreads_cache* )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    readkey_t readkeys[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( readkeys, 0, 
+            sizeof( readkey_t )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    int max_read_length = 0;
+    
+
     /* The current read of interest */
     readkey_t readkey;
     struct rawread *r1, *r2;
@@ -458,7 +480,7 @@ find_candidate_mappings( void* params )
         for( j = 0; j < 2 && reads[j] != NULL; j++ )
         {
             struct rawread* r = reads[j];
-
+                        
             /* Build the quality lookup tables */
             float* lookuptable_position = malloc(sizeof(float)*r->length);
             float* inverse_lookuptable_position = malloc(sizeof(float)*r->length);
@@ -496,9 +518,17 @@ find_candidate_mappings( void* params )
                we need to add extra reads for the untemplated g's */
             make_assay_specific_corrections( r, results );
             
-            candidate_mappings* mappings;
             build_candidate_mappings_from_mapped_locations(
-                genome, r, results, &mappings, min_match_penalty);
+                genome, r, results, 
+                candidate_mappings_cache + 2*curr_read_index + j, 
+                min_match_penalty);
+            candidate_mappings* mappings = candidate_mappings_cache[2*curr_read_index + j];
+
+            readkeys[2*curr_read_index + j] = readkey;
+
+            rawreads_cache[ 2*curr_read_index + j ] = r;
+            
+            max_read_length = MAX( max_read_length, r->length );
 
             // print_mapped_locations( results );
             // print_candidate_mappings( mappings );
@@ -530,10 +560,10 @@ find_candidate_mappings( void* params )
             float max_penalty = min_match_penalty;
             
             /* first, if necessary, recheck the locations */
-            int j;
-            for( j = 0; j < mappings->length; j++ )
+            int k;
+            for( k = 0; k < mappings->length; k++ )
             {
-                recheck_location( genome, r, mappings->mappings + j,
+                recheck_location( genome, r, mappings->mappings + k,
                                   lookuptable_position,
                                   inverse_lookuptable_position,
                                   reverse_lookuptable_position,
@@ -542,16 +572,16 @@ find_candidate_mappings( void* params )
                     );
                     
                 /* we may need to update the max penalty */
-                if( (mappings->mappings + j)->penalty > max_penalty ) {
-                    max_penalty = (mappings->mappings + j)->penalty;
+                if( (mappings->mappings + k)->penalty > max_penalty ) {
+                    max_penalty = (mappings->mappings + k)->penalty;
                 }
-
             }
 
-            for( j = 0; j < mappings->length; j++ )
+            // int k declared earlier 
+            for( k = 0; k < mappings->length; k++ )
             {
                 /* this should be optimized out */
-                candidate_mapping* loc = mappings->mappings + j;
+                candidate_mapping* loc = mappings->mappings + k;
 
                 /* 
                  * We always need to do this because of the way the search queue
@@ -583,42 +613,97 @@ find_candidate_mappings( void* params )
                 if( loc->recheck != INVALID )
                     loc->recheck = VALID;                
             }
-
-            /* increment the number of reads that mapped, if any pass the rechecks */
-            for( j = 0; j < mappings->length; j++ ) {
-                if( (mappings->mappings + j)->recheck == VALID )
-                {
-                    pthread_mutex_lock( mapped_cnt_mutex );
-                    *mapped_cnt += 1;
-                    pthread_mutex_unlock( mapped_cnt_mutex );
-                    break;
-                }
-            }
             
-            /****** add the results to the database ******/
-            /* BUG - assert the readnames are identical */
-            /* BUG - why is this mutex necessary? */
-            pthread_mutex_lock( mappings_db_mutex );
-            assert( thread_id < num_threads );
-            /* note that we add to the DB even if there are 0 that map,
-               we do this so that we can join with the rawreads easier */
-            add_candidate_mappings_to_db( 
-                mappings_db, mappings, readkey, thread_id );
-            pthread_mutex_unlock( mappings_db_mutex );
-
-            free_candidate_mappings( mappings );
-
-            /* cleanup the unmarshalled reads */
-            free_rawread( r );
-
             /* free the mutation lookup tables */
             free( lookuptable_position );
             free( inverse_lookuptable_position );
             free( reverse_lookuptable_position );
             free( reverse_inverse_lookuptable_position );
         }
+        
+        curr_read_index += 1;
     }
 
+    /****** update the error estimates ******/
+    struct error_data_t* error_data;
+    init_error_data( &error_data, max_read_length );
+    
+    int i;
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        /* skip empty mapping lists */
+        if( NULL == candidate_mappings_cache[i] )
+            continue;
+
+        candidate_mappings* mappings = candidate_mappings_cache[i];
+        
+        /* we only want unique mappers for the error estiamte updates */
+        if( mappings->length != 1 
+            || mappings->mappings[0].recheck != VALID )
+            continue;
+        
+        // emphasize the array aspect with the + 0
+        candidate_mapping* loc = mappings->mappings + 0; 
+        assert( mappings->length == 1 && loc->recheck == VALID );
+        
+        /* the read that corresponds with these mappings */
+        struct rawread* r = rawreads_cache[ i ];
+
+        int mapped_length = r->length - loc->trimmed_len;
+        
+        char* genome_seq = find_seq_ptr( 
+            genome, 
+            loc->chr, 
+            loc->start_bp,
+            mapped_length
+        );            
+        
+        char* error_str = r->error_str + loc->trimmed_len;
+
+        char* read_seq = r->char_seq + loc->trimmed_len;
+        
+        update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+    }
+
+    // fprintf_error_data( stdout, error_data );
+    
+    /****** add the results to the database ******/
+    // int i; already declared 
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        /* skip empty mapping lists */
+        if( NULL == candidate_mappings_cache[i] )
+            continue;
+        
+        candidate_mappings* mappings = candidate_mappings_cache[i];
+        
+        /* increment the number of reads that mapped, if any pass the rechecks */
+        int k;
+        for( k = 0; k < mappings->length; k++ ) {
+            if( (mappings->mappings + k)->recheck == VALID )
+            {
+                pthread_mutex_lock( mapped_cnt_mutex );
+                *mapped_cnt += 1;
+                pthread_mutex_unlock( mapped_cnt_mutex );
+                break;
+            }
+        }
+            
+        
+        pthread_mutex_lock( mappings_db_mutex );
+        assert( thread_id < num_threads );
+        /* note that we add to the DB even if there are 0 that map,
+           we do this so that we can join with the rawreads easier */
+        add_candidate_mappings_to_db( 
+            mappings_db, mappings, readkeys[i], thread_id );
+        pthread_mutex_unlock( mappings_db_mutex );
+        
+        /* free the cached reads and mappings */
+        free_rawread( rawreads_cache[i] );
+        free_candidate_mappings( mappings );
+    }
+    
+    
     /* cleanup the bp mutation rates */
     free( bp_mut_rates );
     
@@ -732,7 +817,7 @@ find_all_candidate_mappings( struct genome_data* genome,
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        td_template.max_readkey += READS_STEP_SIZE;
+        td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
         spawn_threads( &td_template );
     }
     

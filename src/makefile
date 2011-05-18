@@ -30,7 +30,7 @@ snp.o : snp.c snp.h genome.h config.h
 	$(compiler) $(compile_options) -c snp.c
 
 find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h \
-			    quality.h index_genome.h snp.h
+			    quality.h index_genome.h snp.h error_correction.h
 	$(compiler) $(compile_options) -c find_candidate_mappings.c
 
 find_candidate_mappings.h : genome.h rawread.h 

@@ -8,6 +8,7 @@
 
 #include "quality.h"
 #include "rawread.h"
+#include "error_correction.h"
 
 /*
  *  This determines whether we consider the quality scores to 
@@ -227,6 +228,57 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
     return;
 }
 
+static inline float
+est_error_prb( char bp, char error_score, enum bool inverse, 
+               int pos, struct error_data_t* error_data )
+{
+    float rv = -1;
+    
+    /* silenmce the warning */
+    assert( pos >= 0 );
+
+    unsigned char quality_char = ((unsigned char) error_score) - QUAL_SHIFT;
+    
+    if( inverse == false ) {
+        /* check to see if the read is an 'N'. If it is, set the qual to the min */
+        if( bp == 'N' || bp == 'n' )
+        {
+            /* set the probability that this is incorrect to 0.75 */
+            rv = -0.1249387;
+        } else {
+            if( ARE_LOG_ODDS == false )
+            {
+                rv = logodds_lookuptable_score[ quality_char ];
+            } else {
+                rv = logprb_lookuptable_score[ quality_char ];
+            }
+        }
+    } else {
+        /* check to see if the read is an 'N'. If it is, set the qual to the min */
+        if( bp == 'N' || bp == 'n' )
+        {
+            /* set the probability that this is correct to 0.25 */
+            rv = -0.60206;
+        } else {
+            if( ARE_LOG_ODDS == false )
+            {
+                rv = logodds_inverse_lookuptable_score[ quality_char ];
+            } else {
+                rv = logprb_inverse_lookuptable_score[ quality_char ];
+            }
+        }
+    }
+
+    /* if we don't have any error correction data, 
+       then take the estiamtes as provided by the machines */
+    if( NULL == error_data ) {
+        return rv;
+    }
+
+    return rv;
+}
+
+
 void
 build_lookup_table_from_rawread ( struct rawread* rd,
                                   float* lookuptable_position,
@@ -238,38 +290,16 @@ build_lookup_table_from_rawread ( struct rawread* rd,
     int i;
     for( i = 0; i < rd->length; i++ )
     {
-        unsigned char quality_char = ((unsigned char) rd->error_str[i]) - QUAL_SHIFT;
-
-        /* check to see if the read is an 'N'. If it is, set the qual to the min */
-        if( rd->char_seq[i] == 'N' || rd->char_seq[i] == 'n' )
-        {
-            /* set the probability that this is incorrect to 0.75 */
-            lookuptable_position[i] = -0.1249387;
-        } else {
-            if( ARE_LOG_ODDS == false )
-            {
-                lookuptable_position[i] = logodds_lookuptable_score[ quality_char ];
-            } else {
-                lookuptable_position[i] = logprb_lookuptable_score[ quality_char ];
-            }
-        }
+        /* set the log prb of error */
+        lookuptable_position[i] 
+            = est_error_prb( rd->char_seq[i], rd->error_str[i], false, i, NULL );
         /* set the reverse position */
         reverse_lookuptable_position[rd->length-1-i] = lookuptable_position[i];
-        
-        /* check to see if the read is an 'N'. If it is, set the qual to the min */
-        if( rd->char_seq[i] == 'N' || rd->char_seq[i] == 'n' )
-        {
-            /* set the probability that this is incorrect to 0.75 */
-            inverse_lookuptable_position[i] = -0.60206;
-        } else {        
-            if( ARE_LOG_ODDS == false ) {
-                inverse_lookuptable_position[i] = 
-                    logodds_inverse_lookuptable_score[ quality_char ];
-            } else {
-                inverse_lookuptable_position[i] = 
-                    logprb_inverse_lookuptable_score[ quality_char ];
-            }
-        }
+
+        /* set the log prb of no error */
+        inverse_lookuptable_position[i] 
+            = est_error_prb( rd->char_seq[i], rd->error_str[i], true, i, NULL );
+        /* and the reverse position */
         reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
     }

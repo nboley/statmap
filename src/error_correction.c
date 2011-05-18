@@ -19,8 +19,8 @@ init_error_data(
     for( j = 0; j < max_num_qual_scores; j++ )
     {
         /* add a little bias to the scores */
-        (*data)->qual_score_cnts[j] = 20;
-        (*data)->qual_score_mismatch_cnts[j] = 1;
+        (*data)->qual_score_cnts[j] = 0;
+        (*data)->qual_score_mismatch_cnts[j] = 0;
     }
     
     return;
@@ -72,14 +72,14 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%.2ff\n", i+1, 
+        fprintf( stream, "%i\t%e\n", i+1, 
                  ((float)data->position_mismatch_cnts[ i ])/data->num_unique_reads );
     }
     
     fprintf( stream, "Qual Score Error Rates:\n" );
     for( i = 0; i < max_num_qual_scores; i++ )
     {
-        fprintf( stream, "%i\t%.2ff\n", i+1, 
+        fprintf( stream, "%i\t%e\n", i+1, 
                  ((float)data->qual_score_mismatch_cnts[ i ])/data->qual_score_cnts[ i ] );
     }
     
