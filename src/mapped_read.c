@@ -95,7 +95,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
     
     /* prevent divide by zero */
     double prb_sum = ML_PRB_MIN;
-    size_t i;
+    long i;
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
@@ -124,7 +124,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
 int 
 write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
 {
-    size_t num = 0;
+    long num = 0;
 
     num = fwrite( &(read->read_id), sizeof( read->read_id ), 1, of );
     if( num != 1 )
@@ -697,7 +697,7 @@ build_mapped_read_from_candidate_mappings(
         return;
     }
     
-    size_t i;
+    long i;
     /* set the conditional probabilites - just renormalize */
     for( i = 0; i < (*mpd_rd)->num_mappings; i++ )
     {

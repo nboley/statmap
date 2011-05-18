@@ -430,8 +430,7 @@ find_candidate_mappings( void* params )
 
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
-    readkey_t prev_readkey = MAPPING_STATUS_GRANULARITY;
-
+    
     /*********** cache the candidate maping results **************************************/
     /* cache the candidate mappings so that we can add them ( or not ) together at the 
        end of this mapping. */
@@ -467,10 +466,9 @@ find_candidate_mappings( void* params )
         /* We dont lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
-        if( thread_id == 0 && readkey >= prev_readkey )
+        if( readkey > 0 && 0 == readkey%MAPPING_STATUS_GRANULARITY )
         {
-            prev_readkey += MAPPING_STATUS_GRANULARITY;
-            fprintf(stderr, "DEBUG       :  Mapped %ui reads, %i successfully\n", 
+            fprintf(stderr, "DEBUG       :  Mapped %u reads, %i successfully\n", 
                     readkey, *mapped_cnt);
         }
         

@@ -1345,7 +1345,7 @@ update_CAGE_mapped_read_prbs(
         if( (flag&IS_PAIRED) > 0 )
         {
             fprintf( stderr, "FATAL: paired cage reads are not supported\n" );
-            exit( -1 );
+            continue;
         } 
         /* If the read is *not* paired */
         else {
@@ -1488,7 +1488,8 @@ update_chipseq_mapping_wnc(
     long seconds  = stop.tv_sec  - start.tv_sec;
     long useconds = stop.tv_usec - start.tv_usec;
     
-    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.5f seconds\n", ((float)seconds) + ((float)useconds)/1000000 );
+    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.5f seconds\n", 
+            ((float)seconds) + ((float)useconds)/1000000 );
     
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );
@@ -1638,8 +1639,6 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
                          float max_prb_change_for_convergence)
 {
     /* tell whether or not we *can* iteratively map ( ie, do we know the assay? ) */
-    clock_t start, stop;
-    
     int error = 0;
     
     void (*update_expectation)(
@@ -1687,13 +1686,17 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
     global_genome = genome;
     
     /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( rdb );
+    reset_all_read_cond_probs( rdb );    
     
-    struct trace_t* uniform_trace;
+    /* The uniform start does not appear to be useful */
+    #if 0
+    clock_t start, stop;
     
     /* iteratively map from a uniform prior */
     start = clock();
     fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
+    
+    struct trace_t* uniform_trace;
     
     /* initialize the trace that we will store the expectation in */
     init_trace( genome, &uniform_trace, trace_size, track_names );
@@ -1709,10 +1712,12 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
     );
     
     write_trace_to_file( uniform_trace, "relaxed_mapping.bin.trace" );
+    close_traces( uniform_trace );
     
     stop = clock();
     fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
             ((float)(stop-start))/CLOCKS_PER_SEC );
+    #endif
     
     error = sample_random_traces(
         rdb, genome, 
@@ -1727,8 +1732,6 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
 cleanup:
 
     free( track_names );
-
-    close_traces( uniform_trace );
     
     return 0;    
 }

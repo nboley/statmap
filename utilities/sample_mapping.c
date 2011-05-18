@@ -47,7 +47,7 @@ int main( int argc, char** argv )
     float max_prb_change_for_convergence = 1e-2;
 
     /* try to get the number of available threads from the os */
-    num_threads = get_nprocs();
+    num_threads = MAX( 8, get_nprocs() );
     /* if we cant determine the number of threads, set it to 1 */
     if( num_threads <= 0 )
         num_threads = 1;
