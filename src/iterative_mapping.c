@@ -585,6 +585,7 @@ update_mapping(
     struct trace_t* starting_trace,
     int max_num_iterations,
     float max_prb_change_for_convergence,
+    float lhd_ratio_stop_value,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
         const struct mapped_read_location* const loc),
@@ -628,8 +629,6 @@ update_mapping(
         );
         gettimeofday( &ut_stop, NULL );
 
-        #define LHD_RATIO_STOP_VAL 1.05
-        
         if( num_iterations > 0 &&
             ( 
                 ( 
@@ -638,7 +637,7 @@ update_mapping(
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
                 )
                 || rv.max_change < max_prb_change_for_convergence
-                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL 
+                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value
                      && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
                    )
                 )
@@ -654,7 +653,7 @@ update_mapping(
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
-                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < LHD_RATIO_STOP_VAL 
+                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value 
                      && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
                    )
                 )
@@ -815,6 +814,7 @@ sample_random_trace(
     update_mapping( 
         rdb, sample_trace, max_num_iterations,
         max_prb_change_for_convergence,
+        CHIPSEQ_LHD_RATIO_STOP_VALUE, 
         update_trace_expectation_from_location,
         update_mapped_read_prbs
         );
@@ -1376,7 +1376,11 @@ update_CAGE_mapped_read_prbs(
             
             assert( get_cond_prob_from_mapped_read_location( r->locations + i ) >= 0 );
         }
+
+        rv.log_lhd = log10( density_sum );
     }      
+
+
     
     /* Free the tmp array */
     free( new_prbs );   
@@ -1457,6 +1461,7 @@ update_chipseq_mapping_wnc(
         *ip_trace,
         MAX_NUM_EM_ITERATIONS,
         max_prb_change_for_convergence,
+        CAGE_LHD_RATIO_STOP_VALUE,
         update_chipseq_trace_expectation_from_location,
         update_chipseq_mapped_read_prbs
     );

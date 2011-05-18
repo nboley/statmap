@@ -18,6 +18,9 @@ struct genome_data;
 
 #define WINDOW_SIZE 20
 
+#define CHIPSEQ_LHD_RATIO_STOP_VALUE 1.05
+#define CAGE_LHD_RATIO_STOP_VALUE -1
+
 struct update_mapped_read_rv_t {
     /* Store the probability of observing the 
        returned sequence, conditional on the trace */
@@ -80,6 +83,7 @@ update_mapping(
     struct trace_t* starting_trace,
     int max_num_iterations,
     float max_prb_change_for_convergence,
+    float lhd_ratio_stop_value,
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 

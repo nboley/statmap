@@ -57,11 +57,25 @@ int main( int argc, char** argv )
     srand ( time(NULL) );
     enum bool use_random_start = true;
     float max_prb_change_for_convergence = MAX_PRB_CHANGE_FOR_CONVERGENCE;
-    num_threads = args->num_threads;
+    if( args->num_threads == -1 )
+    {
+        /* try to get the number of available threads from the os */
+        num_threads = get_nprocs();
+        /* if we cant determine the number of threads, set it to 1 */
+        if( num_threads <= 0 )
+            num_threads = 1;
+        
+        /* never set the number of threads to more than 8, by default */
+        if( num_threads > 8 )
+            num_threads = 8;
+        
+        fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
+    } else {
+        num_threads = args->num_threads;
+    }
+        
     min_num_hq_bps = args->min_num_hq_bps;
     /* END parse arguments */
-    
-    assert( args->assay_type == CHIP_SEQ );
     
     /* Load the genome */
     struct genome_data* genome;
@@ -83,9 +97,8 @@ int main( int argc, char** argv )
         fclose(frag_len_fp);
         
         build_chipseq_bs_density( IP_mpd_rdb->fl_dist );
+        assert( IP_mpd_rdb->fl_dist != NULL );    
     }
-
-    assert( IP_mpd_rdb->fl_dist != NULL );
     
     /* load the rawreads */
     struct rawread_db_t* raw_rdb;

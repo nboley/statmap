@@ -3,7 +3,7 @@ compiler = clang
 compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
-	estimate_read_density call_peaks \
+	call_peaks \
 	bootstrap_wiggles_from_mapped_reads build_random_start_from_mapped_reads \
 	aggregate_over_traces convert_trace_into_wiggle
 
@@ -47,17 +47,6 @@ mapped_reads_into_sam : mapped_reads_into_sam.c
 	cp mapped_reads_into_sam ../bin/
 
 mapped_reads_into_sam.c :
-
-estimate_read_density : estimate_read_density.c
-	$(compiler) $(compile_options) -o estimate_read_density estimate_read_density.c \
-	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
-	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o ../src/wiggle.o \
-	 ../src/pseudo_location.o ../src/iterative_mapping.o \
-	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
-	-lm -pthread
-	cp estimate_read_density ../bin/
-
-estimate_read_density.c :
 
 sample_mapping : sample_mapping.c
 	$(compiler) $(compile_options) -o sample_mapping sample_mapping.c \
@@ -111,7 +100,6 @@ clean :
 	-rm aggregate_over_traces
 	-rm convert_trace_into_wiggle
 	-rm mapped_reads_into_sam
-	-rm estimate_read_density
 	-rm build_index
 	-rm call_peaks
 	-rm sample_mapping
