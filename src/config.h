@@ -27,7 +27,19 @@
 #define SAM_MARGINAL_OFNAME "mapped_reads.sam"
 #define SAM_MARGINAL_NC_OFNAME "mapped_reads.nc.sam"
 
-// Bootstrap 
+/********** Iterative Mapping **************************************************/
+// this says that we will setup the iterative mapping framework,
+// but not actually take any samples ( they can be taken later with 
+// sample mappings )
+#define DEFAULT_NUM_SAMPLES 0
+#define SAVE_STARTING_SAMPLES true
+#define STARTING_SAMPLES_PATH "./starting_samples/"
+#define STARTING_SAMPLES_META_INFO_FNAME "./starting_samples/meta_info.csv"
+
+#define SAVE_SAMPLES true
+#define RELAXED_SAMPLES_PATH "./samples/"
+#define RELAXED_SAMPLES_META_INFO_FNAME "./samples/meta_info.csv"
+
 #define SAVE_BOOTSTRAP_SAMPLES true
 #define SAVE_AGGREGATED_BOOTSTRAP_SAMPLES (false && SAVE_BOOTSTRAP_SAMPLES)
 #define NUM_BOOTSTRAP_SAMPLES 25
@@ -40,14 +52,6 @@
 #define CALLED_PEAKS_OUTPUT_DIRECTORY "./called_peaks/"
 #define JOINED_CALLED_PEAKS_FNAME "./called_peaks/peaks.wig"
 #define CALLED_PEAK_REGIONS_FNAME "./called_peaks/peaks.bed"
-
-#define SAVE_STARTING_SAMPLES true
-#define STARTING_SAMPLES_PATH "./starting_samples/"
-#define STARTING_SAMPLES_META_INFO_FNAME "./starting_samples/meta_info.csv"
-
-#define SAVE_SAMPLES true
-#define RELAXED_SAMPLES_PATH "./samples/"
-#define RELAXED_SAMPLES_META_INFO_FNAME "./samples/meta_info.csv"
 
 #define MAPPED_READS_DB_FNAME "mapped_reads.db"
 #define MAPPED_NC_READS_DB_FNAME "mapped_NC_reads.db"

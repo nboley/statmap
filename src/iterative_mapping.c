@@ -762,15 +762,20 @@ build_random_starting_trace(
  *
  *****************************************************************************/
 
-int
-sample_random_traces( 
+int 
+sample_random_trace(
     struct mapped_reads_db* rdb, 
     struct genome_data* genome,
 
     int num_tracks,
     char** track_names,
 
-    int num_samples,
+    int sample_index,
+    
+    // (starting) sample meta info
+    FILE* ss_mi,
+    FILE* s_mi,
+
     int max_num_iterations,
     float max_prb_change_for_convergence,
 
@@ -781,121 +786,93 @@ sample_random_traces(
     struct update_mapped_read_rv_t 
         (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
-                          
-)
+    )
 {
-    /* Store meta information about the samples and starting samples */
-    FILE* ss_mi;
-    FILE* s_mi;
-    
-    /* Create the meta data csv's */
-    if( SAVE_STARTING_SAMPLES )
-    {
-        ss_mi = fopen(STARTING_SAMPLES_META_INFO_FNAME, "w");
-        fprintf( ss_mi, "sample_number,log_lhd\n" );
-    }
+    fprintf( stderr, "Starting Sample %i\n", sample_index+1 );
 
-    s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
-    fprintf( s_mi, "sample_number,log_lhd\n" );
-    
-    /* build bootstrap samples. Then take the max and min. */
-    int i;
-    for( i = 0; i < num_samples; i++ )
-    {
-        printf( "Starting Sample %i\n", i+1 );
+    struct trace_t* sample_trace;
+    init_trace( genome, &sample_trace, num_tracks, track_names );
 
-        struct trace_t* sample_trace;
-        init_trace( genome, &sample_trace, num_tracks, track_names );
-
-        build_random_starting_trace( 
-            sample_trace, genome, rdb, 
-            update_trace_expectation_from_location,
-            update_mapped_read_prbs
+    build_random_starting_trace( 
+        sample_trace, genome, rdb, 
+        update_trace_expectation_from_location,
+        update_mapped_read_prbs
         );
         
-        if( SAVE_STARTING_SAMPLES )
-        {
-            char buffer[100];
-            sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, i+1 );
+    if( SAVE_STARTING_SAMPLES )
+    {
+        char buffer[100];
+        sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, sample_index+1 );
             
-            write_trace_to_file( sample_trace, buffer );
+        write_trace_to_file( sample_trace, buffer );
                         
-            double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
-            fprintf( ss_mi, "%i,%e\n", i+1, log_lhd );
-            fflush( ss_mi );
-        }
+        double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+        fprintf( ss_mi, "%i,%e\n", sample_index+1, log_lhd );
+        fflush( ss_mi );
+    }
         
-        /* maximize the likelihood */
-        update_mapping( 
-            rdb, sample_trace, max_num_iterations,
-            max_prb_change_for_convergence,
-            update_trace_expectation_from_location,
-            update_mapped_read_prbs
+    /* maximize the likelihood */
+    update_mapping( 
+        rdb, sample_trace, max_num_iterations,
+        max_prb_change_for_convergence,
+        update_trace_expectation_from_location,
+        update_mapped_read_prbs
         );
         
-        if( SAVE_SAMPLES )
-        {
-            char buffer[100];
-            sprintf( buffer, "%ssample%i.bin.trace", RELAXED_SAMPLES_PATH, i+1 );
+    if( SAVE_SAMPLES )
+    {
+        char buffer[100];
+        sprintf( buffer, "%ssample%i.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
 
-            write_trace_to_file( sample_trace, buffer );
+        write_trace_to_file( sample_trace, buffer );
             
-            double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
-            fprintf( s_mi, "%i,%e\n", i+1, log_lhd );
-            fflush( s_mi );
-        }
-        
-        if( NUM_BOOTSTRAP_SAMPLES > 0 )
-        {
-            fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
-            char buffer[200];
-            sprintf( buffer, "mkdir %ssample%i/",
-                     BOOTSTRAP_SAMPLES_ALL_PATH, i+1 );
-            int error = system( buffer );
-            if (WIFSIGNALED(error) &&
-                (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-            {
-                fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-                perror( "System Call Failure");
-                assert( false );
-                exit( -1 );
-            }
-            
-            int j;
-            for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-            {                
-                
-                if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
-                    fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
-
-                /* actually perform the bootstrap */
-                bootstrap_traces_from_mapped_reads( 
-                    rdb, sample_trace, update_trace_expectation_from_location );
-                
-                if( SAVE_BOOTSTRAP_SAMPLES )
-                {
-                    sprintf( buffer, "%ssample%i/bssample%i.bin.trace", 
-                             BOOTSTRAP_SAMPLES_ALL_PATH, i+1, j+1 );
-                    
-                    write_trace_to_file( sample_trace, buffer );                    
-                }    
-            }
-            fprintf( stderr, " 100%%\n");
-        }
-        
-        close_traces( sample_trace );
+        double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+        fprintf( s_mi, "%i,%e\n", sample_index+1, log_lhd );
+        fflush( s_mi );
     }
-    
-    /* Create the meta data csv's */
-    if( SAVE_STARTING_SAMPLES )
-        fclose(ss_mi);
+        
+    if( NUM_BOOTSTRAP_SAMPLES > 0 )
+    {
+        fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
+        char buffer[200];
+        sprintf( buffer, "mkdir %ssample%i/",
+                 BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1 );
+        int error = system( buffer );
+        if (WIFSIGNALED(error) &&
+            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
+        {
+            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
+            perror( "System Call Failure");
+            assert( false );
+            exit( -1 );
+        }
+            
+        int j;
+        for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
+        {                
+                
+            if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
+                fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
 
-    fclose(s_mi);
-
+            /* actually perform the bootstrap */
+            bootstrap_traces_from_mapped_reads( 
+                rdb, sample_trace, update_trace_expectation_from_location );
+                
+            if( SAVE_BOOTSTRAP_SAMPLES )
+            {
+                sprintf( buffer, "%ssample%i/bssample%i.bin.trace", 
+                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
+                    
+                write_trace_to_file( sample_trace, buffer );                    
+            }    
+        }
+        fprintf( stderr, " 100%%\n");
+    }
+        
+    close_traces( sample_trace );
     
     return 0;
 }
-
 
 /*
  *
@@ -1630,6 +1607,72 @@ take_chipseq_sample_wnc(
     return;
 }
 
+int
+take_chipseq_sample( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    
+    int sample_index,
+    
+    FILE* ss_mi,
+    FILE* s_mi,
+    
+    int max_num_iterations,
+    float max_prb_change_for_convergence
+) {
+    int trace_size = 2;
+
+    char** track_names = NULL;
+    track_names = malloc( trace_size*sizeof(char*) );
+    track_names[0] = "fwd_strnd_read_density"; 
+    track_names[1] = "rev_strnd_read_density";
+
+    sample_random_trace(
+        rdb, genome, trace_size, track_names, sample_index,
+        ss_mi, s_mi, 
+        max_num_iterations, max_prb_change_for_convergence,
+        update_chipseq_trace_expectation_from_location,
+        update_chipseq_mapped_read_prbs
+    );
+    
+    free( track_names );
+
+    return 0;
+}
+
+int
+take_cage_sample( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    
+    int sample_index,
+    
+    FILE* ss_mi,
+    FILE* s_mi,
+    
+    int max_num_iterations,
+    float max_prb_change_for_convergence
+) {
+    int trace_size = 2;
+
+    char** track_names = NULL;
+    track_names = malloc( trace_size*sizeof(char*) );
+    track_names[0] = "fwd_strnd_read_density"; 
+    track_names[1] = "rev_strnd_read_density";
+
+    sample_random_trace(
+        rdb, genome, trace_size, track_names, sample_index,
+        ss_mi, s_mi, 
+        max_num_iterations, max_prb_change_for_convergence,
+        update_CAGE_trace_expectation_from_location,
+        update_CAGE_mapped_read_prbs
+    );
+    
+    free( track_names );
+
+    return 0;
+}
+
 
 int
 generic_update_mapping(  struct mapped_reads_db* rdb, 
@@ -1638,101 +1681,52 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
                          int num_samples,
                          float max_prb_change_for_convergence)
 {
-    /* tell whether or not we *can* iteratively map ( ie, do we know the assay? ) */
-    int error = 0;
-    
-    void (*update_expectation)(
-        const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc) 
-        = NULL;
-    
-    struct update_mapped_read_rv_t 
-        (*update_reads)( const struct trace_t* const traces, 
-                         const struct mapped_read_t* const r  )
-        = NULL;
-
-    char** track_names = NULL;
-
-    int trace_size = -1;
-
-    switch( assay_type )
-    {
-    case CAGE:
-        update_expectation = update_CAGE_trace_expectation_from_location;
-        update_reads = update_CAGE_mapped_read_prbs;
-        trace_size = 2;
-        track_names = malloc( trace_size*sizeof(char*) );
-        track_names[0] = "fwd_strnd_read_density"; 
-        track_names[1] = "rev_strnd_read_density";
-        break;
-    
-    case CHIP_SEQ:
-        update_expectation = update_chipseq_trace_expectation_from_location;
-        update_reads = update_chipseq_mapped_read_prbs;
-        trace_size = 2;
-        track_names = malloc( trace_size*sizeof(char*) );
-        track_names[0] = "fwd_strand_read_density";
-        track_names[1] = "bkwd_strand_read_density";
-        break;
-    
-    default:
-        fprintf( stderr, "WARNING     :  Can not iteratively map for assay type '%u'. Returning marginal mappings.\n", assay_type);
-        return 0;
-    }
-    
-    /* BUG!!! */
     /* Set the global fl dist */
     global_fl_dist = rdb->fl_dist;
     global_genome = genome;
-    
-    /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( rdb );    
-    
-    /* The uniform start does not appear to be useful */
-    #if 0
-    clock_t start, stop;
-    
-    /* iteratively map from a uniform prior */
-    start = clock();
-    fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
-    
-    struct trace_t* uniform_trace;
-    
-    /* initialize the trace that we will store the expectation in */
-    init_trace( genome, &uniform_trace, trace_size, track_names );
-    set_trace_to_uniform( uniform_trace, 1 );
-    
-    error = update_mapping (
-        rdb, 
-        uniform_trace,
-        MAX_NUM_EM_ITERATIONS,
-        max_prb_change_for_convergence,
-        update_expectation,
-        update_reads
-    );
-    
-    write_trace_to_file( uniform_trace, "relaxed_mapping.bin.trace" );
-    close_traces( uniform_trace );
-    
-    stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.2lf seconds\n", 
-            ((float)(stop-start))/CLOCKS_PER_SEC );
-    #endif
-    
-    error = sample_random_traces(
-        rdb, genome, 
-        trace_size, track_names,
-        num_samples, MAX_NUM_EM_ITERATIONS, 
-        max_prb_change_for_convergence,
-        update_expectation, update_reads
-    );
-    
-    goto cleanup;
 
-cleanup:
-
-    free( track_names );
+    /* Store meta information about the samples and starting samples */
+    FILE* ss_mi = NULL;
+    FILE* s_mi = NULL;
     
+    /* Create the meta data csv's */
+    if( SAVE_STARTING_SAMPLES )
+    {
+        ss_mi = fopen(STARTING_SAMPLES_META_INFO_FNAME, "w");
+        fprintf( ss_mi, "sample_number,log_lhd\n" );
+    }
+
+    s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
+    fprintf( s_mi, "sample_number,log_lhd\n" );
+    
+    /* build bootstrap samples. Then take the max and min. */
+    int i;
+    for( i = 0; i < num_samples; i++ )
+    {
+        if( assay_type == CAGE )
+        {
+            take_cage_sample(
+                rdb, genome,
+                i, ss_mi, s_mi,
+                MAX_NUM_EM_ITERATIONS,
+                max_prb_change_for_convergence
+             );
+        } else if ( assay_type == CHIP_SEQ ) {
+             take_chipseq_sample(
+                rdb, genome,
+                i, ss_mi, s_mi,
+                MAX_NUM_EM_ITERATIONS,
+                max_prb_change_for_convergence
+             );
+        }
+    }
+    
+    /* Create the meta data csv's */
+    if( SAVE_STARTING_SAMPLES )
+        fclose(ss_mi);
+
+    fclose(s_mi);
+
     return 0;    
 }
 

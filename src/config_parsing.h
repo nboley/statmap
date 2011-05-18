@@ -89,6 +89,7 @@ struct args_t {
 void
 write_config_file_to_disk( struct args_t* args  );
 
+/* this assumes that we have moved intot he output directory */
 void
 read_config_file_from_disk( struct args_t** args  );
 

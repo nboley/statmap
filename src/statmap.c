@@ -324,7 +324,7 @@ parse_arguments( int argc, char** argv )
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
-    args.num_starting_locations = 10;
+    args.num_starting_locations = DEFAULT_NUM_SAMPLES;
 
     args.num_threads = -1;
     args.indexed_seq_len = -1;
