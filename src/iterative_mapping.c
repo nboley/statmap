@@ -637,7 +637,8 @@ update_mapping(
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
                 )
                 || rv.max_change < max_prb_change_for_convergence
-                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value
+                || ( lhd_ratio_stop_value >= 1.0
+                     && pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value
                      && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
                    )
                 )
@@ -653,12 +654,14 @@ update_mapping(
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
-                || ( pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value 
+                || ( lhd_ratio_stop_value >= 1.0
+                     && pow( 10, rv.log_lhd - prev_log_lhd ) < lhd_ratio_stop_value 
                      && pow( 10, rv.log_lhd - prev_log_lhd ) > 0.95
                    )
                 )
-              )
+                ) {
                 break;
+            }
         }        
 
         prev_log_lhd = rv.log_lhd;

@@ -31,6 +31,35 @@ void usage()
 }
 
 
+/* forward declarations */
+int
+take_chipseq_sample( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    
+    int sample_index,
+    
+    FILE* ss_mi,
+    FILE* s_mi,
+    
+    int max_num_iterations,
+    float max_prb_change_for_convergence
+);
+
+int
+take_cage_sample( 
+    struct mapped_reads_db* rdb, 
+    struct genome_data* genome,
+    
+    int sample_index,
+    
+    FILE* ss_mi,
+    FILE* s_mi,
+    
+    int max_num_iterations,
+    float max_prb_change_for_convergence
+);
+
 int main( int argc, char** argv )
 {
     /* parse arguments */
