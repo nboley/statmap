@@ -421,6 +421,13 @@ update_mapped_reads_from_trace_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
     {
+        if( r->read_id%1000000 == 0 )
+            fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", 
+                     r->read_id );
+
+        if( r->num_mappings <= 1 )
+            continue;
+
         /* Update the read */
         struct update_mapped_read_rv_t tmp_rv 
             = update_mapped_read_prbs( traces, r );
@@ -468,9 +475,15 @@ update_mapped_reads_from_trace(
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
         {
             read_cnt++;
+                        
             if( read_cnt%1000000 == 0 )
                 fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", read_cnt );
             
+            /* if there aren't more than 1 potential locations, 
+               there's no point in updating this */
+            if( r->num_mappings <= 1 )
+                continue;
+
             /* Update the read */
             struct update_mapped_read_rv_t tmp_rv 
                 = update_mapped_read_prbs( traces, r );
@@ -633,7 +646,7 @@ update_mapping(
             ( 
                 ( 
                   num_iterations == 1 
-                  || num_iterations%25 == 0 
+                  || num_iterations%1 == 0 
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
                 )
                 || rv.max_change < max_prb_change_for_convergence
@@ -1342,16 +1355,16 @@ update_CAGE_mapped_read_prbs(
                 trace = traces->traces[1];
             }
             
-            unsigned int stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
-            for( j = start; j < stop; j++ )
+            unsigned int win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
+            unsigned int win_start = start - MIN( start, WINDOW_SIZE );
+            for( j = win_start; j < win_stop; j++ )
             {
                 window_density += trace[chr_index][j];
             }
         }
         
-        new_prbs[i] = 
-            get_seq_error_from_mapped_read_location( r->locations + i )
-                *window_density;
+        new_prbs[i] = get_seq_error_from_mapped_read_location( r->locations + i )
+                          *window_density;
         
         density_sum += new_prbs[i];
     }
@@ -1369,17 +1382,18 @@ update_CAGE_mapped_read_prbs(
             //                 - r.locations[i].cond_prob, 2 ) ;
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
-
-            rv.max_change += MAX( 
-                normalized_density - new_prbs[i], new_prbs[i] - normalized_density 
-            );
+            double old_cnd_prb = get_cond_prob_from_mapped_read_location( r->locations + i );
             
+            // printf("%i\t%e\t%e\t%e\n", i, new_prbs[i], normalized_density, old_cnd_prb );
+            
+            rv.max_change += fabs( normalized_density - old_cnd_prb );
+           
             set_cond_prob_in_mapped_read_location( 
                 r->locations + i, normalized_density );
-            
-            assert( get_cond_prob_from_mapped_read_location( r->locations + i ) >= 0 );
         }
 
+        // printf( "%i\t%e\n", r->num_mappings, rv.max_change );
+                    
         rv.log_lhd = log10( density_sum );
     }      
 

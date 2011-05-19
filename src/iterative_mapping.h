@@ -16,7 +16,7 @@ struct genome_data;
 // BUG
 // static const void* iterative_mapping_args; 
 
-#define WINDOW_SIZE 20
+#define WINDOW_SIZE 100
 
 #define CHIPSEQ_LHD_RATIO_STOP_VALUE 1.05
 #define CAGE_LHD_RATIO_STOP_VALUE -1

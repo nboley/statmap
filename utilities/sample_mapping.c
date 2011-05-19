@@ -27,7 +27,7 @@ struct fragment_length_dist_t* global_fl_dist;
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./sample_mapping.c output_directory\n" );
+    fprintf( stderr, "Usage: ./sample_mapping.c output_directory [num_threads]\n" );
 }
 
 
@@ -63,7 +63,7 @@ take_cage_sample(
 int main( int argc, char** argv )
 {
     /* parse arguments */
-    if( argc != 2  )
+    if( argc != 2 && argc!= 3  )
     {
         usage();
         exit(1);
@@ -76,7 +76,7 @@ int main( int argc, char** argv )
         perror( "FATAL       :  Cannot move into output directory ");
         exit( 1 );
     }
-    
+        
     /* read the assay info */
     struct args_t* args;
     read_config_file_from_disk( &args );
@@ -86,23 +86,35 @@ int main( int argc, char** argv )
     srand ( time(NULL) );
     enum bool use_random_start = true;
     float max_prb_change_for_convergence = MAX_PRB_CHANGE_FOR_CONVERGENCE;
-    if( args->num_threads == -1 )
+
+    if( argc == 3 )
     {
-        /* try to get the number of available threads from the os */
-        num_threads = get_nprocs();
-        /* if we cant determine the number of threads, set it to 1 */
+        num_threads = atoi( argv[2] );
         if( num_threads <= 0 )
-            num_threads = 1;
-        
-        /* never set the number of threads to more than 8, by default */
-        if( num_threads > 8 )
-            num_threads = 8;
-        
+        {
+            fprintf( stderr, "FATAL       :  Invalid number of threads '%s'\n", argv[2]);
+            exit( 1 );
+        }
         fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
     } else {
-        num_threads = args->num_threads;
-    }
+        if( args->num_threads == -1 )
+        {
+            /* try to get the number of available threads from the os */
+            num_threads = get_nprocs();
+            /* if we cant determine the number of threads, set it to 1 */
+            if( num_threads <= 0 )
+                num_threads = 1;
+            
+            /* never set the number of threads to more than 8, by default */
+            if( num_threads > 8 )
+                num_threads = 8;
         
+            fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
+        } else {
+            num_threads = args->num_threads;
+        }
+    }
+    
     min_num_hq_bps = args->min_num_hq_bps;
     /* END parse arguments */
     
