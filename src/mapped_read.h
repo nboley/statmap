@@ -19,6 +19,7 @@ typedef unsigned int MPD_RD_ID_T;
 struct fragment_length_dist_t;
 struct genome_data;
 struct rawread_db_t;
+struct cond_prbs_db_t;
 
 /* defines copied from sam tools - these go into the 'flag' field */
 /* the read is paired in sequencing, no matter 
@@ -169,7 +170,7 @@ struct mapped_read_location {
     } position;
     
     ML_PRB_TYPE seq_error;
-    ML_PRB_TYPE cond_prob;
+    // ML_PRB_TYPE cond_prob;
 } __attribute__((__packed__));
 
 /* 
@@ -248,6 +249,7 @@ set_seq_error_in_mapped_read_location(
 
 /** COND PROB **/
 
+/*
 static inline float
 get_cond_prob_from_mapped_read_location( const struct mapped_read_location* const loc)
 { 
@@ -261,7 +263,8 @@ set_cond_prob_in_mapped_read_location(
     assert( value == -1 || ( value >= -0.000001 && value <= 1.00001 ) );
     loc->cond_prob = ML_PRB_TYPE_from_float( value ); 
 }
- 
+*/
+
 /*
  * A full mapped read.
  *
@@ -297,9 +300,8 @@ add_location_to_mapped_read(
     struct mapped_read_t* rd, struct mapped_read_location* loc );
 
 void
-reset_read_cond_probs( struct mapped_read_t* rd );
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd );
                        
-
 void
 fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
@@ -392,7 +394,8 @@ get_next_read_from_mapped_reads_db(
     struct mapped_read_t** rd );
 
 void
-reset_all_read_cond_probs( struct mapped_reads_db* rdb );
+reset_all_read_cond_probs( 
+    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db );
 
 /*
  * this requires code from iterative mapping to write out the
@@ -427,5 +430,52 @@ index_mapped_reads_db( struct mapped_reads_db* rdb );
  *  END Mapped Reads DB
  *
  **************************************************************************/
+
+/*****************************************************************************
+ *
+ * Mapped Reads Conditional Probabilities Code
+ *
+ */
+
+
+struct cond_prbs_db_t {
+    /* this should be the same length as the number of reads in the mapped read db */
+    /* each pointer should contain num_mapped_location entries */
+    ML_PRB_TYPE** cond_read_prbs;
+    MPD_RD_ID_T max_rd_id;
+};
+
+void
+init_cond_prbs_db_from_mpd_rdb( 
+    struct cond_prbs_db_t** cond_prbs_db,
+    struct mapped_reads_db* mpd_rdb
+);
+
+void
+free_cond_prbs_db( struct cond_prbs_db_t* cond_prbs_db );
+
+static inline void
+set_cond_prb( 
+    struct cond_prbs_db_t* cond_prbs_db,
+    MPD_RD_ID_T mpd_rd_id,
+    int mapping_index,
+    float prb
+)          
+{
+    cond_prbs_db->cond_read_prbs[ mpd_rd_id ][ mapping_index ] 
+        = ML_PRB_TYPE_from_float( prb );
+    return;
+}
+
+static inline float
+get_cond_prb( 
+    struct cond_prbs_db_t* cond_prbs_db,
+    MPD_RD_ID_T mpd_rd_id,
+    int mapping_index
+)          
+{
+    return ML_PRB_TYPE_from_float( 
+        cond_prbs_db->cond_read_prbs[ mpd_rd_id ][ mapping_index ] );
+}
 
 #endif // MAPPED_READ

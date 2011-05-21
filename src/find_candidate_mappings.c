@@ -268,7 +268,7 @@ recheck_location( struct genome_data* genome,
 
 /* build candidate mappings from mapped locations ( 
    the data structure that index lookups return  )    */
-static void inline
+static inline void 
 build_candidate_mappings_from_mapped_locations(
     struct genome_data* genome,
     struct rawread* r, 
@@ -664,6 +664,7 @@ find_candidate_mappings( void* params )
     }
 
     // fprintf_error_data( stdout, error_data );
+    free_error_data( error_data );
     
     /****** add the results to the database ******/
     // int i; already declared 

@@ -20,7 +20,6 @@
 #include "trace.h"
 
 
-
 /*************************************************************************
  *
  *  Mapped Reads
@@ -82,7 +81,7 @@ add_location_to_mapped_read(
 
 
 void
-reset_read_cond_probs( struct mapped_read_t* rd )
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd )
 {
     struct fragment_length_dist_t* fl_dist = NULL;
     if( rd->rdb != NULL )
@@ -109,9 +108,7 @@ reset_read_cond_probs( struct mapped_read_t* rd )
 
     for( i = 0; i < rd->num_mappings; i++ )
     {
-        set_cond_prob_in_mapped_read_location( 
-            rd->locations + i, prbs[i]/prb_sum
-        );
+        set_cond_prb( cond_prbs_db, rd->read_id, i, prbs[i]/prb_sum );
         
         assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= -0.001 );
     }
@@ -181,7 +178,6 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     set_seq_error_in_mapped_read_location( 
         loc, pow( 10, cm->penalty ) );
     
-    set_cond_prob_in_mapped_read_location( loc, -1.0 );
     set_flag_in_mapped_read_location( loc, flag  );
     
     return 1;
@@ -248,7 +244,6 @@ join_two_candidate_mappings(
     
     set_seq_error_in_mapped_read_location( 
         loc, pow( 10, first_read->penalty + second_read->penalty ) );
-    set_cond_prob_in_mapped_read_location( loc, -1.0);
     
     set_flag_in_mapped_read_location( loc, flag );
     
@@ -697,17 +692,6 @@ build_mapped_read_from_candidate_mappings(
         return;
     }
     
-    long i;
-    /* set the conditional probabilites - just renormalize */
-    for( i = 0; i < (*mpd_rd)->num_mappings; i++ )
-    {
-        set_cond_prob_in_mapped_read_location( 
-            (*mpd_rd)->locations + i,    
-            get_seq_error_from_mapped_read_location( (*mpd_rd)->locations + i )
-               /prob_sum
-        );
-    }
-    
     return;
 }
 
@@ -943,7 +927,8 @@ get_next_read_from_mapped_reads_db(
 
 
 void
-reset_all_read_cond_probs( struct mapped_reads_db* rdb )
+reset_all_read_cond_probs( 
+    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db )
                            
 {
     if( NULL == rdb->mmapped_data ) {
@@ -957,7 +942,7 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb )
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {
-        reset_read_cond_probs( r );
+        reset_read_cond_probs( cond_prbs_db, r );
         free_mapped_read( r );
     }
 
@@ -970,6 +955,7 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb )
 void
 update_traces_from_read_densities( 
     struct mapped_reads_db* rdb,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces
 )
 {    
@@ -989,8 +975,7 @@ update_traces_from_read_densities(
                 get_start_from_mapped_read_location( r->locations + j );
             unsigned int stop = 
                 get_stop_from_mapped_read_location( r->locations + j );
-            float cond_prob = 
-                get_cond_prob_from_mapped_read_location( r->locations + j );
+            float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
             cond_prob_sum += cond_prob;
             
             assert( cond_prob >= -0.0001 );
@@ -1148,7 +1133,74 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
 }
 
 /*
- *  END Mapped Reads
+ *  END Mapped DB Reads
+ *
+ **************************************************************************/
+
+
+/*****************************************************************************
+ *
+ * Conditional Probs DB Code
+ *
+ ***************************************************************************/
+
+
+void
+init_cond_prbs_db_from_mpd_rdb( 
+    struct cond_prbs_db_t** cond_prbs_db,
+    struct mapped_reads_db* mpd_rdb
+)
+{
+    *cond_prbs_db = malloc( sizeof( struct cond_prbs_db_t ) );
+    
+    /* reset the database position */
+    rewind_mapped_reads_db( mpd_rdb );
+    
+    /* find the maximum readid */
+    MPD_RD_ID_T max_rd_id = 0;
+    struct mapped_read_t* mapped_rd;
+    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
+    {
+        max_rd_id = MAX( max_rd_id, mapped_rd->read_id );
+        free_mapped_read( mapped_rd );
+    }
+    (*cond_prbs_db)->max_rd_id = max_rd_id;
+    
+    free_mapped_read( mapped_rd );
+    
+    /* allocate space for the prb start pointers */
+    (*cond_prbs_db)->cond_read_prbs = calloc( max_rd_id+1, sizeof(ML_PRB_TYPE*) );
+    
+    /* allocate space for the prbs */
+    rewind_mapped_reads_db( mpd_rdb );
+    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
+    {
+        (*cond_prbs_db)->cond_read_prbs[mapped_rd->read_id] 
+            = calloc( mapped_rd->num_mappings, sizeof( ML_PRB_TYPE  )  );
+        free_mapped_read( mapped_rd );
+    }
+
+    free_mapped_read( mapped_rd );
+
+    return;
+}
+
+void
+free_cond_prbs_db( struct cond_prbs_db_t* cond_prbs_db )
+{
+    MPD_RD_ID_T i;
+    for( i = 0; i < cond_prbs_db->max_rd_id+1; i++ )
+    {
+        if( cond_prbs_db->cond_read_prbs[i] != NULL )
+            free( cond_prbs_db->cond_read_prbs[i] );
+    }
+    
+    free( cond_prbs_db->cond_read_prbs );
+    free( cond_prbs_db );
+}
+
+/*
+ *  END Conditional Prbs DB Code
  *
  **************************************************************************/
 

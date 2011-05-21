@@ -12,72 +12,6 @@
 #include "genome.h"
 #include "mapped_read.h"
 
-// move this 
-static void
-naive_update_trace_expectation_from_location( 
-    const struct trace_t* const traces, 
-    const struct mapped_read_location* const loc )
-{
-    unsigned int i;
-
-    const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
-    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
-    
-    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
-    {
-        /* lock the locks */
-        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_lock( traces->locks[1][ chr_index ] + i );
-            #else
-            pthread_spin_lock( traces->locks[1][ chr_index ] + i );
-            #endif
-        }
-        
-        for( i = start; i <= stop; i++ )
-            traces->traces[1][chr_index][i] += cond_prob;
-
-        /* unlock the locks */
-        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_unlock( traces->locks[1][ chr_index ] + i );
-            #else
-            pthread_spin_unlock( traces->locks[1][ chr_index ] + i );
-            #endif
-        }
-    } else {
-        /* lock the locks */
-        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_lock( traces->locks[0][ chr_index ] + i );
-            #else
-            pthread_spin_lock( traces->locks[0][ chr_index ] + i );
-            #endif
-        }
-        
-        for( i = start; i <= stop; i++ )
-            traces->traces[0][chr_index][i] += cond_prob;
-
-        /* unlock the locks */
-        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
-        {
-            #ifdef USE_MUTEX
-            pthread_mutex_unlock( traces->locks[0][ chr_index ] + i );
-            #else
-            pthread_spin_unlock( traces->locks[0][ chr_index ] + i );
-            #endif
-        }
-    }
-    
-    return;
-}
-
 
 float 
 wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wigs  )
@@ -521,6 +455,75 @@ call_peaks_from_wiggles(
     return;
 }
 
+// We dont use this anymore
+#if 0
+
+// move this 
+static void
+naive_update_trace_expectation_from_location( 
+    const struct trace_t* const traces, 
+    const struct mapped_read_location* const loc )
+{
+    unsigned int i;
+
+    const int chr_index = get_chr_from_mapped_read_location( loc  );
+    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
+    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+    
+    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+    {
+        /* lock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
+        
+        for( i = start; i <= stop; i++ )
+            traces->traces[1][chr_index][i] += cond_prob;
+
+        /* unlock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[1][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[1][ chr_index ] + i );
+            #endif
+        }
+    } else {
+        /* lock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_lock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_lock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
+        
+        for( i = start; i <= stop; i++ )
+            traces->traces[0][chr_index][i] += cond_prob;
+
+        /* unlock the locks */
+        for( i = start/TM_GRAN; i <= stop/TM_GRAN; i++ )
+        {
+            #ifdef USE_MUTEX
+            pthread_mutex_unlock( traces->locks[0][ chr_index ] + i );
+            #else
+            pthread_spin_unlock( traces->locks[0][ chr_index ] + i );
+            #endif
+        }
+    }
+    
+    return;
+}
+
 
 void
 write_marginal_mapped_reads_to_stranded_wiggles( 
@@ -600,3 +603,4 @@ write_marginal_mapped_reads_to_stranded_wiggles(
     close_traces( traces );
 }
 
+#endif

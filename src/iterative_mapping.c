@@ -54,12 +54,13 @@ struct trace_t* global_starting_trace;
 static inline void
 update_stranded_read_start_density_from_location( 
     const struct trace_t* const traces, 
-    const struct mapped_read_location* const loc )
+    const struct mapped_read_location* const loc,
+    const float cond_prob 
+)
 {
     const int chr_index = get_chr_from_mapped_read_location( loc  );
     const unsigned char flag = get_flag_from_mapped_read_location( loc  );
     const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
@@ -122,10 +123,13 @@ update_stranded_read_start_density_from_location(
 void
 bootstrap_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc)
+        const struct mapped_read_location* const loc,
+        float cond_prob
+    )
 )
 {        
     global_fl_dist = reads_db->fl_dist;
@@ -178,8 +182,7 @@ bootstrap_traces_from_mapped_reads(
                 double cum_dist = 0;
                 for( j = 0; j < r.num_mappings; j++ ) 
                 {
-                    cum_dist += 
-                        get_cond_prob_from_mapped_read_location( r.locations + j );
+                    cum_dist += get_cond_prb( cond_prbs_db, r.read_id, j );
                     if( random_num <= cum_dist )
                         break;
                 }
@@ -206,14 +209,7 @@ bootstrap_traces_from_mapped_reads(
             }
                         
             /* Add this location to the trace, with prb 1 */
-            /* We do this by temp changing cond_prb, and then changing it back */
-            float tmp_cond_prb = 
-                get_cond_prob_from_mapped_read_location( r.locations + j );
-            set_cond_prob_in_mapped_read_location( 
-                r.locations + j, 1.0  );
-            update_trace_expectation_from_location( traces, r.locations + j );
-            set_cond_prob_in_mapped_read_location( 
-                r.locations + j, tmp_cond_prb  );
+            update_trace_expectation_from_location( traces, r.locations + j, 1.0 );
         }
     }
     
@@ -240,21 +236,29 @@ struct update_traces_param {
      * can't fully fit into memory.
      */
     struct mapped_reads_db* reads_db;
+    struct cond_prbs_db_t* cond_prbs_db;
     struct trace_t* traces;
     void (* update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc);
+        const struct mapped_read_location* const loc,
+        const float cond_prob );
 };
 
 void*
 update_traces_from_mapped_reads_worker( void* params )
 {
     struct trace_t* traces = ( (struct update_traces_param*) params)->traces;
+    
     struct mapped_reads_db* rdb = 
         ( (struct update_traces_param*) params)->reads_db;
+
+    struct cond_prbs_db_t* cond_prbs_db =
+        ( (struct update_traces_param*) params)->cond_prbs_db;
+
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc)
+        const struct mapped_read_location* const loc,
+        const float cond_prob )
         = ( (struct update_traces_param*) 
             params)->update_trace_expectation_from_location;
     
@@ -265,8 +269,10 @@ update_traces_from_mapped_reads_worker( void* params )
         /* Update the trace from this mapping */        
         unsigned int j;
         for( j = 0; j < r->num_mappings; j++ ) {
+            float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
             // update_stranded_read_start_density_from_location( traces, r->locations + j );
-            update_trace_expectation_from_location( traces, r->locations + j );
+            update_trace_expectation_from_location( 
+                traces, r->locations + j, cond_prob );
         }
         
         free_mapped_read( r );
@@ -282,10 +288,12 @@ update_traces_from_mapped_reads_worker( void* params )
 void
 update_traces_from_mapped_reads( 
     struct mapped_reads_db* reads_db,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc)
+        const struct mapped_read_location* const loc,
+        const float cond_prob )
 )
 {        
     zero_traces( traces );
@@ -310,8 +318,10 @@ update_traces_from_mapped_reads(
             /* Update the trace from this mapping */        
             unsigned int j;
             for( j = 0; j < r->num_mappings; j++ ) {
+                float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
                 // update_stranded_read_start_density_from_location( traces, r->locations + j );
-                update_trace_expectation_from_location( traces, r->locations + j );
+                update_trace_expectation_from_location( 
+                    traces, r->locations + j, cond_prob );
             }
             
             free_mapped_read( r );
@@ -326,6 +336,7 @@ update_traces_from_mapped_reads(
         struct update_traces_param params;
         
         params.reads_db = reads_db;
+        params.cond_prbs_db = cond_prbs_db;
         params.traces = traces;
         params.update_trace_expectation_from_location 
             = update_trace_expectation_from_location;
@@ -396,9 +407,12 @@ struct update_mapped_reads_param {
     unsigned int* curr_read_index;
     
     struct mapped_reads_db* reads_db;
+    struct cond_prbs_db_t* cond_prbs_db;
+    
     struct trace_t* traces;
     struct update_mapped_read_rv_t 
-        (* update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                     const struct trace_t* const traces, 
                                      const struct mapped_read_t* const r  );
     
 };
@@ -410,8 +424,12 @@ update_mapped_reads_from_trace_worker( void* params )
     struct mapped_reads_db* reads_db = 
         ( (struct update_mapped_reads_param*) params)->reads_db;
 
+    struct cond_prbs_db_t* cond_prbs_db =
+        ( (struct update_mapped_reads_param*) params)->cond_prbs_db;
+
     struct update_mapped_read_rv_t 
-        (* update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                     const struct trace_t* const traces, 
                                      const struct mapped_read_t* const r  )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
@@ -421,16 +439,18 @@ update_mapped_reads_from_trace_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
     {
-        if( r->read_id%1000000 == 0 )
+        if( r->read_id%1000000 == 0 && r->read_id > 0  )
             fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", 
                      r->read_id );
 
-        if( r->num_mappings <= 1 )
+        if( r->num_mappings <= 1 ) {
+            free_mapped_read( r );
             continue;
-
+        }
+        
         /* Update the read */
         struct update_mapped_read_rv_t tmp_rv 
-            = update_mapped_read_prbs( traces, r );
+            = update_mapped_read_prbs( cond_prbs_db, traces, r );
 
         /* Hand reduce the max */
         if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
@@ -453,9 +473,11 @@ update_mapped_reads_from_trace_worker( void* params )
 struct update_mapped_read_rv_t
 update_mapped_reads_from_trace( 
     struct mapped_reads_db* reads_db,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces,
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                           const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
     )
 {    
@@ -476,17 +498,19 @@ update_mapped_reads_from_trace(
         {
             read_cnt++;
                         
-            if( read_cnt%1000000 == 0 )
+            if( read_cnt%1000000 == 0 && r->read_id > 0 )
                 fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", read_cnt );
             
             /* if there aren't more than 1 potential locations, 
                there's no point in updating this */
-            if( r->num_mappings <= 1 )
+            if( r->num_mappings <= 1 ) {
+                free_mapped_read( r );
                 continue;
+            }
 
             /* Update the read */
             struct update_mapped_read_rv_t tmp_rv 
-                = update_mapped_read_prbs( traces, r );
+                = update_mapped_read_prbs( cond_prbs_db, traces, r );
             
             /* Hand reduce the max */
             if( tmp_rv.max_change > rv.max_change )
@@ -510,6 +534,8 @@ update_mapped_reads_from_trace(
         params.rv.log_lhd = 0;
                 
         params.reads_db = reads_db;
+        params.cond_prbs_db = cond_prbs_db;
+        
         /* traces should be read only, so they are shared */
         params.traces = traces;
         params.update_mapped_read_prbs = update_mapped_read_prbs;
@@ -578,16 +604,18 @@ update_mapped_reads_from_trace(
 double
 calc_log_lhd( 
     struct mapped_reads_db* reads_db,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces,
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                           const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
     )
 {    
     struct update_mapped_read_rv_t rv;
     
     rv = update_mapped_reads_from_trace( 
-        reads_db, traces, update_mapped_read_prbs );
+        reads_db, cond_prbs_db, traces, update_mapped_read_prbs );
     
     return rv.log_lhd;
 }
@@ -595,16 +623,19 @@ calc_log_lhd(
 int
 update_mapping(
     struct mapped_reads_db* rdb,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* starting_trace,
     int max_num_iterations,
     float max_prb_change_for_convergence,
     float lhd_ratio_stop_value,
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc),
+        const struct mapped_read_location* const loc,
+        const float prb ),
 
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                           const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
     )
 {
@@ -630,14 +661,15 @@ update_mapping(
         
         gettimeofday( &umr_start, NULL );   
         rv = update_mapped_reads_from_trace(
-            rdb, starting_trace, 
+            rdb, cond_prbs_db,
+            starting_trace, 
             update_mapped_read_prbs
         );
         gettimeofday( &umr_stop, NULL );   
         
         gettimeofday( &ut_start, NULL );   
         update_traces_from_mapped_reads( 
-            rdb, starting_trace, 
+            rdb, cond_prbs_db, starting_trace, 
             update_trace_expectation_from_location
         );
         gettimeofday( &ut_stop, NULL );
@@ -687,14 +719,18 @@ void
 build_random_starting_trace( 
     struct trace_t* traces, 
     struct genome_data* genome,
+
     struct mapped_reads_db* rdb,
-    
+    struct cond_prbs_db_t* cond_prbs_db,
+
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc),
+        const struct mapped_read_location* const loc,
+        const float cond_prob),
 
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                           const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
     )
 {
@@ -710,10 +746,10 @@ build_random_starting_trace(
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {        
         /* reset the read cond prbs under a uniform prior */
-        reset_read_cond_probs( r );
+        reset_read_cond_probs( cond_prbs_db, r );
         
         /* update the read conditional probabilities from the trace */
-        update_mapped_read_prbs( traces, r );        
+        update_mapped_read_prbs( cond_prbs_db, traces, r );        
         
         if( r->num_mappings > 0 )
         {
@@ -726,8 +762,7 @@ build_random_starting_trace(
                 double cum_dist = 0;
                 for( j = 0; j < r->num_mappings; j++ ) 
                 {
-                    cum_dist += 
-                        get_cond_prob_from_mapped_read_location( r->locations + j );
+                    cum_dist += get_cond_prb( cond_prbs_db, r->read_id, j );
                     if( random_num <= cum_dist )
                         break;
                 }
@@ -748,12 +783,7 @@ build_random_starting_trace(
             }
                         
             /* Add this location to the trace, with prb 1 */
-            /* We do this by temp changing cond_prb, and then changing it back */
-            float tmp_cond_prb = 
-                get_cond_prob_from_mapped_read_location( r->locations + j );
-            set_cond_prob_in_mapped_read_location( r->locations + j, 1.0 );
-            update_trace_expectation_from_location( traces, r->locations + j );
-            set_cond_prob_in_mapped_read_location( r->locations + j, tmp_cond_prb );
+            update_trace_expectation_from_location( traces, r->locations + j, 1.0 );
         }
 
         free_mapped_read( r );
@@ -780,6 +810,7 @@ build_random_starting_trace(
 int 
 sample_random_trace(
     struct mapped_reads_db* rdb, 
+    struct cond_prbs_db_t* cond_prbs_db,
     struct genome_data* genome,
 
     int num_tracks,
@@ -796,10 +827,13 @@ sample_random_trace(
 
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
-        const struct mapped_read_location* const loc),
+        const struct mapped_read_location* const loc,
+        const float cond_prob
+    ),
     
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( const struct trace_t* const traces, 
+        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                           const struct trace_t* const traces, 
                                            const struct mapped_read_t* const r  )
     )
 {
@@ -809,10 +843,10 @@ sample_random_trace(
     init_trace( genome, &sample_trace, num_tracks, track_names );
 
     build_random_starting_trace( 
-        sample_trace, genome, rdb, 
+        sample_trace, genome, rdb, cond_prbs_db,
         update_trace_expectation_from_location,
         update_mapped_read_prbs
-        );
+     );
         
     if( SAVE_STARTING_SAMPLES )
     {
@@ -821,19 +855,20 @@ sample_random_trace(
             
         write_trace_to_file( sample_trace, buffer );
                         
-        double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+        double log_lhd = calc_log_lhd( 
+            rdb, cond_prbs_db, sample_trace, update_mapped_read_prbs );
         fprintf( ss_mi, "%i,%e\n", sample_index+1, log_lhd );
         fflush( ss_mi );
     }
         
     /* maximize the likelihood */
     update_mapping( 
-        rdb, sample_trace, max_num_iterations,
+        rdb, cond_prbs_db, sample_trace, max_num_iterations,
         max_prb_change_for_convergence,
         CHIPSEQ_LHD_RATIO_STOP_VALUE, 
         update_trace_expectation_from_location,
         update_mapped_read_prbs
-        );
+    );
         
     if( SAVE_SAMPLES )
     {
@@ -842,7 +877,8 @@ sample_random_trace(
 
         write_trace_to_file( sample_trace, buffer );
             
-        double log_lhd = calc_log_lhd( rdb, sample_trace, update_mapped_read_prbs );
+        double log_lhd = calc_log_lhd( 
+            rdb, cond_prbs_db, sample_trace, update_mapped_read_prbs );
         fprintf( s_mi, "%i,%e\n", sample_index+1, log_lhd );
         fflush( s_mi );
     }
@@ -872,7 +908,7 @@ sample_random_trace(
 
             /* actually perform the bootstrap */
             bootstrap_traces_from_mapped_reads( 
-                rdb, sample_trace, update_trace_expectation_from_location );
+                rdb, cond_prbs_db, sample_trace, update_trace_expectation_from_location );
                 
             if( SAVE_BOOTSTRAP_SAMPLES )
             {
@@ -906,13 +942,14 @@ sample_random_trace(
 void 
 update_chipseq_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const struct mapped_read_location* const loc )
+    const struct mapped_read_location* const loc,
+    float cond_prob 
+)
 {
     const unsigned char flag = get_flag_from_mapped_read_location( loc  );
     const int chr_index = get_chr_from_mapped_read_location( loc  );
     const unsigned int start = get_start_from_mapped_read_location( loc  );
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
-    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
@@ -1094,8 +1131,9 @@ update_chipseq_trace_expectation_from_location(
 }
 
 struct update_mapped_read_rv_t 
-update_chipseq_mapped_read_prbs( const struct trace_t* const traces, 
-                                 const struct mapped_read_t* const r  )
+update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
+                                     const struct trace_t* const traces, 
+                                     const struct mapped_read_t* const r  )
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
     
@@ -1205,15 +1243,10 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             /* absolute value error */
             double normalized_density = new_prbs[i]/prb_sum; 
             
-            rv.max_change += MAX( 
-                normalized_density 
-                    - get_cond_prob_from_mapped_read_location( r->locations + i ),
-                get_cond_prob_from_mapped_read_location( r->locations + i ) 
-                    - normalized_density 
-            );
+            rv.max_change += fabs( 
+                get_cond_prb( cond_prbs_db, r->read_id, i ) - normalized_density );
             
-            set_cond_prob_in_mapped_read_location( 
-                r->locations + i, normalized_density );
+            set_cond_prb( cond_prbs_db, r->read_id, i, normalized_density );
         }
         /* BUG - Can we be smarter here? */
         /* if the window density sums to 0, then it is impossible to normalize. 
@@ -1233,8 +1266,7 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
             double normalized_density = 
                 get_seq_error_from_mapped_read_location( r->locations + i )
                 /error_prb_sum; 
-            set_cond_prob_in_mapped_read_location( 
-                r->locations + i, normalized_density );
+            set_cond_prb( cond_prbs_db, r->read_id, i, normalized_density );
         }
     }
     
@@ -1254,13 +1286,14 @@ update_chipseq_mapped_read_prbs( const struct trace_t* const traces,
 
 void update_CAGE_trace_expectation_from_location(
     const struct trace_t* const traces, 
-    const struct mapped_read_location* const loc )
+    const struct mapped_read_location* const loc,
+    float cond_prob
+)
 {
     int chr_index = get_chr_from_mapped_read_location( loc  );
     unsigned char flag = get_flag_from_mapped_read_location( loc  );
     unsigned int start = get_start_from_mapped_read_location( loc  );
     // unsigned int stop = get_stop_from_mapped_read_location( loc  );
-    float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
@@ -1312,6 +1345,7 @@ void update_CAGE_trace_expectation_from_location(
 /* Returns the probability of observing the read, conditional on the trace */
 inline struct update_mapped_read_rv_t 
 update_CAGE_mapped_read_prbs( 
+    struct cond_prbs_db_t* cond_prbs_db,
     const struct trace_t* const traces, 
     const struct mapped_read_t* const r  )
 {
@@ -1382,14 +1416,13 @@ update_CAGE_mapped_read_prbs(
             //                 - r.locations[i].cond_prob, 2 ) ;
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
-            double old_cnd_prb = get_cond_prob_from_mapped_read_location( r->locations + i );
+            double old_cnd_prb = get_cond_prb( cond_prbs_db, r->read_id, i );
             
             // printf("%i\t%e\t%e\t%e\n", i, new_prbs[i], normalized_density, old_cnd_prb );
             
             rv.max_change += fabs( normalized_density - old_cnd_prb );
            
-            set_cond_prob_in_mapped_read_location( 
-                r->locations + i, normalized_density );
+            set_cond_prb( cond_prbs_db, r->read_id, i, normalized_density );
         }
 
         // printf( "%i\t%e\n", r->num_mappings, rv.max_change );
@@ -1419,10 +1452,14 @@ update_CAGE_mapped_read_prbs(
 
 int
 update_chipseq_mapping_wnc(  
+    int sample_index,
+    
     struct mapped_reads_db* ip_rdb, 
+    struct cond_prbs_db_t* ip_cond_prbs_db,
     struct trace_t** ip_trace,
     
     struct mapped_reads_db* nc_rdb,
+    struct cond_prbs_db_t* nc_cond_prbs_db,
     struct trace_t** nc_trace,
     
     struct genome_data* genome,
@@ -1444,8 +1481,8 @@ update_chipseq_mapping_wnc(
     global_genome = genome;
 
     /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( ip_rdb );
-    reset_all_read_cond_probs( nc_rdb );
+    reset_all_read_cond_probs( ip_rdb, ip_cond_prbs_db );
+    reset_all_read_cond_probs( nc_rdb, nc_cond_prbs_db );
             
     /* iteratively map from a uniform prior */
     gettimeofday( &start, NULL );
@@ -1463,18 +1500,28 @@ update_chipseq_mapping_wnc(
         set_trace_to_uniform( *ip_trace, 1 );    
     } else {
         build_random_starting_trace( 
-            *ip_trace, genome, ip_rdb, 
+            *ip_trace, genome, 
+            ip_rdb, ip_cond_prbs_db,
             update_chipseq_trace_expectation_from_location,
             update_chipseq_mapped_read_prbs
         );
+
+        if( SAVE_STARTING_SAMPLES )
+        {
+            char buffer[100];
+            sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, sample_index+1 );
+            
+            write_trace_to_file( *ip_trace, buffer );
+        }
     }
     
     /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( ip_rdb );
+    reset_all_read_cond_probs( ip_rdb, ip_cond_prbs_db );
     
     /* update the 'real' IP data */
     error = update_mapping (
         ip_rdb, 
+        ip_cond_prbs_db,
         *ip_trace,
         MAX_NUM_EM_ITERATIONS,
         max_prb_change_for_convergence,
@@ -1495,20 +1542,20 @@ update_chipseq_mapping_wnc(
     
     struct update_mapped_read_rv_t rv;
     rv = update_mapped_reads_from_trace(
-            nc_rdb, *ip_trace, 
-            update_chipseq_mapped_read_prbs
+            nc_rdb, nc_cond_prbs_db,
+            *ip_trace, update_chipseq_mapped_read_prbs
         );
 
     /* update the NC reads from the ip marginal density */
     update_traces_from_mapped_reads( 
-        nc_rdb, *nc_trace, 
+        nc_rdb, nc_cond_prbs_db, *nc_trace, 
         update_chipseq_trace_expectation_from_location
     );
 
     /* we need to do this because I renormalized the read sensity, 
        and it screws up the wiggle printing. Kind of a hack... */
     update_traces_from_mapped_reads( 
-        ip_rdb, *ip_trace, 
+        ip_rdb, ip_cond_prbs_db, *ip_trace, 
         update_chipseq_trace_expectation_from_location
     );
     
@@ -1544,10 +1591,17 @@ take_chipseq_sample_wnc(
     /* traces and track names to store the 2 marginal densities */
     struct trace_t* ip_trace;
     struct trace_t* nc_trace;
+
+    struct cond_prbs_db_t* chip_cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &chip_cond_prbs_db, chip_mpd_rds_db );
+    
+    struct cond_prbs_db_t* NC_cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &NC_cond_prbs_db, NC_mpd_rds_db );
     
     /* jointly update the mappings */
-    update_chipseq_mapping_wnc(  chip_mpd_rds_db, &ip_trace,
-                                 NC_mpd_rds_db, &nc_trace,
+    update_chipseq_mapping_wnc(  sample_index,
+                                 chip_mpd_rds_db, chip_cond_prbs_db, &ip_trace,
+                                 NC_mpd_rds_db, NC_cond_prbs_db, &nc_trace,
                                  genome, 
                                  max_prb_change_for_convergence,
                                  random_start ); 
@@ -1568,7 +1622,8 @@ take_chipseq_sample_wnc(
 
         /* write the lhd to the meta info folder */
         double log_lhd = calc_log_lhd( 
-            chip_mpd_rds_db, ip_trace, update_chipseq_mapped_read_prbs );
+            chip_mpd_rds_db, chip_cond_prbs_db, 
+            ip_trace, update_chipseq_mapped_read_prbs );
         fprintf( meta_info_fp, "%i,%e\n", sample_index+1, log_lhd );
         fflush( meta_info_fp );
     }
@@ -1597,12 +1652,12 @@ take_chipseq_sample_wnc(
                     
             /* actually perform the bootstrap */
             bootstrap_traces_from_mapped_reads( 
-                chip_mpd_rds_db, ip_trace, 
+                chip_mpd_rds_db, chip_cond_prbs_db, ip_trace, 
                 update_chipseq_trace_expectation_from_location );
                     
             /* actually perform the bootstrap */
             bootstrap_traces_from_mapped_reads( 
-                NC_mpd_rds_db, nc_trace,
+                NC_mpd_rds_db, NC_cond_prbs_db, nc_trace,
                 update_chipseq_trace_expectation_from_location );
                     
             if( SAVE_BOOTSTRAP_SAMPLES )
@@ -1625,7 +1680,10 @@ take_chipseq_sample_wnc(
         close_traces( ip_trace );
         close_traces( nc_trace );
     }     
-
+    
+    free_cond_prbs_db( chip_cond_prbs_db );
+    free_cond_prbs_db( NC_cond_prbs_db );
+    
     return;
 }
 
@@ -1649,8 +1707,11 @@ take_chipseq_sample(
     track_names[0] = "fwd_strnd_read_density"; 
     track_names[1] = "rev_strnd_read_density";
 
+    struct cond_prbs_db_t* cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, rdb );
+
     sample_random_trace(
-        rdb, genome, trace_size, track_names, sample_index,
+        rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
         ss_mi, s_mi, 
         max_num_iterations, max_prb_change_for_convergence,
         update_chipseq_trace_expectation_from_location,
@@ -1658,6 +1719,7 @@ take_chipseq_sample(
     );
     
     free( track_names );
+    free_cond_prbs_db( cond_prbs_db );
 
     return 0;
 }
@@ -1682,8 +1744,11 @@ take_cage_sample(
     track_names[0] = "fwd_strnd_read_density"; 
     track_names[1] = "rev_strnd_read_density";
 
+    struct cond_prbs_db_t* cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, rdb );
+
     sample_random_trace(
-        rdb, genome, trace_size, track_names, sample_index,
+        rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
         ss_mi, s_mi, 
         max_num_iterations, max_prb_change_for_convergence,
         update_CAGE_trace_expectation_from_location,
@@ -1691,7 +1756,8 @@ take_cage_sample(
     );
     
     free( track_names );
-
+    free_cond_prbs_db( cond_prbs_db );
+    
     return 0;
 }
 
@@ -1755,13 +1821,15 @@ generic_update_mapping(  struct mapped_reads_db* rdb,
 void
 update_cond_prbs_from_trace_and_assay_type(  
     struct mapped_reads_db* rdb, 
+    struct cond_prbs_db_t* cond_prbs_db,
     struct trace_t* traces,
     struct genome_data* genome,
     enum assay_type_t assay_type
-    )
+)
 {
     struct update_mapped_read_rv_t 
-        (*update_reads)( const struct trace_t* const traces, 
+        (*update_reads)( struct cond_prbs_db_t* cond_prbs_db, 
+                         const struct trace_t* const traces, 
                          const struct mapped_read_t* const r  )
         = NULL;
 
@@ -1786,7 +1854,7 @@ update_cond_prbs_from_trace_and_assay_type(
     global_genome = genome;
 
     update_mapped_reads_from_trace(
-        rdb, traces, update_reads
+        rdb, cond_prbs_db, traces, update_reads
     );
     
     goto cleanup;

@@ -13,6 +13,7 @@ void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
     struct mapped_read_location* loc,
+    float cond_prob,
     struct genome_data* genome,
     char* key, 
     char* seq,
@@ -24,7 +25,6 @@ fprintf_nonpaired_mapped_read_as_sam(
     const unsigned int start = get_start_from_mapped_read_location( loc  );
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
-    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
 
     assert( cond_prob <= 1.0 );
     
@@ -95,6 +95,8 @@ void
 fprintf_paired_mapped_read_as_sam( 
     FILE* sam_fp,
     struct mapped_read_location* loc,
+    const float cond_prob,
+
     struct genome_data* genome,
     
     char* r1_key, 
@@ -113,7 +115,7 @@ fprintf_paired_mapped_read_as_sam(
     const unsigned int start = get_start_from_mapped_read_location( loc  );
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
-    const float cond_prob = get_cond_prob_from_mapped_read_location( loc  );
+
 
     if( cond_prob > 1.0 )
     {
@@ -325,6 +327,7 @@ void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
     struct mapped_read_t* mpd_rd,
+    struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
     struct rawread* rr1,
     struct rawread* rr2,
@@ -336,6 +339,8 @@ fprintf_mapped_read_to_sam(
     size_t i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
+        float cond_prob = get_cond_prb( cond_prbs_db, mpd_rd->read_id, i );
+        
         /* if this is a paired end read */
         if( rr2 != NULL )
         {
@@ -345,6 +350,8 @@ fprintf_mapped_read_to_sam(
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd->locations + i,
+                cond_prob,
+
                 genome,
 
                 rr1->name,
@@ -361,6 +368,8 @@ fprintf_mapped_read_to_sam(
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd->locations + i,
+                cond_prob,
+                
                 genome,
                 
                 rr1->name,
@@ -488,6 +497,7 @@ void
 write_mapped_reads_to_sam( 
     struct rawread_db_t* rdb,
     struct mapped_reads_db* mappings_db,
+    struct cond_prbs_db_t* cond_prbs_db,
     struct genome_data* genome,
     enum bool reset_cond_read_prbs,
     /* whether or not to print out pseudo locations
@@ -547,10 +557,11 @@ write_mapped_reads_to_sam(
         {
             /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
-                reset_read_cond_probs( mapped_rd );
+                reset_read_cond_probs( cond_prbs_db, mapped_rd );
 
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, genome, rd1, rd2, expand_pseudo_locations );
+                sam_ofp, mapped_rd, cond_prbs_db, 
+                genome, rd1, rd2, expand_pseudo_locations );
         }
         
         free_mapped_read( mapped_rd );

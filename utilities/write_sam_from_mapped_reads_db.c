@@ -9,6 +9,9 @@
 #include "../src/sam.h"
 #include "../src/rawread.h"
 #include "../src/config_parsing.h"
+#include "../src/fragment_length.h"
+#include "../src/trace.h"
+#include "../src/iterative_mapping.h"
 
 /* make it possible to link */
 int min_num_hq_bps = -1;
@@ -97,6 +100,9 @@ int main( int argc, char** argv )
     struct mapped_reads_db* mpd_rdb;
     open_mapped_reads_db( &mpd_rdb, mpd_rd_fname );
 
+    struct cond_prbs_db_t* cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb );
+    
     /* load the rawreads */
     struct rawread_db_t* raw_rdb;
     if( USE_IP == 0 ) {
@@ -153,13 +159,13 @@ int main( int argc, char** argv )
         mmap_mapped_reads_db( mpd_rdb );
         index_mapped_reads_db( mpd_rdb );
         update_cond_prbs_from_trace_and_assay_type( 
-            mpd_rdb, traces, genome, args->assay_type );
+            mpd_rdb, cond_prbs_db, traces, genome, args->assay_type );
 
         close_traces( traces );
     }
         
     write_mapped_reads_to_sam( 
-        raw_rdb, mpd_rdb, genome, reset_cond_prbs, false, stdout );
+        raw_rdb, mpd_rdb, cond_prbs_db, genome, reset_cond_prbs, false, stdout );
     
     goto cleanup;
     

@@ -357,13 +357,13 @@ update_snp_estimates_from_candidate_mappings(
                     /* We cap the min penalties to enable the fast math optimizations */
                     if( ( (loc->snps_bm_r1)&(1<<snp_index) ) > 0 ) 
                     {
-                        snps[snp_index].alt_cnt += 
-                            get_cond_prob_from_mapped_read_location(
-                                rd->locations + i);
+                        // BUG - XXX - need to use the cond prb, but need to pass more in
+                        snps[snp_index].alt_cnt += 1;
+                        // get_cond_prob_from_mapped_read_location( rd->locations + i);
                     } else {
-                        snps[snp_index].ref_cnt += 
-                            get_cond_prob_from_mapped_read_location(
-                                rd->locations + i);
+                        // BUG - XXX - need to use the cond prb, but need to pass more in
+                        snps[snp_index].ref_cnt += 1;
+                        // get_cond_prob_from_mapped_read_location( rd->locations + i);
                     }
                 }                    
             }
