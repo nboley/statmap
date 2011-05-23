@@ -11,43 +11,52 @@
    However, if we are searching for memory leaks, it may be useful 
    to manually free the index. 
 */
-#define EXPLICITLY_FREE_INDEX
+#define DONT_EXPLICITLY_FREE_INDEX
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./build_index genome.fa indexed_seq_len output_filename\n" );
+    fprintf( stderr, "Usage: ./build_index indexed_seq_len output_filename genome.fa(s)\n" );
     return;
 }
 
 int 
 main( int argc, char** argv )
 {
-    if( argc != 4 )
+    if( argc < 4 )
     {
         usage();
         exit( 1 );
     }
     
-    char* genome_fname = argv[1];
-    int indexed_seq_len = atoi( argv[2] );
-    
-    /*** Load the genome ***/
-    FILE* genome_fp = fopen( genome_fname, "r");
+    int indexed_seq_len = atoi( argv[1] );
+
+    char* output_fname = argv[2];
+    char index_fname[500];
+    sprintf( index_fname, "%s.index", output_fname );
+
+    /* Initialize the genome data structure */
     struct genome_data* genome;
     init_genome( &genome );
-    /* load the genome into memory */
-    add_chrs_from_fasta_file( genome, genome_fp );
+
+    /*** Load the genome ***/
+    /* Add the fasta files to the genome */
+    int i;
+    for( i = 3; i < argc; i++ )
+    {
+        char* genome_fname = argv[i];
+        fprintf( stderr, "NOTICE      :  Adding '%s'\n", genome_fname );
+        FILE* genome_fp = fopen( genome_fname, "r");
+        add_chrs_from_fasta_file( genome, genome_fp );
+    }
     
     /* index the genome */
     index_genome( genome, indexed_seq_len );
 
     /* write the genome to file */
-    write_genome_to_disk( genome, argv[3]  );
+    write_genome_to_disk( genome, output_fname  );
     
     /* write the index to disk */
-    char buffer[500];
-    sprintf( buffer, "%s.index", argv[3] );
-    build_ondisk_index( genome->index, buffer  );
+    build_ondisk_index( genome->index, index_fname  );
 
     /* Test the code - make sure the two copies are identical
     struct genome_data* genome_copy;

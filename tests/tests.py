@@ -113,7 +113,7 @@ def map_with_statmap( read_fnames, output_dir,
     
     # if the indexed seq len is None, we will build the index seperately
     if indexed_seq_len == None:
-        call = "%s -g tmp.genome %s -o %s -p %.2f -m %.2f -t %i" \
+        call = "%s -g tmp.genome.fa %s -o %s -p %.2f -m %.2f -t %i" \
             % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
         if assay != None:
             call += ( " -n 1 -a " + assay )
@@ -125,7 +125,7 @@ def map_with_statmap( read_fnames, output_dir,
                 % str( ret_code )
     else:
         # first, build the genome
-        call = "%s tmp.genome %i tmp.genome.bin" % ( BUILD_INDEX_PATH, indexed_seq_len )
+        call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
         print >> stdout, re.sub( "\s+", " ", call)
         ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
         if ret_code != 0:
@@ -133,7 +133,7 @@ def map_with_statmap( read_fnames, output_dir,
                 % str( ret_code )
 
 
-        call = "%s -g tmp.genome.bin %s -o %s -p %.2f -m %.2f -t %i" \
+        call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i" \
             % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
         if assay != None:
             call += ( " -n 1 -a " + assay )
@@ -269,6 +269,29 @@ def write_genome_to_fasta( genome, fasta_fp, num_repeats=1 ):
             ):
             fasta_fp.write( seq[start:stop] )
             fasta_fp.write( "\n" )
+    
+    return
+
+def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
+    # the maximum length, in bp's, of each fasta line
+    FA_LL = 50
+    
+    for chr_name in genome.keys():
+        fasta_fp = open( file_prefix + "_" + chr_name + ".fa", "w" )
+        
+        fasta_fp.write( ">%s\n" % chr_name)
+        
+        seq = genome[chr_name]*num_repeats
+        chr_size = len(seq)
+
+        for start, stop in izip( \
+                xrange(0,chr_size,FA_LL), \
+                xrange(FA_LL,chr_size+FA_LL+1,FA_LL) \
+            ):
+            fasta_fp.write( seq[start:stop] )
+            fasta_fp.write( "\n" )
+        
+        fasta_fp.close()
     
     return
 
@@ -478,7 +501,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome", "w")
+    genome_of = open("tmp.genome.fa", "w")
     write_genome_to_fasta( r_genome, genome_of, 1 )
     genome_of.close()
     
@@ -529,7 +552,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        os.remove("./tmp.genome")
+        os.remove("./tmp.genome.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
 
@@ -608,7 +631,7 @@ def test_paired_end_reads( read_len ):
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome", "w")
+    genome_of = open("tmp.genome.fa", "w")
     write_genome_to_fasta( r_genome, genome_of, 1 )
     genome_of.close()
     
@@ -651,7 +674,7 @@ def test_paired_end_reads( read_len ):
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        os.remove("./tmp.genome")
+        os.remove("./tmp.genome.fa")
         os.remove("./tmp.1.fastq")
         os.remove("./tmp.2.fastq")
         shutil.rmtree(output_directory)
@@ -682,7 +705,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome", "w")
+    genome_of = open("tmp.genome.fa", "w")
     write_genome_to_fasta( r_genome, genome_of, n_dups )
     genome_of.close()
     
@@ -725,7 +748,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        os.remove("./tmp.genome")
+        os.remove("./tmp.genome.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
 
@@ -744,7 +767,7 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i" \
         % ( read_len, min_penalty, n_threads )
 
@@ -752,7 +775,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
 
     ###### Prepare the data for the test ############################################
     # build a random genome
-    r_genome = build_random_genome( [1000,], ["1",] )
+    r_genome = build_random_genome( [1000,1000, 10000], ["1","2","3"] )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
@@ -768,10 +791,14 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome", "w")
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
-    
+    if fasta_prefix == None:
+        genome_of = open("tmp.genome.fa", "w")
+        write_genome_to_fasta( r_genome, genome_of, 1 )
+        genome_of.close()
+    # otherwise, assume we want multiple genomes fasta
+    else:
+        write_genome_to_multiple_fastas( r_genome, fasta_prefix, 1 )
+
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
     build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
@@ -856,7 +883,12 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1 ):
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        os.remove("./tmp.genome")
+        if fasta_prefix == None:
+            os.remove("./tmp.genome.fa")
+        else:
+            os.remove("./tmp_genome_1.fa")
+            os.remove("./tmp_genome_2.fa")
+            os.remove("./tmp_genome_3.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
 
@@ -879,6 +911,17 @@ def test_multithreaded_mapping( ):
             raise
         else:
             print "PASS: Multi-Threaded Read Mapping %i BP Test. ( Statmap appears to be mapping correctly with multiple threads )" % rl
+
+def test_multi_fasta_mapping( ):
+    rl = 50
+    try: 
+        test_dirty_reads( rl, n_threads=2, fasta_prefix="tmp_genome" ) 
+    except:
+        print "FAIL: Multi-Fasta Read Mapping %i BP Test Failed." % rl
+        raise
+    else:
+        print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
+
 ###
 # Test to make sure that we are correctly indexing and finding snps
 def test_snps( read_len, num_snps = 10 ):
@@ -929,7 +972,7 @@ def test_snps( read_len, num_snps = 10 ):
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome", "w")
+    genome_of = open("tmp.genome.fa", "w")
     write_genome_to_fasta( r_genome, genome_of, 1 )
     genome_of.close()
     
@@ -938,7 +981,7 @@ def test_snps( read_len, num_snps = 10 ):
     build_single_end_fastq_from_seqs( reads, reads_of )
     reads_of.close()
 
-    call = "%s -g tmp.genome -s -r tmp.fastq -s tmp.snpcov -o %s \
+    call = "%s -g tmp.genome.fa -s -r tmp.fastq -s tmp.snpcov -o %s \
                              -p %.2f -m %.2f \
                              -t 1 " % ( STATMAP_PATH, output_directory, -10.0, 0.50 )
         
@@ -991,7 +1034,7 @@ def test_snps( read_len, num_snps = 10 ):
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        os.remove("./tmp.genome")
+        os.remove("./tmp.genome.fa")
         os.remove("./tmp.fastq")
         os.remove("./tmp.snpcov")
         shutil.rmtree(output_directory)
@@ -1043,6 +1086,8 @@ if __name__ == '__main__':
         test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
         test_multithreaded_mapping( )
+        print "Starting test_multi)_fasta_mapping()"
+        test_multi_fasta_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
         print "Starting test_untemplated_g_finding()"
