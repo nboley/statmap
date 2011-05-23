@@ -359,18 +359,6 @@ build_candidate_mappings_from_mapped_locations(
         if( read_location < 0 )
             continue;
 
-        if( result->location.covers_snp == 1 )
-        {
-            template_candidate_mapping.recheck = COVERS_SNP;
-            template_candidate_mapping.snp_bitfield = 
-                result->location.snp_coverage;
-            template_candidate_mapping.does_cover_snp = true;
-        } else {
-            template_candidate_mapping.does_cover_snp = false;
-            assert( 0 == result->location.snp_coverage );
-            template_candidate_mapping.snp_bitfield = 0;
-        }
-        
         template_candidate_mapping.subseq_offset = results->subseq_offset;
                 
         template_candidate_mapping.trimmed_len = result->trim_offset;

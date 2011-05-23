@@ -693,9 +693,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                     continue;
                 }
                 
-                loc.covers_snp = 0;
-                loc.snp_coverage = 0;
-                
                 /* Add the sequence into the tree */
                 add_sequence(genome->index, genome->index->ps_locs, translation, seq_len, loc);
                 
@@ -754,9 +751,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
                     if( translation == NULL ) {
                         continue;
                     }
-                    
-                    loc.covers_snp = 1;
-                    loc.snp_coverage = bm;
                     
                     /* Add the sequence into the tree */
                     add_sequence(genome->index, genome->index->ps_locs, 

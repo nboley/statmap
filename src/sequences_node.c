@@ -819,9 +819,6 @@ add_duplicate_sequence_to_sequences_node(
             /* unset the array bit */
             clear_bit( get_bitmap_start( seqs ), insert_loc );
             
-            /* add the pseudo location */
-            loc->loc.covers_snp = 0;
-            loc->loc.snp_coverage = 0;
             loc->loc.read_type = 0;
             loc->loc.chr = PSEUDO_LOC_CHR_INDEX;
             assert( psloc_index <= LOCATION_MAX );

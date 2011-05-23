@@ -228,13 +228,16 @@ enum RECHECK
 #define FRAGMENT_LENGTH_BITS 20
 #define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
 #define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
+
 #define MAX_NUM_SNPS 3
+
 typedef struct __attribute__((__packed__))
 {
-    /* 1 if it covers at least 1 snp */
-    unsigned covers_snp     :1;
-    unsigned snp_coverage   :MAX_NUM_SNPS;
+    unsigned is_paternal    :1;
+    unsigned is_maternal    :1;
 
+    unsigned unused_space   :2;
+    
     /* read_type 0 = normal, 1 = junction */
     unsigned read_type      :1;
 

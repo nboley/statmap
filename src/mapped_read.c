@@ -342,9 +342,7 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                 
                 pseudo_array_1[i].chr = gen_locs_1[k].chr;
                 pseudo_array_1[i].start_bp = gen_locs_1[k].loc;
-                pseudo_array_1[i].does_cover_snp = gen_locs_1[k].covers_snp;
-                pseudo_array_1[i].snp_bitfield = gen_locs_1[k].snp_coverage;
-
+                
                 int ps_loc_2_index = pseudo_array_2[j].start_bp;
                 struct pseudo_location_t* ps_loc_2 = ps_locs->locs + ps_loc_2_index;
 
@@ -355,8 +353,6 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                     
                     pseudo_array_2[j].chr = gen_locs_2[l].chr;
                     pseudo_array_2[j].start_bp = gen_locs_2[l].loc;
-                    pseudo_array_2[j].does_cover_snp = gen_locs_2[l].covers_snp;
-                    pseudo_array_2[j].snp_bitfield = gen_locs_2[l].snp_coverage;
 
                 
                     /* if the chrs mismatch, this match is impossible continue */
@@ -433,8 +429,6 @@ mapped_read_from_CMA_and_pseudo_CMA(
                 
                 pseudo_array[i].chr = gen_locs[k].chr;
                 pseudo_array[i].start_bp = gen_locs[k].loc;
-                pseudo_array[i].does_cover_snp = gen_locs[k].covers_snp;
-                pseudo_array[i].snp_bitfield = gen_locs[k].snp_coverage;
                 
                 /* if the chrs mismatch, this match is impossible continue */
                 if( gen_locs[k].chr != r2_array[j].chr )
@@ -600,9 +594,7 @@ build_mapped_read_from_unpaired_candidate_mappings(
                 
                 (mappings->mappings)[i].chr = gen_locs[k].chr;
                 (mappings->mappings)[i].start_bp = gen_locs[k].loc;
-                (mappings->mappings)[i].does_cover_snp = gen_locs[k].covers_snp;
-                (mappings->mappings)[i].snp_bitfield = gen_locs[k].snp_coverage;
-
+                
                 int rv = 
                     convert_unpaired_candidate_mapping_into_mapped_read( 
                         mappings->mappings + i, &loc );
