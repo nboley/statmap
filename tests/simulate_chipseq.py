@@ -383,7 +383,7 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, 
 
 def map_with_statmap( iterative=True, paired_end=True ):
     # build the index
-    call = "%s tmp.genome 20 tmp.genome.bin" % sc.BUILD_INDEX_PATH
+    call = "%s 20 tmp.genome.bin tmp.genome" % sc.BUILD_INDEX_PATH
     print re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True )    
     if ret_code != 0:

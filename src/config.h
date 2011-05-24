@@ -231,6 +231,9 @@ enum RECHECK
 
 #define MAX_NUM_SNPS 3
 
+/* this needs to always be able to store up to LOCATION_MAX */
+#define SIGNED_LOC int
+
 typedef struct __attribute__((__packed__))
 {
     unsigned is_paternal    :1;
