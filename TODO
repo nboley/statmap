@@ -28,6 +28,7 @@
 -26) Fix the hack in map_marginal that uses the is_nc flag. ( What's better? )
 -25) COPY estimated_fl_dist into the output directory
 -24) simple repeat analysis, with an eye towards item -23
+-23) Paralellize trace normalization
 H -23) PSEDUO locations - speed up repeats
   ( Review this code - needs to be faster and more efficient in iterative. Currently,
     we just expand this into mapped reads ( but we pbly shouldnt )

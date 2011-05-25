@@ -210,7 +210,6 @@ parse_map_file( char* fname, struct diploid_map_data_t** map_data  )
     /* we assume the chromosome name is the string characters until 
        the first underscore or period */
     
-    
     init_diploid_map_data( map_data, "test_chr" );
 
     /* move to the beginning of the file */

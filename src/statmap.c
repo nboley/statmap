@@ -627,6 +627,14 @@ parse_arguments( int argc, char** argv )
             perror( buffer );
             exit( -1 );
         }    
+    } else {
+        if( args.assay_type == CHIP_SEQ )
+        {
+            char buffer[500];
+            sprintf( buffer, "FATAL       :  CHIPSEQ assay mappings requires a fragment length distirbution (-f)\n" );
+            perror( buffer );
+            exit( 1 );
+        }
     }
 
 

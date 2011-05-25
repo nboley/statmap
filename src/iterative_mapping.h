@@ -142,7 +142,9 @@ sample_random_traces(
 
     int num_samples,
     int max_num_iterations,
+
     float max_prb_change_for_convergence,
+    float min_lhd_ratio_change_for_convergence,
     
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 

@@ -824,6 +824,7 @@ sample_random_trace(
 
     int max_num_iterations,
     float max_prb_change_for_convergence,
+    float min_lhd_ratio_change_for_convergence,
 
     void (* const update_trace_expectation_from_location)(
         const struct trace_t* const traces, 
@@ -865,7 +866,7 @@ sample_random_trace(
     update_mapping( 
         rdb, cond_prbs_db, sample_trace, max_num_iterations,
         max_prb_change_for_convergence,
-        CHIPSEQ_LHD_RATIO_STOP_VALUE, 
+        min_lhd_ratio_change_for_convergence, 
         update_trace_expectation_from_location,
         update_mapped_read_prbs
     );
@@ -1525,7 +1526,7 @@ update_chipseq_mapping_wnc(
         *ip_trace,
         MAX_NUM_EM_ITERATIONS,
         max_prb_change_for_convergence,
-        CAGE_LHD_RATIO_STOP_VALUE,
+        CHIPSEQ_LHD_RATIO_STOP_VALUE,
         update_chipseq_trace_expectation_from_location,
         update_chipseq_mapped_read_prbs
     );
@@ -1713,7 +1714,9 @@ take_chipseq_sample(
     sample_random_trace(
         rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
         ss_mi, s_mi, 
-        max_num_iterations, max_prb_change_for_convergence,
+        max_num_iterations, 
+        max_prb_change_for_convergence,
+        CHIPSEQ_LHD_RATIO_STOP_VALUE,
         update_chipseq_trace_expectation_from_location,
         update_chipseq_mapped_read_prbs
     );
@@ -1735,7 +1738,7 @@ take_cage_sample(
     FILE* s_mi,
     
     int max_num_iterations,
-    float max_prb_change_for_convergence
+    double max_prb_change_for_convergence
 ) {
     int trace_size = 2;
 
@@ -1750,7 +1753,9 @@ take_cage_sample(
     sample_random_trace(
         rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
         ss_mi, s_mi, 
-        max_num_iterations, max_prb_change_for_convergence,
+        max_num_iterations, 
+        max_prb_change_for_convergence,
+        CAGE_LHD_RATIO_STOP_VALUE,
         update_CAGE_trace_expectation_from_location,
         update_CAGE_mapped_read_prbs
     );

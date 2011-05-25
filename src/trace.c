@@ -396,23 +396,61 @@ normalize_traces( struct trace_t* traces )
     return;
 }
 
+struct sum_trace_params {
+    TRACE_TYPE* trace;
+    unsigned int length;
+};
+
+double
+sum_trace( struct sum_trace_params params )
+{
+    double sum = 0;
+    unsigned int i;
+    for( i = 0; i < params.length; i++ )
+    {
+        sum += params.trace[i];
+    }
+    
+    return sum;
+}
+
+struct track_index_t {
+    int track_index;
+    int chr_index;
+};
+
 double
 sum_traces( struct trace_t* traces )
 {
-    double sum = 0;
+    /* build a queue of track indices to iterate (and call threads) over */
+    int num_tracks = traces->num_tracks*traces->num_chrs;
+    struct track_index_t* track_indices
+        = malloc( num_tracks*sizeof(struct track_index_t)  );
 
-    int i, j;
-    unsigned int k;
+     int i, j;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
-            {
-                sum += traces->traces[i][j][k];
-            }
+            track_indices[i*traces->num_tracks + j].track_index = i;
+            track_indices[i*traces->num_tracks + j].chr_index = j;
         }
     }
+
+    double sum = 0;
+    for( i = 0; i < num_tracks; i++ )
+    {
+        int track_index = track_indices[i].track_index;
+        int chr_index = track_indices[i].chr_index;
+            
+        struct sum_trace_params params = 
+            { traces->traces[track_index][chr_index], 
+              traces->chr_lengths[chr_index]  };
+        sum += sum_trace( params  );
+    }
+
+    free( track_indices );
+    
     return sum;
 }
 
