@@ -6,6 +6,7 @@ struct mapped_read_t;
 struct mapped_read_location;
 struct genome_data;
 struct cond_prbs_db_t;
+struct mapped_reads_db;
 
 /*
  * Global arguments that are available to all of the 

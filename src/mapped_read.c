@@ -923,12 +923,6 @@ reset_all_read_cond_probs(
     struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db )
                            
 {
-    if( NULL == rdb->mmapped_data ) {
-        perror( "ERROR       :  Mapped Read must be indexed to be writable." );
-        perror( "            :  This is not a user error, it is a bug." );
-        exit( 1 );
-    }
-
     rewind_mapped_reads_db( rdb );
     struct mapped_read_t* r;
 

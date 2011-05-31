@@ -3,7 +3,8 @@ compiler = clang
 compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
-	call_peaks aggregate_over_traces convert_trace_into_wiggle
+	call_peaks aggregate_over_traces convert_trace_into_wiggle \
+	build_marginal_mappings_trace_from_mpd_read_db
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -46,6 +47,18 @@ mapped_reads_into_sam : mapped_reads_into_sam.c
 
 mapped_reads_into_sam.c :
 
+build_marginal_mappings_trace_from_mpd_read_db : build_marginal_mappings_trace_from_mpd_read_db.c
+	$(compiler) $(compile_options) -o build_marginal_mappings_trace_from_mpd_read_db \
+	build_marginal_mappings_trace_from_mpd_read_db.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o  ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/iterative_mapping.o ../src/config_parsing.o \
+	-lm -lpthread
+	cp build_marginal_mappings_trace_from_mpd_read_db ../bin/
+
+build_marginal_mappings_trace_from_mpd_read_db.c :
+
 sample_mapping : sample_mapping.c
 	$(compiler) $(compile_options) -o sample_mapping sample_mapping.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
@@ -79,3 +92,4 @@ clean :
 	-rm build_index
 	-rm call_peaks
 	-rm sample_mapping
+	-rm build_marginal_mappings_trace_from_mpd_read_db
