@@ -163,7 +163,10 @@ struct mapped_read_location {
     MRL_CHR_TYPE chr;
 
     struct {
-        unsigned start_pos :LOCATION_BITS;
+        // MADE_SIGNED_REVERT
+        // unsigned start_pos :LOCATION_BITS;
+        signed start_pos :LOCATION_BITS;
+        
         /* THIS IS EXCLUSIVE, ie NOT including stop */
         signed frag_len :FRAGMENT_LENGTH_BITS;
         // MRL_STOP_POS_TYPE stop_pos;
@@ -228,8 +231,13 @@ set_start_and_stop_in_mapped_read_location(
     int start,
     int stop )
 { 
+    assert( start >= 0 );
     assert( start < LOCATION_MAX );
     loc->position.start_pos = start;
+    
+    assert( stop >= 0 );
+    assert( stop < LOCATION_MAX );
+    
     assert( (stop - start) > FRAGMENT_LENGTH_MIN );
     assert( (stop - start) < FRAGMENT_LENGTH_MAX );
     loc->position.frag_len = stop - start;

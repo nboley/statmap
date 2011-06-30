@@ -153,6 +153,7 @@ add_mapped_location( mapped_locations* results,
     mapped_location* loc = results->locations + results->length;
 
     /* set the location */
+    assert( loc->location.loc >= 0 );
     loc->location = location;
    
     /* set the read strand */

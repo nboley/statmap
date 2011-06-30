@@ -41,7 +41,7 @@ typedef struct __attribute__((packed))__{
 
     /*** Info relating to the location ***/
     /* the chromosome code */
-    unsigned char chr;
+    short chr;
     /* the bp in genomic coordinates */
     int start_bp;
 

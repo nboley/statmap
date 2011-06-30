@@ -1,3 +1,5 @@
+-32) Made some things signed for overflow debugging purposes.
+     search MADE_SIGNED_REVERT to find them
 -31) Adding rawreads to the DB also opens the unmappable files. This is probably
      incorrect, and the sam code was overwriting these files. I fixed it quickly
      by chaning the open mode to append, but the correct fix is to initialize a

@@ -7,6 +7,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <pthread.h>
+#include <limits.h>
 #include "math.h"
 
 #include "statmap.h"
@@ -343,11 +344,16 @@ build_candidate_mappings_from_mapped_locations(
             {
                 continue;
             }
-
+            
+            assert( read_location >= 0 );
+            assert( read_location + ( r->length - result->trim_offset ) > 0 );
+            assert( genome->chr_lens[(result->location).chr] < INT_MAX );
+            assert( read_location + ( r->length - result->trim_offset ) 
+                        < ( int ) genome->chr_lens[(result->location).chr] );
         } 
-                                
+        
         template_candidate_mapping.start_bp = read_location;
-                
+        
         /* set the penalty */
         template_candidate_mapping.penalty = result->penalty;
 

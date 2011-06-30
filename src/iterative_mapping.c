@@ -58,9 +58,9 @@ update_stranded_read_start_density_from_location(
     const float cond_prob 
 )
 {
-    const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
+    const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
+    const MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
+    const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
     
     if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
     {
@@ -947,10 +947,10 @@ update_chipseq_trace_expectation_from_location(
     float cond_prob 
 )
 {
-    const unsigned char flag = get_flag_from_mapped_read_location( loc  );
-    const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    const MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
+    const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
+    const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
+    const MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
@@ -1152,10 +1152,10 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
         /* calculate the mean density */
         double window_density = 0;
 
-        int chr_index = get_chr_from_mapped_read_location( r->locations + i  );
-        unsigned char flag = get_flag_from_mapped_read_location( r->locations + i );
-        unsigned int start = get_start_from_mapped_read_location( r->locations + i );
-        unsigned int stop = get_stop_from_mapped_read_location( r->locations + i );
+        MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( r->locations + i  );
+        MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( r->locations + i );
+        MRL_START_POS_TYPE start = get_start_from_mapped_read_location( r->locations + i );
+        MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( r->locations + i );
 
         /* If the reads are paired */
         unsigned int j = 0;
@@ -1291,9 +1291,9 @@ void update_CAGE_trace_expectation_from_location(
     float cond_prob
 )
 {
-    int chr_index = get_chr_from_mapped_read_location( loc  );
-    unsigned char flag = get_flag_from_mapped_read_location( loc  );
-    unsigned int start = get_start_from_mapped_read_location( loc  );
+    MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
+    MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
+    MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
     // unsigned int stop = get_stop_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
@@ -1364,9 +1364,9 @@ update_CAGE_mapped_read_prbs(
         /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
         double window_density = 2*DBL_EPSILON;
 
-        int chr_index = get_chr_from_mapped_read_location( r->locations + i  );
-        unsigned char flag = get_flag_from_mapped_read_location( r->locations + i );
-        unsigned int start = get_start_from_mapped_read_location( r->locations + i );
+        MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( r->locations + i  );
+        MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( r->locations + i );
+        MRL_START_POS_TYPE start = get_start_from_mapped_read_location( r->locations + i );
         
         /* If the reads are paired */
         unsigned int j = 0;
