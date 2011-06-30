@@ -385,7 +385,8 @@ def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
 
 def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout, untemplated_gs_perc=0.0 ):
     for sample_num, seq in enumerate( samples_iter ):
-        num_untemplated_gs = 1 if random.random() < untemplated_gs_perc else 0
+        num_untemplated_gs = random.randint(1,3) \
+            if random.random() < untemplated_gs_perc else 0
         error_str = 'h'*len(seq)
         of.write("@%s\n" % sample_num )
         of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
@@ -1075,25 +1076,25 @@ if __name__ == '__main__':
 
     if True:
         print "Starting test_fivep_sequence_finding()"
-        test_fivep_sequence_finding()
+        #test_fivep_sequence_finding()
         print "Starting test_threep_sequence_finding()"
-        test_threep_sequence_finding()
+        #test_threep_sequence_finding()
         print "Starting test_paired_end_sequence_finding()"
-        test_paired_end_sequence_finding( )
+        #test_paired_end_sequence_finding( )
         print "Starting test_repeat_sequence_finding()"
-        test_repeat_sequence_finding()
+        #test_repeat_sequence_finding()
         print "Starting test_mutated_read_finding()"
-        test_mutated_read_finding()
+        #test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
-        test_multithreaded_mapping( )
+        #test_multithreaded_mapping( )
         print "Starting test_multi)_fasta_mapping()"
-        test_multi_fasta_mapping( )
+        #test_multi_fasta_mapping( )
         print "Starting test_build_index()"
-        test_build_index( )
+        #test_build_index( )
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
         print "Starting test_index_probe()"
-        test_short_index_probe()
+        #test_short_index_probe()
     # test_snp_finding()
     
     # We skip this test because statmap can't currently
