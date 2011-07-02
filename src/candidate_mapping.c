@@ -26,7 +26,7 @@ void
 init_candidate_mappings( candidate_mappings** mappings )
 {
     *mappings = malloc( sizeof(candidate_mappings) );
-    (*mappings)->mappings = 
+    (*mappings)->mappings =
         malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
     (*mappings)->length = 0;
     (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;

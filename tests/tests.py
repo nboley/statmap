@@ -489,6 +489,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
 
     rl = read_len
 
+    # if we are testing untemplated g's, increase the number of samples so that we get some
+    # beggining overlap
+    nsamples = 10000 if untemplated_gs_perc > 0 else 100
+    
     ###### Prepare the data for the test ############################################
     # build a random genome
     r_genome = build_random_genome( [1000,], ["1",] )
@@ -496,7 +500,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
+    fragments = sample_uniformily_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=rev_comp, paired_end=False )
     
@@ -539,9 +543,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
            or truth[1] not in locs[1]:
             # we need to special case an untemplated g that happens to correspond to a genomic g. 
             # in such cases, we really can't tell what is correct.
-            if untemplated_gs_perc == 0.0 \
-               or loc[1] != truth[1] - 1 \
-               or ( reads_data[0][9][0] != 'g' or r_genome[truth[0]][truth[1]-1] not in 'Gg' ):
+            if untemplated_gs_perc == 0.0:
                print reads_data
                print truth
                print reads_data[0][9][0]
@@ -1076,25 +1078,28 @@ if __name__ == '__main__':
 
     if True:
         print "Starting test_fivep_sequence_finding()"
-        #test_fivep_sequence_finding()
+        test_fivep_sequence_finding()
         print "Starting test_threep_sequence_finding()"
-        #test_threep_sequence_finding()
+        test_threep_sequence_finding()
         print "Starting test_paired_end_sequence_finding()"
-        #test_paired_end_sequence_finding( )
+        test_paired_end_sequence_finding( )
         print "Starting test_repeat_sequence_finding()"
-        #test_repeat_sequence_finding()
+        test_repeat_sequence_finding()
         print "Starting test_mutated_read_finding()"
-        #test_mutated_read_finding()
+        test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
-        #test_multithreaded_mapping( )
+        test_multithreaded_mapping( )
         print "Starting test_multi)_fasta_mapping()"
-        #test_multi_fasta_mapping( )
+        test_multi_fasta_mapping( )
         print "Starting test_build_index()"
-        #test_build_index( )
-        print "Starting test_untemplated_g_finding()"
-        test_untemplated_g_finding()
+        test_build_index( )
         print "Starting test_index_probe()"
         #test_short_index_probe()
+    
+    if True:
+        print "Starting test_untemplated_g_finding()"
+        test_untemplated_g_finding()
+
     # test_snp_finding()
     
     # We skip this test because statmap can't currently

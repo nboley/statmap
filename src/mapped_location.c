@@ -153,9 +153,9 @@ add_mapped_location( mapped_locations* results,
     mapped_location* loc = results->locations + results->length;
 
     /* set the location */
-    assert( loc->location.loc >= 0 );
     loc->location = location;
-   
+    assert( loc->location.loc >= 0 );
+    
     /* set the read strand */
     loc->strnd = strnd;
 
@@ -174,7 +174,7 @@ add_mapped_location( mapped_locations* results,
 void
 print_mapped_locations( mapped_locations* results )
 {
-    size_t i;
+    int i;
     // printf("Num:\tPenalty\tLoc\n");
     
     for( i = 0; i < results->length; i++)

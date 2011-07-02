@@ -466,7 +466,7 @@ get_next_read_from_rawread_db(
     pthread_mutex_lock( rdb->lock );
     
     if( max_readkey >= 0
-        && rdb->readkey > (readkey_t) max_readkey ) {
+        && rdb->readkey >= (readkey_t) max_readkey ) {
         pthread_mutex_unlock( rdb->lock );
         *r1 = NULL;
         *r2 = NULL;

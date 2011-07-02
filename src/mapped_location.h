@@ -36,8 +36,8 @@ typedef struct {
 typedef struct {
     /* An array of mapped locations */
     mapped_location* locations;
-    size_t length;
-    size_t allocated_length;
+    int length;
+    int allocated_length;
 
     int subseq_len;
     int subseq_offset;

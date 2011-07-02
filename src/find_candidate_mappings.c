@@ -167,6 +167,8 @@ make_assay_specific_corrections( struct rawread* r,
             GENOME_LOC_TYPE tmp_loc = loc.location;
             
             /* A location always needs to be greater than 0 */
+            /* note that we use j+1 because j == 0 corresponds
+               to having an untemplated g at index 1 */
             if( tmp_loc.loc < (j+1) ) {
                 continue;
             }
@@ -266,6 +268,104 @@ recheck_location( struct genome_data* genome,
     free( mut_genome_seq );
 }
 
+static inline void
+recheck_locations(
+    struct genome_data* genome, 
+
+    struct rawread* r, 
+    candidate_mappings* mappings,
+    
+    float min_match_penalty,
+    float max_penalty_spread,
+    
+    const float* const lookuptable_position,
+    const float* const inverse_lookuptable_position,
+    const float* const reverse_lookuptable_position,
+    const float* const reverse_inverse_lookuptable_position,
+    const float* const bp_mut_rates
+)
+{
+    /* 
+     * Currently, everything should be set *except* the gene strand. 
+     * This is because we dont know what it is. Therefore, we will 
+     * add these to the db with that bit unset, and then during the 
+     * merging stage add to the penalty and say that it was equally 
+     * likely to have come from either gene strand. This corresponds
+     * with us being equally certain that the read is from either gene.
+     *
+     * Also, we need to check that we dont have any low quality reads.
+     * ( This is possible if the path search went awry, and we found 
+     *   a low quality read before a high quality read )
+     */
+
+    /* 
+     * We keep track of the max observed penalty so that we can filter
+     * out penalties that are too low. The index will never return 
+     * results that are strictly below the minimum penalty, but it may 
+     * return  results below the relative penalty. ( Read the indexing
+     *  header for details )
+     */
+    float max_penalty = min_match_penalty;
+            
+    /* first, if necessary, recheck the locations */
+    int k;
+    for( k = 0; k < mappings->length; k++ )
+    {
+        recheck_location( genome, r, mappings->mappings + k,
+                          lookuptable_position,
+                          inverse_lookuptable_position,
+                          reverse_lookuptable_position,
+                          reverse_inverse_lookuptable_position,
+                          bp_mut_rates
+            );
+                    
+        /* we may need to update the max penalty */
+        if( (mappings->mappings + k)->penalty > max_penalty ) {
+            max_penalty = (mappings->mappings + k)->penalty;
+        }
+    }
+
+    // int k declared earlier 
+    for( k = 0; k < mappings->length; k++ )
+    {
+        /* this should be optimized out */
+        candidate_mapping* loc = mappings->mappings + k;
+
+        /* 
+         * We always need to do this because of the way the search queue
+         * handles poor branches. If our brnach prediction fails we could
+         * add a low probability read, and then go back and find a very 
+         * good read which would invalidate the previous. Then, the read
+         * may not belong, but it isnt removed in the index searching method.
+         */
+                                
+        /* we check max_penalty_spread > -0.00001 to make sure that the
+           likelihood ratio threshold is actually active */
+
+        /* I set the safe bit to 1e-6, which is correct for most floats */
+        if(  max_penalty_spread > -0.00001  ) 
+        {
+            assert( max_penalty_spread >= 0.0 );
+            if(   loc->penalty < ( max_penalty - max_penalty_spread ) )
+            {
+                loc->recheck = INVALID;
+            } 
+        }
+                
+        /* make sure that the penalty isn't too low */
+        if( loc->penalty < min_match_penalty  )
+        {
+            loc->recheck = INVALID;
+        } 
+
+        /* if it's passed all of the tests, it must be valid */
+        if( loc->recheck != INVALID )
+            loc->recheck = VALID;                
+    }
+
+    return;
+}
+
 
 /* build candidate mappings from mapped locations ( 
    the data structure that index lookups return  )    */
@@ -284,10 +384,11 @@ build_candidate_mappings_from_mapped_locations(
     candidate_mapping template_candidate_mapping 
         = init_candidate_mapping_from_template( 
             r, max_penalty_spread 
-            );
+        );
+    
     assert( template_candidate_mapping.rd_type != 0 );
 
-    /* Mkae sure the "subseq" is acutally shorter than the read */
+    /* Make sure the "subseq" is acutally shorter than the read */
     assert( subseq_len <= r->length );
             
     /***** COPY information from the index lookup into the result set
@@ -295,7 +396,7 @@ build_candidate_mappings_from_mapped_locations(
      */        
     init_candidate_mappings( mappings );
                         
-    unsigned int i;
+    int i;
     for( i = 0; i < results->length; i++ )
     {        
         /* 
@@ -325,31 +426,102 @@ build_candidate_mappings_from_mapped_locations(
         /* check for overflow error */
         assert( read_location >= 0 );
         if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
-            /* we can't have a read that starts before location 0 */
-            if( results->subseq_offset > read_location )
+            /* make sure that the read doesn't start before 0 */
+            
+            /* first deal with reads that map to the 5' genome */
+            if( result->strnd == FWD )
             {
+                /* if the mapping location of the probe is less than
+                   the length of the probe offset, then the actual 
+                   read is mapping before the start of the genome, which 
+                   is clearly impossible 
+                */
+                if( read_location < results->subseq_offset ) 
+                {
+                    continue;
+                } 
+                /* we shift the location to the beggining of the sequence, 
+                   rather than the subseq that we looked at in the index  */
+                else {
+                    read_location -= results->subseq_offset;
+                }
+                
+                /* if the end of the read extends past the end of the genome
+                   then this mapping location is impossible, so ignore it    */
+                /* note that we just shifted the read start, so it's correct to
+                   add the full read length without substracting off the probe 
+                   offset. */
+                if( read_location + r->length
+                    > (long) genome->chr_lens[(result->location).chr]      )
+                {
+                    continue;
+                }
+
+            } else if( result->strnd == BKWD ) {
+                /*
+                  This can be very confusing, so we need to draw it out:
+                  
+                  
+                  READ - 20 basepairs
+                  RRRR1RRRRRRRRRR2RRRR
+                  SUBSEQ - 12 BASEPAIRS w/ 4 BP offset
+                      SSSSSSSSSSSS
+                  
+                  If the subsequence maps to the 3' genome, that means the reverse
+                  complement maps to the 5' genome.
+                  
+                  GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+                       2SSSSSSSSSS1
+                       L
+                  ( where L indicates the start position of the subsequence )
+                  
+                  So the *start* of the read in the 3' genome is at position 
+                  L - 4 ( the subsequence offset ) + 16 ( the read length )
+                 */
+                
+                /* this moves the read start to the beginning of the read 
+                 <b>in the 3' genome</b>. */
+
+
+                /** check not going past the end of the gneome */
+                
+                /* make sure that the genome is not too short, this case should
+                   be pretty rare but it is possible */
+                if( (long) genome->chr_lens[(result->location).chr]
+                    < ( results->subseq_len + results->subseq_offset ) )
+                {
+                    continue;
+                }
+                
+                /* this will actually be the read end in the 5' genome,
+                   so we check to make sure that it won't make the read extend
+                   past the end of the genome */                
+                if( read_location > 
+                    (long) genome->chr_lens[(result->location).chr]
+                        - ( results->subseq_len + results->subseq_offset )
+                ) {
+                    continue;
+                }
+                
+                read_location += ( results->subseq_len + results->subseq_offset );             
+                
+                /* now we subtract off the full read length, so that we have the 
+                   read *end* in the 5' genome. Which is what our coordinates are 
+                   based upon. We do it like this to prevent overflow errors. We
+                   first check to make sure we have enough room to subtract, and 
+                   then we do 
+                */
+                if( read_location < r->length )
+                {
+                    continue;
+                } else {
+                    read_location -= r->length;
+                }
+            } else {
+                perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
                 continue;
             }
-
-            /* similarly, make sure the read doesn't move past the genome */
             
-            read_location -= results->subseq_offset;
-                    
-            if( result->strnd == BKWD ) {
-                read_location -= ( r->length - subseq_len - 2*results->subseq_offset );
-            }
-
-            if( (unsigned int) read_location + ( r->length - result->trim_offset )
-                    > genome->chr_lens[(result->location).chr] )
-            {
-                continue;
-            }
-            
-            assert( read_location >= 0 );
-            assert( read_location + ( r->length - result->trim_offset ) > 0 );
-            assert( genome->chr_lens[(result->location).chr] < INT_MAX );
-            assert( read_location + ( r->length - result->trim_offset ) 
-                        < ( int ) genome->chr_lens[(result->location).chr] );
         } 
         
         template_candidate_mapping.start_bp = read_location;
@@ -375,6 +547,52 @@ build_candidate_mappings_from_mapped_locations(
     return;
 }
 
+static inline void
+update_error_data_from_candidate_mappings(
+    struct genome_data* genome,
+    struct error_data_t* error_data,
+    candidate_mappings* mappings,
+    struct rawread* r
+)
+{
+    /* skip empty mappings */
+    if( NULL == mappings )
+        return;
+        
+    /*** we only want unique mappers for the error estiamte updates */        
+    if( mappings->length != 1 ) {
+        return;
+    }
+        
+    /* we know that the length is one from right above */
+    assert( mappings->length == 1 );
+    if( mappings->mappings[0].recheck != VALID ) {
+        return;
+    }
+        
+    // emphasize the array aspect with the + 0
+    // but, since the length is exactly 1, we know that
+    // we only need to deal with this read
+    candidate_mapping* loc = mappings->mappings + 0; 
+    assert( mappings->length == 1 && loc->recheck == VALID );
+        
+    int mapped_length = r->length - loc->trimmed_len;
+        
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp,
+        mapped_length
+    );            
+        
+    char* error_str = r->error_str + loc->trimmed_len;
+
+    char* read_seq = r->char_seq + loc->trimmed_len;
+        
+    update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+
+    return;
+}
 
 /* TODO - revisit the read length vs seq length distinction */
 /* 
@@ -457,7 +675,7 @@ find_candidate_mappings( void* params )
                rdb, &readkey, &r1, &r2, td->max_readkey )  
          ) 
     {                
-        /* We dont lock mapped_cnt because it's read only and we dont 
+        /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
         if( readkey > 0 && 0 == readkey%MAPPING_STATUS_GRANULARITY )
@@ -510,153 +728,75 @@ find_candidate_mappings( void* params )
                we need to add extra reads for the untemplated g's */
             make_assay_specific_corrections( r, results );
             
-            build_candidate_mappings_from_mapped_locations(
-                genome, r, results, 
-                candidate_mappings_cache + 2*curr_read_index + j, 
-                min_match_penalty);
-            candidate_mappings* mappings = candidate_mappings_cache[2*curr_read_index + j];
-
+            /* make a reference to the current set of mappings. This should be
+               optimized out by the compiler */
+            candidate_mappings* mappings;
+            
             readkeys[2*curr_read_index + j] = readkey;
-
             rawreads_cache[ 2*curr_read_index + j ] = r;
             
+            build_candidate_mappings_from_mapped_locations(
+                genome, r, results, 
+                &mappings,
+                min_match_penalty
+            );
+            
+            /* add the read to the cache */
+            assert( 2*curr_read_index + j < 2*READS_STAT_UPDATE_STEP_SIZE );
+            candidate_mappings_cache[2*curr_read_index + j] = mappings;
+            
+            /* update the maximum read length */
             max_read_length = MAX( max_read_length, r->length );
 
-            // print_mapped_locations( results );
-            // print_candidate_mappings( mappings );
-            // printf( "==========================================\n\n" );
+            /*
+            print_mapped_locations( results );
+            print_candidate_mappings( mappings );
+            printf( "==========================================\n\n" );
+            */
             
             free_mapped_locations( results );
 
             /****** Do the recheck ******/
-            /* 
-             * Currently, everything should be set *except* the gene strand. 
-             * This is because we dont know what it is. Therefore, we will 
-             * add these to the db with that bit unset, and then during the 
-             * merging stage add to the penalty and say that it was equally 
-             * likely to have come from either gene strand. This corresponds
-             * with us being equally certain that the read is from either gene.
-             *
-             * Also, we need to check that we dont have any low quality reads.
-             * ( This is possible if the path search went awry, and we found 
-             *   a low quality read before a high quality read )
-             */
-
-            /* 
-             * We keep track of the max observed penalty so that we can filter
-             * out penalties that are too low. The index will never return 
-             * results that are strictly below the minimum penalty, but it may 
-             * return  results below the relative penalty. ( Read the indexing
-             *  header for details )
-             */
-            float max_penalty = min_match_penalty;
             
-            /* first, if necessary, recheck the locations */
-            int k;
-            for( k = 0; k < mappings->length; k++ )
-            {
-                recheck_location( genome, r, mappings->mappings + k,
-                                  lookuptable_position,
-                                  inverse_lookuptable_position,
-                                  reverse_lookuptable_position,
-                                  reverse_inverse_lookuptable_position,
-                                  bp_mut_rates
-                    );
-                    
-                /* we may need to update the max penalty */
-                if( (mappings->mappings + k)->penalty > max_penalty ) {
-                    max_penalty = (mappings->mappings + k)->penalty;
-                }
-            }
-
-            // int k declared earlier 
-            for( k = 0; k < mappings->length; k++ )
-            {
-                /* this should be optimized out */
-                candidate_mapping* loc = mappings->mappings + k;
-
-                /* 
-                 * We always need to do this because of the way the search queue
-                 * handles poor branches. If our brnach prediction fails we could
-                 * add a low probability read, and then go back and find a very 
-                 * good read which would invalidate the previous. Then, the read
-                 * may not belong, but it isnt removed in the index searching method.
-                 */
-                /* I set the safe bit to 1e-6, which is correct for a float */
-                                
-                /* we check max_penalty_spread > -0.00001 to make sure that the
-                   likelihood ratio threshold is actually active */
-                if(  max_penalty_spread > -0.00001  ) 
-                {
-                    assert( max_penalty_spread >= 0.0 );
-                    if(   loc->penalty < ( max_penalty - max_penalty_spread ) )
-                    {
-                        loc->recheck = INVALID;
-                    } 
-                }
-                
-                /* make sure that the penalty isn't too low */
-                if( loc->penalty < min_match_penalty  )
-                {
-                    loc->recheck = INVALID;
-                } 
-
-                /* if it's passed all of the tests, it must be valid */
-                if( loc->recheck != INVALID )
-                    loc->recheck = VALID;                
-            }
+            // call recheck
+            recheck_locations( 
+                genome, 
+                               
+                r, mappings,
+                               
+                min_match_penalty,
+                max_penalty_spread,
+                               
+                lookuptable_position,
+                inverse_lookuptable_position,
+                reverse_lookuptable_position,
+                reverse_inverse_lookuptable_position,
+                bp_mut_rates 
+            );
             
             /* free the mutation lookup tables */
             free( lookuptable_position );
             free( inverse_lookuptable_position );
             free( reverse_lookuptable_position );
             free( reverse_inverse_lookuptable_position );
+
         }
         
         curr_read_index += 1;
     }
-
+    
     /****** update the error estimates ******/
     struct error_data_t* error_data;
     init_error_data( &error_data, max_read_length );
-    
-    int i;
-    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
-    {
-        /* skip empty mapping lists */
-        if( NULL == candidate_mappings_cache[i] )
-            continue;
-
-        candidate_mappings* mappings = candidate_mappings_cache[i];
-        
-        /* we only want unique mappers for the error estiamte updates */
-        if( mappings->length != 1 
-            || mappings->mappings[0].recheck != VALID )
-            continue;
-        
-        // emphasize the array aspect with the + 0
-        candidate_mapping* loc = mappings->mappings + 0; 
-        assert( mappings->length == 1 && loc->recheck == VALID );
-        
-        /* the read that corresponds with these mappings */
-        struct rawread* r = rawreads_cache[ i ];
-
-        int mapped_length = r->length - loc->trimmed_len;
-        
-        char* genome_seq = find_seq_ptr( 
-            genome, 
-            loc->chr, 
-            loc->start_bp,
-            mapped_length
-        );            
-        
-        char* error_str = r->error_str + loc->trimmed_len;
-
-        char* read_seq = r->char_seq + loc->trimmed_len;
-        
-        update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+    int i;    
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
+        update_error_data_from_candidate_mappings( 
+            genome,
+            error_data, 
+            candidate_mappings_cache[ i ],
+            rawreads_cache[ i ]
+        );
     }
-
     // fprintf_error_data( stdout, error_data );
     free_error_data( error_data );
     
@@ -693,7 +833,7 @@ find_candidate_mappings( void* params )
         
         /* free the cached reads and mappings */
         free_rawread( rawreads_cache[i] );
-        free_candidate_mappings( mappings );
+        // free_candidate_mappings( mappings );
     }
     
     
