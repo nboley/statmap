@@ -833,7 +833,7 @@ find_candidate_mappings( void* params )
         
         /* free the cached reads and mappings */
         free_rawread( rawreads_cache[i] );
-        // free_candidate_mappings( mappings );
+        free_candidate_mappings( mappings );
     }
     
     
