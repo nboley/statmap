@@ -52,6 +52,9 @@ int main( int argc, char** argv )
     open_mapped_reads_db( &mpd_rdb, mpd_rd_fname );
     rewind_mapped_reads_db( mpd_rdb );
 
+    struct mapped_reads_db* new_mpd_rdb;
+    new_mapped_reads_db( &new_mpd_rdb, "new_mapped_reads.db" );
+
     struct mapped_read_t* mapped_rd;
     
     error = get_next_read_from_mapped_reads_db( 
@@ -62,6 +65,7 @@ int main( int argc, char** argv )
     {
         // printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
         unsigned int i;
+        enum bool discovered_error = false;
         for( i = 0; i < mapped_rd->num_mappings; i++ )
         {
             // Make sure that the read is actually in the genome
@@ -74,8 +78,16 @@ int main( int argc, char** argv )
                 )
             {
                 printf("\t\t%i (%i)\t%i-%i ( %i )\n", chr, genome->num_chrs, start, stop, genome->chr_lens[ chr ] );
-            }
+                discovered_error = true;
+            } 
         }
+
+        /* if there were no errors, add the read to the new rdb */
+        if( discovered_error == false )
+        {
+            add_read_to_mapped_reads_db( new_mpd_rdb, mapped_rd );
+        }
+        
         // print_mapped_locations( mapped_rd->locations );
         
         free_mapped_read( mapped_rd );
@@ -85,6 +97,9 @@ int main( int argc, char** argv )
         );
 
     }
+    
+    close_mapped_reads_db( &new_mpd_rdb );
+    close_mapped_reads_db( &mpd_rdb );
     
     return 0;
 }
