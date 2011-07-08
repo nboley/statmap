@@ -1,3 +1,6 @@
+-33) Eliminated the thrad path in the update trace code - it appears
+     to be slow. There is probably some optimization to be done, but 
+     for now we just set the threads to always be one.
 -32) Made some things signed for overflow debugging purposes.
      search MADE_SIGNED_REVERT to find them
 -31) Adding rawreads to the DB also opens the unmappable files. This is probably

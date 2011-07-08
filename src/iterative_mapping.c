@@ -305,15 +305,17 @@ update_traces_from_mapped_reads(
     rewind_mapped_reads_db( reads_db );
     
     /* If the number of threads is one, then just do everything in serial */
-    if( num_threads == 1 )
+    if( true || num_threads == 1 )
     {
         struct mapped_read_t* r;
         int read_num = 0;
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
             read_num++;
+            /*
             if( read_num%1000000 == 0 )
                 fprintf( stderr, "DEBUG       :  Updated traces from mapped reads for %i reads\n", read_num );
+            */
             
             /* Update the trace from this mapping */        
             unsigned int j;
