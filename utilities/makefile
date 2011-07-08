@@ -33,7 +33,7 @@ aggregate_over_traces : aggregate_over_traces.c
 convert_trace_into_wiggle : convert_trace_into_wiggle.c
 	$(compiler) $(compile_options) -o convert_trace_into_wiggle convert_trace_into_wiggle.c \
 	../src/trace.o -pthread
-	cp aggregate_over_traces ../bin/
+	cp convert_trace_into_wiggle ../bin/
 
 verify_mapped_read_locations : verify_mapped_read_locations.c
 	$(compiler) $(compile_options) -o verify_mapped_read_locations verify_mapped_read_locations.c \
