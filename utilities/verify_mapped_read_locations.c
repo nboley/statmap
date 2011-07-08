@@ -60,7 +60,7 @@ int main( int argc, char** argv )
 
     while( NULL != mapped_rd )
     {
-        printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
+        // printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
         unsigned int i;
         for( i = 0; i < mapped_rd->num_mappings; i++ )
         {
@@ -73,7 +73,7 @@ int main( int argc, char** argv )
                 || (unsigned int) stop >= genome->chr_lens[ chr ]
                 )
             {
-                printf("\t\t%i\t%i-%i\n", chr, start, stop );
+                printf("\t\t%i (%i)\t%i-%i ( %i )\n", chr, genome->num_chrs, start, stop, genome->chr_lens[ chr ] );
             }
         }
         // print_mapped_locations( mapped_rd->locations );
