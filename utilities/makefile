@@ -4,7 +4,7 @@ compile_options = -O0 -g -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	call_peaks aggregate_over_traces convert_trace_into_wiggle \
-	build_marginal_mappings_trace_from_mpd_read_db
+	build_marginal_mappings_trace_from_mpd_read_db verify_mapped_read_locations
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -34,6 +34,17 @@ convert_trace_into_wiggle : convert_trace_into_wiggle.c
 	$(compiler) $(compile_options) -o convert_trace_into_wiggle convert_trace_into_wiggle.c \
 	../src/trace.o -pthread
 	cp aggregate_over_traces ../bin/
+
+verify_mapped_read_locations : verify_mapped_read_locations.c
+	$(compiler) $(compile_options) -o verify_mapped_read_locations verify_mapped_read_locations.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/snp.o ../src/sam.o  ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/iterative_mapping.o ../src/config_parsing.o \
+	-lm -pthread
+	cp verify_mapped_read_locations ../bin/
+
+mapped_reads_into_sam.c :
 
 
 mapped_reads_into_sam : mapped_reads_into_sam.c
@@ -93,3 +104,4 @@ clean :
 	-rm call_peaks
 	-rm sample_mapping
 	-rm build_marginal_mappings_trace_from_mpd_read_db
+	-rm verify_mapped_read_locations
