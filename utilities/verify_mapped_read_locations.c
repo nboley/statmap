@@ -60,7 +60,23 @@ int main( int argc, char** argv )
 
     while( NULL != mapped_rd )
     {
-        printf("%i\n", mapped_rd->read_id );
+        printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
+        unsigned int i;
+        for( i = 0; i < mapped_rd->num_mappings; i++ )
+        {
+            // Make sure that the read is actually in the genome
+            int chr = get_chr_from_mapped_read_location( mapped_rd->locations + i );
+            int start = get_start_from_mapped_read_location( mapped_rd->locations + i );
+            int stop = get_stop_from_mapped_read_location( mapped_rd->locations + i );
+            if( chr > genome->num_chrs
+                || start < 0 || stop < 0
+                || (unsigned int) stop >= genome->chr_lens[ chr ]
+                )
+            {
+                printf("\t\t%i\t%i-%i\n", chr, start, stop );
+            }
+        }
+        // print_mapped_locations( mapped_rd->locations );
         
         free_mapped_read( mapped_rd );
                 
