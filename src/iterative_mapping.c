@@ -439,10 +439,12 @@ update_mapped_reads_from_trace_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
     {
+        /*
         if( r->read_id%1000000 == 0 && r->read_id > 0  )
             fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", 
                      r->read_id );
-
+        */
+        
         if( r->num_mappings <= 1 ) {
             free_mapped_read( r );
             continue;
@@ -498,8 +500,10 @@ update_mapped_reads_from_trace(
         {
             read_cnt++;
                         
+            /*
             if( read_cnt%1000000 == 0 && r->read_id > 0 )
                 fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", read_cnt );
+            */
             
             /* if there aren't more than 1 potential locations, 
                there's no point in updating this */
