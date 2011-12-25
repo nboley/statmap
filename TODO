@@ -1,3 +1,11 @@
+fix bug
+finish human indexing fix
+make sample mapping take multiple samples
+
+error estimates code
+fragment length estimation code
+write network breaking code
+
 -33) Eliminated the thrad path in the update trace code - it appears
      to be slow. There is probably some optimization to be done, but 
      for now we just set the threads to always be one.
