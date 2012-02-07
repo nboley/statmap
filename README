@@ -43,6 +43,9 @@ OR
 -3 : Specifies pair 1 negative control data ( only Chip Seq )
 -4 : Specifies pair 2 negative control data ( only Chip Seq )
 
+CAGE experiments need indexes that have probe lengths at least 3 basepairs
+shorter than the shortest CAGE sequence, to account for templated G's.
+
 ===== Arguments ====================================================================
 
 Required Arguments:
