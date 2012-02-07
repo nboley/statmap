@@ -2,7 +2,6 @@ import random
 import array
 from math import exp
 import bisect
-import rpy
 import numpy
 import sys
 import os
@@ -11,12 +10,16 @@ import re
 import subprocess
 import gzip
 
+import matplotlib as mpl
+# Use built-in (not default) drawing backend;
+# default is to use X, which fails on amold and probably most servers
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+
 sys.path.insert(0, "../python_lib/" )
 import trace
 
 import tests as sc # for simulation code
-
-
 
 NUM_READS = 1000
 NUM_SAMPLES = 25
@@ -451,46 +454,42 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     else: 
         genome = { 'chr2L_paternal': region }
             
-    # set up the plotting environment
+    # Get current directory so we can create temporary files
     curr_dir = os.getcwd()
-    rpy.r.png( os.path.join(curr_dir, png_fname), width=7.0, height=3.5*len(genome), units='in', res=300 )
-    rpy.r("par(cex=0.47, mai=c(0.5,0.4,0.4,0.2), lwd=0.5, mfrow=c(%i,1))" % len(genome) )
     
     density_max = 1.0 # max( density[0].max(), density[1].max() )
-    if polymorphic:
-        rpy.r.plot( (), main='Paternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
-        rpy.r.plot( (), main='Maternal', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
+    if polymorphic: # Set titles on subplots
+        plt.subplot(2, 1, 1)
+        plt.title('Paternal')
+        plt.subplot(2, 1, 2)
+        plt.title('Maternal')
     else:
-        rpy.r.plot( (), main='', xlab='', ylab='', lty=1, xlim=(0,5000), ylim=(-0.65, 0.65) )
+        pass
 
-    def plot_wiggle( wiggle_density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
+    def plot_wiggle( wiggle_density, color, lty=1, lwd=0.25, norm_factor = 1.0  ):
         for index, key in enumerate(genome.keys()):
-            rpy.r("par(mfg=c(%i,1))" % (index+1))
+            plt.subplot(len(genome), 1, index+1)
             if len( wiggle_density ) > 0 and wiggle_density[0].has_key( key ):
-                rpy.r.points( wiggle_density[0][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+                plt.plot( wiggle_density[0][key]*norm_factor, color=color, linestyle='-', marker='', linewidth=lwd )
             if len( wiggle_density ) > 1 and wiggle_density[1].has_key( key ):
-                rpy.r.points( -1*wiggle_density[1][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=lty, lwd=lwd )
+                plt.plot( -1*wiggle_density[1][key]*norm_factor, color=color, linestyle='-', marker='', linewidth=lwd )
             if len( wiggle_density ) > 2 and wiggle_density[2].has_key( key ):
-                rpy.r.points( wiggle_density[2][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+                plt.plot( wiggle_density[2][key]*norm_factor, color=color, linestyle=':', marker='', linewidth=lwd/2.0 )
             if len( wiggle_density ) > 3 and wiggle_density[3].has_key( key ):
-                rpy.r.points( -1*wiggle_density[3][key]*norm_factor, type='l', col=color, main='', xlab='', ylab='', lty=3, lwd=lwd/2.0 )
+                plt.plot( -1*wiggle_density[3][key]*norm_factor, color=color, linestyle=':', marker='', linewidth=lwd/2.0 )
 
-    def plot_trace( density, color, lty=1, lwd=0.5, norm_factor = 1.0  ):
+    def plot_trace( density, color, lty=1, lwd=0.25, norm_factor = 1.0  ):
         # plot the IP traces
         for track_name in density.keys():
             for index, chr_name in enumerate(genome.keys()):
-                rpy.r("par(mfg=c(%i,1))" % (index+1))
-                # change the line type for NC
-                curr_lwd = lwd
-                curr_lty = lty
-                if track_name.startswith("NC"):
-                    curr_lwd /= 2
-                    curr_lty = 3
+                plt.subplot(len(genome), 1, index+1)
                 # change the multiplicative factor for neg vs pos stranded data
                 mult_factor = -1 if track_name.find( "bkwd" ) != -1 else 1
-                rpy.r.points( mult_factor*density[track_name][chr_name]*norm_factor, 
-                              type='l', col=color, main='', xlab='', ylab='', 
-                              lty=lty, lwd=lwd )
+                plt.plot( mult_factor*density[track_name][chr_name]*norm_factor,
+                          color=color,
+                          linestyle='-',
+                          marker="",
+                          linewidth=lwd )
     
     def plot_traces( dir, color, lty=1, lwd=0.5, filter=""  ):
         fnames = []
@@ -510,26 +509,24 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     plot_traces( "./smo_chipseq_sim/bootstrap_samples/min_traces/", 'green', lty=1, lwd=0.5, filter=".ip" )
     plot_traces( "./smo_chipseq_sim/bootstrap_samples/max_traces/", 'orange', lty=1, lwd=0.5, filter=".ip" )
     
-    rpy.r("par(mfg=c(2,1))")
     true_density = parse_wig( "true_read_coverage.wig", genome )    
     plot_wiggle( true_density, 'black', lty=3, lwd=3 )
     
     for index in xrange(len(genome)):
-        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        plt.subplot(len(genome), 1, index+1)
         for bp_index in mut_indexes:
-            rpy.r.abline( v=bp_index, col='red', lty=2  )
+            plt.axvline( x=bp_index, color='red', linewidth=1, linestyle='--' )
 
     # parse bowtie out
     # density = parse_bwtout( "mapped_reads.bwtout", genome, paired_end )
     # plot_wiggle( density, 'dark green', lty=1, lwd=2 )
     
     for index in xrange(len(genome)):
-        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        plt.subplot(len(genome), 1, index+1)
         true_density = parse_wig( "binding_site_occupancies.wig", genome )
         for index, value in enumerate(true_density[0].values()[0]):
             if value > 0.50:
-                rpy.r.abline( v=index, col='black', lty=2, lwd=1  )
-    
+                plt.axvline( x=index, color='black', linewidth=1, linestyle='--' )
     
     # marginal mapping
     """
@@ -554,9 +551,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     density = parse_trace( "./smo_chipseq_sim/called_peaks/sample1.bin.trace" )
     plot_trace( density, 'red', lwd=2, norm_factor=nf )
     for index in xrange(len(genome)):
-        rpy.r("par(mfg=c(%i,1))" % (index+1))
-        rpy.r.abline( h=nf*0.95, col='red', lwd=1, lty=2  )
-        rpy.r.abline( h=-0.95*nf, col='red', lwd=1, lty=2  )
+        plt.subplot(len(genome), 1, index+1)
+        plt.axhline( y=nf*0.95, color='red', linewidth=0.5, linestyle='--' )
+        plt.axhline( y=nf*-0.95, color='red', linewidth=0.5, linestyle='--' )
 
     
     """
@@ -568,9 +565,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     """
         
     for index in xrange(len(genome)):
-        rpy.r("par(mfg=c(%i,1))" % (index+1))
+        plt.subplot(len(genome), 1, index+1)
         for bp_index in mut_indexes:
-            rpy.r.abline( v=bp_index, col='red', lty=2  )
+            plt.axvline( x=bp_index, color='red', linestyle='--' )
 
     """
     # x=7700, y=0.5,
@@ -583,7 +580,13 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
              lwd=c(0.5,0.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,3,3,2,2) )"" )
     """
 
-    rpy.r.dev_off()
+    # Save plot as png
+    # If you want manual xlim and ylim, set after plotting is done
+    for index in xrange(len(genome)):
+        plt.subplot(len(genome), 1, index+1)
+        plt.xlim((0,5000))
+        plt.ylim((-0.65, 0.65))
+    plt.savefig( os.path.join(curr_dir, png_fname) )
 
 
 if __name__ == '__main__':
