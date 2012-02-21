@@ -72,7 +72,7 @@ This sets the upper bound, in log10 probability, of the difference of the
 probabilities of the top matching sequence, to the sequence of interest. 
 That is, if we find a sequence with a match penalty of -6, but we have already
 observed a sequence with a match penalty of -2, then we will only return the
-new sequence if -m is >= 4. It defaults to -2.1, which is sufficient to map  
+new sequence if -m is >= 4. It defaults to 2.1, which is sufficient to map  
 duplicate reads with 1 high quality mismatch.
 
 -a : The type of the underlying assay.
