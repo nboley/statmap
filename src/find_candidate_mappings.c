@@ -20,7 +20,7 @@
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
-#define MAX_NUM_UNTEMPLATED_GS 4
+#define MAX_NUM_UNTEMPLATED_GS 3
 
 int
 find_optimal_subseq_offset( 
