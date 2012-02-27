@@ -52,8 +52,9 @@ int main( int argc, char** argv )
     open_mapped_reads_db( &mpd_rdb, mpd_rd_fname );
     rewind_mapped_reads_db( mpd_rdb );
 
+    char* new_mpd_rd_fname = "new_mapped_reads.db";
     struct mapped_reads_db* new_mpd_rdb;
-    new_mapped_reads_db( &new_mpd_rdb, "new_mapped_reads.db" );
+    new_mapped_reads_db( &new_mpd_rdb, new_mpd_rd_fname );
 
     struct mapped_read_t* mapped_rd;
     
@@ -72,12 +73,18 @@ int main( int argc, char** argv )
             int chr = get_chr_from_mapped_read_location( mapped_rd->locations + i );
             int start = get_start_from_mapped_read_location( mapped_rd->locations + i );
             int stop = get_stop_from_mapped_read_location( mapped_rd->locations + i );
+            // Make sure the seq_error is between 0 and 1
+            float seq_error = get_seq_error_from_mapped_read_location( mapped_rd->locations + i );
             if( chr > genome->num_chrs
                 || start < 0 || stop < 0
                 || (unsigned int) stop >= genome->chr_lens[ chr ]
+                || ( seq_error < 0.0 || seq_error > 1.0 )
                 )
             {
-                printf("\t\t%i (%i)\t%i-%i ( %i )\n", chr, genome->num_chrs, start, stop, genome->chr_lens[ chr ] );
+                printf("\t\t%i (%i)\t%i-%i ( %i ) %f \n",
+                        chr, genome->num_chrs,
+                        start, stop, genome->chr_lens[ chr ],
+                        seq_error );
                 discovered_error = true;
             } 
         }
@@ -100,6 +107,34 @@ int main( int argc, char** argv )
     
     close_mapped_reads_db( &new_mpd_rdb );
     close_mapped_reads_db( &mpd_rdb );
-    
+
+    /* Swap dbs */
+    error = 0;
+    char mv_buf[256];
+
+    /* Move mapped_reads.db to mapped_reads.db.old */
+    if( (error = sprintf( mv_buf, "mv %s %s.old", mpd_rd_fname, mpd_rd_fname))
+            < 0 ) {
+        fprintf( stderr,  "FATAL : in sprintf %i", error );
+        exit( -1 );
+    }
+    if( (error = system( mv_buf ))
+            != 0 ) {
+        fprintf( stderr, "FATAL : in system %i", error);
+        exit( -1 );
+    }
+
+    /* Move new_mapped_reads.db to mapped_reads.db */
+    if( (error = sprintf( mv_buf, "mv %s %s", new_mpd_rd_fname, mpd_rd_fname))
+            < 0 ) {
+        fprintf( stderr,  "FATAL : in sprintf %i", error );
+        exit( -1 );
+    }
+    if( (error = system( mv_buf ))
+            != 0 ) {
+        fprintf( stderr, "FATAL : in system %i", error);
+        exit( -1 );
+    }
+
     return 0;
 }
