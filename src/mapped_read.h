@@ -248,12 +248,18 @@ set_start_and_stop_in_mapped_read_location(
 static inline float
 get_seq_error_from_mapped_read_location( 
     const struct mapped_read_location* const loc)
-{ return ML_PRB_TYPE_to_float( loc->seq_error ); }
+{ 
+    assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
+    return ML_PRB_TYPE_to_float( loc->seq_error );
+}
 
 static inline void
 set_seq_error_in_mapped_read_location( 
     struct mapped_read_location* loc, float value )
-{ loc->seq_error = ML_PRB_TYPE_from_float( value ); }
+{ 
+    assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
+    loc->seq_error = ML_PRB_TYPE_from_float( value );
+}
 
 /** COND PROB **/
 

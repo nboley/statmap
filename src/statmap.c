@@ -140,7 +140,7 @@ guess_input_file_type( struct args_t* args )
 
     /* FIXME - stop assuming this is a fastq file */
     int i, j;
-    for( i = 0; i < 1000; i++ )
+    for( i = 0; i < 10000; i++ )
     {
         struct rawread* r;
         populate_read_from_fastq_file( fp, &r, UNKNOWN );

@@ -237,7 +237,15 @@ est_error_prb( char bp, char error_score, enum bool inverse,
     /* silenmce the warning */
     assert( pos >= 0 );
 
-    unsigned char quality_char = ((unsigned char) error_score) - QUAL_SHIFT;
+    /*
+        Make sure our quality score is not less than 0
+        Sometimes the max/min heuristic fails to find the true minimum
+        (we can't always scan through EVERY read, could be an enormous amount).
+        IF the heuristic fails, then this will slightly round up the worst quality
+        scores. 
+    */
+    unsigned char quality_char = MAX(0, ((unsigned char) error_score) - QUAL_SHIFT);
+    assert( quality_char < 100 );
     
     if( inverse == false ) {
         /* check to see if the read is an 'N'. If it is, set the qual to the min */
@@ -302,6 +310,13 @@ build_lookup_table_from_rawread ( struct rawread* rd,
         /* and the reverse position */
         reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
+        if( !(isfinite(inverse_lookuptable_position[i])) ) {
+            printf("i : %i\n", i);
+            printf("rd->length-1-i : %i\n", rd->length-1-i);
+            printf("rd->length : %i\n", rd->length );
+            printf("inverse_lookuptable_position[i] : %f\n", inverse_lookuptable_position[i] );
+        }
+        assert( isfinite(inverse_lookuptable_position[i] ));
     }
 
     return;
@@ -462,15 +477,21 @@ recheck_penalty( char* reference,
         if( ref == 'N' || obs == 'N' )
         {
             penalty += N_penalty;
+            assert( isfinite( penalty ) );
         } else {
             if( ref == obs )
             {
                 /* the marginal probability of a match */
                 penalty = penalty 
                     + n_inverse_lookuptable_position[ i ] ;
+                if( !isfinite( penalty ) ) {
+                    printf("n_inverse_lookuptable_position : %f\n", n_inverse_lookuptable_position [ i ]);
+                }
+                assert( isfinite( penalty ) );
             } else {
                 /* the marginal penalty of a mismatch */
                 penalty += n_lookuptable_position[ i ];
+                assert( isfinite( penalty ) );
                 
                 /* make the bp specific correction */
                 int bp_lookup = bp_code( ref );
@@ -478,10 +499,12 @@ recheck_penalty( char* reference,
                 bp_lookup += bp_code( obs );
                 
                 penalty += n_lookuptable_bp[ bp_lookup ];
+                assert( isfinite( penalty ) );
             }
         }
     }
     
+    assert( isfinite( penalty ) );
     return penalty;
 }
 

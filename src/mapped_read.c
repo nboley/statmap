@@ -177,6 +177,9 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     
     set_seq_error_in_mapped_read_location( 
         loc, pow( 10, cm->penalty ) );
+    if( !(loc->seq_error > 0.0 && loc->seq_error < 1.0) )
+        printf( "cm->penalty : %f\n", cm->penalty );
+    assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
     
     set_flag_in_mapped_read_location( loc, flag  );
     
@@ -605,6 +608,7 @@ build_mapped_read_from_unpaired_candidate_mappings(
                 /* if the conversion succeeded */
                 if( 1 == rv )
                 {
+                    assert( loc.seq_error > 0.0 && loc.seq_error < 1.0 );
                     prob_sum += get_seq_error_from_mapped_read_location( &loc );
                     add_location_to_mapped_read( mpd_rd, &loc );
                 }
@@ -617,6 +621,7 @@ build_mapped_read_from_unpaired_candidate_mappings(
             /* if the conversion succeeded */
             if( 1 == rv )
             {
+                assert( loc.seq_error > 0.0 && loc.seq_error < 1.0 );
                 prob_sum += get_seq_error_from_mapped_read_location( &loc );
                 add_location_to_mapped_read( mpd_rd, &loc );
             }
