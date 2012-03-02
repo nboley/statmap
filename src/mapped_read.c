@@ -148,19 +148,9 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     struct mapped_read_location* loc    
 )
 {
-    loc->snps_bm_r1 = 0;
-    loc->snps_bm_r2 = 0;
-    
     /* Ensure all of the flags are turned off */
     MRL_FLAG_TYPE flag = 0;
 
-    /* deal with the alternate locations that come from covering snps */
-    if( cm->does_cover_snp )
-    {
-        flag |= FIRST_READ_COVERS_SNP;
-        loc->snps_bm_r1 = cm->snp_bitfield;
-    }
-    
     /* deal with pseudo location */
     set_chr_in_mapped_read_location( loc, cm->chr );
     if( PSEUDO_LOC_CHR_INDEX == cm->chr )
@@ -177,8 +167,6 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     
     set_seq_error_in_mapped_read_location( 
         loc, pow( 10, cm->penalty ) );
-    if( !(loc->seq_error > 0.0 && loc->seq_error < 1.0) )
-        printf( "cm->penalty : %f\n", cm->penalty );
     assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
     
     set_flag_in_mapped_read_location( loc, flag  );
@@ -195,9 +183,6 @@ join_two_candidate_mappings(
     struct mapped_read_location* loc    
 )
 {
-    loc->snps_bm_r1 = 0;
-    loc->snps_bm_r2 = 0;
-
     /* Ensure all of the flags are turned off */
     MRL_FLAG_TYPE flag = IS_PAIRED;
     
@@ -213,18 +198,6 @@ join_two_candidate_mappings(
     
     if( PSEUDO_LOC_CHR_INDEX == second_read->chr )
         flag |= SECOND_READ_IS_PSEUDO;
-    
-    if( first_read->does_cover_snp )
-    {
-        flag |= FIRST_READ_COVERS_SNP;
-        loc->snps_bm_r1 = first_read->snp_bitfield;
-    }
-    
-    if( second_read->does_cover_snp )
-    {
-        flag |= SECOND_READ_COVERS_SNP;
-        loc->snps_bm_r2 = second_read->snp_bitfield;
-    }            
     
     /* Set the chr */
     set_chr_in_mapped_read_location( loc, first_read->chr );

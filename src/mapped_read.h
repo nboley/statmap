@@ -142,10 +142,6 @@ ML_PRB_TYPE_from_float( float value  )
 #define FIRST_READ_WAS_REV_COMPLEMENTED 2
 /* Set if the first read ( ie read_name/1 ) maps to start_pos */
 #define FIRST_PAIR_IS_FIRST_IN_GENOME 4
-/* set if the first read covers a snp */
-#define FIRST_READ_COVERS_SNP 8
-/* set if the second read covers a snp */
-#define SECOND_READ_COVERS_SNP 16
 /* set if this is a pseudo read */
 #define FIRST_READ_IS_PSEUDO 32
 #define SECOND_READ_IS_PSEUDO 64
@@ -156,9 +152,6 @@ struct mapped_read_t;
 
 struct mapped_read_location {
     MRL_FLAG_TYPE flag;
-    
-    unsigned snps_bm_r1 :MAX_NUM_SNPS;
-    unsigned snps_bm_r2 :MAX_NUM_SNPS;
     
     MRL_CHR_TYPE chr;
 

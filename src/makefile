@@ -1,9 +1,9 @@
-compiler = clang
-compile_options = -O3 -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
+#compiler = clang
+#compile_options = -O3 -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 # For debugging
-#compiler = gcc
-#compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+compiler = gcc
+compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
 
 # compile_options = -fast
 
@@ -12,11 +12,20 @@ compile_options = -O3 -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 
 
 objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
-	  iterative_mapping.o snp.o trace.o candidate_mapping.o mapped_read.o \
+	  iterative_mapping.o trace.o candidate_mapping.o mapped_read.o \
 	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o \
 	  config_parsing.o error_correction.o
 
 all: statmap trace.so
+
+diploid_map_data : diploid_map_data.o $(objects)
+	$(compiler) -o diploid_map_data \
+	diploid_map_data.o $(objects) \
+	$(compile_options) \
+	-lm -lpthread
+
+diploid_map_data.o : diploid_map_data.c config.h genome.h
+	$(compiler) $(compile_options) -c diploid_map_data.c
 
 statmap : $(objects)
 	$(compiler) -o statmap \
@@ -26,14 +35,11 @@ statmap : $(objects)
 	cp statmap ../bin/
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
-	index_genome.h quality.h config.h snp.h fragment_length.h sam.h
+	index_genome.h quality.h config.h fragment_length.h sam.h
 	$(compiler) $(compile_options) -c statmap.c
 
-snp.o : snp.c snp.h genome.h config.h
-	$(compiler) $(compile_options) -c snp.c
-
 find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h \
-			    quality.h index_genome.h snp.h error_correction.h
+			    quality.h index_genome.h error_correction.h
 	$(compiler) $(compile_options) -c find_candidate_mappings.c
 
 find_candidate_mappings.h : genome.h rawread.h 
@@ -51,7 +57,7 @@ peak_calling.o : peak_calling.c wiggle.h trace.h genome.h
 # Iterative Mapping
 #
 
-iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h snp.h genome.h fragment_length.h
+iterative_mapping.o : iterative_mapping.c iterative_mapping.h mapped_location.h statmap.h trace.h mapped_location.h genome.h fragment_length.h
 	$(compiler) $(compile_options) -c iterative_mapping.c # --openmp
 
 iterative_mapping.h : config.h genome.h trace.h

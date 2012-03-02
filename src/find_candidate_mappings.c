@@ -14,7 +14,6 @@
 #include "find_candidate_mappings.h"
 #include "quality.h"
 #include "index_genome.h"
-#include "snp.h"
 #include "mapped_location.h"
 #include "error_correction.h"
 

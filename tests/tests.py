@@ -316,47 +316,6 @@ def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
     
     return truth
 
-def build_snps_from_genome( genome, num ):
-    snps = []
-    # calculate the genome lengths sum, to make
-    # sure that our samples are uniform in the 
-    # chr length
-    chr_names = genome.keys()
-    chr_names.sort()
-    chr_lens = [ len(genome[key]) for key in chr_names ]
-    chr_lens_cdr = [ sum(chr_lens[:i]) for i in xrange(len(genome)+1) ]
-    chr_lens_cdr[0] = 0
-    chr_lens_cdr = numpy.array( chr_lens_cdr )
-    # sample all of the chr's
-    samples = set()
-    for loop in xrange( num ):
-        rnd_num = random.randint( 0, chr_lens_cdr[-1] - 1  )
-        chr_index = chr_lens_cdr.searchsorted( rnd_num  ) - 1
-        # make sure that we dont get duplicates
-        rnd_bp = random.randint( 0, chr_lens[chr_index] - 1 )
-        while ( chr_index, rnd_bp ) in samples:
-            rnd_bp = random.randint( 0, chr_lens[chr_index] - 1 )
-        samples.add( ( chr_index, rnd_bp )  )
-        ref_bp = genome[chr_names[chr_index]][rnd_bp].upper()
-        bps = ['A', 'C', 'G', 'T']
-        bps.remove( ref_bp.upper() )
-        alt_bp = random.choice( bps )
-        snps.append( ( chr_names[chr_index], rnd_bp, ref_bp, alt_bp )  )
-        assert alt_bp.upper() != ref_bp.upper()
-        assert genome[chr_names[chr_index]].upper() != alt_bp.upper()
-    return snps
-
-def write_snps_to_snpcov_file( snps, genome, fname  ):
-    chr_names = genome.keys()
-    chr_names.sort()
-    
-    fp = open( fname, "w" )
-    for snp in snps:
-        fp.write("%s	%i	ID	0	0	0	0	0	%s	%s	%s	H	H	50	50	Test	RSIM	BICKEL\n" \
-                 % ( snp[0], snp[1], snp[2], snp[2], snp[3]  ) )
-    fp.close()
-    return 
-
 def build_reads_from_fragments( \
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
     reads = []
@@ -925,130 +884,6 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-###
-# Test to make sure that we are correctly indexing and finding snps
-def test_snps( read_len, num_snps = 10 ):
-    output_directory = "smo_test_snps_%i_%i" % ( read_len, num_snps )
-    rl = read_len
-
-    ###### Prepare the data for the test ############################################
-    # build a random genome
-    r_genome = build_random_genome( [1000,], ["1",] )
-    
-    # build the snps
-    snps = build_snps_from_genome( r_genome, num_snps )
-    snps.sort( key = itemgetter(1) )
-    try:
-        for snp in snps:
-            assert r_genome[ snp[0] ][snp[1]].upper() != snp[3].upper()
-            assert r_genome[ snp[0] ][snp[1]].upper() == snp[2].upper()
-    except:
-        print r_genome[ snp[0] ][snp[1]], snp
-        raise
-    
-    write_snps_to_snpcov_file( snps, r_genome, "tmp.snpcov"  )
-    
-    # sample uniformly from the genome. This gives us the sequences
-    # that we need to map. Note that we dont RC them, so every read should be in the
-    # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=500, frag_len=rl )
-    reads = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
- 
-    ref_snps = [0]*num_snps
-    alt_snps = [0]*num_snps
-    # mutate the snps
-    for index, (read, fragment) in enumerate(zip(reads, fragments)):
-        for snp_index, snp in enumerate(snps):
-            # if this read covers the snp
-            if snp[0] == fragment[0] \
-               and snp[1] >= fragment[1] \
-               and snp[1] < fragment[2]:
-                if random.random() > 0.5:
-                    tmp = array.array('c', reads[index])
-                    tmp[snp[1]-fragment[1]] = snp[3]
-                    assert reads[index] != tmp.tostring()
-                    reads[index] = tmp.tostring()
-                    alt_snps[snp_index] += 1
-                else:
-                    ref_snps[snp_index] += 1
-    
-    ###### Write out the test files, and run statmap ################################
-    # write genome
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
-    
-    # build and write the reads
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
-    reads_of.close()
-
-    call = "%s -g tmp.genome.fa -s -r tmp.fastq -s tmp.snpcov -o %s \
-                             -p %.2f -m %.2f \
-                             -t 1 " % ( STATMAP_PATH, output_directory, -10.0, 0.50 )
-        
-    print >> stdout, re.sub( "\s+", " ", call)
-    
-    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-    # ret_code = ( os.system( call ) >> 8 )
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
-    
-    ###### Test the sam file to make sure that each of the reads appears ############
-    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
-    
-    if len(fragments) != total_num_reads:
-        raise ValueError, "Mapping returned too few reads. ( %i / %i )" % ( total_num_reads, len(fragments) )
-            
-    for loop, (reads_data, truth) in enumerate( izip( iter_sam_reads( sam_fp ), fragments ) ):
-        # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
-        if len(reads_data) != 1:
-            raise ValueError, "Mapping returned too many results."
-
-        if int(reads_data[0][0]) != loop:
-            raise ValueError, "Key %i (%i) is off ( a read was probably skipped )" % ( loop, int(reads_data[0][0]) )
-        
-        loc = ( reads_data[0][2], int(reads_data[0][3]) )
-        
-        # make sure the chr and start locations are identical
-        if loc[0] != truth[0] \
-           or loc[1] != truth[1]:
-            print reads_data
-            raise ValueError, \
-                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
-    
-    sam_fp.close()
-
-    ###### Test the snp file to make sure that each of the snps appears #############
-    
-    snp_fp = open( "./%s/updated_snp_cnts.snp" % output_directory )
-    lines = list( snp_fp )
-    snp_fp.close()
-    for line_num, (line, ref_cnt, alt_cnt) in enumerate(zip( lines[1:], ref_snps, alt_snps)):
-        data = map( int, line.strip().split("\t")[-2:] )
-        if data[0] != ref_cnt or data[1] != alt_cnt:
-            print line.strip(), data, [ref_cnt, alt_cnt]
-            raise ValueError, "The wrong number of snps was discovered ( %s vs %s ) " % ( data, [ref_cnt, alt_cnt] )
-
-    ###### Cleanup the created files ###############################################
-    if CLEANUP:
-        os.remove("./tmp.genome.fa")
-        os.remove("./tmp.fastq")
-        os.remove("./tmp.snpcov")
-        shutil.rmtree(output_directory)
-        
-
-def test_snp_finding( ):
-    rls = [ 25, ]
-    for rl in rls:
-        test_snps( rl )
-        print "PASS: SNP Mapping %i BP Test. ( Statmap appears to be mapping perfect SNPs correctly )" % rl
-
 
 if False:
     num_repeats = 1
@@ -1100,8 +935,6 @@ if __name__ == '__main__':
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
 
-    # test_snp_finding()
-    
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )

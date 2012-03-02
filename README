@@ -227,11 +227,6 @@ Furthermore, for paired end reads, statmap only reports reads that can be paired
 
 =====================================================================================
 
-SNPCOV:
-
-If a snp coverage file is passed in, statmap will output an updated snp frequency 
-list.
-
 OUTPUT THAT YOU PROBABLY DONT CARE ABOUT-
 
 mapped_reads.db - 
@@ -273,7 +268,6 @@ Furthermore, there are several functions that can be called to run specific test
     test_repeat_sequence_finding()
     test_mutated_read_finding()
     test_multithreaded_mapping()
-    test_snp_finding()
     test_lots_of_repeat_sequence_finding()
 
 simulate_chipseq.py:

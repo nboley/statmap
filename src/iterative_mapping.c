@@ -28,7 +28,6 @@
 #include "trace.h"
 #include "wiggle.h"
 #include "mapped_location.h"
-#include "snp.h"
 #include "genome.h"
 #include "fragment_length.h"
 #include "sam.h"

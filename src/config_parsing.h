@@ -60,8 +60,6 @@ struct args_t {
     char* pair1_NC_reads_fnames;
     char* pair2_NC_reads_fnames;
     struct rawread_db_t* NC_rdb;
-    char* snpcov_fname;
-    FILE* snpcov_fp;
 
     char* frag_len_fname;
     FILE* frag_len_fp;

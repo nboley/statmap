@@ -14,7 +14,6 @@
 #include "config.h"
 #include "index_genome.h"
 #include "genome.h"
-#include "snp.h"
 #include "pseudo_location.h"
 
 /**** ON DISK Code **********************************************************************/
@@ -35,15 +34,12 @@ write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
     rv = fwrite( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
 
-    rv = fwrite( &(header->snp_db_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-    
     /* // keep the index in a separate file
     rv = fwrite( &(header->index_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
     */
     
-    return ( 9*sizeof(char) + 4*sizeof(size_t) );
+    return ( 9*sizeof(char) + 3*sizeof(size_t) );
 }
 
 static void
@@ -76,9 +72,6 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
     rv = fread( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
 
-    rv = fread( &(header->snp_db_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-
     /* // keep the index in a separate file
     rv = fread( &(header->index_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
@@ -103,9 +96,6 @@ init_genome( struct genome_data** gen )
     /* the genome index */
     (*gen)->index = NULL;
     
-    /* snps - we dont init because they may not exist */
-    (*gen)->snp_db = NULL;
-
     (*gen)->is_mmapped = false;
 
     /** Init the pseudo locations **/
@@ -225,7 +215,6 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     
     header.size = 0;
     header.genome_offset = 0;
-    header.snp_db_offset = 0;
     header.pseudo_locs_offset = 0;
     // header.index_offset = 0;
 
@@ -235,11 +224,8 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     
     size_written = write_standard_genome_to_file( gen, ofp  );
     header.size += size_written;
-    header.snp_db_offset = header.genome_offset + size_written;
     
-    size_written = write_snp_db_to_binary_file( gen->snp_db, ofp );
-    header.size += size_written;
-    header.pseudo_locs_offset = header.snp_db_offset + size_written;
+    header.pseudo_locs_offset = header.genome_offset + size_written;
 
     /* write the updated header */
     fseek( ofp, 0, SEEK_SET );
@@ -270,9 +256,8 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
     read_reference_data_header_from_disk( &header, genome_fp );
 
     #ifdef DEBUG
-    fprintf( stderr, "DEBUG       :  HEADER DATA: %zu %zu %zu %zu\n", 
-            header.size, header.genome_offset, 
-            header.snp_db_offset, header.pseudo_locs_offset  );
+    fprintf( stderr, "DEBUG       :  HEADER DATA: %zu %zu %zu\n", 
+            header.size, header.genome_offset, header.pseudo_locs_offset  );
     #endif
     
     *gen = malloc( sizeof( struct genome_data ) );
@@ -294,9 +279,6 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
 
     char* curr_pos = OD_genome + header.genome_offset;
     populate_standard_genome_from_mmapped_file( *gen, curr_pos );
-
-    curr_pos = OD_genome + header.snp_db_offset;
-    load_snp_db_from_mmapped_data( *gen, curr_pos );
 
     curr_pos = OD_genome + header.pseudo_locs_offset;
     load_pseudo_locations_from_mmapped_data( &((*gen)->ps_locs), curr_pos );
@@ -347,9 +329,6 @@ free_genome( struct genome_data* gen )
     free( gen->chrs );
     free( gen->chr_lens );
 
-    if( gen->snp_db != NULL )
-        free_snp_db( gen->snp_db );
-        
     free( gen );
 }
 
@@ -595,23 +574,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     /* initialize the tree structure */
     init_tree( &(genome->index), indexed_seq_len );
 
-    /* TODO - use snps directly */
-    struct snp_db_t* snp_db = genome->snp_db;
-    /* 
-     * If there is no initialized snp DB, then we set the
-     * number of snps to zero so that we dont try and 
-     * add any downstream. Maybe, in the future, I will 
-     * just always init the db but set the number of snps to 0.
-     *
-     */
-    int num_snps;
-    if( snp_db == NULL )
-    {
-        num_snps = 0;
-    } else {
-        num_snps = snp_db->num_snps;
-    }
-    
     /* initialize the constant loc elements */
     GENOME_LOC_TYPE loc;
     /* Not a junction read */
@@ -623,13 +585,8 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     int chr_index;
     unsigned int bp_index;
     
-    int snp_lb = 0;
-    int snp_ub = 0;
-
     /* 
-     * Iterate through each indexable sequence in the genome. If the 
-     * sequence covers snps, then add them.
-     *
+     * Iterate through each indexable sequence in the genome.
      * We skip chr 0 - the pseudo chromosome.
      */
     for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
@@ -652,113 +609,21 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
             /* Set the basepair index */
             loc.loc = bp_index;
             
-            /* 
-             * Update the snp_lb. While the snps are strictly below bp_index, the
-             * lower bound, then the snps can not fall into the sequence and there
-             * is no need to consider these
-             */
-            while( snp_lb < num_snps
-                   && snp_db->snps[snp_lb].loc.chr == chr_index 
-                   && snp_db->snps[snp_lb].loc.loc < bp_index  )
-            {
-                snp_lb += 1;
+            memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
+            
+            /* Add the normal sequence */
+            LETTER_TYPE *translation;
+            translate_seq( tmp_seq, seq_len, &(translation));
+            
+            /* if we cant add this sequence ( probably an N ) continue */
+            if( translation == NULL ) {
+                continue;
             }
-                        
-            /* 
-             * Update the snp_ub. While the snps are strictly below bp_index, the
-             * lower bound, then the snps can not fall into the sequence and there
-             * is no need to consider these
-             */
-            snp_ub = MAX( snp_lb, snp_ub );
-            while( snp_ub < num_snps
-                   && snp_db->snps[snp_ub].loc.chr == chr_index 
-                   && snp_db->snps[snp_ub].loc.loc < bp_index + seq_len )
-            {
-                snp_ub += 1;
-            }
-                   
-            /* 
-             * If lb == ub, then we know this sequence doesnt cover any snps. 
-             */
-            if( snp_lb == snp_ub )
-            {
-                memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
-                
-                /* Add the normal sequence */
-                LETTER_TYPE *translation;
-                translate_seq( tmp_seq, seq_len, &(translation));
-                
-                /* if we cant add this sequence ( probably an N ) continue */
-                if( translation == NULL ) {
-                    continue;
-                }
-                
-                /* Add the sequence into the tree */
-                add_sequence(genome->index, genome->index->ps_locs, translation, seq_len, loc);
-                
-                free( translation );                                
-            } else {
-                /* If there are too many snps in this sequence, print a warning */
-                if( snp_ub - snp_lb > MAX_NUM_SNPS )
-                {
-                    fprintf(stderr, "ERROR       :  Can not add the sequence at 'chr %i: bp %i' - it contains %i SNPs ( %i max )\n", 
-                            chr_index, bp_index, snp_ub - snp_lb, MAX_NUM_SNPS );
-                    continue;
-                }
-                
-                /* 
-                 * We need to iterate through every combination of snps in the following
-                 * list. Ie, if there are 2 snps, then we need to add all of the 
-                 * subsequences with s1 on, s2 on, sn1 on, s2 off, s1 off, s2 off, 
-                 * and both off.  This might be hard in general, but there
-                 * is an easy way of dealing with this. Since there are 2^NS -1 total
-                 * combinations, we just count from 1 to 2^NS. Then, if the ith bit
-                 * is set, we know that the ith snp should be on. 
-                 */
-                
-                /* Make sure there is room in the bitmap to store all of the snips */
-                assert( sizeof(unsigned int)*8 > MAX_NUM_SNPS  );
-                /* bm stands for bitmap */
-                unsigned int bm;
-                assert( snp_ub > snp_lb );
-                for( bm = 0; bm < (((unsigned int)1) << (snp_ub - snp_lb)); bm++ )
-                {
-                    /* Make a copy of the sequence that we will be mutating */
-                    /* 
-                     * TODO - Make this more efficient. We shouldnt need to recopy the sequence
-                     * every single time. Although, since snps should typically be pretty 
-                     * sparse, this may not matter in practice.
-                     */
-                    memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
-                    
-                    /* 
-                     * Loop through each possible snp. If the bit is set, then 
-                     * set the bp location in the seq to the alternate.
-                     */
-                    int snp_index; 
-                    for( snp_index = 0; snp_index < snp_ub - snp_lb; snp_index++ )
-                    {
-                        /* If the correct bit is set */
-                        if( (bm&(1<<snp_index)) > 0 )
-                            tmp_seq[ snp_db->snps[snp_lb+snp_index].loc.loc - bp_index  ] 
-                                = snp_db->snps[snp_lb+snp_index].alt_bp;                        
-                    }
-                    
-                    LETTER_TYPE *translation;
-                    translate_seq( tmp_seq, seq_len, &(translation));
-                    
-                    /* if we cant add this sequence ( probably an N ) continue */
-                    if( translation == NULL ) {
-                        continue;
-                    }
-                    
-                    /* Add the sequence into the tree */
-                    add_sequence(genome->index, genome->index->ps_locs, 
-                                 translation, seq_len, loc);
-                    
-                    free( translation );                
-                }
-            }
+            
+            /* Add the sequence into the tree */
+            add_sequence(genome->index, genome->index->ps_locs, translation, seq_len, loc);
+            
+            free( translation );                                
         }
     }
     free( tmp_seq );

@@ -16,7 +16,6 @@
 #include "quality.h"
 #include "index_genome.h"
 #include "genome.h"
-#include "snp.h"
 #include "pseudo_location.h"
 
 /* a global pointer offset */

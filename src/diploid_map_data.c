@@ -25,12 +25,21 @@ to the maternal. A couple points:
 
  */
 
-
+/*
+ * Location of a haplotype start (basepair number)
+ * and the index of the corresponding entry in diploid_map_data_t->mappings
+ */
 struct loc_and_index_t {
     SIGNED_LOC loc;
     int index;
 };
 
+/*
+ * Binary search : Find containing indexed loc to given paternal loc
+ * Returns index loc where paternal (loc) matches the index (index.loc) exactly,
+ * OR returns the previous index. This is the index of the start of the
+ * "containing" contig.
+ */
 static int
 search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
 {
@@ -38,7 +47,7 @@ search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
     int high = len;
     while (low < high) {
         int mid = low + ((high - low) / 2) ;
-        // printf("%i-%i-%i\t%i\t%i\n", low, mid, high, index[mid].index, len );
+        //printf("%i-%i-%i\t%i\t%i\n", low, mid, high, index[mid].index, len );
         if( index[mid].loc < loc ) {
             low = mid + 1; 
         } else {
@@ -60,11 +69,19 @@ search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
     return index[low-1].index;
 }
 
+/*
+ * Stores mapping from a single line in .map file
+ */
 struct diploid_mapping_t {
     SIGNED_LOC paternal;
     SIGNED_LOC maternal;
 };
 
+/*
+ * Stores all informaiton parsed from a .map file, as well as
+ * the index of loc_and_index_t types that are used to find the index
+ * in the .map file of a mapping given the loc.
+ */
 struct diploid_map_data_t {
     char* chr_name;
     unsigned int chr_lens[2];
@@ -120,6 +137,17 @@ add_diploid_mapping(
     return;
 }
 
+/*
+ * Loop through all mappings from .map file.
+ *
+ * If both paternal and maternal entries are non-zero, add this mapping
+ * to the index. 
+ *
+ * Builds data->index, storing in each loc_and_index_t entry:
+ *      
+ *      data->index.loc = paternal loc (value from .map file)
+ *      data->index.index = corresponding index in diploid_map_data_t->mappings
+ */
 void
 index_diploid_map_data( struct diploid_map_data_t* data )
 {
@@ -155,18 +183,29 @@ index_diploid_map_data( struct diploid_map_data_t* data )
     return;
 }
 
-void
+int
 find_diploid_locations( struct diploid_map_data_t* data, 
-                        SIGNED_LOC paternal_pos,
-                        SIGNED_LOC* maternal_pos
+                        SIGNED_LOC paternal_pos
 )
 {
     int index = search_index( data->index, data->index_len, paternal_pos  );
     assert( data->mappings[index].maternal > 0 );
     assert( data->mappings[index].paternal > 0 );
-    *maternal_pos = data->mappings[index].maternal + 
+
+    int maternal_pos = data->mappings[index].maternal + 
                        ( paternal_pos - data->mappings[index].paternal );
-    return;
+
+    // return NULL if in unique sequence on the paternal
+    // look ahead to determine the paternal length
+    if( data->mappings[index+1].maternal == 0 &&
+        data->mappings[index+1].paternal != 0 &&
+        paternal_pos >= data->mappings[index+1].paternal )
+    {
+        //printf("Skipping %i\n", paternal_pos);
+        return NULL;
+    }
+
+    return maternal_pos;
 }
 
 void
@@ -186,8 +225,56 @@ fprintf_diploid_map_data( FILE* stream, struct diploid_map_data_t* map  )
     return;
 }
 
+/*
+ * File opening boilerplate
+ */
+
+FILE*
+open( char* fname )
+{
+    FILE* fp = NULL;
+    fp = fopen( fname, "r" );
+    if( fp == NULL )
+    {
+        fprintf( stderr, "FATAL         : Can not open '%s'\n", fname );
+        exit( 1 );
+    }
+    return fp;
+}
+
+/*
+ * Loops through FASTA file; counts characters that are not newlines
+ * Skips lines that start with > or ;
+ */
+int
+count_bp_in_fasta_file( FILE* fp )
+{
+    char c;
+    int bp_count = 0;
+    rewind( fp ); // don't assume at the beginning
+    while( ( c = fgetc( fp ) ) != EOF )
+    {
+        if( c == '>' || c == ';' )
+        {
+            // loop until newline; this is a header line or comment
+            // and does not count towards the total bp's
+            while( ( c = fgetc( fp ) ) != '\n') continue;
+            continue;
+        }
+        if( c != '\n' )
+            bp_count++;
+    }
+
+    return bp_count;
+}
+
+/*
+ * Loop through .map file.
+ * Store all entries in a pointer array of diploid_map_data_t.
+ */
 void
-parse_map_file( char* fname, struct diploid_map_data_t** map_data  )
+parse_map_file( char* fname, char* paternal_fname, char* maternal_fname,
+                struct diploid_map_data_t** map_data )
 {
     /* Initialize map data */
     *map_data = NULL;
@@ -209,13 +296,32 @@ parse_map_file( char* fname, struct diploid_map_data_t** map_data  )
         return;
     }
     
-    /* find the chromosome name */
-    /* we assume the chromosome name is the string characters until 
+    /*
+     * find the chromosome name and each chromosome's length
+     * from the fasta files
+     */
+    char* chr_name; // first line in .fa file; >chr_name
+    int p_len = 0, m_len = 0;
+    FILE* paternal_fp = NULL;
+    FILE* maternal_fp = NULL;
+
+    paternal_fp = open( paternal_fname );
+    /* we assume the chromosome name is the string of characters until 
        the first underscore or period */
-    
-    unsigned int chr_lens[2] = {135262207+1000, 135275611+1000};
-    
-    init_diploid_map_data( map_data, "test_chr", chr_lens );
+    // TODO: this was causing segfaults? only sometimes? why?
+    //fscanf( paternal_fp, ">%[^_.]", chr_name );
+    chr_name = "test";
+    p_len = count_bp_in_fasta_file( paternal_fp );
+    fclose( paternal_fp );
+
+    maternal_fp = open( maternal_fname );
+    // check that this is the same name as paternal?
+    m_len = count_bp_in_fasta_file( maternal_fp );
+    fclose( maternal_fp );
+
+    /* Initialize the map data structure */
+    unsigned int chr_lens[2] = { p_len, m_len };
+    init_diploid_map_data( map_data, chr_name, chr_lens );
 
     /* move to the beginning of the file */
     fseek( fp, 0, SEEK_SET );
@@ -241,15 +347,22 @@ parse_map_file( char* fname, struct diploid_map_data_t** map_data  )
     }
 
     /* finally, add a diploid mapping onto the end that includes the chr
-       stops. This simplifies logic in that w can always 'peak ahead' */
+       stops. This simplifies logic in that w can always 'peek ahead' */
     struct diploid_mapping_t mapping = { chr_lens[0], chr_lens[1] };
     add_diploid_mapping( *map_data, &mapping );
     /* decrement the number of mappings */
     (*map_data)->num_mappings -= 1;
 
+    fclose( fp );
     return;
 }
 
+/*
+ * Represents an identical segment on both chromosomes by
+ * the start of the region on the paternal chromosome,
+ *      "           "           " maternal chromosme,
+ * the length of the segment.
+ */
 struct chr_subregion_t {
     SIGNED_LOC paternal_start_pos;
     SIGNED_LOC maternal_start_pos;
@@ -265,6 +378,7 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
 {
     assert( seq_len > 0 );
 
+    /* Allocate memory for segments; one segment for each mapping */
     *segments = calloc( sizeof( struct chr_subregion_t ), data->num_mappings );
     assert( *segments != NULL );
     
@@ -325,18 +439,20 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         }
         
         assert( maternal_length == 0 || paternal_length == 0
-                || maternal_length == paternal_length        );
+                || maternal_length == paternal_length || i == data->num_mappings-1 );
         
         /* the map files are 1 indexed, but statmap uses zero based locations. */
         paternal_start -= 1;
         maternal_start -= 1;
         
-        /*
           // DEBUG
-        fprintf( stderr, "%i-%i\t%i-%i\n", 
+#if 0
+        fprintf( stderr, "%i-%i\t%i-%i\t%i, %i\n", 
                  paternal_start, paternal_start+paternal_length, 
-                 maternal_start, maternal_start+maternal_length );
-        */
+                 maternal_start, maternal_start+maternal_length,
+                 paternal_length, maternal_length );
+#endif
+
         struct chr_subregion_t subregion =  { 
             paternal_start, maternal_start, MAX(paternal_length, maternal_length)
         };
@@ -352,12 +468,21 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     return;
 }
 
+void diploid_map_usage()
+{
+    fprintf(stderr, "USAGE: diploid_map_data file.map paternal.fa maternal.fa\n");
+    exit(1);
+}
 
 int 
 main( int argc, char** argv )
 {
+    if( argc != 4 ) {
+        diploid_map_usage();
+    }
+
     struct diploid_map_data_t* map_data;
-    parse_map_file( argv[1], &map_data  );
+    parse_map_file( argv[1], argv[2], argv[3], &map_data );
     if( NULL == map_data )
     {
         fprintf( stderr, "FATAL         :  Can not parse map file.\n" );
@@ -368,27 +493,59 @@ main( int argc, char** argv )
 
     struct chr_subregion_t* segments;
     int num_segments;
-    build_unique_sequence_segments( map_data, 10, &segments, &num_segments );
+    int seq_len = 10;
+    build_unique_sequence_segments( map_data, seq_len, &segments, &num_segments );
     
     struct genome_data* genome;
     init_genome( &genome );
-    add_chrs_from_fasta_file( genome, fopen( "chr2_paternal.fa", "r")  );
-    add_chrs_from_fasta_file( genome, fopen( "chr2_maternal.fa", "r")  );
-    
+    add_chrs_from_fasta_file( genome, fopen( argv[2], "r" ) );
+    add_chrs_from_fasta_file( genome, fopen( argv[3], "r" ) );
+
     /* make sure the inverse is working */
-    #if 0
+    int p_chr_index = find_chr_index( genome, "chr22_paternal" ); // hardcoded for testing
+    int m_chr_index = find_chr_index( genome, "chr22_maternal" ); // hardcoded for testing
+    int shortest_chr = (map_data->chr_lens[0] <= map_data->chr_lens[1]) ? map_data->chr_lens[0] : map_data->chr_lens[1];
+
     int i;
     SIGNED_LOC prev_maternal = 0;
-    for( i = 87670; i < 135372312+10000; i++ )
+    int mismatches = 0;
+    // Start mismatch table
+    printf("PAT\tMAT\n");
+    // Start at 1 because .map file is 1-indexed
+    for( i = 1; i < shortest_chr; i++ ) // loop through paternal genome, up to last bp in shortest chr
     {
         SIGNED_LOC mat, pat;
         pat = i;
-        find_diploid_locations( map_data, pat, &mat );
-        fprintf( stderr, "%i\t%i\n", mat, prev_maternal );
-        prev_maternal = mat;
+        // sometimes there's unique seq on the paternal; return NULL from find_diploid_locations in that case
+        mat = find_diploid_locations( map_data, pat );
+
+        /* go back into maternal genome, do stringcmp make sure they match */
+        if( mat != NULL ) {
+            // pat-1 and mat-1 because .map file is 1-indexed, but statmap is 0-indexed
+            char* pg_ptr = find_seq_ptr( genome, p_chr_index, pat-1, 1 );
+            char* mg_ptr = find_seq_ptr( genome, m_chr_index, mat-1, 1 );
+            // ignore case in chr files
+            if( toupper( *pg_ptr ) != toupper( *mg_ptr ) ) {
+                //printf("ERROR : Sequence in paternal and maternal not equal.\n");
+                //printf("pat = %i, mat = %i\n", pat, mat);
+                //printf("pg sequence : %.*s\n", seq_len, pg_ptr);
+                //printf("mg_sequence : %.*s\n", seq_len, mg_ptr);
+                //abort();
+                // print out into table of mismatches: mapping_index, paternal, maternal
+                printf("%i\t%i\n", pat, mat);
+                mismatches++;
+            }
+        }
     }
-    #endif
-    
+
+    // Debugging
+    printf( "\n---- Summary ----\n");
+    printf("Found %i mismatches\n", mismatches);
+    printf( "Paternal chr_len: %i\n", map_data->chr_lens[0] );
+    printf( "Maternal chr_len: %i\n", map_data->chr_lens[1] );
+
+    // ignoring Inconsistency detected by ld.so for now. Something to do with the makefile?
+
     return 0;
 }
 

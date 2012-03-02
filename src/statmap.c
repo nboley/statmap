@@ -37,10 +37,6 @@
 #include "trace.h"
 #include "pseudo_location.h"
 
-/* fwd declaration */
-struct snp_db_t;
-#include "snp.h"
-
 /* Set the deafults for these two global variables */
 int num_threads = -1;
 int min_num_hq_bps = -1;
@@ -49,7 +45,7 @@ void usage()
 {
     fprintf(stderr, "Usage: ./statmap -g genome.fa -p men_match_penalty -m max_penalty_spread \n");
     fprintf(stderr, "                 ( -r input.fastq | [ -1 input.pair1.fastq & -2 input.pair2.fastq ] ) \n");
-    fprintf(stderr, "      (optional)  [ -o output_directory  -a assay_type -n snp_cov -f fragment_lengths ] \n\n" );
+    fprintf(stderr, "      (optional)  [ -o output_directory  -a assay_type -f fragment_lengths ] \n\n" );
 }
 
 void
@@ -307,9 +303,6 @@ parse_arguments( int argc, char** argv )
     args.pair2_NC_reads_fnames = NULL;
     args.NC_rdb = NULL;
 
-    args.snpcov_fname = NULL;
-    args.snpcov_fp = NULL;
-
     args.frag_len_fname = NULL;
     args.frag_len_fp = NULL;
     
@@ -335,7 +328,7 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:v:f:l:a:w:t:q:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:f:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -383,9 +376,6 @@ parse_arguments( int argc, char** argv )
             assay_name = optarg;
             break;
 
-        case 'v': // snp input file
-            args.snpcov_fname = optarg;
-            break;
         case 'f': // fragment length file
             args.frag_len_fname = optarg;
             break;
@@ -599,17 +589,6 @@ parse_arguments( int argc, char** argv )
         if( args.indexed_seq_len <= 11 ) 
         {
             fprintf( stderr, "FATAL       :  Can not index sequences less than 12 basepairs long.\n" );
-            exit( -1 );
-        }
-    }
-
-    /* open the snp coverage file */
-    if( args.snpcov_fname != NULL )
-    {
-        args.snpcov_fp = fopen( args.snpcov_fname, "r");
-        if( NULL == args.snpcov_fp )
-        {
-            fprintf( stderr, "FATAL       :  Failed to open '%s'\n", args.snpcov_fname );
             exit( -1 );
         }
     }
@@ -1146,11 +1125,6 @@ cleanup:
     if( args.log_fp != NULL )
         fclose(args.log_fp);
     
-    /* close the snp coverage file */
-    if( args.snpcov_fp != NULL ) {
-        fclose( args.snpcov_fp );
-    }
-
     if( args.frag_len_fp != NULL ) {
         fclose( args.frag_len_fp );
     }

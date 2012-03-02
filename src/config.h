@@ -174,12 +174,10 @@ enum RECHECK
     RECHECK_PENALTY = 1,
     /* recheck against chr to make sure the penalty is correct */
     RECHECK_LOCATION = 2,
-    /* we know this crosses a snp, so we test for one */
-    COVERS_SNP = 3,
     /* all rechecks have been performed, and the loc is valid */
-    VALID = 4,
+    VALID = 3,
     /* one or more rechecks failed */
-    INVALID = 5
+    INVALID = 4
 };
 
 
@@ -231,8 +229,6 @@ enum RECHECK
 #define FRAGMENT_LENGTH_BITS 20
 #define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
 #define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
-
-#define MAX_NUM_SNPS 3
 
 /* this needs to always be able to store up to LOCATION_MAX */
 #define SIGNED_LOC int

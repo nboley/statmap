@@ -27,15 +27,11 @@ struct index_t {
 };
 
 struct static_node;
-struct snp_db_t;
 
 struct genome_data {
     /* The index for this genome */
     struct index_t* index;
 
-    /* snps, NULL if there are none */
-    struct snp_db_t* snp_db;
-    
     /* the pseudo locations info */
     struct pseudo_locations_t* ps_locs;
     
@@ -77,7 +73,6 @@ free_genome( struct genome_data* gen );
 struct genome_header {
     size_t size;
     size_t genome_offset;
-    size_t snp_db_offset;
     size_t pseudo_locs_offset;
     size_t index_offset;
 };
