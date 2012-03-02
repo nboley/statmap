@@ -257,8 +257,8 @@ static inline void
 set_seq_error_in_mapped_read_location( 
     struct mapped_read_location* loc, float value )
 { 
-    assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
     loc->seq_error = ML_PRB_TYPE_from_float( value );
+    assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
 }
 
 /** COND PROB **/

@@ -202,7 +202,7 @@ guess_input_file_type( struct args_t* args )
                 input_file_type = MARKS_SOLEXA;
             } else if ( min_qual == 104 ) {
                 fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-               input_file_type = TEST_SUITE_FORMAT;
+                input_file_type = TEST_SUITE_FORMAT;
             } else {
                 fprintf( stderr, "ERROR       :  Could not automatically determine " );
                 fprintf( stderr, "input format. ( max=%i, min=%i  )\n",

@@ -159,10 +159,12 @@ parse_next_line( struct wig_line_info* line,
                 /* set the track name */
                 if( track_names[line->trace_index] != NULL )
                 {
-                    if( 0 != strncmp( track_name, track_names[line->trace_index], strlen( track_names[line->trace_index] ) ) )
+                    if( 0 != strncmp( track_name, track_names[line->trace_index], \
+                                      strlen( track_names[line->trace_index] ) ) )
                     {
                         fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync\n", 
-                                 (int)strlen(track_names[line->trace_index]), track_name, track_names[line->trace_index] );
+                                 (int)strlen(track_names[line->trace_index]), track_name, \
+                                 track_names[line->trace_index] );
                         assert( 0 );
                     }
                 } else {
@@ -189,10 +191,12 @@ parse_next_line( struct wig_line_info* line,
                 /* set the chr name */
                 if( chr_names[line->chr_index] != NULL )
                 {
-                    if( 0 != strncmp( chr_name, chr_names[line->chr_index], strlen( chr_names[line->chr_index] ) ) )
+                    if( 0 != strncmp( chr_name, chr_names[line->chr_index], \
+                                      strlen( chr_names[line->chr_index] ) ) )
                     {
                         fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
-                                 (int)strlen(chr_names[line->chr_index]), chr_name, chr_names[line->chr_index] );
+                                 (int)strlen(chr_names[line->chr_index]), chr_name, \
+                                 chr_names[line->chr_index] );
                         assert( 0 );
                     }
                 } else {
