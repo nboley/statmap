@@ -46,7 +46,7 @@ main( int argc, char** argv )
         char* genome_fname = argv[i];
         fprintf( stderr, "NOTICE      :  Adding '%s'\n", genome_fname );
         FILE* genome_fp = fopen( genome_fname, "r");
-        add_chrs_from_fasta_file( genome, genome_fp );
+        add_chrs_from_fasta_file( genome, genome_fp, REFERENCE );
     }
     
     /* index the genome */

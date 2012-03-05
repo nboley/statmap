@@ -806,15 +806,12 @@ void load_fasta_genome( struct genome_data** genome,
     {
         FILE* genome_fp = fopen(genome_fname, "r");
         add_chrs_from_fasta_file( *genome, genome_fp, REFERENCE );
-        fclose( genome_fp );
     } else // diploid
     {
         FILE* paternal_genome_fp = fopen(paternal_genome_fname, "r");
         FILE* maternal_genome_fp = fopen(maternal_genome_fname, "r");
         add_chrs_from_fasta_file( *genome, paternal_genome_fp, PATERNAL );
         add_chrs_from_fasta_file( *genome, maternal_genome_fp, MATERNAL );
-        fclose( paternal_genome_fp );
-        fclose( maternal_genome_fp );
     }
 
     write_genome_to_disk( *genome, GENOME_FNAME  );

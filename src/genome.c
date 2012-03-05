@@ -187,7 +187,7 @@ populate_standard_genome_from_mmapped_file( struct genome_data* gen, char* data 
 
     /* read the chr sources */
     gen->chr_sources = (enum CHR_SOURCE *) data;
-    data += sizeof(unsigned int)*gen->num_chrs;
+    data += sizeof(enum CHR_SOURCE)*gen->num_chrs;
     
     /* read the actual chromosomes */
     gen->chrs = malloc( gen->num_chrs*sizeof(char**) );
