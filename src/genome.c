@@ -92,6 +92,7 @@ init_genome( struct genome_data** gen )
     (*gen)->chr_names = NULL;
     (*gen)->chrs = NULL;
     (*gen)->chr_lens = NULL;
+    (*gen)->chr_sources = NULL;
 
     /* the genome index */
     (*gen)->index = NULL;
@@ -103,7 +104,7 @@ init_genome( struct genome_data** gen )
     init_pseudo_locations( &((*gen)->ps_locs)  );
     
     /* Add the pseudo chromosome */
-    add_chr_to_genome( "Pseudo", "", 0, *gen );
+    add_chr_to_genome( "Pseudo", "", 0, REFERENCE, *gen );
 }
 
 /* returns the size written */
@@ -140,7 +141,11 @@ write_standard_genome_to_file( struct genome_data* gen, FILE* ofp  )
     rv = fwrite( gen->chr_lens, sizeof( unsigned int ), gen->num_chrs, ofp );
     size_written += (gen->num_chrs)*sizeof( unsigned int );
     assert( rv == gen->num_chrs);
-    
+
+    /* write the chr sources */
+    rv = fwrite( gen->chr_sources, sizeof( enum CHR_SOURCE ), gen->num_chrs, ofp );
+    size_written += (gen->num_chrs)*sizeof( enum CHR_SOURCE );
+    assert( rv == gen->num_chrs );
     
     /* write the actual chromosomes */
     for( i = 0; i < gen->num_chrs; i++ )
@@ -178,6 +183,10 @@ populate_standard_genome_from_mmapped_file( struct genome_data* gen, char* data 
 
     /* read the chr lengths */
     gen->chr_lens = (unsigned int*) data;
+    data += sizeof(unsigned int)*gen->num_chrs;
+
+    /* read the chr sources */
+    gen->chr_sources = (enum CHR_SOURCE *) data;
     data += sizeof(unsigned int)*gen->num_chrs;
     
     /* read the actual chromosomes */
@@ -328,6 +337,7 @@ free_genome( struct genome_data* gen )
     
     free( gen->chrs );
     free( gen->chr_lens );
+    free( gen->chr_sources );
 
     free( gen );
 }
@@ -400,6 +410,7 @@ void
 add_chr_to_genome( char* chr_name, 
                    char* chr_str, 
                    unsigned int chr_len,
+                   enum CHR_SOURCE chr_source,
                    struct genome_data* gen )
 {
     /* find the length of the chromosome name  */
@@ -420,6 +431,11 @@ add_chr_to_genome( char* chr_name,
     (gen->chr_lens)[gen->num_chrs - 1] = chr_len;
     assert( chr_len <= LOCATION_MAX );
 
+    /* copy the chr source */
+    gen->chr_sources = 
+        realloc( gen->chr_sources, sizeof(enum CHR_SOURCE)*(gen->num_chrs));
+    (gen->chr_sources)[gen->num_chrs - 1] = chr_source;
+
     /* copy the chr string into memory */
     gen->chrs = 
         realloc( gen->chrs, sizeof(char*)*(gen->num_chrs) );
@@ -433,7 +449,8 @@ add_chr_to_genome( char* chr_name,
 
 extern void 
 add_chrs_from_fasta_file( 
-    struct genome_data* gen, FILE* f   )
+    struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source
+    )
 {
     int error;
     
@@ -494,7 +511,7 @@ add_chrs_from_fasta_file(
                     assert( chr_name[0] != '\0' );
                     fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
                             chr_name, i);
-                    add_chr_to_genome( chr_name, chr, i, gen );
+                    add_chr_to_genome( chr_name, chr, i, chr_source, gen );
                     
                     if( !feof(f)) {
                         /* reset the bp index to 0 */
@@ -550,7 +567,7 @@ add_chrs_from_fasta_file(
     chr = realloc( chr, (i+1)*sizeof(char) );
 
     assert( chr_name[0] != '\0' );
-    add_chr_to_genome( chr_name, chr, i, gen );
+    add_chr_to_genome( chr_name, chr, i, chr_source, gen );
     
     fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", chr_name, i);
     free(chr);

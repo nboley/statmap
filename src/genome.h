@@ -43,12 +43,14 @@ struct genome_data {
     char** chrs;
     /* the length of the chrsomosomes in bps' */
     unsigned int* chr_lens;
+    /* the source the chromosomes */
+    enum CHR_SOURCE* chr_sources;
 
     enum bool is_mmapped;
 };
 
 void
-add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  struct genome_data* gen ); 
+add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, enum CHR_SOURCE chr_source, struct genome_data* gen ); 
 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
@@ -62,7 +64,7 @@ extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );
 
 extern void 
-add_chrs_from_fasta_file( struct genome_data* gen, FILE* f  );
+add_chrs_from_fasta_file( struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source );
 
 void
 init_genome( struct genome_data** gen );

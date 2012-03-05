@@ -255,6 +255,14 @@ typedef struct __attribute__((__packed__))
 
 } GENOME_LOC_TYPE;
 
+enum CHR_SOURCE
+{
+    //UNKNOWN,
+    REFERENCE,
+    PATERNAL,
+    MATERNAL
+};
+
 /*** Globally useful macros ***/
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
