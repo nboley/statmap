@@ -14,18 +14,9 @@ objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  dna_sequence.o quality.o mapped_location.o find_candidate_mappings.o \
 	  iterative_mapping.o trace.o candidate_mapping.o mapped_read.o \
 	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o \
-	  config_parsing.o error_correction.o
+	  config_parsing.o error_correction.o diploid_map_data.o
 
 all: statmap trace.so
-
-diploid_map_data : diploid_map_data.o $(objects)
-	$(compiler) -o diploid_map_data \
-	diploid_map_data.o $(objects) \
-	$(compile_options) \
-	-lm -lpthread
-
-diploid_map_data.o : diploid_map_data.c config.h genome.h
-	$(compiler) $(compile_options) -c diploid_map_data.c
 
 statmap : $(objects)
 	$(compiler) -o statmap \
@@ -37,6 +28,9 @@ statmap : $(objects)
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
 	index_genome.h quality.h config.h fragment_length.h sam.h
 	$(compiler) $(compile_options) -c statmap.c
+
+diploid_map_data.o : diploid_map_data.c diploid_map_data.h config.h genome.h
+	$(compiler) $(compile_options) -c diploid_map_data.c
 
 find_candidate_mappings.o : find_candidate_mappings.c find_candidate_mappings.h \
 			    quality.h index_genome.h error_correction.h

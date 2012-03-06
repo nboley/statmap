@@ -5,34 +5,7 @@
 
 #include "config.h"
 #include "genome.h"
-
-/*
-
-TODO - get rid of the reference part. It doesn't make sense to
-keep it because we will never be mapping to it. Instead, just
-use the paternal as the refernce and modify the code to convert
-to the maternal. A couple points:
-
-1) We can skip any row that has zeros for both paternal and maternal
-2) We will, by default, use the paternal chromsome coordinate in cases 
-   with identical coordinates.
-
-
-
-
-
-
-
- */
-
-/*
- * Location of a haplotype start (basepair number)
- * and the index of the corresponding entry in diploid_map_data_t->mappings
- */
-struct loc_and_index_t {
-    SIGNED_LOC loc;
-    int index;
-};
+#include "diploid_map_data.h"
 
 /*
  * Binary search : Find containing indexed loc to given paternal loc
@@ -68,28 +41,6 @@ search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
     assert( low > 0 );
     return index[low-1].index;
 }
-
-/*
- * Stores mapping from a single line in .map file
- */
-struct diploid_mapping_t {
-    SIGNED_LOC paternal;
-    SIGNED_LOC maternal;
-};
-
-/*
- * Stores all informaiton parsed from a .map file, as well as
- * the index of loc_and_index_t types that are used to find the index
- * in the .map file of a mapping given the loc.
- */
-struct diploid_map_data_t {
-    char* chr_name;
-    unsigned int chr_lens[2];
-    size_t num_mappings;
-    struct diploid_mapping_t* mappings;
-    size_t index_len;
-    struct loc_and_index_t* index;
-};
 
 void
 init_diploid_map_data( 
@@ -183,6 +134,12 @@ index_diploid_map_data( struct diploid_map_data_t* data )
     return;
 }
 
+/*
+ * Lookup the maternal loc corresponding to a loc on the paternal genome.
+ *
+ * If paternal_pos is in unique paternal sequence (where there is no corresponding
+ * maternal loc), returns NULL
+ */
 int
 find_diploid_locations( struct diploid_map_data_t* data, 
                         SIGNED_LOC paternal_pos
@@ -271,14 +228,19 @@ count_bp_in_fasta_file( FILE* fp )
 /*
  * Loop through .map file.
  * Store all entries in a pointer array of diploid_map_data_t.
+ * Needs a copy of the genome so it can add entries for SNPs
  */
 void
-parse_map_file( char* fname, char* paternal_fname, char* maternal_fname,
-                struct diploid_map_data_t** map_data )
+parse_map_file( char* fname, 
+                struct diploid_map_data_t** map_data,
+                struct genome_data* genome,
+                int paternal_chr_index,
+                int maternal_chr_index
+              )
 {
     /* Initialize map data */
     *map_data = NULL;
-    
+
     FILE* fp = NULL;
     fp = fopen( fname,"r" );
     if( fp == NULL )
@@ -296,41 +258,24 @@ parse_map_file( char* fname, char* paternal_fname, char* maternal_fname,
         return;
     }
     
-    /*
-     * find the chromosome name and each chromosome's length
-     * from the fasta files
-     */
-    char* chr_name; // first line in .fa file; >chr_name
-    int p_len = 0, m_len = 0;
-    FILE* paternal_fp = NULL;
-    FILE* maternal_fp = NULL;
-
-    paternal_fp = open( paternal_fname );
-    /* we assume the chromosome name is the string of characters until 
-       the first underscore or period */
-    // TODO: this was causing segfaults? only sometimes? why?
-    //fscanf( paternal_fp, ">%[^_.]", chr_name );
-    chr_name = "test";
-    p_len = count_bp_in_fasta_file( paternal_fp );
-    fclose( paternal_fp );
-
-    maternal_fp = open( maternal_fname );
-    // check that this is the same name as paternal?
-    m_len = count_bp_in_fasta_file( maternal_fp );
-    fclose( maternal_fp );
-
     /* Initialize the map data structure */
-    unsigned int chr_lens[2] = { p_len, m_len };
-    init_diploid_map_data( map_data, chr_name, chr_lens );
+    unsigned int chr_lens[2] = {
+        genome->chr_lens[paternal_chr_index],
+        genome->chr_lens[maternal_chr_index]
+    };
+    
+    // TODO: reconsider naming. Using paternal chr name for now.
+    init_diploid_map_data( map_data, genome->chr_names[paternal_chr_index], chr_lens );
 
     /* move to the beginning of the file */
     fseek( fp, 0, SEEK_SET );
     char buffer[500];    
+    char* rv;
     int line_num = 0;
     while( !feof(fp) )
     {
         line_num++;
-        char* rv = fgets( buffer, 500, fp );
+        rv = fgets( buffer, 500, fp );
         // read the next line
         if( NULL == rv )
             break;
@@ -339,11 +284,58 @@ parse_map_file( char* fname, char* paternal_fname, char* maternal_fname,
         if( buffer[0] == '#' )
             continue;
         
+        // Add mapping
         struct diploid_mapping_t mapping;
-        
         sscanf( buffer, "%*i\t%i\t%i", &(mapping.paternal), &(mapping.maternal) );
-        
         add_diploid_mapping( *map_data, &mapping );
+
+        // Look ahead (for SNPs) if we're in a shared region
+        if( mapping.paternal > 0 && mapping.maternal > 0 )
+        {
+            // Save current position in file
+            long current_pos = ftell( fp );
+            int nextp, nextm;
+            // loop until the next paternal mapping
+            while( 1 )
+            {
+                rv = fgets( buffer, 500, fp );
+                if( NULL == rv ) {
+                    // we were on the last line; use chr_lens
+                    nextp = chr_lens[0]; nextm = chr_lens[1];
+                    break;
+                } else {
+                    // read next .map entry; if paternal is non-zero, this is the upper bound
+                    sscanf( buffer, "%*i\t%i\t%i", &nextp, &nextm );
+                    if( nextp != 0 )
+                        break;
+                }
+            }
+
+            // loop through bps in genome
+            int i;
+            for( i = 0; i < nextp - mapping.paternal; i++ )
+            {
+                // - 1 because .map file is 1-indexed, but statmap is 0-indexed
+                char *p_ptr = find_seq_ptr( genome, paternal_chr_index, mapping.paternal + i - 1, 1 );
+                char *m_ptr = find_seq_ptr( genome, maternal_chr_index, mapping.maternal + i - 1, 1 );
+                // test for mismatch (SNP); normalize case of bp letter
+                if( toupper(*p_ptr) != toupper(*m_ptr) )
+                {
+                    // add mappings for SNP
+                    struct diploid_mapping_t tmp_mapping;
+                    tmp_mapping.paternal = mapping.paternal + i; tmp_mapping.maternal = 0;
+                    add_diploid_mapping( *map_data, &tmp_mapping );
+                    tmp_mapping.paternal = 0; tmp_mapping.maternal = mapping.maternal + i;
+                    // end SNP, resuming contig
+                    tmp_mapping.paternal = mapping.paternal + i + 1;
+                    tmp_mapping.maternal = mapping.maternal + i + 1;
+                    add_diploid_mapping( *map_data, &tmp_mapping );
+                }
+            }
+
+            // restore position in file for next mapping
+            fseek( fp, current_pos, SEEK_SET );
+        }
     }
 
     /* finally, add a diploid mapping onto the end that includes the chr
@@ -356,18 +348,6 @@ parse_map_file( char* fname, char* paternal_fname, char* maternal_fname,
     fclose( fp );
     return;
 }
-
-/*
- * Represents an identical segment on both chromosomes by
- * the start of the region on the paternal chromosome,
- *      "           "           " maternal chromosme,
- * the length of the segment.
- */
-struct chr_subregion_t {
-    SIGNED_LOC paternal_start_pos;
-    SIGNED_LOC maternal_start_pos;
-    SIGNED_LOC segment_length;
-};
 
 void
 build_unique_sequence_segments( struct diploid_map_data_t* data, 
@@ -468,19 +448,10 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     return;
 }
 
-void diploid_map_usage()
-{
-    fprintf(stderr, "USAGE: diploid_map_data file.map paternal.fa maternal.fa\n");
-    exit(1);
-}
-
+#if 0
 int 
 main( int argc, char** argv )
 {
-    if( argc != 4 ) {
-        diploid_map_usage();
-    }
-
     struct diploid_map_data_t* map_data;
     parse_map_file( argv[1], argv[2], argv[3], &map_data );
     if( NULL == map_data )
@@ -548,4 +519,4 @@ main( int argc, char** argv )
 
     return 0;
 }
-
+#endif
