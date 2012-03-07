@@ -2,7 +2,6 @@
 #define DIPLOID_MAP
 
 #include "config.h"
-#include "genome.h"
 
 /*
  * Location of a haplotype start (basepair number)
@@ -47,7 +46,6 @@ struct chr_subregion_t {
     SIGNED_LOC segment_length;
 };
 
-
 void
 init_diploid_map_data( 
     struct diploid_map_data_t** map_data, 
@@ -58,6 +56,18 @@ init_diploid_map_data(
 void
 free_diploid_map_data(
     struct diploid_map_data_t* map_data
+);
+
+void
+write_diploid_map_data_to_file(
+    struct diploid_map_data_t* map_data,
+    FILE* fp
+);
+
+void
+read_diploid_map_data_from_file(
+    struct diploid_map_data_t** map_data,
+    FILE* fp
 );
 
 void

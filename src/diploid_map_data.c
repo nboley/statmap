@@ -88,6 +88,117 @@ add_diploid_mapping(
     return;
 }
 
+void
+write_diploid_map_data_to_file(
+    struct diploid_map_data_t* map_data,
+    FILE* fp
+)
+{
+    int rv;
+
+    /* Set first byte to zero if there's no map data to write */
+    if( map_data == NULL )
+    {
+        rv = fprintf( fp, "%i\n", 0 );
+        assert( rv > 0 );
+        return;
+    } else {
+        rv = fprintf( fp, "%i\n", 1 );
+        assert( rv > 0 );
+    }
+
+    /* write chr_name */
+    rv = fprintf( fp, "%s\n", map_data->chr_name );
+    assert( rv > 0 );
+    /* write chr_lens */
+    rv = fprintf( fp, "%i %i\n", map_data->chr_lens[0], map_data->chr_lens[1] );
+    assert( rv > 0 );
+    /* write the number of mappings */
+    rv = fprintf( fp, "%i\n", map_data->num_mappings );
+    assert( rv > 0 );
+    /* write the mappings */
+    int i; // loop counter
+    // num_mappings + 1 to write the final chr_lens 
+    for( i = 0; i < map_data->num_mappings + 1; i++ )
+    {
+        rv = fprintf( fp, "%i %i\n",
+                map_data->mappings[i].paternal,
+                map_data->mappings[i].maternal );
+        assert( rv > 0 );
+    }
+    /* write the length of the diploid map index */
+    rv = fprintf( fp, "%i\n", map_data->index_len );
+    assert( rv > 0 );
+    /* write the diploid map index */
+    for( i = 0; i < map_data->index_len; i++ )
+    {
+        rv = fprintf( fp, "%i %i\n",
+                map_data->index[i].loc,
+                map_data->index[i].index );
+        assert( rv > 0 );
+    }
+}
+
+void
+read_diploid_map_data_from_file(
+    struct diploid_map_data_t** map_data,
+    FILE* fp
+)
+{
+    int rv; 
+
+    /* Check if there is diploid map data to read, marked by first byte */
+    int marker;
+    rv = fscanf( fp, "%i\n", &marker );
+    assert( rv == 1 );
+    if( marker == 0 ) {
+        return;
+    }
+
+    /* load initial information needed to initialize diploid_map_data_t */
+    char chr_name[500];
+    rv = fscanf( fp, "%s\n", chr_name );
+    assert( rv == 1 );
+    unsigned int chr_lens[2];
+    rv = fscanf( fp, "%i %i\n", &chr_lens[0], &chr_lens[1] );
+    assert( rv == 2 );
+
+    /* initialize diploid_map_data structure */
+    init_diploid_map_data( map_data, chr_name, chr_lens );
+
+    int i; // loop counter
+
+    /* load mappings */
+    // add_diploid_mappings increments num_mappings automatically
+    size_t num_mappings;
+    rv = fscanf( fp, "%i\n", &num_mappings );
+    assert( rv == 1 );
+    // num_mappings + 1 to read the final chr_lens
+    for( i = 0; i < num_mappings + 1; i++ )
+    {
+        struct diploid_mapping_t mapping;
+        rv = fscanf( fp, "%i %i\n",
+                &(mapping.paternal),
+                &(mapping.maternal) );
+        assert( rv == 2 );
+        add_diploid_mapping( *map_data, &mapping );
+    }
+
+    (*map_data)->num_mappings -= 1; // Corrects for "extra" mapping (the chr lens)
+
+    /* load diploid map index */
+    rv = fscanf( fp, "%i\n", &((*map_data)->index_len) );
+    assert( rv == 1 );
+    (*map_data)->index = calloc( (*map_data)->index_len, sizeof(struct loc_and_index_t) );
+    for( i = 0; i < (*map_data)->index_len; i++ )
+    {
+        rv = fscanf( fp, "%i %i\n",
+                &((*map_data)->index[i].loc),
+                &((*map_data)->index[i].index) );
+        assert( rv == 2 );
+    }
+}
+
 /*
  * Loop through all mappings from .map file.
  *
@@ -454,9 +565,9 @@ main( int argc, char** argv )
 {
     struct diploid_map_data_t* map_data;
     parse_map_file( argv[1], argv[2], argv[3], &map_data );
-    if( NULL == map_data )
+    if( null == map_data )
     {
-        fprintf( stderr, "FATAL         :  Can not parse map file.\n" );
+        fprintf( stderr, "fatal         :  can not parse map file.\n" );
         return -1;
     }
 
