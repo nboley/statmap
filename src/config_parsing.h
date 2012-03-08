@@ -85,9 +85,12 @@ struct args_t {
 };
 
 void
-write_config_file_to_disk( struct args_t* args  );
+write_config_file_to_stream( FILE* arg_fp, struct args_t* args  );
 
 /* this assumes that we have moved intot he output directory */
+void
+read_config_file_fname_from_disk( char* fname, struct args_t** args  );
+
 void
 read_config_file_from_disk( struct args_t** args  );
 
