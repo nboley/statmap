@@ -444,12 +444,13 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0 ):
-    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
+    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s" % ( \
+        read_len, str(rev_comp), indexed_seq_len )
 
     rl = read_len
 
     # if we are testing untemplated g's, increase the number of samples so that we get some
-    # beggining overlap
+    # beginning overlap
     nsamples = 10000 if untemplated_gs_perc > 0 else 100
     
     ###### Prepare the data for the test ############################################
@@ -730,8 +731,8 @@ def test_lots_of_repeat_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i" \
-        % ( read_len, min_penalty, n_threads )
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
 
     rl = read_len
 
@@ -924,17 +925,17 @@ if __name__ == '__main__':
         test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
         test_multithreaded_mapping( )
-        print "Starting test_multi)_fasta_mapping()"
+        print "Starting test_multi_fasta_mapping()"
         test_multi_fasta_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
         print "Starting test_index_probe()"
         #test_short_index_probe()
     
-    if True:
+    if False:
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
-
+    
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )
