@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <libgen.h> // for basename()
 
 #include "../src/index_genome.h"
 
@@ -16,14 +17,14 @@
 
 void usage()
 {
-    fprintf( stderr, "Usage: ./build_index indexed_seq_len output_filename genome.fa(s)\n" );
+    fprintf( stderr, "Usage: ./build_index indexed_seq_len output_filename genome.fa(s) [diploid.map(s)]\n" );
     return;
 }
 
 struct input_file_group {
     char* prefix;
     int num_files;
-    char** files;
+    char** filenames;
 };
 
 void
@@ -33,27 +34,49 @@ init_input_file_group(
 )
 {
     (*ifg) = malloc( sizeof( struct input_file_group ) );
-    (*ifg)->num_files = 0;
-    (*ifg)->files = NULL;
+    assert( (*ifg) != NULL );
 
-    // Init and copy prefix string
+    // Allocate memory for, and copy, prefix string
     (*ifg)->prefix = calloc( strlen(prefix) + 1, sizeof(char) );
     assert( (*ifg)->prefix != NULL );
     strcpy( (*ifg)->prefix, prefix );
+
+    (*ifg)->num_files = 0;
+    (*ifg)->filenames = NULL;
+}
+
+// TODO: test
+void
+free_input_file_group(
+    struct input_file_group* ifg
+)
+{
+    int i;
+    for( i=0; i < ifg->num_files; i++ )
+    {
+        free( ifg->filenames[i] );
+    }
+    free( ifg->filenames );
+    free( ifg->prefix );
+    free( ifg );
 }
 
 void add_file_to_input_file_group(
-    struct input_file_group** ifg,
-    char* file
+    struct input_file_group* ifg,
+    char* filename
 )
 {
-    (*ifg)->num_files += 1;
-    (*ifg)->files = realloc(
-        (*ifg)->files,
-        (*ifg)->num_files * sizeof(char *)
+    ifg->num_files += 1;
+
+    ifg->filenames = realloc(
+        ifg->filenames,
+        ifg->num_files * sizeof(char *)
     );
-    (*ifg)->files[(*ifg)->num_files - 1] = calloc( strlen(file) + 1, sizeof(char) );
-    strcpy( (*ifg)->files[(*ifg)->num_files - 1], file );
+    assert( ifg->filenames != NULL );
+
+    ifg->filenames[ifg->num_files - 1] = calloc(strlen(filename) + 1, sizeof(char) );
+    assert( ifg->filenames[ifg->num_files - 1] != NULL );
+    strcpy( ifg->filenames[ifg->num_files - 1], filename );
 }
 
 void
@@ -66,70 +89,64 @@ print_input_file_group(
     int i;
     for( i=0; i < ifg->num_files; i++ )
     {
-        printf("%s\n", ifg->files[i]);
+        printf("%s\n", ifg->filenames[i]);
     }
 }
 
 void
 group_input_files(
-    int argc,
-    char** argv,
+    char** filenames,
+    int num_files,
     struct input_file_group** ifgs,
     int* num_ifgs
 )
 {
+    /* loop counters */
     int i, j;
     /* build a list of input file groups based on file prefixes */
-    for( i = 3; i < argc; i++ ) // loop through filenames in argv
+    for( i = 0; i < num_files; i++ ) // loop through filenames
     {
         /* find the prefix */
-        // first, pull out the filename
-        // start at the end of the string, step back until slash
-        assert( strlen( argv[i] ) > 1 );
-        int filename_start;
-        for( filename_start = strlen( argv[i] ) ;
-             filename_start > 1 && argv[i][filename_start-1] != '/' ;
-             filename_start-- )
-            ;
-        // move forward until we encounter an underscore
-        int prefix_end;
-        for( prefix_end = filename_start ;
-             prefix_end < strlen( argv[i] ) && argv[i][prefix_end] != '_' ;
-             prefix_end++ )
-            ;
-        int prefix_len = prefix_end - filename_start;
-        char prefix[prefix_len + 1];
-        strncpy( prefix, argv[i] + filename_start, prefix_len );
-        prefix[prefix_len] = '\0'; // append null byte
+        /* make a copy of the original string, since basename and strtok are destructive */
+        char* fncopy = calloc( strlen(filenames[i]) + 1, sizeof(char) );
+        strcpy( fncopy, filenames[i] );
+        char* bname = basename( fncopy );
+        char* prefix = strtok( bname, "_" ); // non-reentrant: uses strtok()! (use strtok_r() instead?)
+        assert( prefix != NULL );
 
-        // is this prefix already in ifgs?
+        /* loop through ifgs */
         for( j = 0; j < *num_ifgs; j++ )
         {
+            /* is the prefix already in the list? */
             if( 0 == strcmp( prefix, ifgs[j]->prefix ) )
             {
                 // yes - add it to the ifg
-                add_file_to_input_file_group( &ifgs[j], argv[i] );
+                add_file_to_input_file_group( ifgs[j], filenames[i] );
                 break; // continue on the next input filename
             }
         }
+        // no - create a new ifg, and add this file to the new group
         if( j == *num_ifgs )
         {
-            // no - create a new ifg, and add this file to the new group
             *num_ifgs += 1;
-            ifgs = realloc(
-                ifgs,
+            // realloc appears to be failing here - not that if realloc fails, it returns NULL
+            *ifgs = realloc(
+                *ifgs,
                 *num_ifgs * sizeof( struct input_file_group * )
             );
+            assert( *ifgs != NULL );
             init_input_file_group( &ifgs[*num_ifgs - 1], prefix );
-            add_file_to_input_file_group( &ifgs[*num_ifgs - 1], argv[i] );
+            add_file_to_input_file_group( ifgs[*num_ifgs - 1], filenames[i] );
         }
+
+        free( fncopy );
     }
 }
 
 int 
 main( int argc, char** argv )
 {
-    int i, j; // loop counter
+    int i; // loop counter
 
     if( argc < 4 )
     {
@@ -158,7 +175,7 @@ main( int argc, char** argv )
     /* sort input files into groups by their prefixes */
     int num_groups = 0;
     struct input_file_group* groups = NULL;
-    group_input_files( argc, argv, &groups, &num_groups );
+    group_input_files( argv+3, argc-3, &groups, &num_groups );
     // debug - print input file groups
     printf("num_groups : %i\n", num_groups );
     for( i = 0; i < num_groups; i++ )
@@ -166,7 +183,7 @@ main( int argc, char** argv )
         print_input_file_group( &groups[i] );
     }
 
-    exit(0);
+    exit(0); // testing
 
     /* Initialize the genome data structure */
     struct genome_data* genome;
