@@ -97,7 +97,7 @@ struct rawread_db_t {
     */
     readkey_t readkey;
     /* We lock this mutex whenever we grab a read */
-    pthread_mutex_t* lock; 
+    pthread_spinlock_t* lock; 
 
     FILE* single_end_reads;
     FILE* paired_end_1_reads;

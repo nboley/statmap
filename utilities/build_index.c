@@ -6,6 +6,9 @@
 
 #include "../src/index_genome.h"
 
+int min_num_hq_bps = -1;
+int num_threads = 1;
+
 /* 
    usually, we can just let the OS cleanup the in memory index. 
    However, if we are searching for memory leaks, it may be useful 

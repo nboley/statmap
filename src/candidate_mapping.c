@@ -13,8 +13,135 @@
 #include "candidate_mapping.h"
 #include "mapped_read.h"
 #include "rawread.h"
+#include "genome.h"
 
 struct mapped_read_t;
+
+/** 
+    Some bastard code. I need this later on when I unpack the pseudo loc reads
+    so I stick it here. 
+***/
+
+int
+modify_mapped_read_location_for_index_probe_offset(  
+    int read_location,
+    const int chr,
+    const enum STRAND strnd,
+    const int subseq_offset,
+    const int subseq_len,
+    const int read_len,
+    struct genome_data* genome
+) 
+{
+    // Check for overflow error
+    if( read_location < 0 ) {
+        perror( "ERROR: The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        return -1;
+    }
+    
+    // If this is a pseudo chromosome, we need to do these checks later.
+    if( chr == PSEUDO_LOC_CHR_INDEX ) {
+        perror( "ERROR: Pseudol locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        return -1;
+    }
+
+    /* first deal with reads that map to the 5' genome */
+    if( strnd == FWD )
+    {
+        /* if the mapping location of the probe is less than
+           the length of the probe offset, then the actual 
+           read is mapping before the start of the genome, which 
+           is clearly impossible 
+        */
+        if( read_location < subseq_offset ) 
+        {
+            return -1;
+        } 
+        /* we shift the location to the beggining of the sequence, 
+           rather than the subseq that we looked at in the index  */
+        else {
+            read_location -= subseq_offset;
+        }
+                
+        /* if the end of the read extends past the end of the genome
+           then this mapping location is impossible, so ignore it    */
+        /* note that we just shifted the read start, so it's correct to
+           add the full read length without substracting off the probe 
+           offset. */
+        if( read_location + read_len
+            > (long) genome->chr_lens[chr]      )
+        {
+            return -1;
+        }
+
+    } else if( strnd == BKWD ) {
+        /*
+          This can be very confusing, so we need to draw it out:
+                  
+                  
+          READ - 20 basepairs
+          RRRR1RRRRRRRRRR2RRRR
+          SUBSEQ - 12 BASEPAIRS w/ 4 BP offset
+          SSSSSSSSSSSS
+                  
+          If the subsequence maps to the 3' genome, that means the reverse
+          complement maps to the 5' genome.
+                  
+          GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+          2SSSSSSSSSS1
+          L
+          ( where L indicates the start position of the subsequence )
+                  
+          So the *start* of the read in the 3' genome is at position 
+          L - 4 ( the subsequence offset ) + 16 ( the read length )
+        */
+                
+        /* this moves the read start to the beginning of the read 
+           <b>in the 3' genome</b>. */
+
+
+        /** check not going past the end of the gneome */
+                
+        /* make sure that the genome is not too short, this case should
+           be pretty rare but it is possible */
+        if( (long) genome->chr_lens[chr] < read_len  )
+        {
+            return -1;
+        }
+                
+        /* this will actually be the read end in the 5' genome,
+           so we check to make sure that it won't make the read extend
+           past the end of the genome */                
+        if( read_location > 
+            (long) genome->chr_lens[chr]
+            - ( subseq_len + subseq_offset )
+            ) {
+            return -1;
+        }
+                
+        read_location += ( subseq_len + subseq_offset );             
+                
+        /* now we subtract off the full read length, so that we have the 
+           read *end* in the 5' genome. Which is what our coordinates are 
+           based upon. We do it like this to prevent overflow errors. We
+           first check to make sure we have enough room to subtract, and 
+           then we do 
+        */
+        if( read_location < read_len )
+        {
+            return -1;
+        } else {
+            read_location -= read_len;
+        }
+    
+    } else {
+        perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
+        return -1;
+    }
+    
+    return read_location;
+}
+
 
 /*********************************************************************************
  *

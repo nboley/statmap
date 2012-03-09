@@ -5,6 +5,9 @@
 
 #include "../src/wiggle.h"
 
+int min_num_hq_bps = -1;
+int num_threads = 1;
+
 void usage()
 {
     fprintf(stderr, "Usage: ./aggregate_over_wiggles (min|max|sum) file(s).wig > output.wig\n");

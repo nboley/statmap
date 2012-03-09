@@ -249,8 +249,8 @@ init_rawread_db( struct rawread_db_t** rdb )
 
     (*rdb)->readkey = 0;
 
-    (*rdb)->lock = malloc( sizeof(pthread_mutex_t) );
-    pthread_mutex_init( (*rdb)->lock, NULL );
+    (*rdb)->lock = malloc( sizeof(pthread_spinlock_t) );
+    pthread_spin_init( (*rdb)->lock, PTHREAD_PROCESS_PRIVATE );
 
     (*rdb)->single_end_reads = NULL;
     (*rdb)->paired_end_1_reads = NULL;
@@ -286,8 +286,8 @@ close_rawread_db( struct rawread_db_t* rdb )
         fclose( rdb->non_mapping_paired_end_2_reads );
     }
     
-    pthread_mutex_destroy( rdb->lock );
-    free( rdb->lock );
+    pthread_spin_destroy( rdb->lock );
+    // free( (pthread_spinlock_t*) rdb->lock );
     
     free( rdb );
     return;
@@ -463,11 +463,11 @@ get_next_read_from_rawread_db(
     struct rawread** r1, struct rawread** r2,
     long max_readkey )
 {
-    pthread_mutex_lock( rdb->lock );
+    pthread_spin_lock( rdb->lock );
     
     if( max_readkey >= 0
         && rdb->readkey >= (readkey_t) max_readkey ) {
-        pthread_mutex_unlock( rdb->lock );
+        pthread_spin_unlock( rdb->lock );
         *r1 = NULL;
         *r2 = NULL;
         return EOF;
@@ -490,7 +490,7 @@ get_next_read_from_rawread_db(
         if( rv == EOF )
         {
             *r1 = NULL;
-            pthread_mutex_unlock( rdb->lock );
+            pthread_spin_unlock( rdb->lock );
             return EOF;
         }        
 
@@ -510,7 +510,7 @@ get_next_read_from_rawread_db(
             assert( rawread_db_is_empty( rdb ) );
             *r1 = NULL;
             *r2 = NULL;
-            pthread_mutex_unlock( rdb->lock );
+            pthread_spin_unlock( rdb->lock );
             return EOF;
         }
         
@@ -528,7 +528,7 @@ get_next_read_from_rawread_db(
     *readkey = rdb->readkey;
     rdb->readkey += 1;
 
-    pthread_mutex_unlock( rdb->lock );
+    pthread_spin_unlock( rdb->lock );
     return 0;
 }
 

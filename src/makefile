@@ -83,7 +83,7 @@ mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
 
 mapped_location.h : 
 
-mapped_read.o : mapped_read.c mapped_read.h trace.h fragment_length.h fragment_length.o iterative_mapping.h 
+mapped_read.o : mapped_read.c mapped_read.h trace.h fragment_length.h fragment_length.o iterative_mapping.h candidate_mapping.h 
 	$(compiler) $(compile_options) -c mapped_read.c
 
 mapped_read.h : iterative_mapping.h trace.h

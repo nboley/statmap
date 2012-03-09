@@ -366,6 +366,7 @@ recheck_locations(
 }
 
 
+
 /* build candidate mappings from mapped locations ( 
    the data structure that index lookups return  )    */
 static inline void 
@@ -422,106 +423,17 @@ build_candidate_mappings_from_mapped_locations(
         /* set the location. We need to play with this a bit to account
            for index probes that are shorter than the read. */
         int read_location = (result->location).loc;
+        /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
+        if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
+        {
+            read_location = modify_mapped_read_location_for_index_probe_offset(
+                (result->location).loc, (result->location).chr, result->strnd, 
+                results->subseq_offset, results->subseq_len, r->length,
+                genome
+            );
+        }
+
         /* check for overflow error */
-        assert( read_location >= 0 );
-        if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
-            /* make sure that the read doesn't start before 0 */
-            
-            /* first deal with reads that map to the 5' genome */
-            if( result->strnd == FWD )
-            {
-                /* if the mapping location of the probe is less than
-                   the length of the probe offset, then the actual 
-                   read is mapping before the start of the genome, which 
-                   is clearly impossible 
-                */
-                if( read_location < results->subseq_offset ) 
-                {
-                    continue;
-                } 
-                /* we shift the location to the beggining of the sequence, 
-                   rather than the subseq that we looked at in the index  */
-                else {
-                    read_location -= results->subseq_offset;
-                }
-                
-                /* if the end of the read extends past the end of the genome
-                   then this mapping location is impossible, so ignore it    */
-                /* note that we just shifted the read start, so it's correct to
-                   add the full read length without substracting off the probe 
-                   offset. */
-                if( read_location + r->length
-                    > (long) genome->chr_lens[(result->location).chr]      )
-                {
-                    continue;
-                }
-
-            } else if( result->strnd == BKWD ) {
-                /*
-                  This can be very confusing, so we need to draw it out:
-                  
-                  
-                  READ - 20 basepairs
-                  RRRR1RRRRRRRRRR2RRRR
-                  SUBSEQ - 12 BASEPAIRS w/ 4 BP offset
-                      SSSSSSSSSSSS
-                  
-                  If the subsequence maps to the 3' genome, that means the reverse
-                  complement maps to the 5' genome.
-                  
-                  GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-                       2SSSSSSSSSS1
-                       L
-                  ( where L indicates the start position of the subsequence )
-                  
-                  So the *start* of the read in the 3' genome is at position 
-                  L - 4 ( the subsequence offset ) + 16 ( the read length )
-                 */
-                
-                /* this moves the read start to the beginning of the read 
-                 <b>in the 3' genome</b>. */
-
-
-                /** check not going past the end of the gneome */
-                
-                /* make sure that the genome is not too short, this case should
-                   be pretty rare but it is possible */
-                if( (long) genome->chr_lens[(result->location).chr]
-                    < ( results->subseq_len + results->subseq_offset ) )
-                {
-                    continue;
-                }
-                
-                /* this will actually be the read end in the 5' genome,
-                   so we check to make sure that it won't make the read extend
-                   past the end of the genome */                
-                if( read_location > 
-                    (long) genome->chr_lens[(result->location).chr]
-                        - ( results->subseq_len + results->subseq_offset )
-                ) {
-                    continue;
-                }
-                
-                read_location += ( results->subseq_len + results->subseq_offset );             
-                
-                /* now we subtract off the full read length, so that we have the 
-                   read *end* in the 5' genome. Which is what our coordinates are 
-                   based upon. We do it like this to prevent overflow errors. We
-                   first check to make sure we have enough room to subtract, and 
-                   then we do 
-                */
-                if( read_location < r->length )
-                {
-                    continue;
-                } else {
-                    read_location -= r->length;
-                }
-            } else {
-                perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
-                continue;
-            }
-            
-        } 
         
         template_candidate_mapping.start_bp = read_location;
         
