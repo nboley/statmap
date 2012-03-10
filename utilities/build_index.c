@@ -21,90 +21,163 @@ void usage()
     return;
 }
 
-struct input_file_group {
+struct file_group {
     char* prefix;
     int num_files;
     char** filenames;
 };
 
+struct file_group_list {
+    int num_groups;
+    struct file_group* groups;
+};
+
 void
-init_input_file_group(
-    struct input_file_group** ifg,
+init_file_group (
+    struct file_group** fg,
     char* prefix
 )
 {
-    (*ifg) = malloc( sizeof( struct input_file_group ) );
-    assert( (*ifg) != NULL );
+    // allocate memory for file_group struct
+    (*fg) = malloc( sizeof( struct file_group ) );
 
-    // Allocate memory for, and copy, prefix string
-    (*ifg)->prefix = calloc( strlen(prefix) + 1, sizeof(char) );
-    assert( (*ifg)->prefix != NULL );
-    strcpy( (*ifg)->prefix, prefix );
+    // allocate memory for, and copy, prefix
+    (*fg)->prefix = calloc( strlen(prefix) + 1, sizeof(char) );
+    strcpy( (*fg)->prefix, prefix );
 
-    (*ifg)->num_files = 0;
-    (*ifg)->filenames = NULL;
+    (*fg)->num_files = 0;
+    (*fg)->filenames = NULL;
 }
 
-// TODO: test
 void
-free_input_file_group(
-    struct input_file_group* ifg
+free_file_group(
+    struct file_group* fg
 )
 {
+    // free all allocated filenames
     int i;
-    for( i=0; i < ifg->num_files; i++ )
+    for( i=0; i < fg->num_files; i++ )
     {
-        free( ifg->filenames[i] );
+        free( fg->filenames[i] );
     }
-    free( ifg->filenames );
-    free( ifg->prefix );
-    free( ifg );
+    
+    free( fg->prefix );
+    free( fg );
 }
 
-void add_file_to_input_file_group(
-    struct input_file_group* ifg,
+void
+init_file_group_list(
+    struct file_group_list** fgl
+)
+{
+    (*fgl) = malloc( sizeof( struct file_group_list ) );
+    
+    (*fgl)->num_groups = 0;
+    (*fgl)->groups = NULL;
+}
+
+void
+free_file_group_list(
+    struct file_group_list* fgl
+)
+{
+    // free all allocated file groups
+    free( fgl->groups );
+    free( fgl );
+}
+
+void
+add_filename_to_file_group(
+    struct file_group* fg,
     char* filename
 )
 {
-    ifg->num_files += 1;
+    fg->num_files += 1;
 
-    ifg->filenames = realloc(
-        ifg->filenames,
-        ifg->num_files * sizeof(char *)
+    // Allocate a pointer to char for filename
+    fg->filenames = realloc(
+        fg->filenames,
+        fg->num_files * sizeof(char *)
     );
-    assert( ifg->filenames != NULL );
-
-    ifg->filenames[ifg->num_files - 1] = calloc(strlen(filename) + 1, sizeof(char) );
-    assert( ifg->filenames[ifg->num_files - 1] != NULL );
-    strcpy( ifg->filenames[ifg->num_files - 1], filename );
+    // Allocate space for the filename
+    fg->filenames[fg->num_files - 1] = calloc( strlen(filename) + 1, sizeof(char) );
+    // Copy filename
+    strcpy( fg->filenames[fg->num_files - 1], filename );
 }
 
 void
-print_input_file_group(
-    struct input_file_group* ifg
+add_group_to_file_group_list(
+    struct file_group* fg,
+    struct file_group_list* fgl
 )
 {
-    printf("prefix : %s\n", ifg->prefix);
+    fgl->num_groups += 1;
 
+    // Allocate memory for new file group
+    fgl->groups = realloc(
+        fgl->groups,
+        fgl->num_groups * sizeof( struct file_group )
+    );
+    // Copy file group
+    fgl->groups[fgl->num_groups - 1] = *fg;
+}
+
+void
+print_file_group(
+    struct file_group* fg
+)
+{
+    // print the prefix
+    printf("prefix : %s\n", fg->prefix);
+    // print the filenames
     int i;
-    for( i=0; i < ifg->num_files; i++ )
+    for( i=0; i < fg->num_files; i++ )
     {
-        printf("%s\n", ifg->filenames[i]);
+        printf("%s\n", fg->filenames[i] );
     }
 }
 
 void
-group_input_files(
-    char** filenames,
-    int num_files,
-    struct input_file_group** ifgs,
-    int* num_ifgs
+print_file_group_list(
+    struct file_group_list* fgl
 )
 {
-    /* loop counters */
-    int i, j;
-    /* build a list of input file groups based on file prefixes */
-    for( i = 0; i < num_files; i++ ) // loop through filenames
+    // print the file groups
+    int i;
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        print_file_group( &(fgl->groups[i]) );
+    }
+}
+
+int
+find_prefix_index_in_file_group_list(
+    struct file_group_list* fgl,
+    char* prefix
+)
+{
+    int prefix_index;
+    /* loop through files in group */
+    for( prefix_index=0; prefix_index < fgl->num_groups; prefix_index++ )
+    {
+        if( 0 == strcmp( fgl->groups[prefix_index].prefix, prefix ) )
+            return prefix_index;
+    }
+
+    /* if prefix not found in list of file groups, return -1 */
+    return -1;
+}
+
+void
+group_files(
+    char** filenames,
+    int num_files,
+    struct file_group_list* fgl
+)
+{
+    int i;
+    /* loop through filenames */
+    for( i = 0; i < num_files; i++ )
     {
         /* find the prefix */
         /* make a copy of the original string, since basename and strtok are destructive */
@@ -112,36 +185,27 @@ group_input_files(
         strcpy( fncopy, filenames[i] );
         char* bname = basename( fncopy );
         char* prefix = strtok( bname, "_" ); // non-reentrant: uses strtok()! (use strtok_r() instead?)
-        assert( prefix != NULL );
 
-        /* loop through ifgs */
-        for( j = 0; j < *num_ifgs; j++ )
+        int prefix_index = find_prefix_index_in_file_group_list( fgl, prefix );
+
+        /* if we didn't find the prefix in the list, 
+         * add a new file group to the list */
+        if( prefix_index == -1 )
         {
-            /* is the prefix already in the list? */
-            if( 0 == strcmp( prefix, ifgs[j]->prefix ) )
-            {
-                // yes - add it to the ifg
-                add_file_to_input_file_group( ifgs[j], filenames[i] );
-                break; // continue on the next input filename
-            }
+            struct file_group* fg;
+            init_file_group( &fg, prefix );
+            add_group_to_file_group_list( fg, fgl );
+            // set prefix_index to newly added file group
+            prefix_index = fgl->num_groups - 1;
         }
-        // no - create a new ifg, and add this file to the new group
-        if( j == *num_ifgs )
-        {
-            *num_ifgs += 1;
-            // realloc appears to be failing here - not that if realloc fails, it returns NULL
-            *ifgs = realloc(
-                *ifgs,
-                *num_ifgs * sizeof( struct input_file_group * )
-            );
-            assert( *ifgs != NULL );
-            init_input_file_group( &ifgs[*num_ifgs - 1], prefix );
-            add_file_to_input_file_group( ifgs[*num_ifgs - 1], filenames[i] );
-        }
+
+        /* add the filename to the file group */
+        add_filename_to_file_group( &(fgl->groups[prefix_index]), filenames[i] );
 
         free( fncopy );
     }
 }
+
 
 int 
 main( int argc, char** argv )
@@ -173,15 +237,13 @@ main( int argc, char** argv )
     }
 
     /* sort input files into groups by their prefixes */
-    int num_groups = 0;
-    struct input_file_group* groups = NULL;
-    group_input_files( argv+3, argc-3, &groups, &num_groups );
-    // debug - print input file groups
-    printf("num_groups : %i\n", num_groups );
-    for( i = 0; i < num_groups; i++ )
-    {
-        print_input_file_group( &groups[i] );
-    }
+    struct file_group_list* fgl = NULL;
+    init_file_group_list( &fgl );
+    group_files( argv+3, argc-3, fgl );
+    // debug - print file group list
+    print_file_group_list( fgl );
+    // free file group list
+    free_file_group_list( fgl );
 
     exit(0); // testing
 
