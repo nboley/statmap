@@ -34,19 +34,19 @@ struct file_group_list {
 
 void
 init_file_group (
-    struct file_group** fg,
+    struct file_group* fg,
     char* prefix
 )
 {
-    // allocate memory for file_group struct
-    (*fg) = malloc( sizeof( struct file_group ) );
+    /* NOTE: assumes memory for file_group struct fg has been allocated
+     * (by realloc in add_group_to_file_group_list) */
 
     // allocate memory for, and copy, prefix
-    (*fg)->prefix = calloc( strlen(prefix) + 1, sizeof(char) );
-    strcpy( (*fg)->prefix, prefix );
+    fg->prefix = calloc( strlen(prefix) + 1, sizeof(char) );
+    strcpy( fg->prefix, prefix );
 
-    (*fg)->num_files = 0;
-    (*fg)->filenames = NULL;
+    fg->num_files = 0;
+    fg->filenames = NULL;
 }
 
 void
@@ -61,8 +61,8 @@ free_file_group(
         free( fg->filenames[i] );
     }
     
+    free( fg->filenames );
     free( fg->prefix );
-    free( fg );
 }
 
 void
@@ -81,7 +81,14 @@ free_file_group_list(
     struct file_group_list* fgl
 )
 {
-    // free all allocated file groups
+    // free memory allocated in file groups
+    int i;
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        free_file_group( &(fgl->groups[i]) );
+    }
+
+    // free contigious block of file_group structs
     free( fgl->groups );
     free( fgl );
 }
@@ -107,7 +114,7 @@ add_filename_to_file_group(
 
 void
 add_group_to_file_group_list(
-    struct file_group* fg,
+    char* prefix,
     struct file_group_list* fgl
 )
 {
@@ -118,8 +125,9 @@ add_group_to_file_group_list(
         fgl->groups,
         fgl->num_groups * sizeof( struct file_group )
     );
-    // Copy file group
-    fgl->groups[fgl->num_groups - 1] = *fg;
+
+    // Initialize new file group
+    init_file_group( &(fgl->groups[fgl->num_groups - 1]), prefix );
 }
 
 void
@@ -192,11 +200,8 @@ group_files(
          * add a new file group to the list */
         if( prefix_index == -1 )
         {
-            struct file_group* fg;
-            init_file_group( &fg, prefix );
-            add_group_to_file_group_list( fg, fgl );
-            // set prefix_index to newly added file group
-            prefix_index = fgl->num_groups - 1;
+            add_group_to_file_group_list( prefix, fgl );
+            prefix_index = fgl->num_groups - 1; // set prefix_index to newly added file group
         }
 
         /* add the filename to the file group */
