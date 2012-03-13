@@ -212,6 +212,7 @@ group_files(
 }
 
 /* Sanity checks on input file groups */
+/* Exits with fatal error if bad input is found */
 void
 verify_file_groups(
     struct file_group_list* fgl
@@ -222,54 +223,46 @@ verify_file_groups(
     for( i=0; i < fgl->num_groups; i++ )
     {
         // check number of files
-        if( fgl->groups[i].num_files == 1 )
+        int num_files = fgl->groups[i].num_files;
+        if( !(num_files == 1 || num_files == 3) )
         {
-            // Group with single file only makes sense if the file is .fa
-            if( 0 != strcmp( ".fa",
-                fgl->groups[i].filenames[0] + strlen( fgl->groups[i].filenames[0] ) - 3 ))
-            {
-                fprintf( stderr,
-                        "Prefix file group contains single non-FASTA file. "
-                        "Statmap does not understand how to process this.\n"
-                );
-                exit( -1 );
-            }
+            fprintf( stderr,
+                    "FATAL : File group contains %i files\n"
+                    "There should be 1 (for a haploid geome), or 3 (for a diploid genome).\n",
+                    num_files
+            );
+            exit( -1 );
         }
-        else if( fgl->groups[i].num_files == 3 )
+
+        // make sure diploid file groups make sense
+        if( num_files == 3 )
         {
             // count types of file by suffix
             // there should be 2 .fa files and 1 .map file
             int num_fa = 0;
             int num_map = 0;
             int j;
-            for( j=0; j < fgl->groups[i].num_files; j++ )
+            for( j=0; j < num_files; j++ )
             {
                 char* filename = fgl->groups[i].filenames[j];
-                if( 0 == strcmp( ".fa", filename + strlen(filename) - 3 ))
-                    num_fa++;
-                else if( 0 == strcmp( ".map", filename + strlen(filename ) - 4 ))
+                if( 0 == strcmp( ".map", filename + strlen(filename ) - 4 ))
                     num_map++;
                 else
                 {
-                    fprintf( stderr, "FATAL : Encountered unexpected filetype: %s\n", filename );
-                    exit( -1 );
+                    // Assume it's fasta
+                    num_fa++;
                 }
             }
-            // check counts
+            // check counts of fasta and map files
             if( !( num_fa == 2 && num_map == 1 ) )
             {
-                fprintf( stderr, "FATAL: Encountered a group of 3 files with %i fastas and %i map files. ", num_fa, num_map );
+                fprintf( stderr,
+                    "FATAL : Encountered a group of 3 files with %i fastas "
+                    "and %i map files.\n",
+                    num_fa, num_map
+                );
                 exit( -1 );
             }
-        }
-        else
-        {
-            fprintf( stderr,
-                "FATAL : Input files were grouped by prefix into a group of %i files. "
-                "Statmap does not understand how to process this.\n",
-                fgl->groups[i].num_files
-            );
-            exit( -1 );
         }
     }
 }
@@ -349,7 +342,7 @@ add_file_group_to_genome(
             }
 
             /* Add to genome */
-            fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
+            //fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
             add_chrs_from_fasta_file( genome, genome_fp, chr_source );
 
             //TODO: add_chrs closes input FILE*. This behavior should be consistent.
@@ -402,13 +395,11 @@ main( int argc, char** argv )
     /* free file group list */
     free_file_group_list( fgl );
 
-    exit(0);
-
     /* index the genome */
     // TODO: implement diploid genome indexing
     // init_index
     // build_diploid_index
-    index_genome( genome, indexed_seq_len, NULL );
+    index_genome( genome, indexed_seq_len );
 
     /* write the genome to file */
     write_genome_to_disk( genome, output_fname  );
