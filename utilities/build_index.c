@@ -192,7 +192,7 @@ group_files(
         char* fncopy = calloc( strlen(filenames[i]) + 1, sizeof(char) );
         strcpy( fncopy, filenames[i] );
         char* bname = basename( fncopy );
-        char* prefix = strtok( bname, "_" ); // non-reentrant: uses strtok()! (use strtok_r() instead?)
+        char* prefix = strtok( bname, "_" );
 
         int prefix_index = find_prefix_index_in_file_group_list( fgl, prefix );
 
@@ -211,12 +211,169 @@ group_files(
     }
 }
 
+/* Sanity checks on input file groups */
+void
+verify_file_groups(
+    struct file_group_list* fgl
+)
+{
+    /* Iterate over groups in list */
+    int i;
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        // check number of files
+        if( fgl->groups[i].num_files == 1 )
+        {
+            // Group with single file only makes sense if the file is .fa
+            if( 0 != strcmp( ".fa",
+                fgl->groups[i].filenames[0] + strlen( fgl->groups[i].filenames[0] ) - 3 ))
+            {
+                fprintf( stderr,
+                        "Prefix file group contains single non-FASTA file. "
+                        "Statmap does not understand how to process this.\n"
+                );
+                exit( -1 );
+            }
+        }
+        else if( fgl->groups[i].num_files == 3 )
+        {
+            // count types of file by suffix
+            // there should be 2 .fa files and 1 .map file
+            int num_fa = 0;
+            int num_map = 0;
+            int j;
+            for( j=0; j < fgl->groups[i].num_files; j++ )
+            {
+                char* filename = fgl->groups[i].filenames[j];
+                if( 0 == strcmp( ".fa", filename + strlen(filename) - 3 ))
+                    num_fa++;
+                else if( 0 == strcmp( ".map", filename + strlen(filename ) - 4 ))
+                    num_map++;
+                else
+                {
+                    fprintf( stderr, "FATAL : Encountered unexpected filetype: %s\n", filename );
+                    exit( -1 );
+                }
+            }
+            // check counts
+            if( !( num_fa == 2 && num_map == 1 ) )
+            {
+                fprintf( stderr, "FATAL: Encountered a group of 3 files with %i fastas and %i map files. ", num_fa, num_map );
+                exit( -1 );
+            }
+        }
+        else
+        {
+            fprintf( stderr,
+                "FATAL : Input files were grouped by prefix into a group of %i files. "
+                "Statmap does not understand how to process this.\n",
+                fgl->groups[i].num_files
+            );
+            exit( -1 );
+        }
+    }
+}
+
+enum CHR_SOURCE
+get_chr_source_from_fasta_file(
+    char* filename
+)
+{
+    enum CHR_SOURCE chr_source;
+
+    FILE* fp = fopen( filename, "r" );
+    char id[500];
+    fscanf( fp, ">%s", id );
+    fclose( fp );
+    // parse on underscore
+    char* past_underscore = strchr( id, '_' ) + 1;
+
+    if( past_underscore == NULL )
+    {
+        // fail closed
+        fprintf( stderr, "FATAL : Could not determine chromosome source from .fa file %s\n", filename );
+        exit( -1 );
+    }
+
+    // TODO: case insensitive? 
+    if( 0 == strcmp( "paternal", past_underscore ) )
+        chr_source = PATERNAL;
+    else if( 0 == strcmp( "maternal", past_underscore ) )
+        chr_source = MATERNAL;
+    else
+    {
+        // fail closed
+        fprintf( stderr, "FATAL : Could not determine chromosome source from .fa file %s. Found %s\n",
+            filename,
+            id
+        );
+        exit( -1 );
+    }
+
+    return chr_source;
+}
+
+void
+add_file_group_to_genome(
+    struct file_group* fg,
+    struct genome_data* genome
+)
+{
+    /* Is this a diploid or haploid group of genome files? */
+    enum bool diploid_group;
+    if( fg->num_files == 1 ) // one file (.fa) in the group => haploid
+        diploid_group = false; 
+    else if( fg->num_files == 3 ) // two .fa and one .map => diploid
+        diploid_group = true;
+
+    /* Loop through files in group */
+    int i;
+    for( i=0; i < fg->num_files; i++ )
+    {
+        char* filename = fg->filenames[i];
+        // if file is fasta, add it
+        if( 0 == strcmp( ".fa", filename + (strlen(filename) - 3)) )
+        {
+            /* Determine chromosome source */
+            enum CHR_SOURCE chr_source; 
+            if( diploid_group )
+                chr_source = get_chr_source_from_fasta_file( fg->filenames[i] );
+            else
+                chr_source = REFERENCE;
+
+            FILE* genome_fp = fopen( filename, "r" );
+            if( NULL == genome_fp )
+            {
+                fprintf( stderr, "FATAL : Error opening input file %s.", filename );
+                exit( -1 );
+            }
+
+            /* Add to genome */
+            fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
+            add_chrs_from_fasta_file( genome, genome_fp, chr_source );
+
+            //TODO: add_chrs closes input FILE*. This behavior should be consistent.
+            //fclose( genome_fp );
+        }
+    }
+}
+
+void add_file_group_list_to_genome(
+    struct file_group_list* fgl,
+    struct genome_data* genome
+)
+{
+    /* Iterate over groups in list */
+    int i;
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        add_file_group_to_genome( &(fgl->groups[i]), genome );
+    }
+}
 
 int 
 main( int argc, char** argv )
 {
-    int i; // loop counter
-
     if( argc < 4 )
     {
         usage();
@@ -229,45 +386,28 @@ main( int argc, char** argv )
     char index_fname[500];
     sprintf( index_fname, "%s.index", output_fname );
 
-    /* Are we indexing a diploid or a haploid genome? */
-    enum bool diploid = false;
-    // are there .map files in the input?
-    for( i = 3; i < argc; i++ )
-    {
-        /* verify that this is a '.map' file ( just search for the suffix ) */
-        if( 0 == strcmp( ".map", argv[i] + (strlen(argv[i]) - 4))) {
-            diploid = true;
-            break;
-        }
-    }
-
     /* sort input files into groups by their prefixes */
     struct file_group_list* fgl = NULL;
     init_file_group_list( &fgl );
     group_files( argv+3, argc-3, fgl );
-    // debug - print file group list
-    print_file_group_list( fgl );
-    // free file group list
-    free_file_group_list( fgl );
-
-    exit(0); // testing
+    verify_file_groups( fgl );
 
     /* Initialize the genome data structure */
     struct genome_data* genome;
     init_genome( &genome );
 
     /*** Load the genome ***/
-    /* Add the fasta files to the genome */
-    for( i = 3; i < argc; i++ )
-    {
-        char* genome_fname = argv[i];
-        fprintf( stderr, "NOTICE      :  Adding '%s'\n", genome_fname );
-        FILE* genome_fp = fopen( genome_fname, "r");
-        add_chrs_from_fasta_file( genome, genome_fp, REFERENCE );
-    }
-    
+    add_file_group_list_to_genome( fgl, genome );
+
+    /* free file group list */
+    free_file_group_list( fgl );
+
+    exit(0);
+
     /* index the genome */
     // TODO: implement diploid genome indexing
+    // init_index
+    // build_diploid_index
     index_genome( genome, indexed_seq_len, NULL );
 
     /* write the genome to file */

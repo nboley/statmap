@@ -64,6 +64,7 @@
 #define GENOME_FNAME "genome.bin"
 #define GENOME_INDEX_FNAME "genome.bin.index"
 #define GENOME_INDEX_PSLOCS_FNAME "genome.bin.index.pslocs"
+#define GENOME_INDEX_DIPLOID_MAP_FNAME "genome.bin.index.dmap"
 
 /**** determine how the letters are packed       ****/
 
@@ -221,10 +222,9 @@ enum RECHECK
 #define CHR_BITS 15
 #define CHR_NUM_MAX (32768 - 1) // 2**15 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
-#define LOCATION_BITS 28
+#define LOCATION_BITS 29
 // MADE_SIGNED_REVERT
-// #define LOCATION_MAX (268435456 - 1) // 2**28 = 268435456
-#define LOCATION_MAX (268435456/2 - 1) // 2**27 = 268435456
+#define LOCATION_MAX (536870912/2 - 1) // 2**29 = 536870912
 
 #define FRAGMENT_LENGTH_BITS 20
 #define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
@@ -238,7 +238,7 @@ typedef struct __attribute__((__packed__))
     unsigned is_paternal    :1;
     unsigned is_maternal    :1;
 
-    unsigned unused_space   :2;
+    unsigned unused_space   :1;
     
     /* read_type 0 = normal, 1 = junction */
     unsigned read_type      :1;
