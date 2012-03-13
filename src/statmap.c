@@ -36,6 +36,7 @@
 #include "wiggle.h"
 #include "trace.h"
 #include "pseudo_location.h"
+#include "diploid_map_data.h"
 
 /* Set the deafults for these two global variables */
 int num_threads = -1;
@@ -44,7 +45,7 @@ int min_num_hq_bps = -1;
 // TODO: update message
 void usage()
 {
-    fprintf(stderr, "Usage: ./statmap -g genome.fa -p men_match_penalty -m max_penalty_spread \n");
+    fprintf(stderr, "Usage: ./statmap -g genome.fa.bin -p men_match_penalty -m max_penalty_spread \n");
     fprintf(stderr, "                 ( -r input.fastq | [ -1 input.pair1.fastq & -2 input.pair2.fastq ] ) \n");
     fprintf(stderr, "      (optional)  [ -o output_directory  -a assay_type -f fragment_lengths ] \n\n" );
 }
@@ -293,9 +294,6 @@ parse_arguments( int argc, char** argv )
     
     args.genome_fname = NULL;
     args.genome_index_fname = NULL;
-    args.paternal_genome_fname = NULL;
-    args.maternal_genome_fname = NULL;
-    args.diploid_map_fname = NULL;
     
     args.unpaired_reads_fnames = NULL;
     args.pair1_reads_fnames = NULL;
@@ -332,20 +330,11 @@ parse_arguments( int argc, char** argv )
     char* assay_name = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:f:l:a:w:t:q:P:M:D")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:f:l:a:w:t:q:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
             args.genome_fname = optarg;
-            break;
-        case 'P': // paternal gneome fasta file
-            args.paternal_genome_fname = optarg;
-            break;
-        case 'M':
-            args.maternal_genome_fname = optarg;
-            break;
-        case 'D':
-            args.diploid_map_fname = optarg;
             break;
         case 'p': // minimum match penalty
             args.min_match_penalty = atof(optarg);
@@ -436,13 +425,10 @@ parse_arguments( int argc, char** argv )
      *  OR
      *  -P, -M, and -D TODO: make optarg enforce this?
      */
-    if( args.genome_fname == NULL &&
-        ( args.paternal_genome_fname == NULL ||
-          args.maternal_genome_fname == NULL ||
-          args.diploid_map_fname == NULL ) )
+    if( args.genome_fname == NULL )
     {
         usage();
-        fprintf(stderr, "FATAL       :  -g ( reference_genome ) or -P (paternal genome) AND -M (maternal genome) and -D (diploid map data) are required\n");
+        fprintf(stderr, "FATAL       :  -g ( binary genome ) is required\n");
         exit( -1 );
     }
     
@@ -530,28 +516,15 @@ parse_arguments( int argc, char** argv )
         exit( -1 );
     }
 
-    /* Check paths of genome files and set filename of index */
+    /* Check path of genome file
+     * Expand paths to absolute paths
+     * Set args.genome_index_fname based on args.genome_fname. */
     args.genome_index_fname = calloc( sizeof(char), PATH_MAX + 6 );
-    if( args.genome_fname != NULL ) { // Haploid genome
+    if( args.genome_fname != NULL ) {
         char* genome_fname = realpath( args.genome_fname, NULL );
         assert( NULL != genome_fname );
         args.genome_fname = genome_fname;
         sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
-    } else { // Diploid genome
-        char* paternal_genome_fname = realpath( args.paternal_genome_fname, NULL );
-        assert( NULL != paternal_genome_fname );
-        args.paternal_genome_fname = paternal_genome_fname;
-
-        char* maternal_genome_fname = realpath( args.maternal_genome_fname, NULL );
-        assert( NULL != maternal_genome_fname );
-        args.maternal_genome_fname = maternal_genome_fname;
-
-        // TODO: use paternal genome fname to name the index for now
-        sprintf( args.genome_index_fname, "%s.index", args.paternal_genome_fname );
-
-        char* diploid_map_fname = realpath( args.diploid_map_fname, NULL );
-        assert( NULL != diploid_map_fname );
-        args.diploid_map_fname = diploid_map_fname;
     }
     
     if( args.min_match_penalty == 1 )
@@ -773,119 +746,55 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
-void load_binary_genome( struct genome_data** genome, 
-                         char* genome_fname,
-                         char* genome_index_fname
-                         )
-{
-    /* copy the genome into the output directory */
-    safe_link_into_output_directory( 
-        genome_fname, "./", GENOME_FNAME );
-    safe_link_into_output_directory( 
-        genome_index_fname, "./", GENOME_INDEX_FNAME );
-    
-    char pseudo_loc_ofname[500];
-    sprintf(pseudo_loc_ofname, "%s.pslocs", genome_index_fname  );
-    safe_link_into_output_directory( 
-        pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
-    
-    load_genome_from_disk( genome, GENOME_FNAME );
-}
-
-void load_fasta_genome( struct genome_data** genome,
-                        char* genome_fname,
-                        char* paternal_genome_fname,
-                        char* maternal_genome_fname,
-                        int indexed_seq_len
-                        )
-{
-    printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
-    init_genome( genome );
-
-    if( genome_fname != NULL ) // haploid
-    {
-        FILE* genome_fp = fopen(genome_fname, "r");
-        add_chrs_from_fasta_file( *genome, genome_fp, REFERENCE );
-    } else // diploid
-    {
-        FILE* paternal_genome_fp = fopen(paternal_genome_fname, "r");
-        FILE* maternal_genome_fp = fopen(maternal_genome_fname, "r");
-        add_chrs_from_fasta_file( *genome, paternal_genome_fp, PATERNAL );
-        add_chrs_from_fasta_file( *genome, maternal_genome_fp, MATERNAL );
-    }
-
-    write_genome_to_disk( *genome, GENOME_FNAME  );
-
-    pid_t pID = fork();
-    /* create the index, and then exit */
-    /* we do this for the separate address space */
-    if( pID == 0 )
-    {
-        index_genome( *genome, indexed_seq_len );
-        build_ondisk_index( (*genome)->index, GENOME_INDEX_FNAME  );
-        exit( 0 );
-    } 
-    else if ( pID < 0 )
-    {
-        perror( "FATAL       :  Failed to fork. " );
-        exit( 1 );
-    }
-    /* parent process. just wait until the index is created */
-    else {
-        int status;
-        wait( &status );
-    }
-}
-
 /*
- * Normalize different legitimate inputs for genome parameters.
- * Loads a binary genome if it finds one, otherwise creates one from
- * FASTA files and reloads it as a binary genome after it's created.
+ * Loads the binary genome file
  */
 void load_genome( struct genome_data** genome, struct args_t* args )
 {
     int rv;
 
-    if( args->genome_fname != NULL )
+    /* test for a correctly converted binary genome */
+    FILE* genome_fp = fopen( args->genome_fname, "r" );
+    if( NULL == genome_fp )
     {
-        // test for a correctly converted binary genome
-        FILE* genome_fp = fopen( args->genome_fname, "r" );
-        if( NULL == genome_fp )
-        {
-            fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
-            exit( 1 );
-        }
-
-        char magic_number[9];
-        rv = fread( magic_number, sizeof(char), 9, genome_fp );
-        assert( rv == 9 );
-        fclose( genome_fp );
-
-        if( 0 != strncmp( magic_number, "SM_OD_GEN", 9 ) )
-        {
-            load_fasta_genome( genome, 
-                               args->genome_fname,
-                               args->paternal_genome_fname,
-                               args->maternal_genome_fname,
-                               args->indexed_seq_len
-                             );
-        } else
-        {
-            load_binary_genome( genome, 
-                                args->genome_fname,
-                                args->genome_index_fname
-                              );
-        }
-    } else {
-        // no parameter set for -g; index diploid from fasta and .map files
-        load_fasta_genome( genome, 
-                           args->genome_fname,
-                           args->paternal_genome_fname,
-                           args->maternal_genome_fname,
-                           args->indexed_seq_len
-                         );
+        fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
+        exit( 1 );
     }
-    
+
+    char magic_number[9];
+    rv = fread( magic_number, sizeof(char), 9, genome_fp );
+    assert( rv == 9 );
+    fclose( genome_fp );
+
+    if( 0 == strncmp( magic_number, "SM_OD_GEN", 9 ) )
+    {
+        /* copy the genome into the output directory */
+        safe_link_into_output_directory( 
+            args->genome_fname, "./", GENOME_FNAME );
+        /* copy genome index into the output directory */
+        safe_link_into_output_directory( 
+            args->genome_index_fname, "./", GENOME_INDEX_FNAME );
+        
+        /* copy pseudo_locs into the output directory */
+        char pseudo_loc_ofname[500];
+        sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
+        safe_link_into_output_directory( 
+            pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
+
+        /* copy diploid map data into the output directory */
+        char dmap_ofname[500];
+        sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
+        safe_link_into_output_directory(
+            dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
+        
+        load_genome_from_disk( genome, GENOME_FNAME );
+    }
+    else
+    {
+        fprintf(stderr, "FATAL      :  Genome file '%s' is not in the correct format.\n", args->genome_fname);
+        exit(1);
+    }
+
     load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
     
     return;
