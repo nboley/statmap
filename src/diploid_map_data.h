@@ -4,20 +4,20 @@
 #include "config.h"
 
 /*
+ * Stores mapping from a single line in .map file
+ */
+struct diploid_mapping_t {
+    SIGNED_LOC paternal;
+    SIGNED_LOC maternal;
+};
+
+/*
  * Location of a haplotype start (basepair number)
  * and the index of the corresponding entry in diploid_map_data_t->mappings
  */
 struct loc_and_index_t {
     SIGNED_LOC loc;
     int index;
-};
-
-/*
- * Stores mapping from a single line in .map file
- */
-struct diploid_mapping_t {
-    SIGNED_LOC paternal;
-    SIGNED_LOC maternal;
 };
 
 /*
@@ -61,10 +61,11 @@ free_diploid_map_data(
 void
 write_diploid_map_data_to_file(
     struct diploid_map_data_t* map_data,
+    int num_chrs,
     FILE* fp
 );
 
-void
+int
 read_diploid_map_data_from_file(
     struct diploid_map_data_t** map_data,
     FILE* fp
