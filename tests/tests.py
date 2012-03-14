@@ -99,9 +99,9 @@ except AttributeError:
         seq = property(itemgetter(2))
 
 def map_with_statmap( read_fnames, output_dir, 
+                      indexed_seq_len,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
-                      indexed_seq_len=None,
                       assay=None):
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
@@ -111,36 +111,23 @@ def map_with_statmap( read_fnames, output_dir,
     else:
         read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
     
-    # if the indexed seq len is None, we will build the index seperately
-    if indexed_seq_len == None:
-        call = "%s -g tmp.genome.fa %s -o %s -p %.2f -m %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
-        if assay != None:
-            call += ( " -n 1 -a " + assay )
-        
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" \
-                % str( ret_code )
-    else:
-        # first, build the genome
-        call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
-        print >> stdout, re.sub( "\s+", " ", call)
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
-                % str( ret_code )
+    # build the binary genome with build_index
+    call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
+    print >> stdout, re.sub( "\s+", " ", call)
+    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+    if ret_code != 0:
+        raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
+            % str( ret_code )
 
-
-        call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i" \
-            % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
-        if assay != None:
-            call += ( " -n 1 -a " + assay )
-        print >> stdout, re.sub( "\s+", " ", call)    
-        ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
-        if ret_code != 0:
-            raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
+    # run statmap
+    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i" \
+        % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
+    if assay != None:
+        call += ( " -n 1 -a " + assay )
+    print >> stdout, re.sub( "\s+", " ", call)    
+    ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
+    if ret_code != 0:
+        raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
     
     # build the sam file
     call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
@@ -444,6 +431,10 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0 ):
+
+    # If no indexed_seq_len explicitly set, use read_len
+    indexed_seq_len = indexed_seq_len or read_len
+
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
 
     rl = read_len
@@ -604,9 +595,9 @@ def test_paired_end_reads( read_len ):
     reads_of_1.close()
     reads_of_2.close()
 
-    # map the reads
+    # map the reads - indexed_seq_len defaults to read_len
     read_fnames = ( "tmp.1.fastq", "tmp.2.fastq" )
-    map_with_statmap( read_fnames, output_directory  )
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len  )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -767,7 +758,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     reads_of.close()
 
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory, 
+    map_with_statmap( read_fnames, output_directory,
                       min_penalty = min_penalty, max_penalty_spread=10,
                       indexed_seq_len = read_len - 2  ) # read_len = read_len - 2
     
@@ -884,6 +875,24 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
+def generate_diploid_data( read_len, rev_comp = False, indexed_seq_len = None ):
+    '''
+    Generates paternal and maternal genomes with a .map file for testing diploid mapping
+    '''
+    p_genome = m_genome = build_random_genome( [1000,], ["1",] )
+    # perturb genomes
+    map_file = build_map_file( p_genome, m_genome )
+
+    # sample uniformly from both genomes
+    p_frags = sample_uniformily_from_genome( p_genome, nsamples=nsamples, frag_len=rl );
+    p_reads = build_reads_from_fragments(
+            p_genome, p_frags, read_len=rl, rev_comp=rev_comp, paired_end=False )
+    m_frags = sample_uniformily_from_genome( m_genome, nsamples=nsamples, frag_len=rl );
+    m_reads = build_reads_from_fragments(
+            m_genome, m_frags, read_len=rl, rev_comp=rev_comp, paired_end=False )
+
+def test_diploid_mapping():
+    pass
 
 if False:
     num_repeats = 1
@@ -924,13 +933,13 @@ if __name__ == '__main__':
         test_mutated_read_finding()
         print "Starting test_multithreaded_mapping()"
         test_multithreaded_mapping( )
-        print "Starting test_multi)_fasta_mapping()"
+        print "Starting test_multi_fasta_mapping()"
         test_multi_fasta_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
         print "Starting test_index_probe()"
         #test_short_index_probe()
-    
+
     if True:
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
