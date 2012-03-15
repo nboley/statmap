@@ -50,9 +50,6 @@ enum input_file_type_t {
 struct args_t {
     char* genome_fname;
     char* genome_index_fname;
-    char* paternal_genome_fname;
-    char* maternal_genome_fname;
-    char* diploid_map_fname;
     
     char* unpaired_reads_fnames;
     char* pair1_reads_fnames;

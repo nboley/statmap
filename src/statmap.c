@@ -419,12 +419,6 @@ parse_arguments( int argc, char** argv )
     /********* CHECK REQUIRED ARGUMENTS *************************************/
     /* Ensure that the required arguments were present */
 
-    /* Check genome parameter
-     * We require either
-     * -g
-     *  OR
-     *  -P, -M, and -D TODO: make optarg enforce this?
-     */
     if( args.genome_fname == NULL )
     {
         usage();
@@ -518,7 +512,8 @@ parse_arguments( int argc, char** argv )
 
     /* Check path of genome file
      * Expand paths to absolute paths
-     * Set args.genome_index_fname based on args.genome_fname. */
+     * Set args.genome_index_fname based on args.genome_fname.
+     */ 
     args.genome_index_fname = calloc( sizeof(char), PATH_MAX + 6 );
     if( args.genome_fname != NULL ) {
         char* genome_fname = realpath( args.genome_fname, NULL );
