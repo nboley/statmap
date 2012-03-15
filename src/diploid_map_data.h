@@ -66,7 +66,7 @@ write_diploid_map_data_to_file(
 );
 
 int
-read_diploid_map_data_from_file(
+load_diploid_map_data_from_file(
     struct diploid_map_data_t** map_data,
     FILE* fp
 );

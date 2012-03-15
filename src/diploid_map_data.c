@@ -171,7 +171,7 @@ void write_diploid_map_data_to_file(
 /* Read a single diploid_map_data_t struct from file
  * Leaves fp at the start of the next diploid_map_data_t or at the end of the file */
 void
-read_diploid_map_data_t_from_file(
+load_diploid_map_data_t_from_file(
     struct diploid_map_data_t* map_data,
     FILE* fp
 )
@@ -237,11 +237,14 @@ read_diploid_map_data_t_from_file(
 
 /* Read diploid_map_data_t structs from file, returns number of structs read */
 int
-read_diploid_map_data_from_file(
+load_diploid_map_data_from_file(
     struct diploid_map_data_t** map_data,
     FILE* fp
 )
 {
+    // Initialize array of diploid map data
+    *map_data = NULL;
+
     int rv;
 
     /* Check if there is diploid map data to read, marked by first byte */
@@ -266,7 +269,7 @@ read_diploid_map_data_from_file(
     int i;
     for( i=0; i < num_structs; i++ )
     {
-        read_diploid_map_data_t_from_file( &((*map_data)[i]), fp );
+        load_diploid_map_data_t_from_file( &((*map_data)[i]), fp );
     }
 
     return num_structs;
