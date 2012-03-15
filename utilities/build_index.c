@@ -249,7 +249,7 @@ determine_genome_type(
 
 void
 group_files(
-    char*** filenames,
+    char** filenames,
     int num_files,
     struct file_group_list* fgl
 )
@@ -375,8 +375,8 @@ add_file_group_to_genome(
     for( i=0; i < fg->num_files; i++ )
     {
         char* filename = fg->filenames[i];
-        // if file is fasta, add it
-        if( 0 == strcmp( ".fa", filename + (strlen(filename) - 3)) )
+        // if file is not .map, we assume it's fasta and add it
+        if( 0 != strcmp( ".map", filename + (strlen(filename) - 4)) )
         {
             /* Determine chromosome source */
             enum CHR_SOURCE chr_source; 
@@ -388,12 +388,12 @@ add_file_group_to_genome(
             FILE* genome_fp = fopen( filename, "r" );
             if( NULL == genome_fp )
             {
-                fprintf( stderr, "FATAL : Error opening input file %s.", filename );
+                fprintf( stderr, "FATAL : Error opening input file %s. Source : %i", filename, chr_source );
                 exit( -1 );
             }
 
             /* Add to genome */
-            //fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
+            fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
             add_chrs_from_fasta_file( genome, genome_fp, chr_source );
 
             //TODO: add_chrs closes input FILE*. This behavior should be consistent.
