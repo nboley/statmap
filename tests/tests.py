@@ -116,6 +116,7 @@ def map_with_statmap( read_fnames, output_dir,
     print >> stdout, re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
+        print call
         raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
             % str( ret_code )
 
@@ -127,6 +128,7 @@ def map_with_statmap( read_fnames, output_dir,
     print >> stdout, re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
+        print call
         raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
     
     # build the sam file
