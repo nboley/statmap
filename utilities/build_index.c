@@ -177,7 +177,24 @@ find_prefix_index_in_file_group_list(
 }
 
 void
-group_files(
+group_files_for_haploid_mapping(
+    char** filenames,
+    int num_files,
+    struct file_group_list* fgl
+)
+{
+    int i;
+    /* loop through filenames */
+    for( i = 0; i < num_files; i++ )
+    {
+        // default: add each file to its own group, using the full filename as the prefix
+        add_group_to_file_group_list( filenames[i], fgl );
+        add_filename_to_file_group( &(fgl->groups[i]), filenames[i] );
+    }
+}
+
+void
+group_files_for_diploid_mapping(
     char** filenames,
     int num_files,
     struct file_group_list* fgl
@@ -209,6 +226,40 @@ group_files(
 
         free( fncopy );
     }
+}
+
+/* checks list of filenames for .map files
+ * If it finds one, map the input as a diploid genome */
+enum bool
+determine_genome_type(
+    char** filenames,
+    int num_files
+)
+{
+    int i;
+    for( i=0; i < num_files; i++ )
+    {
+        if( 0 == strcmp( ".map", filenames[i] + strlen(filenames[i]) - 4 ) )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void
+group_files(
+    char*** filenames,
+    int num_files,
+    struct file_group_list* fgl
+)
+{
+    /* check input files to see if we're building a haploid or a diploid genome */
+    enum bool is_diploid = determine_genome_type( filenames, num_files );
+    if( is_diploid )
+        group_files_for_diploid_mapping( filenames, num_files, fgl );
+    else
+        group_files_for_haploid_mapping( filenames, num_files, fgl );
 }
 
 /* Sanity checks on input file groups */
