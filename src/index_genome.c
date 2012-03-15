@@ -17,6 +17,7 @@
 #include "index_genome.h"
 #include "genome.h"
 #include "pseudo_location.h"
+#include "diploid_map_data.h"
 
 /* a global pointer offset */
 /* This must be added to all pointers */
@@ -335,9 +336,13 @@ init_tree( struct index_t** index, int seq_length )
     (*index)->index = tree_root;
     (*index)->index_type = TREE;
     (*index)->seq_length = seq_length;
-    
+
     (*index)->ps_locs = NULL;
     init_pseudo_locations( &((*index)->ps_locs) );
+
+    /* diploid map data */
+    (*index)->num_diploid_chrs = 0;
+    (*index)->map_data = NULL;
 }
 
  dynamic_node*
@@ -507,6 +512,9 @@ void free_tree( struct index_t* index )
 {
     assert( index->index_type == TREE );
     free_node_and_children( (static_node*) index->index, 's');
+
+    free( index->map_data );
+
     free( index );
 }
 
@@ -1533,6 +1541,11 @@ free_ondisk_index( struct index_t* index ) {
         free( index->ps_locs->locs );
         free( index->ps_locs );
     }
+
+    /* Free diploid map data structure, if it exists */
+    if( index->map_data != NULL ) {
+        free_diploid_map_data( index->map_data );
+    }
     
     return;
 }
@@ -1629,6 +1642,17 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     assert( NULL != ps_fp );
     load_pseudo_locations( ps_fp, &((*index)->ps_locs) );
     fclose( ps_fp );
+
+    /* load the diploid mappings */
+    char dmap_ofname[500];
+    sprintf( dmap_ofname, "%s.dmap", index_fname );
+    FILE* dmap_fp = fopen( dmap_ofname, "r" );
+    assert( NULL != dmap_fp );
+    (*index)->num_diploid_chrs = load_diploid_map_data_from_file(
+        &((*index)->map_data),
+        dmap_fp
+    );
+    fclose( dmap_fp );
     
     return;
 }
@@ -1800,6 +1824,24 @@ build_ondisk_index( struct index_t* index, char* ofname  )
              size_written);
     fclose(ps_locs_of);
     
+    /* write diploid mappings to file */
+    char diploid_mapping_ofname[500];
+    sprintf( diploid_mapping_ofname, "%s.dmap", ofname );
+    FILE* dmap_of = fopen( diploid_mapping_ofname, "w" );
+    if( NULL == dmap_of )
+    {
+        char buffer[500];
+        sprintf( buffer, "Error opening '%s' for writing", diploid_mapping_ofname );
+        perror( buffer );
+        exit( -1 );
+    }
+    write_diploid_map_data_to_file(
+        index->map_data,
+        index->num_diploid_chrs,
+        dmap_of
+    );
+    fclose( dmap_of );
+
     return;
 }
 
