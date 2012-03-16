@@ -8,40 +8,7 @@
 #include "genome.h"
 #include "diploid_map_data.h"
 
-/*
- * Find containing indexed loc to given paternal loc (binary search)
- * Returns index loc where paternal (loc) matches the index (index.loc) exactly,
- * OR returns the previous index. This is the index of the start of the
- * "containing" contig.
- */
-static int
-search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
-{
-    int low = 0;
-    int high = len;
-    while (low < high) {
-        int mid = low + ((high - low) / 2) ;
-        //printf("%i-%i-%i\t%i\t%i\n", low, mid, high, index[mid].index, len );
-        if( index[mid].loc < loc ) {
-            low = mid + 1; 
-        } else {
-            /* can't be high = mid-1: here A[mid] >= value, */
-            /* so high can't be < mid if A[mid] == value    */
-            high = mid; 
-        }
-    }
-
-    /* make sure the binary search is working */
-    assert( low <= high );
-    assert( low <= len );
-    assert( low >= 0 );
-    
-    if( index[low].loc == loc )
-        return index[low].index;
-    
-    assert( low > 0 );
-    return index[low-1].index;
-}
+/**** FILE I/O ****/
 
 void
 init_diploid_map_data( 
@@ -269,6 +236,43 @@ load_diploid_map_data_from_file(
     return num_structs;
 }
 
+/**** DIPLOID INDEXING CODE ****/
+
+/*
+ * Find containing indexed loc to given paternal loc (binary search)
+ * Returns index loc where paternal (loc) matches the index (index.loc) exactly,
+ * OR returns the previous index. This is the index of the start of the
+ * "containing" contig.
+ */
+static int
+search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
+{
+    int low = 0;
+    int high = len;
+    while (low < high) {
+        int mid = low + ((high - low) / 2) ;
+        //printf("%i-%i-%i\t%i\t%i\n", low, mid, high, index[mid].index, len );
+        if( index[mid].loc < loc ) {
+            low = mid + 1; 
+        } else {
+            /* can't be high = mid-1: here A[mid] >= value, */
+            /* so high can't be < mid if A[mid] == value    */
+            high = mid; 
+        }
+    }
+
+    /* make sure the binary search is working */
+    assert( low <= high );
+    assert( low <= len );
+    assert( low >= 0 );
+    
+    if( index[low].loc == loc )
+        return index[low].index;
+    
+    assert( low > 0 );
+    return index[low-1].index;
+}
+
 /*
  * Loop through all mappings from .map file.
  *
@@ -332,13 +336,11 @@ find_diploid_locations( struct diploid_map_data_t* data,
     int maternal_pos = data->mappings[index].maternal + 
                        ( paternal_pos - data->mappings[index].paternal );
 
-    // look ahead to determine the paternal length
-    // return -1 if in unique paternal sequence
+    // look ahead to determine the paternal length, returning -1 if in unique paternal sequence
     if( data->mappings[index+1].maternal == 0 &&
         data->mappings[index+1].paternal != 0 &&
         paternal_pos >= data->mappings[index+1].paternal )
     {
-        //printf("Skipping %i\n", paternal_pos);
         return -1;
     }
 
@@ -360,49 +362,6 @@ fprintf_diploid_map_data( FILE* stream, struct diploid_map_data_t* map  )
     }
     
     return;
-}
-
-/*
- * File opening boilerplate
- */
-
-FILE*
-open( char* fname )
-{
-    FILE* fp = NULL;
-    fp = fopen( fname, "r" );
-    if( fp == NULL )
-    {
-        fprintf( stderr, "FATAL         : Can not open '%s'\n", fname );
-        exit( 1 );
-    }
-    return fp;
-}
-
-/*
- * Loops through FASTA file; counts characters that are not newlines
- * Skips lines that start with > or ;
- */
-int
-count_bp_in_fasta_file( FILE* fp )
-{
-    char c;
-    int bp_count = 0;
-    rewind( fp ); // don't assume at the beginning
-    while( ( c = fgetc( fp ) ) != EOF )
-    {
-        if( c == '>' || c == ';' )
-        {
-            // loop until newline; this is a header line or comment
-            // and does not count towards the total bp's
-            while( ( c = fgetc( fp ) ) != '\n') continue;
-            continue;
-        }
-        if( c != '\n' )
-            bp_count++;
-    }
-
-    return bp_count;
 }
 
 /*
@@ -498,14 +457,18 @@ parse_map_file( char* fname,
                 // - 1 because .map file is 1-indexed, but statmap is 0-indexed
                 char *p_ptr = find_seq_ptr( genome, paternal_chr_index, mapping.paternal + i - 1, 1 );
                 char *m_ptr = find_seq_ptr( genome, maternal_chr_index, mapping.maternal + i - 1, 1 );
+
                 // test for mismatch (SNP); normalize case of bp letter
                 if( toupper(*p_ptr) != toupper(*m_ptr) )
                 {
-                    // add mappings for SNP
                     struct diploid_mapping_t tmp_mapping;
+
+                    // add mappings for SNP
                     tmp_mapping.paternal = mapping.paternal + i; tmp_mapping.maternal = 0;
                     add_diploid_mapping( map_data, &tmp_mapping );
                     tmp_mapping.paternal = 0; tmp_mapping.maternal = mapping.maternal + i;
+                    add_diploid_mapping( map_data, &tmp_mapping );
+                    
                     // end SNP, resuming contig
                     tmp_mapping.paternal = mapping.paternal + i + 1;
                     tmp_mapping.maternal = mapping.maternal + i + 1;

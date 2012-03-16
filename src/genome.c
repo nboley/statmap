@@ -15,6 +15,7 @@
 #include "index_genome.h"
 #include "genome.h"
 #include "pseudo_location.h"
+#include "diploid_map_data.h"
 
 /**** ON DISK Code **********************************************************************/
 
@@ -601,6 +602,196 @@ add_chrs_from_fasta_file(
 LETTER_TYPE* 
 translate_seq(char*, int num_letters, LETTER_TYPE** );
 
+/*
+ * Iterate through each indexable sequence in the given chromosome
+ * between bp's start and stop, adding it to the index.
+ */
+void
+index_contig(
+    struct genome_data* genome,
+    int seq_len,
+    int chr_index,
+    SIGNED_LOC start,
+    SIGNED_LOC stop,
+    GENOME_LOC_TYPE loc
+)
+{
+    SIGNED_LOC bp_index;
+
+    // TODO: is tmp_seq even necessary?
+    char* tmp_seq = malloc( seq_len*sizeof(char) );
+
+    for( bp_index = start; bp_index < stop-seq_len; bp_index += 1 )
+    {
+        loc.loc = bp_index;
+
+        memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
+
+        /* Add the normal sequence */
+        // TODO: does this make sense? return translation?
+        LETTER_TYPE *translation;
+        translate_seq( tmp_seq, seq_len, &(translation) );
+
+        /* If we cant add this sequence (probably an N ), continue */
+        if( translation == NULL ) {
+            continue;
+        }
+
+        /* Add the sequence into the tree */
+        add_sequence( genome->index, genome->index->ps_locs, translation, seq_len, loc );
+
+        free( translation );
+    }
+
+    free( tmp_seq );
+}
+
+int
+get_maternal_chr_index_from_paternal_chr_index(
+    struct genome_data* genome,
+    int paternal_chr_index
+)
+{
+    /* to avoid making assumptions about the relative location of maternal chrs, we will
+     * search (based on prefix) to be safe */
+
+    int maternal_chr_index;
+    char prefix[500];
+    sscanf( genome->chr_names[paternal_chr_index], "%[^_]", prefix );
+
+    // maternal_chr_index=` to skip pseudo chr
+    for( maternal_chr_index=1; maternal_chr_index < genome->num_chrs; maternal_chr_index++ ) 
+    {
+        /* if the chr_name prefix matches */
+        if( 0 == strncmp( prefix, genome->chr_names[paternal_chr_index], strlen(prefix) ) )
+        {
+            /* ... andthe chr_source is MATERNAL */
+            if( genome->chr_sources[maternal_chr_index] == MATERNAL )
+                return maternal_chr_index;
+        }
+    }
+
+    /* This should never happen - an error would have been raised while building the genome */
+    assert( maternal_chr_index < genome->num_chrs );
+    return -1;
+}
+
+int get_map_data_index_from_chr_index(
+    struct genome_data* genome,
+    int paternal_chr_index
+)
+{
+    int map_data_index;
+    char prefix[500];
+    sscanf( genome->chr_names[paternal_chr_index], "%[^_]", prefix );
+    for( map_data_index=0; map_data_index < genome->index->num_diploid_chrs; map_data_index++ )
+    {
+        /* diploid_map_data_t->chr_name is the same as the prefix of a chr_name */
+        if( 0 == strncmp( prefix,
+                         genome->index->map_data[map_data_index].chr_name,
+                         strlen(prefix)
+                       ) )
+            return map_data_index;
+    }
+
+    /* This should never happen - an error would have been raised while building the genome */
+    assert( map_data_index < genome->index->num_diploid_chrs );
+    return -1;
+}
+
+void
+index_diploid_chrs(
+    struct genome_data* genome,
+    int chr_index,
+    int seq_len,
+    GENOME_LOC_TYPE loc
+)
+{
+    /* we will index both diploid chrs when called on PATERNAL, so first
+     * skip indexing if called with a MATERNAL chr */
+    if( genome->chr_sources[chr_index] == MATERNAL )
+        return;
+
+    /* get paternal and maternal indexes for this chr */
+    int paternal_chr_index = chr_index;
+    int maternal_chr_index = get_maternal_chr_index_from_paternal_chr_index( genome, paternal_chr_index );
+
+    /* get corresponding diploid map struct index */
+    int map_data_index = get_map_data_index_from_chr_index( genome, paternal_chr_index );
+
+    /* build unique sequence segments */
+    struct chr_subregion_t* segments;
+    int num_segments;
+    build_unique_sequence_segments(
+            &(genome->index->map_data[map_data_index]),
+            seq_len,
+            &segments,
+            &num_segments
+        );
+    
+    /* loop over sequence segments */
+    int i;
+    for( i=0; i < num_segments; i++ )
+    {
+        int start_pos; 
+
+        /*** Set bit flags and chr_index ***/
+        /* identical sequence on paternal and maternal */
+        if( segments[i].paternal_start_pos > 0 &&
+            segments[i].maternal_start_pos > 0 )
+        {
+            /* set flags */
+            loc.is_paternal = 1; loc.is_maternal = 1;
+            /* set start_pos */
+            start_pos = segments[i].paternal_start_pos;
+        }
+        /* unique sequence on the paternal */
+        else if( segments[i].maternal_start_pos == 0 ) {
+            /* set flags */
+            loc.is_paternal = 1; loc.is_maternal = 0;
+            /* set start_pos */
+            start_pos = segments[i].paternal_start_pos;
+        }
+        /* unique sequence on the maternal */
+        else if( segments[i].paternal_start_pos == 0 ) {
+            /* set flags */
+            loc.is_paternal = 0; loc.is_maternal = 1;
+            /* set start pos */
+            start_pos = segments[i].maternal_start_pos;
+            /* loc.chr_index defaults to paternal - set to maternal */
+            loc.chr = maternal_chr_index;
+        }
+
+        /* index sequence segment */
+        index_contig( genome, seq_len, loc.chr,
+                start_pos,
+                start_pos + segments[i].segment_length,
+                loc
+            );
+    }
+}
+
+void
+index_haploid_chr(
+    struct genome_data* genome,
+    int chr_index,
+    int seq_len,
+    GENOME_LOC_TYPE loc
+)
+{
+    /* set flags */
+    loc.is_paternal = 0; loc.is_maternal = 0;
+
+    /* take the whole chr and index as a contig */
+    index_contig(
+        genome,
+        seq_len,
+        chr_index,
+        0, genome->chr_lens[chr_index],
+        loc
+    );
+}
+
 extern void
 index_genome( struct genome_data* genome, int indexed_seq_len )
 {
@@ -613,7 +804,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     char* tmp_seq = malloc(seq_len*sizeof(char));
 
     int chr_index;
-    unsigned int bp_index;
     
     /* 
      * Iterate through each indexable sequence in the genome.
@@ -634,26 +824,13 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
         /* Set the chr index in the soon to be added location */
         loc.chr = chr_index;
 
-        for( bp_index = 0; bp_index < genome->chr_lens[chr_index] - seq_len; bp_index += 1 )
-        {            
-            /* Set the basepair index */
-            loc.loc = bp_index;
-            
-            memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
-            
-            /* Add the normal sequence */
-            LETTER_TYPE *translation;
-            translate_seq( tmp_seq, seq_len, &(translation));
-            
-            /* if we cant add this sequence ( probably an N ) continue */
-            if( translation == NULL ) {
-                continue;
-            }
-            
-            /* Add the sequence into the tree */
-            add_sequence(genome->index, genome->index->ps_locs, translation, seq_len, loc);
-            
-            free( translation );                                
+        // TODO: split genome into contigs, index sequences
+        if( genome->chr_sources[chr_index] == PATERNAL ||
+            genome->chr_sources[chr_index] == MATERNAL )
+        {
+            index_diploid_chrs( genome, chr_index, seq_len, loc );
+        } else {
+            index_haploid_chr( genome, chr_index, seq_len, loc );
         }
     }
     free( tmp_seq );
