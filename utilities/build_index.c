@@ -7,6 +7,7 @@
 #include <libgen.h> // for basename()
 
 #include "../src/index_genome.h"
+#include "../src/diploid_map_data.h"
 
 /* 
    usually, we can just let the OS cleanup the in memory index. 
@@ -88,7 +89,7 @@ free_file_group_list(
         free_file_group( &(fgl->groups[i]) );
     }
 
-    // free contigious block of file_group structs
+    // free contiguous block of file_group structs
     free( fgl->groups );
     free( fgl );
 }
@@ -231,7 +232,7 @@ group_files_for_diploid_mapping(
 /* checks list of filenames for .map files
  * If it finds one, map the input as a diploid genome */
 enum bool
-determine_genome_type(
+is_diploid_genome(
     char** filenames,
     int num_files
 )
@@ -255,7 +256,7 @@ group_files(
 )
 {
     /* check input files to see if we're building a haploid or a diploid genome */
-    enum bool is_diploid = determine_genome_type( filenames, num_files );
+    enum bool is_diploid = is_diploid_genome( filenames, num_files );
     if( is_diploid )
         group_files_for_diploid_mapping( filenames, num_files, fgl );
     else
@@ -329,6 +330,7 @@ get_chr_source_from_fasta_file(
     char id[500];
     fscanf( fp, ">%s", id );
     fclose( fp );
+
     // parse on underscore
     char* past_underscore = strchr( id, '_' ) + 1;
 
@@ -415,6 +417,138 @@ void add_file_group_list_to_genome(
     }
 }
 
+int
+count_map_files(
+    struct file_group_list* fgl
+)
+{
+    int num_map_files = 0;
+    int i, j;
+    /* loop through file group list */
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        struct file_group* fg = &(fgl->groups[i]);
+        /* loop through filenames in list */
+        for( j=0; j < fg->num_files; j++ )
+        {
+            /* if the file is a .map file, add it to map_fnames */
+            if( 0 == strcmp( ".map", fg->filenames[j] + strlen(fg->filenames[j]) - 4 ))
+                num_map_files++;
+        }
+    }
+
+    return num_map_files;
+}
+
+void
+get_chr_name_from_fasta(
+    char* filename,
+    char* chr_name
+)
+{
+    FILE* fp = fopen( filename, "r" );
+    char id[500];
+    fscanf( fp, ">%s", id );
+    fclose( fp );
+
+    chr_name = malloc( (strlen(id) + 1) * sizeof( char ) );
+    strcpy( chr_name, id );
+    /* Caller must free chr_name */
+}
+
+void
+parse_diploid_file_group(
+    struct file_group* fg,
+    struct diploid_map_data_t* map_data,
+    struct genome_data* genome
+)
+{
+    char* paternal_fname = NULL;
+    char* maternal_fname = NULL;
+    char* map_fname = NULL;
+
+    /* loop through files in group to get specific filenames */
+    int i;
+    for( i=0; i < fg->num_files; i++ )
+    {
+        char* filename = fg->filenames[i];
+        if( 0 == strcmp( ".map", filename + strlen(filename) - 4 ) )
+        {
+            map_fname = filename;
+        }
+        else
+        {
+            enum CHR_SOURCE chr_source =  get_chr_source_from_fasta_file( filename );
+            if( chr_source == PATERNAL )
+                paternal_fname = filename;
+            else if( chr_source == MATERNAL )
+                maternal_fname = filename;
+            else
+            {
+                fprintf( stderr, "Encountered chr of unknown origin while parsing diploid genome.\n" );
+                exit(1);
+            }
+        }
+    }
+
+    /* get indexes of paternal and maternal chrs based on their names */
+    char paternal_chr_name[500];
+    FILE* pfp = fopen( paternal_fname, "r" );
+    fscanf( pfp, ">%s", paternal_chr_name);
+    fclose( pfp );
+
+    char maternal_chr_name[500];
+    FILE* mfp = fopen( maternal_fname, "r" );
+    fscanf( mfp, ">%s", maternal_chr_name);
+    fclose( mfp );
+
+    int paternal_chr_index = find_chr_index( genome, paternal_chr_name );
+    int maternal_chr_index = find_chr_index( genome, maternal_chr_name );
+
+    /* parse map file */
+    parse_map_file(
+        map_fname,
+        map_data,
+        genome,
+        paternal_chr_index,
+        maternal_chr_index
+    );
+}
+
+int
+build_diploid_map_data(
+    struct diploid_map_data_t** map_data,
+    struct file_group_list* fgl,
+    struct genome_data* genome
+)
+{
+    /* count .map files in file group list */
+    int num_map_files = count_map_files( fgl );
+    /* If there are no .map files, return 0 for num_diploid_chrs */
+    if( num_map_files == 0 )
+        return 0;
+
+    // allocate contiguous memory; one diploid_map_data_t struct for each .map file
+    *map_data = malloc( num_map_files * sizeof( struct diploid_map_data_t ) );
+
+    int map_data_index = 0;
+    int i;
+    /* loop through file group list */
+    for( i=0; i < fgl->num_groups; i++ )
+    {
+        struct file_group* fg = &(fgl->groups[i]);
+        if( is_diploid_genome( fg->filenames, fg->num_files ) )
+        {
+            /* parse_map_file for this diploid_map_data_t */
+            parse_diploid_file_group( fg, map_data[map_data_index], genome );
+            index_diploid_map_data( map_data[map_data_index] );
+            map_data_index++; // increment # of map files processed
+        }
+    }
+
+    return num_map_files;
+}
+
 int 
 main( int argc, char** argv )
 {
@@ -436,6 +570,7 @@ main( int argc, char** argv )
     group_files( argv+3, argc-3, fgl );
     verify_file_groups( fgl );
 
+
     /* Initialize the genome data structure */
     struct genome_data* genome;
     init_genome( &genome );
@@ -443,13 +578,17 @@ main( int argc, char** argv )
     /*** Load the genome ***/
     add_file_group_list_to_genome( fgl, genome );
 
+    /* Initialize the genome data structure */
+    init_index( &(genome->index), indexed_seq_len );
+
+    int num_diploid_chrs = build_diploid_map_data( &(genome->index->map_data), fgl, genome );
+    /* set num_diploid_chrs based on num_map_files */
+    genome->index->num_diploid_chrs = num_diploid_chrs;
+
     /* free file group list */
     free_file_group_list( fgl );
 
     /* index the genome */
-    // TODO: implement diploid genome indexing
-    // init_index
-    // build_diploid_index
     index_genome( genome, indexed_seq_len );
 
     /* write the genome to file */

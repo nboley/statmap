@@ -173,7 +173,7 @@ print_dynamic_node( dynamic_node* node );
 
  void init_dynamic_node( dynamic_node** node );
 
-extern void init_tree( struct index_t** index, int seq_length );
+extern void init_index( struct index_t** index, int seq_length );
 
  dynamic_node*
 add_child_to_dynamic_node( 

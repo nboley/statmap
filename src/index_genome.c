@@ -326,10 +326,10 @@ size_of_dnode( const dynamic_node* const node )
 }
 
 
-
 extern void 
-init_tree( struct index_t** index, int seq_length )
+init_index( struct index_t** index, int seq_length )
 {   
+    /* init tree */
     *index = malloc( sizeof( struct index_t ) );
     static_node* tree_root;
     init_static_node( &tree_root );
@@ -337,10 +337,11 @@ init_tree( struct index_t** index, int seq_length )
     (*index)->index_type = TREE;
     (*index)->seq_length = seq_length;
 
+    /* init ps_locs */
     (*index)->ps_locs = NULL;
     init_pseudo_locations( &((*index)->ps_locs) );
 
-    /* diploid map data */
+    /* init diploid map data */
     (*index)->num_diploid_chrs = 0;
     (*index)->map_data = NULL;
 }

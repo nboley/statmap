@@ -791,7 +791,7 @@ void load_genome( struct genome_data** genome, struct args_t* args )
     }
 
     load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
-    
+
     return;
 }
 

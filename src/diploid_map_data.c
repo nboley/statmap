@@ -45,22 +45,22 @@ search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
 
 void
 init_diploid_map_data( 
-    struct diploid_map_data_t** map_data, 
+    struct diploid_map_data_t* map_data, 
     char* chr_name, 
     unsigned int* chr_lens )
 {
-    (*map_data) = malloc( sizeof( struct diploid_map_data_t ) );
-    
-    memcpy( (*map_data)->chr_lens, chr_lens, sizeof(unsigned int)*3 );
+    /* NOTE: assumes memory was allocated in calling function */
+
+    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*3 );
     
     size_t chr_name_len = strlen(chr_name)+1;
-    (*map_data)->chr_name = malloc( chr_name_len  );
-    memcpy( (*map_data)->chr_name, chr_name, chr_name_len );
+    map_data->chr_name = malloc( chr_name_len  );
+    memcpy( map_data->chr_name, chr_name, chr_name_len );
     
-    (*map_data)->num_mappings = 0;
-    (*map_data)->mappings = NULL;
-    (*map_data)->index_len = 0;
-    (*map_data)->index = 0;
+    map_data->num_mappings = 0;
+    map_data->mappings = NULL;
+    map_data->index_len = 0;
+    map_data->index = 0;
 }
 
 void
@@ -188,14 +188,8 @@ load_diploid_map_data_t_from_file(
     assert( rv == 2 );
 
     /* initialize diploid_map_data struct */
-    // note - memory is already allocated by calling function
-    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*3 ); // 3?
-    map_data->chr_name = malloc( strlen(chr_name)+1 );
-    strcpy( map_data->chr_name, chr_name );
-    map_data->num_mappings = 0;
-    map_data->mappings = NULL;
-    map_data->index_len = 0;
-    map_data->index = NULL;
+    /* NOTE:  memory is already allocated by calling function */
+    init_diploid_map_data( map_data, chr_name, chr_lens );
 
     /* load mappings */
     size_t num_mappings;
@@ -261,7 +255,7 @@ load_diploid_map_data_from_file(
     assert( num_structs > 0 );
 
     /* Allocate memory for the diploid_map_data_t structs */
-    map_data = malloc(
+    (*map_data) = malloc(
         num_structs * sizeof( struct diploid_map_data_t )
     );
 
@@ -412,21 +406,18 @@ count_bp_in_fasta_file( FILE* fp )
 }
 
 /*
- * Loop through .map file.
- * Store all entries in a pointer array of diploid_map_data_t.
+ * Loop through .map file, storing mapping entries.
  * Needs a copy of the genome so it can add entries for SNPs
  */
 void
 parse_map_file( char* fname, 
-                struct diploid_map_data_t** map_data,
+                struct diploid_map_data_t* map_data,
                 struct genome_data* genome,
                 int paternal_chr_index,
                 int maternal_chr_index
               )
 {
-    /* Initialize map data */
-    *map_data = NULL;
-
+    /* Open .map file */
     FILE* fp = NULL;
     fp = fopen( fname,"r" );
     if( fp == NULL )
@@ -445,13 +436,16 @@ parse_map_file( char* fname,
     }
     
     /* Initialize the map data structure */
+    /* Use string up to first underscore in chr name as diploid chr_name */
+    char chr_name[500];
+    sscanf( genome->chr_names[paternal_chr_index], "%[^_]", chr_name );
+
     unsigned int chr_lens[2] = {
         genome->chr_lens[paternal_chr_index],
         genome->chr_lens[maternal_chr_index]
     };
     
-    // TODO: reconsider naming. Using paternal chr name for now.
-    init_diploid_map_data( map_data, genome->chr_names[paternal_chr_index], chr_lens );
+    init_diploid_map_data( map_data, chr_name, chr_lens );
 
     /* move to the beginning of the file */
     fseek( fp, 0, SEEK_SET );
@@ -473,7 +467,7 @@ parse_map_file( char* fname,
         // Add mapping
         struct diploid_mapping_t mapping;
         sscanf( buffer, "%*i\t%i\t%i", &(mapping.paternal), &(mapping.maternal) );
-        add_diploid_mapping( *map_data, &mapping );
+        add_diploid_mapping( map_data, &mapping );
 
         // Look ahead (for SNPs) if we're in a shared region
         if( mapping.paternal > 0 && mapping.maternal > 0 )
@@ -510,12 +504,12 @@ parse_map_file( char* fname,
                     // add mappings for SNP
                     struct diploid_mapping_t tmp_mapping;
                     tmp_mapping.paternal = mapping.paternal + i; tmp_mapping.maternal = 0;
-                    add_diploid_mapping( *map_data, &tmp_mapping );
+                    add_diploid_mapping( map_data, &tmp_mapping );
                     tmp_mapping.paternal = 0; tmp_mapping.maternal = mapping.maternal + i;
                     // end SNP, resuming contig
                     tmp_mapping.paternal = mapping.paternal + i + 1;
                     tmp_mapping.maternal = mapping.maternal + i + 1;
-                    add_diploid_mapping( *map_data, &tmp_mapping );
+                    add_diploid_mapping( map_data, &tmp_mapping );
                 }
             }
 
@@ -527,9 +521,9 @@ parse_map_file( char* fname,
     /* finally, add a diploid mapping onto the end that includes the chr
        stops. This simplifies logic in that w can always 'peek ahead' */
     struct diploid_mapping_t mapping = { chr_lens[0], chr_lens[1] };
-    add_diploid_mapping( *map_data, &mapping );
+    add_diploid_mapping( map_data, &mapping );
     /* decrement the number of mappings */
-    (*map_data)->num_mappings -= 1;
+    map_data->num_mappings -= 1;
 
     fclose( fp );
     return;

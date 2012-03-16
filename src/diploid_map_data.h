@@ -48,7 +48,7 @@ struct chr_subregion_t {
 
 void
 init_diploid_map_data( 
-    struct diploid_map_data_t** map_data, 
+    struct diploid_map_data_t* map_data, 
     char* chr_name, 
     unsigned int* chr_lens
 );
@@ -85,7 +85,7 @@ find_diploid_locations(
 void
 parse_map_file(
     char* fname, 
-    struct diploid_map_data_t** map_data,
+    struct diploid_map_data_t* map_data,
     struct genome_data* genome,
     int paternal_chr_index,
     int maternal_chr_index

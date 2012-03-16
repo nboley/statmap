@@ -60,6 +60,9 @@ add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, enum CHR
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
 
+int
+find_chr_index_of_prefix( struct genome_data* genome, const char* const chr_prefix );
+
 char* 
 find_seq_ptr( struct genome_data* genome, 
               int chr_index, unsigned int loc, 

@@ -357,6 +357,22 @@ find_chr_index( struct genome_data* genome, const char* const chr_name )
     return -1;
 }
 
+/*
+ * Returns index of first chr whose name starts with chr_prefix; -1 if no chr name matches */
+int
+find_chr_index_of_prefix( struct genome_data* genome, const char* const chr_prefix )
+{
+    int i;
+    for( i=0; i < genome->num_chrs; i++ )
+    {
+        if( 0 == strncmp( genome->chr_names[i], chr_prefix, strlen(chr_prefix)) )
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
 char* 
 find_seq_ptr( struct genome_data* genome, 
               int chr_index, unsigned int loc, 
@@ -588,9 +604,6 @@ translate_seq(char*, int num_letters, LETTER_TYPE** );
 extern void
 index_genome( struct genome_data* genome, int indexed_seq_len )
 {
-    /* initialize the tree structure */
-    init_tree( &(genome->index), indexed_seq_len );
-
     /* initialize the constant loc elements */
     GENOME_LOC_TYPE loc;
     /* Not a junction read */
