@@ -359,17 +359,24 @@ find_chr_index( struct genome_data* genome, const char* const chr_name )
 }
 
 /*
- * Returns index of first chr whose name starts with chr_prefix; -1 if no chr name matches */
+ * Returns the index of the chr matching the given prefix and source
+ * Returns -1 if no chr matches
+ */
 int
-find_chr_index_of_prefix( struct genome_data* genome, const char* const chr_prefix )
+find_diploid_chr_index(
+    struct genome_data* genome,
+    const char* const prefix,
+    enum CHR_SOURCE source
+)
 {
     int i;
+    /* loop over chrs */
     for( i=0; i < genome->num_chrs; i++ )
     {
-        if( 0 == strncmp( genome->chr_names[i], chr_prefix, strlen(chr_prefix)) )
-        {
+        if( genome->chr_sources[i] == source &&
+            0 == strncmp( genome->chr_names[i], prefix, strlen(prefix) )
+          )
             return i;
-        }
     }
     return -1;
 }
@@ -646,44 +653,43 @@ index_contig(
     free( tmp_seq );
 }
 
-int
-get_maternal_chr_index_from_paternal_chr_index(
-    struct genome_data* genome,
-    int paternal_chr_index
-)
+/* 
+ * Return the prefix of chr_name up to the first underscore.
+ * NOTE: Caller must free memory allocated by this function
+ */
+char* get_chr_prefix( char* chr_name )
 {
-    /* to avoid making assumptions about the relative location of maternal chrs, we will
-     * search (based on prefix) to be safe */
-
-    int maternal_chr_index;
-    char prefix[500];
-    sscanf( genome->chr_names[paternal_chr_index], "%[^_]", prefix );
-
-    // maternal_chr_index=` to skip pseudo chr
-    for( maternal_chr_index=1; maternal_chr_index < genome->num_chrs; maternal_chr_index++ ) 
+    char* first_underscore = strchr( chr_name, '_' );
+    /* TODO: what's the best way to handle this? this is one of our two major assumptions */
+    if( first_underscore == NULL )
     {
-        /* if the chr_name prefix matches */
-        if( 0 == strncmp( prefix, genome->chr_names[paternal_chr_index], strlen(prefix) ) )
-        {
-            /* ... andthe chr_source is MATERNAL */
-            if( genome->chr_sources[maternal_chr_index] == MATERNAL )
-                return maternal_chr_index;
-        }
+        fprintf( stderr, "FATAL : Diploid genome chr names must have a prefix delimited by an underscore.\n" );
+        exit(1);
     }
 
-    /* This should never happen - an error would have been raised while building the genome */
-    assert( maternal_chr_index < genome->num_chrs );
-    return -1;
+    // - 1 to avoid the underscore
+    int prefix_len = first_underscore - chr_name - 1;
+
+    char* prefix = malloc( (prefix_len+1) * sizeof(char) );
+    strncpy( prefix, chr_name, prefix_len );
+
+    return prefix;
 }
 
+/*
+ * Returns the index into genome->index->map_data for the diploid_map_data_t
+ * structure corresponding to the chr specified by chr_index.
+ */
 int get_map_data_index_from_chr_index(
     struct genome_data* genome,
-    int paternal_chr_index
+    int chr_index
 )
 {
+    /* Get the prefix (i.e. chr1 from chr1_paternal) */
+    char* prefix = get_chr_prefix( genome->chr_names[chr_index] );
+
+    /* loop over the array of diploid_map_data_t, comparing prefixes */
     int map_data_index;
-    char prefix[500];
-    sscanf( genome->chr_names[paternal_chr_index], "%[^_]", prefix );
     for( map_data_index=0; map_data_index < genome->index->num_diploid_chrs; map_data_index++ )
     {
         /* diploid_map_data_t->chr_name is the same as the prefix of a chr_name */
@@ -693,6 +699,8 @@ int get_map_data_index_from_chr_index(
                        ) )
             return map_data_index;
     }
+
+    free( prefix );
 
     /* This should never happen - an error would have been raised while building the genome */
     assert( map_data_index < genome->index->num_diploid_chrs );
@@ -714,10 +722,16 @@ index_diploid_chrs(
 
     /* get paternal and maternal indexes for this chr */
     int paternal_chr_index = chr_index;
-    int maternal_chr_index = get_maternal_chr_index_from_paternal_chr_index( genome, paternal_chr_index );
+    char* prefix = get_chr_prefix( genome->chr_names[chr_index] );
+    int maternal_chr_index = find_diploid_chr_index(
+            genome, prefix, MATERNAL
+        );
+    free( prefix );
 
     /* get corresponding diploid map struct index */
-    int map_data_index = get_map_data_index_from_chr_index( genome, paternal_chr_index );
+    int map_data_index = get_map_data_index_from_chr_index(
+            genome, paternal_chr_index
+        );
 
     /* build unique sequence segments */
     struct chr_subregion_t* segments;
@@ -801,14 +815,12 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
     loc.read_type = 0;
     
     int seq_len = genome->index->seq_length;
-    char* tmp_seq = malloc(seq_len*sizeof(char));
-
-    int chr_index;
     
     /* 
      * Iterate through each indexable sequence in the genome.
      * We skip chr 0 - the pseudo chromosome.
      */
+    int chr_index;
     for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
     {
         if( genome->chr_lens[chr_index] > LOCATION_MAX )
@@ -833,7 +845,6 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
             index_haploid_chr( genome, chr_index, seq_len, loc );
         }
     }
-    free( tmp_seq );
 
     /* sort all of the pseudo locations */
     sort_pseudo_locations( genome->index->ps_locs );

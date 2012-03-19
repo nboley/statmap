@@ -61,7 +61,18 @@ int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
 
 int
-find_chr_index_of_prefix( struct genome_data* genome, const char* const chr_prefix );
+find_diploid_chr_index(
+    struct genome_data* genome,
+    const char* const prefix,
+    enum CHR_SOURCE source
+);
+
+char* get_chr_prefix( char* chr_name );
+
+int get_map_data_index_from_chr_index(
+    struct genome_data* genome,
+    int chr_index
+);
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
