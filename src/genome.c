@@ -667,10 +667,8 @@ char* get_chr_prefix( char* chr_name )
         exit(1);
     }
 
-    // - 1 to avoid the underscore
-    int prefix_len = first_underscore - chr_name - 1;
-
-    char* prefix = malloc( (prefix_len+1) * sizeof(char) );
+    int prefix_len = first_underscore - chr_name;
+    char* prefix = calloc( (prefix_len + 1), sizeof(char) ); // calloc for terminating \0
     strncpy( prefix, chr_name, prefix_len );
 
     return prefix;

@@ -103,7 +103,7 @@ def map_with_statmap( read_fnames, output_dir,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
                       assay=None,
-                      genome_fnames=None):
+                      genome_fnames=["*.fa",]):
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
     read_fname_str = None
@@ -112,13 +112,14 @@ def map_with_statmap( read_fnames, output_dir,
     else:
         read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
     
-    # build the binary genome with build_index
+    # build_index
     if genome_fnames:
-        call = "%s %i tmp.genome.fa.bin " % ( BUILD_INDEX_PATH, indexed_seq_len )
-        for fname in genome_fnames:
-            call += fname + " "
-    else:
-        call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
+        call = "%s %i tmp.genome.fa.bin %s" % (
+                BUILD_INDEX_PATH,
+                indexed_seq_len,
+                ' '.join(genome_fnames)
+            )
+
     print >> stdout, re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
@@ -889,11 +890,10 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-def generate_diploid_data( read_len ):
+def build_diploid_genome( ):
     '''
     Generates paternal and maternal genomes with a .map file for testing diploid mapping
     '''
-
     chr_name = "chr1"
     paternal_chr_name = chr_name + "_paternal"
     maternal_chr_name = chr_name + "_maternal"
@@ -918,7 +918,7 @@ def generate_diploid_data( read_len ):
         random.sample( xrange(1, len(mutated_maternal_chr)), num_mut )
     )
 
-    # NOTE: +1 because sequence array is 0-indexed, but .map files are 1-indexed
+    # mut is an index into the paternal sequence
     mdiff = 0 # keep track of diff between index and mut (due to insertions)
     for mut in muts:
         mut_type = random.choice( ['snp', 'indel'] ) # snp or indel?
@@ -941,6 +941,7 @@ def generate_diploid_data( read_len ):
                 mutated_maternal_chr.insert( mut, random_bp )
 
             # add entries to mapf
+            # +1 because sequence array is 0-indexed, but .map files are 1-indexed
             mapf.append('{0}\t{1}\t{2}'.format(0, 0, mut+mdiff+1))
             mdiff += insertion_len # update diff
             mapf.append('{0}\t{1}\t{2}'.format(0, mut+1, mut+mdiff+1))
@@ -956,6 +957,12 @@ def generate_diploid_data( read_len ):
         f.write( '\n'.join(mapf) )
     output_filenames.append(map_fname)
 
+    return genome, output_filenames
+
+def map_diploid_genome( genome, output_filenames, read_len ):
+    '''
+    Given a diploid genome, randomly sample reads and map them with statmap
+    '''
     # sample reads uniformly from both genomes to get reads
     nsamples = 10000
     fragments = sample_uniformily_from_genome( genome, nsamples=nsamples, frag_len=read_len )
@@ -972,11 +979,48 @@ def generate_diploid_data( read_len ):
     output_directory = "smo_test_diploid_mapping_%i" % (read_len)
     read_fnames = [ "tmp.fastq" ]
     map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
-            genome_fnames = output_filename
+            genome_fnames = output_filenames
         )
 
-def test_diploid_mapping():
-    pass
+    # test the sam file to make sure that each of the reads appears
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
+    total_num_reads = sum( 1 for line in sam_fp )
+    sam_fp.seek(0)
+
+    if len(fragments) > total_num_reads:
+        raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+
+    for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
+
+        loc = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
+
+        # make sure the chr and start locations are identical
+        # first, check that all chromosomes are the same *and*
+        # that the correct loc exists
+        if any( loc != truth[0] for loc in locs[0] ) or truth[1] not in locs[1]:
+           print reads_data
+           print truth
+           print reads_data[0][9][0]
+           print r_genome[truth[0]][truth[1]-1]
+           raise ValueError, \
+                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
+
+    sam_fp.close()
+
+    # Cleanup the created files
+    if CLEANUP:
+        for fn in (read_fnames + output_filenames):
+            os.remove(fn)
+        shutil.rmtree(output_directory)
+
+
+def test_diploid_genome():
+    rls = [ 20, 50, 75 ]
+    for rl in rls:
+        genome, output_filenames = build_diploid_genome()
+        map_diploid_genome( genome, output_filenames, rl )
+        print "PASS: Diploid genome Mapping %i BP Test. ( Statmap appears to be mapping diploid genomes correctly )" % rl
 
 if False:
     num_repeats = 1
@@ -1004,9 +1048,6 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
-    generate_diploid_data()
-    sys.exit(0)
-
     if True:
         print "Starting test_fivep_sequence_finding()"
         test_fivep_sequence_finding()
@@ -1024,8 +1065,10 @@ if __name__ == '__main__':
         test_multi_fasta_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
-        print "Starting test_index_probe()"
+        #print "Starting test_index_probe()"
         #test_short_index_probe()
+        print "Starting test_diploid_genome()"
+        test_diploid_genome()
 
     if True:
         print "Starting test_untemplated_g_finding()"

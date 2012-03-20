@@ -528,7 +528,7 @@ build_diploid_map_data(
     if( num_map_files == 0 )
         return 0;
 
-    // allocate contiguous memory; one diploid_map_data_t struct for each .map file
+    /* allocate contiguous memory; one diploid_map_data_t struct for each .map file */
     *map_data = malloc( num_map_files * sizeof( struct diploid_map_data_t ) );
 
     int map_data_index = 0;
@@ -570,7 +570,6 @@ main( int argc, char** argv )
     group_files( argv+3, argc-3, fgl );
     verify_file_groups( fgl );
 
-
     /* Initialize the genome data structure */
     struct genome_data* genome;
     init_genome( &genome );
@@ -582,8 +581,10 @@ main( int argc, char** argv )
     init_index( &(genome->index), indexed_seq_len );
 
     int num_diploid_chrs = build_diploid_map_data( &(genome->index->map_data), fgl, genome );
-    /* set num_diploid_chrs based on num_map_files */
-    genome->index->num_diploid_chrs = num_diploid_chrs;
+    /* set num_diploid_chrs */
+    genome->index->num_diploid_chrs = build_diploid_map_data(
+            &(genome->index->map_data), fgl, genome
+        );
 
     /* free file group list */
     free_file_group_list( fgl );

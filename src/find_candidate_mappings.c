@@ -553,7 +553,6 @@ build_candidate_mappings_from_diploid_mapped_location(
             &(genome->index->map_data[map_data_index]),
             result->location.loc
         );
-    assert( maternal_start >= 0 );
 
     /* add maternal candidate mapping */
 
