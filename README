@@ -2,25 +2,54 @@ Statmap is a mapping utility.
 
 Statmap is a fast alignment tool designed for mapping short reads to a reference 
 genome under a probability model. The probability model allows statmap to do many 
-things that other mapping tools cannot including 1) Mapping to uncertain reference 
-genome 2) Estimating mapping probabilities for  multi-mappers and then intelligently 
-placing them under an assay specific model 3) Estimating confidence bounds on mapped 
-read density.
+things that other mapping tools cannot, including
 
-Website:      http://encodestatistics.org/statmap/.
+1) Mapping to uncertain reference  genome
+2) Estimating mapping probabilities for  multi-mappers and then intelligently 
+   placing them under an assay specific model
+3) Estimating confidence bounds on mapped read density.
+
+Website:      http://encodestatistics.org/statmap/
 Contact:      Nathan Boley ( nboley (AT) berkeley.edu )
 Mailing List: http://groups.google.com/group/statmap
 
+Using Statmap
+=============
+
+Statmap maps reads in the FASTQ format to a reference genome in a binary genome
+format. You can use a pre-built binary genome, or build one from FASTA files with
+the build_index utility.
+
+build_index
+-----------
+
+utilities/build_index can build a binary genome for a haploid or diploid data set.
+
+
 ===== Input =========================================================================
 
-Statmap requires 2 types of input
+Statmap requires 2 types of input: a binary genome and reads in the FASTQ format.
+You can build a binary genome from FASTAs.
+
+Use utilities/build_index to build a binary genome from FASTAs. You can map haploid
+genomes by specifying any number of fasta files. You can map diploid genomes,
+such as those prepared by the 1000 Genomes project, by specifying the FASTA files
+containing the maternal and paternal sequence, as well as the accompanying MAP file.
+You may specify input files in any order - build_index infers their relationships
+based on their filenames and FASTA specifers.
+
+Note for building diploid genomes: the MAP file format does not contain a source
+specifier at this time, so we use the filename to determine what sequence it
+corresponds to. Therefore, you should use a consistent naming scheme for both your
+filenames and the chromosome specifier names (as 1000 Genomes does). 
 
 REFERENCE GENOME:
 
-Currently, statmap only accepts a reference genome in a single fasta file. cat is 
+Currently, statmap accepts a reference genome as a binary genome file. To create
+the binary genome file, use utilities/build_index.
 you friend.
 
--g - reference genome - in fasta format
+-g - reference genome - in binary format
 
 INPUT READS:
 
@@ -32,7 +61,6 @@ OR
 
 -1 : fastq input file for the first set of read pairs
 -2 : fastq input file for the second set of read pairs
-
 
 In addition, there are several optional input types
 

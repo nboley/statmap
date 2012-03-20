@@ -102,7 +102,8 @@ def map_with_statmap( read_fnames, output_dir,
                       indexed_seq_len,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
-                      assay=None):
+                      assay=None,
+                      genome_fnames=None):
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
     read_fname_str = None
@@ -112,7 +113,12 @@ def map_with_statmap( read_fnames, output_dir,
         read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
     
     # build the binary genome with build_index
-    call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
+    if genome_fnames:
+        call = "%s %i tmp.genome.fa.bin " % ( BUILD_INDEX_PATH, indexed_seq_len )
+        for fname in genome_fnames:
+            call += fname + " "
+    else:
+        call = "%s %i tmp.genome.fa.bin *.fa" % ( BUILD_INDEX_PATH, indexed_seq_len )
     print >> stdout, re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
@@ -264,9 +270,14 @@ def write_genome_to_fasta( genome, fasta_fp, num_repeats=1 ):
 def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
     # the maximum length, in bp's, of each fasta line
     FA_LL = 50
+    files_out = []
     
     for chr_name in genome.keys():
-        fasta_fp = open( file_prefix + "_" + chr_name + ".fa", "w" )
+        if file_prefix:
+            fasta_fname = file_prefix + "_" + chr_name + ".fa"
+        else:
+            fasta_fname = chr_name + ".fa"
+        fasta_fp = open( fasta_fname, "w" )
         
         fasta_fp.write( ">%s\n" % chr_name)
         
@@ -280,9 +291,10 @@ def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
             fasta_fp.write( seq[start:stop] )
             fasta_fp.write( "\n" )
         
+        files_out.append( fasta_fname )
         fasta_fp.close()
     
-    return
+    return files_out
 
 def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
     # store a list of the true fragments
@@ -877,21 +889,91 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-def generate_diploid_data( read_len, rev_comp = False, indexed_seq_len = None ):
+def generate_diploid_data( read_len ):
     '''
     Generates paternal and maternal genomes with a .map file for testing diploid mapping
     '''
-    p_genome = m_genome = build_random_genome( [1000,], ["1",] )
-    # perturb genomes
-    map_file = build_map_file( p_genome, m_genome )
 
-    # sample uniformly from both genomes
-    p_frags = sample_uniformily_from_genome( p_genome, nsamples=nsamples, frag_len=rl );
-    p_reads = build_reads_from_fragments(
-            p_genome, p_frags, read_len=rl, rev_comp=rev_comp, paired_end=False )
-    m_frags = sample_uniformily_from_genome( m_genome, nsamples=nsamples, frag_len=rl );
-    m_reads = build_reads_from_fragments(
-            m_genome, m_frags, read_len=rl, rev_comp=rev_comp, paired_end=False )
+    chr_name = "chr1"
+    paternal_chr_name = chr_name + "_paternal"
+    maternal_chr_name = chr_name + "_maternal"
+
+    mapf = []
+    mapf.append("#REF\tPAT\tMAT") # MAP header
+    mapf.append('{0}\t{1}\t{2}'.format(0, 1, 1)) # sequence start
+
+    # build a random paternal genome
+    genome = build_random_genome( [1000,], [paternal_chr_name,] )
+
+    # maternal starts out as copy of paternal
+    maternal_chr = genome[paternal_chr_name]
+    mutated_maternal_chr = array.array( 'c', maternal_chr )
+
+    ### Mutate maternal sequence, building map file along the way ###
+    num_mut = 25 # TODO: arbitrary. make param?
+
+    # indices to mutate; sorted so we can add entries to the map file
+    # xrange(1, n) so we don't mutate the first bp
+    muts = sorted(
+        random.sample( xrange(1, len(mutated_maternal_chr)), num_mut )
+    )
+
+    # NOTE: +1 because sequence array is 0-indexed, but .map files are 1-indexed
+    mdiff = 0 # keep track of diff between index and mut (due to insertions)
+    for mut in muts:
+        mut_type = random.choice( ['snp', 'indel'] ) # snp or indel?
+
+        if mut_type == 'snp':
+
+            # mutate maternal sequence
+            curr_bp = mutated_maternal_chr[ mut ]
+            valid_bps = [ bp for bp in bps if bp != curr_bp ]
+            mutated_maternal_chr[ mut ] = random.choice( valid_bps )
+
+        elif mut_type == 'indel':
+
+            # default to maternal insertions for now
+            insertion_len = random.choice( xrange(1, 6) )
+
+            # insert insertion_len bps into maternal sequence
+            for i in range(insertion_len):
+                random_bp = random.choice( bps )
+                mutated_maternal_chr.insert( mut, random_bp )
+
+            # add entries to mapf
+            mapf.append('{0}\t{1}\t{2}'.format(0, 0, mut+mdiff+1))
+            mdiff += insertion_len # update diff
+            mapf.append('{0}\t{1}\t{2}'.format(0, mut+1, mut+mdiff+1))
+            
+    # add mutated maternal sequence to genome
+    genome[maternal_chr_name] = mutated_maternal_chr.tostring()
+
+    # write genome to multiple fasta files, with filename prefixes matching chr_names
+    output_filenames = write_genome_to_multiple_fastas( genome, "" )
+    # write .map file
+    map_fname = chr_name + "_test.map"
+    with open( map_fname, "w" ) as f:
+        f.write( '\n'.join(mapf) )
+    output_filenames.append(map_fname)
+
+    # sample reads uniformly from both genomes to get reads
+    nsamples = 10000
+    fragments = sample_uniformily_from_genome( genome, nsamples=nsamples, frag_len=read_len )
+    reads = build_reads_from_fragments(
+            genome, fragments, read_len=read_len
+        )
+
+    # build and write the reads
+    reads_of = open("tmp.fastq", "w")
+    build_single_end_fastq_from_seqs( reads, reads_of )
+    reads_of.close()
+
+    # map the data
+    output_directory = "smo_test_diploid_mapping_%i" % (read_len)
+    read_fnames = [ "tmp.fastq" ]
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
+            genome_fnames = output_filename
+        )
 
 def test_diploid_mapping():
     pass
@@ -921,6 +1003,9 @@ if False:
 
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
+
+    generate_diploid_data()
+    sys.exit(0)
 
     if True:
         print "Starting test_fivep_sequence_finding()"
