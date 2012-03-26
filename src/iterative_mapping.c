@@ -1321,14 +1321,14 @@ void update_CAGE_trace_expectation_from_location(
     else {
         int trace_index;
 
-        /* If this is in the fwd strnanded transcriptome */
+        /* If this is in the reverse ( 3') transcriptome */
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
-            trace_index = 0;
-        } 
-        /* We are in the 3' ( negative ) transcriptome */
-        else {
             trace_index = 1;
+        } 
+        /* We are in the 5' ( positive ) transcriptome */
+        else {
+            trace_index = 0;
         }
 
         /* lock the spinlock */
