@@ -1385,14 +1385,14 @@ update_CAGE_mapped_read_prbs(
             /* store the trace that we care about */
             TRACE_TYPE** trace;
             
-            /* If this is in the fwd strnanded transcriptome */
+            /* If this is in the rev strnanded transcriptome */
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
-                trace = traces->traces[0];
-            } 
-            /* We are in the 3' ( negative ) transcriptome */
-            else {
                 trace = traces->traces[1];
+            } 
+            /* We are in the 5' ( negative ) transcriptome */
+            else {
+                trace = traces->traces[0];
             }
             
             unsigned int win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
