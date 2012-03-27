@@ -617,7 +617,6 @@ void
 index_contig(
     struct genome_data* genome,
     int seq_len,
-    int chr_index,
     SIGNED_LOC start,
     SIGNED_LOC stop,
     GENOME_LOC_TYPE loc
@@ -628,11 +627,15 @@ index_contig(
     // TODO: is tmp_seq even necessary?
     char* tmp_seq = malloc( seq_len*sizeof(char) );
 
-    for( bp_index = start; bp_index < stop-seq_len; bp_index += 1 )
+    for( bp_index = start; bp_index < stop; bp_index += 1 )
     {
+        /* skip negative bp indices explicitly */
+        if( bp_index < 0 )
+            continue;
+
         loc.loc = bp_index;
 
-        memcpy( tmp_seq, genome->chrs[chr_index] + bp_index, sizeof(char)*seq_len );
+        memcpy( tmp_seq, genome->chrs[loc.chr] + bp_index, sizeof(char)*seq_len );
 
         /* Add the normal sequence */
         // TODO: does this make sense? return translation?
@@ -726,7 +729,7 @@ index_diploid_chrs(
         );
     free( prefix );
 
-    /* get corresponding diploid map struct index */
+    /* get corresponding diploid map data struct index */
     int map_data_index = get_map_data_index_from_chr_index(
             genome, paternal_chr_index
         );
@@ -740,12 +743,24 @@ index_diploid_chrs(
             &segments,
             &num_segments
         );
-    
+
+    // DEBUG
+    FILE* debug_fp = fopen("debug_sequence_segments", "w");
+
     /* loop over sequence segments */
     int i;
     for( i=0; i < num_segments; i++ )
     {
+
         int start_pos; 
+
+        // DEBUG
+        fprintf(debug_fp,
+                "Segment #%i: { %i, %i, %i }\n", i,
+                segments[i].paternal_start_pos,
+                segments[i].maternal_start_pos,
+                segments[i].segment_length
+              );
 
         /*** Set bit flags and chr_index ***/
         /* identical sequence on paternal and maternal */
@@ -770,17 +785,20 @@ index_diploid_chrs(
             loc.is_paternal = 0; loc.is_maternal = 1;
             /* set start pos */
             start_pos = segments[i].maternal_start_pos;
-            /* loc.chr_index defaults to paternal - set to maternal */
+            /* loc.chr defaults to paternal - set to maternal */
             loc.chr = maternal_chr_index;
         }
 
         /* index sequence segment */
-        index_contig( genome, seq_len, loc.chr,
-                start_pos,
-                start_pos + segments[i].segment_length,
+        index_contig( genome, seq_len,
+                start_pos-1, // mappings are 1-indexed, but statmap is 0-indexed
+                start_pos-1 + segments[i].segment_length,
                 loc
             );
     }
+
+    // DEBUG
+    fclose( debug_fp );
 }
 
 void
@@ -796,10 +814,9 @@ index_haploid_chr(
 
     /* take the whole chr and index as a contig */
     index_contig(
-        genome,
-        seq_len,
-        chr_index,
-        0, genome->chr_lens[chr_index],
+        genome, seq_len,
+        0,
+        genome->chr_lens[chr_index]-seq_len,
         loc
     );
 }

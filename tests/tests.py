@@ -890,7 +890,7 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-def build_diploid_genome( ):
+def build_diploid_genome( seq_len ):
     '''
     Generates paternal and maternal genomes with a .map file for testing diploid mapping
     '''
@@ -903,56 +903,67 @@ def build_diploid_genome( ):
     mapf.append('{0}\t{1}\t{2}'.format(0, 1, 1)) # sequence start
 
     # build a random paternal genome
-    genome = build_random_genome( [1000,], [paternal_chr_name,] )
+    initial_genome = build_random_genome( [1000,], [chr_name,] )
 
-    # maternal starts out as copy of paternal
-    maternal_chr = genome[paternal_chr_name]
-    mutated_maternal_chr = array.array( 'c', maternal_chr )
+    # create array copies of sequence to mutate
+    mutated_paternal_chr = array.array( 'c', initial_genome[chr_name] )
+    mutated_maternal_chr = array.array( 'c', initial_genome[chr_name] )
 
-    ### Mutate maternal sequence, building map file along the way ###
-    num_mut = 25 # TODO: arbitrary. make param?
+    # Mutate sequence, building map file along the way
+    num_mut = 10 # TODO: arbitrary. make param?
 
     # indices to mutate; sorted so we can add entries to the map file
     # xrange(1, n) so we don't mutate the first bp
     muts = sorted(
-        random.sample( xrange(1, len(mutated_maternal_chr)), num_mut )
+        random.sample( xrange(1, len(initial_genome[chr_name])), num_mut )
     )
 
-    # mut is an index into the paternal sequence
-    mdiff = 0 # keep track of diff between index and mut (due to insertions)
+    # mut is the bp originally chosen to be the site of a mutation
+    # keep track of the offsets from mut caused by indels
+    p_offset = 0
+    m_offset = 0
     for mut in muts:
         mut_type = random.choice( ['snp', 'indel'] ) # snp or indel?
 
         if mut_type == 'snp':
 
-            # mutate maternal sequence
-            curr_bp = mutated_maternal_chr[ mut ]
+            # mutate (maternal - doesn't matter) sequence
+            curr_bp = mutated_maternal_chr[ mut+m_offset ]
             valid_bps = [ bp for bp in bps if bp != curr_bp ]
-            mutated_maternal_chr[ mut ] = random.choice( valid_bps )
+            mutated_maternal_chr[ mut+m_offset] = random.choice( valid_bps )
 
         elif mut_type == 'indel':
 
-            # default to maternal insertions for now
+            # insert random num bp's on paternal or maternal
+            insertion_site = random.choice( ['paternal', 'maternal'] )
             insertion_len = random.choice( xrange(1, 6) )
 
-            # insert insertion_len bps into maternal sequence
-            for i in range(insertion_len):
-                random_bp = random.choice( bps )
-                mutated_maternal_chr.insert( mut, random_bp )
-
-            # add entries to mapf
+            # insert random bps, add entries to map file, and update offsets
             # +1 because sequence array is 0-indexed, but .map files are 1-indexed
-            mapf.append('{0}\t{1}\t{2}'.format(0, 0, mut+mdiff+1))
-            mdiff += insertion_len # update diff
-            mapf.append('{0}\t{1}\t{2}'.format(0, mut+1, mut+mdiff+1))
-            
-    # add mutated maternal sequence to genome
-    genome[maternal_chr_name] = mutated_maternal_chr.tostring()
+            random_bps = [ random.choice( bps ) for x in xrange( insertion_len ) ]
+            if insertion_site == 'paternal':
+                for random_bp in random_bps:
+                    mutated_paternal_chr.insert( mut+p_offset, random_bp )
+                mapf.append('{0}\t{1}\t{2}'.format(0, mut+p_offset+1, 0))
+                p_offset += insertion_len
+                mapf.append('{0}\t{1}\t{2}'.format(0, mut+p_offset+1, mut+m_offset+1))
+            elif insertion_site == 'maternal':
+                for random_bp in random_bps:
+                    mutated_maternal_chr.insert( mut+m_offset, random_bp )
+                mapf.append('{0}\t{1}\t{2}'.format(0, 0, mut+m_offset+1))
+                m_offset += insertion_len
+                mapf.append('{0}\t{1}\t{2}'.format(0, mut+p_offset+1, mut+m_offset+1))
+
+    # build diploid genome (dictionary of sequences keyed by chr names)
+    genome = {
+        paternal_chr_name : mutated_paternal_chr.tostring(),
+        maternal_chr_name : mutated_maternal_chr.tostring()
+    }
 
     # write genome to multiple fasta files, with filename prefixes matching chr_names
     output_filenames = write_genome_to_multiple_fastas( genome, "" )
     # write .map file
-    map_fname = chr_name + "_test.map"
+    map_fname = chr_name + "_test.map" # filename has to be chrname_x to be parsed by build_index
     with open( map_fname, "w" ) as f:
         f.write( '\n'.join(mapf) )
     output_filenames.append(map_fname)
@@ -984,27 +995,26 @@ def map_diploid_genome( genome, output_filenames, read_len ):
 
     # test the sam file to make sure that each of the reads appears
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
 
-    if len(fragments) > total_num_reads:
-        raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+    # make sure the chr and start locations are identical
+    for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
 
-    for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
+        locs = [ ( mapped_reads[i][2], int(mapped_reads[i][3]) ) for i in xrange(len(mapped_reads)) ]
 
-        loc = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
+        # we may randomly choose a read from one chr that is in fact shared on both
+        # this is not an error - but we do want to make sure we got the read we wanted
+        # check that at least one of the reads in the same matches Truth
+        found_read = False
+        for loc in locs:
+            if loc[0] == truth[0] and loc[1] == truth[1]: 
+                found_read = True
 
-        # make sure the chr and start locations are identical
-        # first, check that all chromosomes are the same *and*
-        # that the correct loc exists
-        if any( loc != truth[0] for loc in locs[0] ) or truth[1] not in locs[1]:
-           print reads_data
-           print truth
-           print reads_data[0][9][0]
-           print r_genome[truth[0]][truth[1]-1]
-           raise ValueError, \
-                "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
+        if found_read == False:
+            print "Truth: ", truth
+            print mapped_reads
+            raise ValueError, \
+                "Mapped locations at read id %i and Truth (%s, %i, %i) are not equivalent" \
+                % ( int(mapped_reads[0][0]), truth[0], truth[1], truth[2] )
 
     sam_fp.close()
 
@@ -1018,7 +1028,7 @@ def map_diploid_genome( genome, output_filenames, read_len ):
 def test_diploid_genome():
     rls = [ 20, 50, 75 ]
     for rl in rls:
-        genome, output_filenames = build_diploid_genome()
+        genome, output_filenames = build_diploid_genome( rl )
         map_diploid_genome( genome, output_filenames, rl )
         print "PASS: Diploid genome Mapping %i BP Test. ( Statmap appears to be mapping diploid genomes correctly )" % rl
 
@@ -1048,6 +1058,10 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
+    print "Starting test_diploid_genome()"
+    test_diploid_genome()
+    sys.exit(0)
+
     if True:
         print "Starting test_fivep_sequence_finding()"
         test_fivep_sequence_finding()
@@ -1067,8 +1081,6 @@ if __name__ == '__main__':
         test_build_index( )
         #print "Starting test_index_probe()"
         #test_short_index_probe()
-        print "Starting test_diploid_genome()"
-        test_diploid_genome()
 
     if True:
         print "Starting test_untemplated_g_finding()"

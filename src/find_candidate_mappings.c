@@ -543,18 +543,20 @@ build_candidate_mappings_from_diploid_mapped_location(
     assert( maternal_chr_index >= 0 );
     free( prefix );
 
-    /* get maternal_start from diploid index */
+    /* look up associated diploid map data structure */
     int map_data_index = get_map_data_index_from_chr_index(
             genome, result->location.chr
         );
     assert( map_data_index >= 0 );
 
+    /* get maternal_start from diploid index */
+    /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
     int maternal_start = find_diploid_locations(
             &(genome->index->map_data[map_data_index]),
-            result->location.loc
-        );
+            result->location.loc + 1
+        ) - 1;
 
-    /* add maternal candidate mapping */
+    /*** Add maternal candidate mapping ***/
 
     /* set the chr */
     template_candidate_mapping.chr = maternal_chr_index;

@@ -395,7 +395,7 @@ add_file_group_to_genome(
             }
 
             /* Add to genome */
-            fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
+            //fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
             add_chrs_from_fasta_file( genome, genome_fp, chr_source );
 
             //TODO: add_chrs closes input FILE*. This behavior should be consistent.
@@ -580,11 +580,19 @@ main( int argc, char** argv )
     /* Initialize the genome data structure */
     init_index( &(genome->index), indexed_seq_len );
 
-    int num_diploid_chrs = build_diploid_map_data( &(genome->index->map_data), fgl, genome );
     /* set num_diploid_chrs */
     genome->index->num_diploid_chrs = build_diploid_map_data(
             &(genome->index->map_data), fgl, genome
         );
+
+    // DEBUG
+    FILE* fp = fopen( "chr1_debug_dmap", "w" );
+    write_diploid_map_data_to_file(
+            genome->index->map_data,
+            genome->index->num_diploid_chrs,
+            fp
+        );
+    fclose( fp );
 
     /* free file group list */
     free_file_group_list( fgl );

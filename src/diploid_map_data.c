@@ -336,6 +336,9 @@ find_diploid_locations( struct diploid_map_data_t* data,
     int maternal_pos = data->mappings[index].maternal + 
                        ( paternal_pos - data->mappings[index].paternal );
 
+    // DEBUG
+    //printf("paternal : %i -> maternal : %i\n", paternal_pos, maternal_pos );
+
     // look ahead to determine the paternal length, returning -1 if in unique paternal sequence
     if( data->mappings[index+1].maternal == 0 &&
         data->mappings[index+1].paternal != 0 &&
@@ -492,6 +495,31 @@ parse_map_file( char* fname,
     return;
 }
 
+/* Add chr_subregion_t to dynamic array segments, resizing if necessary */
+void add_segment_to_segments(
+    struct chr_subregion_t** segments,
+    struct chr_subregion_t* segment,
+    int* num_segments,
+    int* segments_size
+)
+{
+    /* increment num_segments */
+    *num_segments += 1;
+
+    if( *num_segments >= *segments_size )
+    {
+        /* resize the storage */
+        *segments_size *= 2;
+        *segments = realloc(
+            *segments,
+            sizeof(struct chr_subregion_t) * *segments_size
+        );
+        assert( *segments != NULL );
+    }
+
+    (*segments)[*num_segments - 1] = *segment;
+}
+
 void
 build_unique_sequence_segments( struct diploid_map_data_t* data, 
                                 int seq_len,
@@ -501,11 +529,12 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
 {
     assert( seq_len > 0 );
 
-    /* Allocate memory for segments; one segment for each mapping */
-    *segments = calloc( sizeof( struct chr_subregion_t ), data->num_mappings );
-    assert( *segments != NULL );
-    
+    /* Set up dynamic array for segments */
+    *segments = NULL;
+    int segments_size = 1;
     *num_segments = 0;
+
+    /* Loop over the mappings */
     size_t i;
     for( i = 0; i < data->num_mappings; i++ )
     {
@@ -518,6 +547,10 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         int case_code = 2*(int)( data->mappings[i].paternal > 0 );
         case_code += 1*(int)( data->mappings[i].maternal > 0 );
 
+        /*
+         * Set start of sequence (negative offset by seq_len so we include all
+         * subsequences that cover the given bp)
+         */
         switch ( case_code )
         {
         case 0:
@@ -538,15 +571,11 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
                      case_code );
             abort();
         }
-        
-        /* the continue in the case statment should have prevented this,
-           but I'm worry because that's a pretty weird construct */
-        assert( maternal_start > 0 || paternal_start > 0 );
-        
+
         /* determine the region length */
-        /* we can peak ahead one because we added the chr lengths to the end */
+        /* we can peek ahead one because we added the chr lengths to the end */
         size_t j;
-        
+
         if( maternal_start > 0 )
         {
             for( j = i+1; data->mappings[j].maternal == 0; j++ )
@@ -560,35 +589,91 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
                 assert( j <= data->num_mappings );
             paternal_length = data->mappings[j].paternal - paternal_start - seq_len + 1;
         }
-        
-        assert( maternal_length == 0 || paternal_length == 0
-                || maternal_length == paternal_length || i == data->num_mappings-1 );
-        
-        /* the map files are 1 indexed, but statmap uses zero based locations. */
-        paternal_start -= 1;
-        maternal_start -= 1;
-        
-          // DEBUG
-#if 0
-        fprintf( stderr, "%i-%i\t%i-%i\t%i, %i\n", 
-                 paternal_start, paternal_start+paternal_length, 
-                 maternal_start, maternal_start+maternal_length,
-                 paternal_length, maternal_length );
-#endif
 
-        struct chr_subregion_t subregion =  { 
-            paternal_start, maternal_start, MAX(paternal_length, maternal_length)
-        };
-        (*segments)[*num_segments] = subregion;
-        *num_segments += 1;
+        /* add sequence segments based on type of mapping */
+
+        /* if it's a contig - (x, y) */
+        if( paternal_start > 0 && maternal_start > 0 )
+        {
+            /* too short to be indexed */
+            if( paternal_length < 0 || maternal_length < 0 )
+            {
+                /* expand and index separately */
+                int exp;
+                for( exp=i+1; ; exp++ )
+                {
+                    if(     data->mappings[exp].paternal > 0
+                        &&  data->mappings[exp].maternal > 0
+                        &&  data->mappings[exp].paternal - data->mappings[i].paternal > seq_len
+                        &&  data->mappings[exp].maternal - data->mappings[i].maternal > seq_len
+                    )
+                        break;
+                }
+
+                struct chr_subregion_t p_segment = {
+                    paternal_start, 0,
+                    data->mappings[exp].paternal - data->mappings[i].paternal
+                };
+                add_segment_to_segments( segments, &p_segment, num_segments, &segments_size );
+
+                struct chr_subregion_t m_segment = {
+                    0, maternal_start,
+                    data->mappings[exp].maternal - data->mappings[i].maternal
+                };
+                add_segment_to_segments( segments, &m_segment, num_segments, &segments_size );
+
+                // update i to start of next un-sequenced mapping
+                i = exp - 1; // for loop will autoincrement i
+            }
+            /* index as shared sequence */
+            else
+            {
+                assert( paternal_length == maternal_length );
+
+                struct chr_subregion_t segment = {
+                    paternal_start + seq_len - 1,
+                    maternal_start + seq_len - 1,
+                    paternal_length - seq_len + 1
+                };
+                add_segment_to_segments( segments, &segment, num_segments, &segments_size );
+            }
+        }
+        /* if it's a mismatch - (x, 0) or (0, y) */
+        else
+        {
+            /* add segment of unique added sequence */
+            assert( paternal_length == 0 || maternal_length == 0 );
+
+            struct chr_subregion_t segment = {
+                paternal_start, maternal_start, MAX( paternal_length, maternal_length )
+            };
+            add_segment_to_segments( segments, &segment, num_segments, &segments_size );
+
+            /* add segment for other chr */
+            /* 
+             * look ahead to get next bp in contig - we will fill in the gap from the
+             * -seq_len offset at the end of the last contig to the start of the next
+             */
+            if( paternal_length == 0 )
+            {
+                paternal_start = data->mappings[i+1].paternal - seq_len + 1;
+                maternal_start = 0;
+            } else {
+                paternal_start = 0;
+                maternal_start = data->mappings[i+1].maternal - seq_len + 1;
+            }
+            struct chr_subregion_t compl_segment = {
+                paternal_start, maternal_start, seq_len
+            };
+            add_segment_to_segments( segments, &compl_segment, num_segments, &segments_size );
+        }
     }
     
+    /* Resize segments to exact size of structs it contains */
     *segments = realloc( *segments, sizeof( struct chr_subregion_t )*(*num_segments) );
     /* This should never fail because I'm always making the allocation smaller */
     assert( *segments != NULL );
-    
-    
-    return;
+
 }
 
 #if 0
