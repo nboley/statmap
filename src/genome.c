@@ -644,6 +644,11 @@ index_contig(
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
+            // DEBUG
+            printf("NOTICE      :  Could not translate sequence at %i on %s\n",
+                    bp_index,
+                    genome->chr_names[loc.chr]
+                );
             continue;
         }
 
@@ -716,11 +721,6 @@ index_diploid_chrs(
     GENOME_LOC_TYPE loc
 )
 {
-    /* we will index both diploid chrs when called on PATERNAL, so first
-     * skip indexing if called with a MATERNAL chr */
-    if( genome->chr_sources[chr_index] == MATERNAL )
-        return;
-
     /* get paternal and maternal indexes for this chr */
     int paternal_chr_index = chr_index;
     char* prefix = get_chr_prefix( genome->chr_names[chr_index] );
@@ -771,6 +771,8 @@ index_diploid_chrs(
             loc.is_paternal = 1; loc.is_maternal = 1;
             /* set start_pos */
             start_pos = segments[i].paternal_start_pos;
+            /* set chr_index */
+            loc.chr = paternal_chr_index;
         }
         /* unique sequence on the paternal */
         else if( segments[i].maternal_start_pos == 0 ) {
@@ -778,6 +780,8 @@ index_diploid_chrs(
             loc.is_paternal = 1; loc.is_maternal = 0;
             /* set start_pos */
             start_pos = segments[i].paternal_start_pos;
+            /* set chr_index */
+            loc.chr = paternal_chr_index;
         }
         /* unique sequence on the maternal */
         else if( segments[i].paternal_start_pos == 0 ) {
@@ -787,6 +791,13 @@ index_diploid_chrs(
             start_pos = segments[i].maternal_start_pos;
             /* loc.chr defaults to paternal - set to maternal */
             loc.chr = maternal_chr_index;
+        }
+        else {
+            fprintf( stderr, "FATAL : Impossible sequence segment : %i, %i, %i \n",
+                    segments[i].paternal_start_pos,
+                    segments[i].maternal_start_pos,
+                    segments[i].segment_length );
+            abort();
         }
 
         /* index sequence segment */
@@ -811,6 +822,9 @@ index_haploid_chr(
 {
     /* set flags */
     loc.is_paternal = 0; loc.is_maternal = 0;
+
+    /* set chr_index */
+    loc.chr = chr_index;
 
     /* take the whole chr and index as a contig */
     index_contig(
@@ -851,14 +865,17 @@ index_genome( struct genome_data* genome, int indexed_seq_len )
         /* Set the chr index in the soon to be added location */
         loc.chr = chr_index;
 
-        // TODO: split genome into contigs, index sequences
-        if( genome->chr_sources[chr_index] == PATERNAL ||
-            genome->chr_sources[chr_index] == MATERNAL )
-        {
+        /*** Index chromosome, depending on whether it is diploid or haploid ***/
+
+        /* If chr is diploid, we will index both the paternal chr and its 
+         * corresponding maternal chr when we iterate over the paternal,
+         * so we skip maternal chrs here. */
+        if( genome->chr_sources[chr_index] == PATERNAL )
             index_diploid_chrs( genome, chr_index, seq_len, loc );
-        } else {
+        else if ( genome->chr_sources[chr_index] == MATERNAL )
+            continue;
+        else
             index_haploid_chr( genome, chr_index, seq_len, loc );
-        }
     }
 
     /* sort all of the pseudo locations */

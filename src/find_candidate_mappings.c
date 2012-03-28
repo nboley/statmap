@@ -525,6 +525,9 @@ build_candidate_mappings_from_diploid_mapped_location(
 
     /* paternal mapping use all of the data in the mapped_location, so we can just add it
      * the same way we add the other locations */
+    // DEBUG
+    //printf("Adding paternal cm for diploid, chr_name: %s\n", genome->chr_names[(result->location).chr]);
+
     build_candidate_mappings_from_haploid_mapped_location(
             genome,
             result, results,
@@ -639,20 +642,39 @@ build_candidate_mappings_from_mapped_locations(
         /* build mappings depending on chr source of this mapped location */
         /* if read mapped to a location that is present on both the maternal and paternal
          * chrs, add candidate_mappings for both chrs */
-        if( result->location.is_paternal && result->location.is_maternal )
+        if( result->location.is_paternal == 1 && result->location.is_maternal == 1 )
+        {
+            // DEBUG
+#if 0
+            printf("Diploid candidate mapping: %i, %i\n",
+                    result->location.chr,
+                    result->location.loc
+                );
+#endif
+
             build_candidate_mappings_from_diploid_mapped_location(
                     genome,
                     result, results, 
                     r, 
                     template_candidate_mapping, mappings
                 );
+        }
         else
+        {
+#if 0
+            // DEBUG
+            printf("Haploid candidate mapping: %i, %i\n",
+                    result->location.chr,
+                    result->location.loc
+                );
+#endif
             build_candidate_mappings_from_haploid_mapped_location(
                     genome,
                     result, results,
                     r,
                     template_candidate_mapping, mappings
                 );
+        }
     }
     
     return;

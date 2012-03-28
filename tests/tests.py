@@ -903,7 +903,7 @@ def build_diploid_genome( seq_len ):
     mapf.append('{0}\t{1}\t{2}'.format(0, 1, 1)) # sequence start
 
     # build a random paternal genome
-    initial_genome = build_random_genome( [1000,], [chr_name,] )
+    initial_genome = build_random_genome( [1000,], [chr_name,], )
 
     # create array copies of sequence to mutate
     mutated_paternal_chr = array.array( 'c', initial_genome[chr_name] )
@@ -929,7 +929,7 @@ def build_diploid_genome( seq_len ):
 
             # mutate (maternal - doesn't matter) sequence
             curr_bp = mutated_maternal_chr[ mut+m_offset ]
-            valid_bps = [ bp for bp in bps if bp != curr_bp ]
+            valid_bps = [ bp for bp in bps_set if bp != curr_bp ]
             mutated_maternal_chr[ mut+m_offset] = random.choice( valid_bps )
 
         elif mut_type == 'indel':
@@ -940,7 +940,7 @@ def build_diploid_genome( seq_len ):
 
             # insert random bps, add entries to map file, and update offsets
             # +1 because sequence array is 0-indexed, but .map files are 1-indexed
-            random_bps = [ random.choice( bps ) for x in xrange( insertion_len ) ]
+            random_bps = [ random.choice( bps[:8] ) for x in xrange( insertion_len ) ]
             if insertion_site == 'paternal':
                 for random_bp in random_bps:
                     mutated_paternal_chr.insert( mut+p_offset, random_bp )
