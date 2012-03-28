@@ -593,27 +593,42 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         /* add sequence segments based on type of mapping */
 
         /* if it's a contig - (x, y) */
-        if( paternal_length > 0 && maternal_length > 0 )
+        if( paternal_start > 0 && maternal_start > 0 )
         {
-            assert( paternal_length == maternal_length );
-
-            /* correct start due to MAX if necessary */
-            if( !(  data->mappings[i].paternal < seq_len ||
-                    data->mappings[i].maternal < seq_len    ) )
+            /* if it's too short to index, add as two separate segments */
+            if( paternal_length < seq_len && maternal_length < seq_len )
             {
-                paternal_start += seq_len - 1;
-                maternal_start += seq_len - 1;
-                paternal_length -= seq_len;
+                struct chr_subregion_t paternal_segment = {
+                    paternal_start, 0, paternal_length
+                };
+                add_segment_to_segments( segments, &paternal_segment, num_segments, &segments_size );
+                struct chr_subregion_t maternal_segment = {
+                    0, maternal_start, maternal_length
+                };
+                add_segment_to_segments( segments, &maternal_segment, num_segments, &segments_size );
             }
+            else
+            {
+                assert( paternal_length == maternal_length );
 
-            /* add seg for contig based on true contig start (no offset by seq_len) */
-            /* index from contig start to start of next mapping - seq_len */
-            struct chr_subregion_t segment = {
-                paternal_start,
-                maternal_start,
-                paternal_length
-            };
-            add_segment_to_segments( segments, &segment, num_segments, &segments_size );
+                /* correct start due to MAX if necessary */
+                if( !(  data->mappings[i].paternal < seq_len ||
+                        data->mappings[i].maternal < seq_len    ) )
+                {
+                    paternal_start += seq_len - 1;
+                    maternal_start += seq_len - 1;
+                    paternal_length -= seq_len - 1;
+                }
+
+                /* add seg for contig based on true contig start (no offset by seq_len) */
+                /* index from contig start to start of next mapping - seq_len */
+                struct chr_subregion_t segment = {
+                    paternal_start,
+                    maternal_start,
+                    paternal_length
+                };
+                add_segment_to_segments( segments, &segment, num_segments, &segments_size );
+            }
         }
         /* if it's a mismatch - (x, 0) or (0, y) */
         else
@@ -621,10 +636,12 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             /* add segment of unique sequence */
             assert( paternal_length == 0 || maternal_length == 0 );
 
+            int segment_length = MAX( paternal_length, maternal_length );
+
             struct chr_subregion_t segment = {
                 paternal_start,
                 maternal_start,
-                MAX( paternal_length, maternal_length )
+                segment_length + seq_len - 1
             };
             add_segment_to_segments( segments, &segment, num_segments, &segments_size );
 
