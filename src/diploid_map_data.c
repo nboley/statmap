@@ -556,14 +556,14 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         case 0:
             continue;
         case 1:
-            maternal_start = MAX( 1, data->mappings[i].maternal - seq_len + 1 );
+            maternal_start = data->mappings[i].maternal;
             break;
         case 2:
-            paternal_start = MAX( 1, data->mappings[i].paternal - seq_len + 1 );
+            paternal_start = data->mappings[i].paternal;
             break;
         case 3:
-            maternal_start = MAX( 1, data->mappings[i].maternal - seq_len + 1 );
-            paternal_start = MAX( 1, data->mappings[i].paternal - seq_len + 1 );
+            maternal_start = data->mappings[i].maternal;
+            paternal_start = data->mappings[i].paternal;
             break;
         default:
             fprintf( stderr, 
@@ -580,14 +580,14 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         {
             for( j = i+1; data->mappings[j].maternal == 0; j++ )
                 assert( j <= data->num_mappings );
-            maternal_length = data->mappings[j].maternal - maternal_start - seq_len + 1;
+            maternal_length = data->mappings[j].maternal - maternal_start + 1;
         }
 
         if( paternal_start > 0 )
         {
             for( j = i+1; data->mappings[j].paternal == 0; j++ )
                 assert( j <= data->num_mappings );
-            paternal_length = data->mappings[j].paternal - paternal_start - seq_len + 1;
+            paternal_length = data->mappings[j].paternal - paternal_start + 1;
         }
 
         /* add sequence segments based on type of mapping */
@@ -596,28 +596,26 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         if( paternal_start > 0 && maternal_start > 0 )
         {
             /* if it's too short to index, expand and add as two separate segments */
-            if( paternal_length < 0 && maternal_length < 0 )
+            if( paternal_length <= seq_len || maternal_length <= seq_len )
             {
                 int exp;
                 for( exp=i+1; ; exp++ )
                 {
                     if(     data->mappings[exp].paternal > 0
                         &&  data->mappings[exp].maternal > 0
-                        &&  data->mappings[exp].paternal - paternal_start > 0
-                        &&  data->mappings[exp].maternal - maternal_start > 0
+                        &&  data->mappings[exp].paternal - paternal_start > seq_len
+                        &&  data->mappings[exp].maternal - maternal_start > seq_len
                       )
                         break;
                 }
 
                 struct chr_subregion_t paternal_segment = {
-                    data->mappings[i].paternal, 0,
-                    data->mappings[exp].paternal - paternal_start + 1
+                    paternal_start, 0, data->mappings[exp].paternal - paternal_start
                 };
                 add_segment_to_segments( segments, &paternal_segment, num_segments, &segments_size );
 
                 struct chr_subregion_t maternal_segment = {
-                    0, data->mappings[i].maternal,
-                    data->mappings[exp].maternal - maternal_start + 1
+                    0, maternal_start, data->mappings[exp].maternal - maternal_start
                 };
                 add_segment_to_segments( segments, &maternal_segment, num_segments, &segments_size );
 
@@ -628,21 +626,12 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             {
                 assert( paternal_length == maternal_length );
 
-                /* correct start due to MAX if necessary */
-                if( !(  data->mappings[i].paternal < seq_len ||
-                        data->mappings[i].maternal < seq_len    ) )
-                {
-                    paternal_start += seq_len - 1;
-                    maternal_start += seq_len - 1;
-                    paternal_length -= seq_len - 1;
-                }
-
                 /* add seg for contig based on true contig start (no offset by seq_len) */
                 /* index from contig start to start of next mapping - seq_len */
                 struct chr_subregion_t segment = {
                     paternal_start,
                     maternal_start,
-                    paternal_length
+                    paternal_length - seq_len
                 };
                 add_segment_to_segments( segments, &segment, num_segments, &segments_size );
             }
@@ -653,12 +642,10 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             /* add segment of unique sequence */
             assert( paternal_length == 0 || maternal_length == 0 );
 
-            int segment_length = MAX( paternal_length, maternal_length );
-
             struct chr_subregion_t segment = {
-                paternal_start,
-                maternal_start,
-                segment_length + seq_len - 1
+                (paternal_start == 0 ) ? paternal_start : paternal_start - seq_len + 1,
+                (maternal_start == 0 ) ? maternal_start : maternal_start - seq_len + 1,
+                MAX( paternal_length, maternal_length ) + seq_len - 2 //?
             };
             add_segment_to_segments( segments, &segment, num_segments, &segments_size );
 
@@ -681,14 +668,13 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             if(     data->mappings[i+1].paternal == 0
                 ||  data->mappings[i+1].maternal == 0 )
             {
-                compl_len = seq_len;
+                compl_len = seq_len; //?
                 /* if SNP, skip the next mapping - we already added it */
                 i++;
             }
             else
-            {
-                compl_len = seq_len - 1;
-            }
+                compl_len = seq_len - 1; //?
+
             struct chr_subregion_t compl_segment = {
                 paternal_start, maternal_start, compl_len// different for SNP
             };
