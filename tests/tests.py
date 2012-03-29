@@ -39,7 +39,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -673,6 +673,9 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     fragments = sample_uniformily_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
+    # note: if we do rev_comp, statmap still correctly maps the read, but our comparison back to
+    # the original genome will fail (incorrectly). Since comparison back to the genome is an 
+    # important test for diploid mapping (to make sure contigs actually make sense), we don't rev_comp.
     
     ###### Write out the test files, and run statmap ################################
     # write genome
@@ -978,10 +981,10 @@ def map_diploid_genome( genome, output_filenames, read_len ):
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
     # sample reads uniformly from both genomes to get reads
-    nsamples = 10000
+    nsamples=1000
     fragments = sample_uniformily_from_genome( genome, nsamples=nsamples, frag_len=read_len )
     reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len
+            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
         )
 
     # build and write the reads
@@ -1012,29 +1015,35 @@ def map_diploid_genome( genome, output_filenames, read_len ):
         # mapping reads to one diploid chr should return a maximum of 2 results for each read
         if len(mapped_reads) > 2:
             print "Truth: ", truth
+            print "A read sampled from a single diploid chromosome returned more than 2 mappings."
+            print "You are probably indexing some portion of sequence more than once."
             raise ValueError, \
                 "Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
                 % ( int(mapped_reads[0][0]), len(mapped_reads) )
 
         # we may randomly choose a read from one chr that is in fact shared on both
         # this is not an error - but we do want to make sure we got the read we wanted
-        # check that at least one of the reads in the same matches Truth
+        # check that at least one of the reads matches Truth
         found_read = False
         for loc in locs:
             # if chr_name and start_bp match
-            if loc[0] == truth[0] and loc[1] == truth[1]: 
+            if truth[0] == loc[0] and truth[1] == loc[1]: 
                 # check original sequence
-                if genome[truth[0]][truth[1]:truth[2]] == loc[2]:
+                if genome[loc[0]][truth[1]:truth[2]] == loc[2]:
                     found_read = True
                 else:
-                    print "Error: Sequence failed to match at Genome (%s, %i) and Read (%s, %i)" \
-                            % ( truth[0], truth[1], loc[0], loc[1] )
+                    print "Truth  : ", truth
+                    print "Loc    : ", loc
                     print "Genome : %s" % genome[truth[0]][truth[1]:truth[2]]
                     print "Read   : %s" % loc[2]
+                    raise ValueError, \
+                        "Error: Readid %i sequence failed to match at Genome (%s, %i) and Read (%s, %i)" \
+                        % ( int(mapped_reads[0][0]), truth[0], truth[1], loc[0], loc[1] )
 
         if found_read == False:
             print "Truth: ", truth
             print mapped_reads
+            print "Mapped locations not equivalent - you probably failed to map the prior read."
             raise ValueError, \
                 "Mapped locations at read id %i and Truth (%s, %i, %i) are not equivalent" \
                 % ( int(mapped_reads[0][0]), truth[0], truth[1], truth[2] )
@@ -1083,7 +1092,7 @@ if __name__ == '__main__':
 
     print "Starting test_diploid_genome()"
     test_diploid_genome()
-    sys.exit(0)
+    sys.exit(1)
 
     if True:
         print "Starting test_fivep_sequence_finding()"

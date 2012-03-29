@@ -534,6 +534,32 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     int segments_size = 1;
     *num_segments = 0;
 
+#if 0
+
+    /*
+     * check special case at end of genome
+     */
+    size_t mappings_end = data->num_mappings;
+    size_t n;
+    for( n=data->num_mappings-1; n >= 0; n-- )
+    {
+        if(     data->mappings[n].paternal > 0
+            &&  data->mappings[n].maternal > 0
+            &&  data->mappings[data->num_mappings].paternal - data->mappings[n].paternal > seq_len
+            &&  data->mappings[data->num_mappings].maternal - data->mappings[n].maternal > seq_len
+          )
+            break;
+    }
+    /* add contig up to end - seq_len */
+    struct chr_subregion_t final_segment = {
+        data->mappings[n].paternal,
+        data->mappings[n].maternal,
+        data->mappings[data->num_mappings].paternal - data->mappings[n].paternal - seq_len + 1
+    };
+    /* adjust mappings_end so we stop before this final mapping */
+    mappings_end = n;
+#endif
+
     /* Loop over the mappings */
     size_t i;
     for( i = 0; i < data->num_mappings; i++ )
@@ -609,15 +635,37 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
                         break;
                 }
 
+                /*
+                 * special case: if we've expanded to a mapping that is within seq_len bps of the
+                 * end, we should expand it to include it as well (and call it a day)
+                 *
+                 * data->mappings[data->num_mappings] is the chr lens
+                 */
+                int offset = 0;
+                if(     data->mappings[data->num_mappings].paternal - data->mappings[exp].paternal < seq_len
+                    ||  data->mappings[data->num_mappings].maternal - data->mappings[exp].maternal < seq_len
+                  )
+                {
+                    exp = data->num_mappings;
+                    /* offset length by seq_len so we don't run off the end of the genome */
+                    offset = seq_len - 1;
+                }
+
                 struct chr_subregion_t paternal_segment = {
-                    paternal_start, 0, data->mappings[exp].paternal - paternal_start
+                    paternal_start, 0, data->mappings[exp].paternal - paternal_start - offset
                 };
                 add_segment_to_segments( segments, &paternal_segment, num_segments, &segments_size );
 
                 struct chr_subregion_t maternal_segment = {
-                    0, maternal_start, data->mappings[exp].maternal - maternal_start
+                    0, maternal_start, data->mappings[exp].maternal - maternal_start - offset
                 };
                 add_segment_to_segments( segments, &maternal_segment, num_segments, &segments_size );
+
+                /*
+                 * if offset greater than 0, we expanded to the last mapping
+                 */
+                if( offset > 0 )
+                    break;
 
                 /* update i to skip the mappings included in the expansion */
                 i = exp-1; // -1 because for loop autoincrements i
@@ -682,6 +730,11 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
 
         }
     }
+
+#if 0
+    /* add final_segment to the end of the list of segments */
+    add_segment_to_segments( segments, &final_segment, num_segments, &segments_size );
+#endif
     
     /* Resize segments to exact size of structs it contains */
     *segments = realloc( *segments, sizeof( struct chr_subregion_t )*(*num_segments) );
