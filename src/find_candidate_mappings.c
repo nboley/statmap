@@ -393,6 +393,10 @@ check_read_location(
             */
             if( read_location < results->subseq_offset ) 
             {
+#if 0
+                // DEBUG
+                printf("Error at checking if read is before the start of the genome\n");
+#endif
                 return -1;
             } 
             /* we shift the location to the beginning of the sequence, 
@@ -409,6 +413,10 @@ check_read_location(
             if( read_location + r->length
                 > (long) genome->chr_lens[(result->location).chr]      )
             {
+#if 0
+                // DEBUG
+                printf("Error at checking to see if read extends past end of genome\n");
+#endif
                 return -1;
             }
 
@@ -479,6 +487,12 @@ check_read_location(
         
     } 
 
+#if 0
+    // DEBUG
+    if( read_location < 0 )
+        printf("read_location adjusted to be < 0 in check_read_location\n");
+#endif
+
     return read_location;
 }
 
@@ -523,11 +537,15 @@ build_candidate_mappings_from_diploid_mapped_location(
 {
     /*** Add paternal candidate mapping ***/
 
+#if 0
+    // DEBUG
+    printf("Adding paternal cand mapping for diploid, chr_name: %s, bp: %i\n",
+            genome->chr_names[(result->location).chr],
+            result->location.loc );
+#endif
+
     /* paternal mapping use all of the data in the mapped_location, so we can just add it
      * the same way we add the other locations */
-    // DEBUG
-    //printf("Adding paternal cm for diploid, chr_name: %s\n", genome->chr_names[(result->location).chr]);
-
     build_candidate_mappings_from_haploid_mapped_location(
             genome,
             result, results,
@@ -567,13 +585,32 @@ build_candidate_mappings_from_diploid_mapped_location(
     /* check read location from diploid lookup */
     /* check for overflow error */
     assert( (result->location).loc >= 0 );
+
+    /* make sure result->location is updatd to the corresponding maternal loc for check */
+    result->location.chr = maternal_chr_index;
+    result->location.loc = maternal_start;
     int read_location = check_read_location(
             maternal_start,
             r, genome, result, results
         );
     if( read_location < 0 ) // the read location was invalid; skip this mapped_location
+    {
+#if 0
+        // DEBUG
+        printf("Invalid read location : chr_name : %s, bp : %i\n",
+                genome->chr_names[maternal_chr_index],
+                read_location);
+#endif
         return;
+    }
     template_candidate_mapping.start_bp = read_location;
+
+#if 0
+    // DEBUG
+    printf("Adding maternal cand mapping for diploid, chr_name: %s, bp: %i\n",
+            genome->chr_names[maternal_chr_index],
+            read_location );
+#endif
 
     /* add the candidate mapping */
     add_candidate_mapping( *mappings, &template_candidate_mapping );

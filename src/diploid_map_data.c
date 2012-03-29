@@ -595,17 +595,34 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         /* if it's a contig - (x, y) */
         if( paternal_start > 0 && maternal_start > 0 )
         {
-            /* if it's too short to index, add as two separate segments */
-            if( paternal_length < seq_len && maternal_length < seq_len )
+            /* if it's too short to index, expand and add as two separate segments */
+            if( paternal_length < 0 && maternal_length < 0 )
             {
+                int exp;
+                for( exp=i+1; ; exp++ )
+                {
+                    if(     data->mappings[exp].paternal > 0
+                        &&  data->mappings[exp].maternal > 0
+                        &&  data->mappings[exp].paternal - paternal_start > 0
+                        &&  data->mappings[exp].maternal - maternal_start > 0
+                      )
+                        break;
+                }
+
                 struct chr_subregion_t paternal_segment = {
-                    paternal_start, 0, paternal_length
+                    data->mappings[i].paternal, 0,
+                    data->mappings[exp].paternal - paternal_start + 1
                 };
                 add_segment_to_segments( segments, &paternal_segment, num_segments, &segments_size );
+
                 struct chr_subregion_t maternal_segment = {
-                    0, maternal_start, maternal_length
+                    0, data->mappings[i].maternal,
+                    data->mappings[exp].maternal - maternal_start + 1
                 };
                 add_segment_to_segments( segments, &maternal_segment, num_segments, &segments_size );
+
+                /* update i to skip the mappings included in the expansion */
+                i = exp-1; // -1 because for loop autoincrements i
             }
             else
             {
@@ -658,8 +675,22 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
                 paternal_start = 0;
                 maternal_start = data->mappings[i+1].maternal - seq_len + 1;
             }
+
+            /* compute compl_len depending on if we're in a SNP or not */
+            int compl_len;
+            if(     data->mappings[i+1].paternal == 0
+                ||  data->mappings[i+1].maternal == 0 )
+            {
+                compl_len = seq_len;
+                /* if SNP, skip the next mapping - we already added it */
+                i++;
+            }
+            else
+            {
+                compl_len = seq_len - 1;
+            }
             struct chr_subregion_t compl_segment = {
-                paternal_start, maternal_start, seq_len
+                paternal_start, maternal_start, compl_len// different for SNP
             };
             add_segment_to_segments( segments, &compl_segment, num_segments, &segments_size );
 

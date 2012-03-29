@@ -132,6 +132,9 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
+    # DEBUG
+    print call
+
     print >> stdout, re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
@@ -999,15 +1002,35 @@ def map_diploid_genome( genome, output_filenames, read_len ):
     # make sure the chr and start locations are identical
     for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
 
-        locs = [ ( mapped_reads[i][2], int(mapped_reads[i][3]) ) for i in xrange(len(mapped_reads)) ]
+        locs = [ (
+                    mapped_reads[i][2],
+                    int(mapped_reads[i][3]),
+                    mapped_reads[i][9],
+                 )
+                    for i in xrange(len(mapped_reads)) ]
+
+        # mapping reads to one diploid chr should return a maximum of 2 results for each read
+        if len(mapped_reads) > 2:
+            print "Truth: ", truth
+            raise ValueError, \
+                "Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
+                % ( int(mapped_reads[0][0]), len(mapped_reads) )
 
         # we may randomly choose a read from one chr that is in fact shared on both
         # this is not an error - but we do want to make sure we got the read we wanted
         # check that at least one of the reads in the same matches Truth
         found_read = False
         for loc in locs:
+            # if chr_name and start_bp match
             if loc[0] == truth[0] and loc[1] == truth[1]: 
-                found_read = True
+                # check original sequence
+                if genome[truth[0]][truth[1]:truth[2]] == loc[2]:
+                    found_read = True
+                else:
+                    print "Error: Sequence failed to match at Genome (%s, %i) and Read (%s, %i)" \
+                            % ( truth[0], truth[1], loc[0], loc[1] )
+                    print "Genome : %s" % genome[truth[0]][truth[1]:truth[2]]
+                    print "Read   : %s" % loc[2]
 
         if found_read == False:
             print "Truth: ", truth
