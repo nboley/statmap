@@ -77,12 +77,12 @@ int main( int argc, char** argv )
             float seq_error = get_seq_error_from_mapped_read_location( mapped_rd->locations + i );
             if( chr > genome->num_chrs
                 || start < 0 || stop < 0
-                || (unsigned int) stop >= genome->chr_lens[ chr ]
+                || (unsigned int) stop > genome->chr_lens[ chr ]
                 || ( seq_error < 0.0 || seq_error > 1.0 )
                 )
             {
-                printf("\t\t%i (%i)\t%i-%i ( %i ) %f \n",
-                        chr, genome->num_chrs,
+                printf("\t%i\t\t%i (%i)\t%i-%i ( %i ) %f \n",
+                       mapped_rd->read_id, chr, genome->num_chrs,
                         start, stop, genome->chr_lens[ chr ],
                         seq_error );
                 discovered_error = true;

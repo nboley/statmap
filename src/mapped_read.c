@@ -535,12 +535,14 @@ build_mapped_read_from_paired_candidate_mappings(
 /* returns the sum of sequencing error probabilities - used for renormalization */
 static inline double
 build_mapped_read_from_unpaired_candidate_mappings( 
-    struct pseudo_locations_t* ps_locs,
+    struct genome_data* genome,
     candidate_mappings* mappings,
     /* assume this has already been initialized */
     struct mapped_read_t* mpd_rd )
 {
     double prob_sum = 0;
+
+    struct pseudo_locations_t* ps_locs = genome->index->ps_locs;
 
     /* store local read location data */
     struct mapped_read_location loc;
@@ -576,7 +578,25 @@ build_mapped_read_from_unpaired_candidate_mappings(
                         mappings->mappings + i, &loc );
                 
                 /* if this is a pseudo location, we need to make the offset correction */
-                loc.position.start_pos -= mappings->mappings[i].subseq_offset;
+                int read_location = loc.position.start_pos;
+                read_location = modify_mapped_read_location_for_index_probe_offset(  
+                    read_location,
+                    loc.chr,
+                    mappings->mappings[i].rd_strnd,
+                    mappings->mappings[i].subseq_offset,
+                    // subseq len? prbly a bug...
+                    mappings->mappings[i].rd_len - mappings->mappings[i].subseq_offset,
+                    mappings->mappings[i].rd_len,
+                    genome
+                );
+                
+                // If this location is impossible for some reason ( ie, less than 0 )
+                // then skip adding it
+                if( read_location < 0 ) {
+                    continue;
+                } else {
+                    loc.position.start_pos = read_location;
+                }
                 
                 /* if the conversion succeeded */
                 if( 1 == rv )
@@ -647,7 +667,7 @@ build_mapped_read_from_candidate_mappings(
     if( mappings->mappings[0].rd_type == SINGLE_END )
     {
         prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
-            genome->index->ps_locs, mappings, *mpd_rd );
+            genome, mappings, *mpd_rd );
     } else {
         prob_sum = build_mapped_read_from_paired_candidate_mappings( 
             genome, mappings, *mpd_rd );

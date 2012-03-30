@@ -244,7 +244,7 @@ est_error_prb( char bp, char error_score, enum bool inverse,
         IF the heuristic fails, then this will slightly round up the worst quality
         scores. 
     */
-    unsigned char quality_char = MAX(0, ((unsigned char) error_score) - QUAL_SHIFT);
+    unsigned char quality_char = MAX(QUAL_SHIFT, ((unsigned char) error_score)) - QUAL_SHIFT;
     assert( quality_char < 100 );
     
     if( inverse == false ) {

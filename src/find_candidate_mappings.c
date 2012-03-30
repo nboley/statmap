@@ -670,6 +670,26 @@ build_candidate_mappings_from_mapped_locations(
             template_candidate_mapping.rd_strnd = BKWD;
         }
 
+        /* set the chr */
+        template_candidate_mapping.chr = (result->location).chr;
+
+        /* set the location. We need to play with this a bit to account
+           for index probes that are shorter than the read. */
+        int read_location = (result->location).loc;
+        /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
+        if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
+        {
+            read_location = modify_mapped_read_location_for_index_probe_offset(
+                (result->location).loc, (result->location).chr, result->strnd, 
+                results->subseq_offset, results->subseq_len, r->length,
+                genome
+            );
+        }
+
+        /* check for overflow error */
+        
+        template_candidate_mapping.start_bp = read_location;
+        
         /* set the penalty */
         template_candidate_mapping.penalty = result->penalty;
         

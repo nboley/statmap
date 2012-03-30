@@ -14,6 +14,18 @@ struct genome_data;
 /* block size for newly allocated results memory */
 #define CAND_MAPPING_RESULTS_GROWTH_FACTOR 100
 
+int
+modify_mapped_read_location_for_index_probe_offset(  
+    int read_location,
+    const int chr,
+    const enum STRAND strnd,
+    const int subseq_offset,
+    const int subseq_len,
+    const int read_len,
+    struct genome_data* genome
+    ) ;
+
+
 /*************************************************************************
  *
  *  Candidate Mapping

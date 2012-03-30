@@ -1098,7 +1098,7 @@ main( int argc, char** argv )
     
     /* write the arguments to a file */
     FILE* arg_fp = fopen( "config.dat", "w" );
-    fwrite( &args, sizeof(struct args_t), 1, arg_fp );
+    write_config_file_to_stream( arg_fp, &args );
     fclose( arg_fp  );
     
     if( args.assay_type == CHIP_SEQ )

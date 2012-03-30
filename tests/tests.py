@@ -134,8 +134,6 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
-    # DEBUG
-    print call
 
     print >> stdout, re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -460,7 +458,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     rl = read_len
 
     # if we are testing untemplated g's, increase the number of samples so that we get some
-    # beggining overlap
+    # beginning overlap
     nsamples = 10000 if untemplated_gs_perc > 0 else 100
     
     ###### Prepare the data for the test ############################################
@@ -744,8 +742,8 @@ def test_lots_of_repeat_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i" \
-        % ( read_len, min_penalty, n_threads )
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
 
     rl = read_len
 
@@ -1115,10 +1113,10 @@ if __name__ == '__main__':
         #print "Starting test_index_probe()"
         #test_short_index_probe()
 
-    if True:
+    if False:
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
-
+    
     # We skip this test because statmap can't currently
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )

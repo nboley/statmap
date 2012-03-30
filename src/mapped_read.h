@@ -242,7 +242,7 @@ static inline float
 get_seq_error_from_mapped_read_location( 
     const struct mapped_read_location* const loc)
 { 
-    assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
+    //assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
     return ML_PRB_TYPE_to_float( loc->seq_error );
 }
 
