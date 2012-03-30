@@ -534,32 +534,6 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     int segments_size = 1;
     *num_segments = 0;
 
-#if 0
-
-    /*
-     * check special case at end of genome
-     */
-    size_t mappings_end = data->num_mappings;
-    size_t n;
-    for( n=data->num_mappings-1; n >= 0; n-- )
-    {
-        if(     data->mappings[n].paternal > 0
-            &&  data->mappings[n].maternal > 0
-            &&  data->mappings[data->num_mappings].paternal - data->mappings[n].paternal > seq_len
-            &&  data->mappings[data->num_mappings].maternal - data->mappings[n].maternal > seq_len
-          )
-            break;
-    }
-    /* add contig up to end - seq_len */
-    struct chr_subregion_t final_segment = {
-        data->mappings[n].paternal,
-        data->mappings[n].maternal,
-        data->mappings[data->num_mappings].paternal - data->mappings[n].paternal - seq_len + 1
-    };
-    /* adjust mappings_end so we stop before this final mapping */
-    mappings_end = n;
-#endif
-
     /* Loop over the mappings */
     size_t i;
     for( i = 0; i < data->num_mappings; i++ )
@@ -624,6 +598,10 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             /* if it's too short to index, expand and add as two separate segments */
             if( paternal_length <= seq_len || maternal_length <= seq_len )
             {
+                /*
+                 * expand to the next mapping that is a contig such that we have
+                 * two separate indexable sequences
+                 */
                 int exp;
                 for( exp=i+1; ; exp++ )
                 {
@@ -687,55 +665,86 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
         /* if it's a mismatch - (x, 0) or (0, y) */
         else
         {
-            /* add segment of unique sequence */
             assert( paternal_length == 0 || maternal_length == 0 );
 
-            struct chr_subregion_t segment = {
-                (paternal_start == 0 ) ? paternal_start : paternal_start - seq_len + 1,
-                (maternal_start == 0 ) ? maternal_start : maternal_start - seq_len + 1,
-                MAX( paternal_length, maternal_length ) + seq_len - 2 //?
-            };
-            add_segment_to_segments( segments, &segment, num_segments, &segments_size );
+            /* compute starts and lengths of paternal and maternal segments */
 
-            /* add segment for other chr */
             /* 
-             * look ahead to get next bp in contig - we will fill in the gap from the
+             * look ahead to get next mapping - we will fill in the gap from the
              * -seq_len offset at the end of the last contig to the start of the next
+             * if it's a SNP, +1 to cover the SNP
              */
-            if( paternal_length == 0 )
-            {
-                paternal_start = data->mappings[i+1].paternal - seq_len + 1;
-                maternal_start = 0;
-            } else {
-                paternal_start = 0;
-                maternal_start = data->mappings[i+1].maternal - seq_len + 1;
-            }
 
             /* compute compl_len depending on if we're in a SNP or not */
             int compl_len;
+            enum bool snp = false;
             if(     data->mappings[i+1].paternal == 0
                 ||  data->mappings[i+1].maternal == 0 )
             {
-                compl_len = seq_len; //?
-                /* if SNP, skip the next mapping - we already added it */
-                i++;
+                compl_len = seq_len;
+                snp = true;
+                i++; // if SNP, skip the next mapping - we're adding it in this iteration 
             }
             else
-                compl_len = seq_len - 1; //?
+                compl_len = seq_len - 1;
 
-            struct chr_subregion_t compl_segment = {
-                paternal_start, maternal_start, compl_len// different for SNP
+            /* set starts and lengths for each segment */
+            if( paternal_length == 0 )
+            {
+                paternal_start = data->mappings[i+1].paternal - seq_len + 1;
+                if( snp )
+                    paternal_start -= 1;
+                maternal_start -= seq_len;
+                paternal_length = compl_len;
+                maternal_length += seq_len - 2;
+            } else {
+                paternal_start -= seq_len;
+                maternal_start = data->mappings[i+1].maternal - seq_len + 1;
+                if( snp )
+                    maternal_start -= 1;
+                paternal_length += seq_len - 2;
+                maternal_length = compl_len;
+            }
+
+            struct chr_subregion_t paternal_mismatch = {
+                paternal_start, 0, paternal_length
             };
-            add_segment_to_segments( segments, &compl_segment, num_segments, &segments_size );
 
+            struct chr_subregion_t maternal_mismatch = {
+                0, maternal_start, maternal_length
+            };
+
+            /*
+             * special case - if we're close to the end of the genome, expand these
+             * separate segments to the end and skip any remaining mappings
+             */
+            int last_mapping = MAX(
+                paternal_mismatch.paternal_start_pos + paternal_mismatch.segment_length,
+                maternal_mismatch.maternal_start_pos + maternal_mismatch.segment_length
+            );
+            /* compare to chr_lens */
+            if( last_mapping > MIN( data->mappings[data->num_mappings].paternal,
+                                    data->mappings[data->num_mappings].maternal )
+            )
+            {
+                /* expand segments to end of genome, add, and break */
+                paternal_mismatch.segment_length = 
+                    data->mappings[data->num_mappings].paternal - paternal_mismatch.paternal_start_pos - seq_len + 1;
+                maternal_mismatch.segment_length =
+                    data->mappings[data->num_mappings].maternal - maternal_mismatch.maternal_start_pos - seq_len + 1;
+                add_segment_to_segments( segments, &paternal_mismatch, num_segments, &segments_size );
+                add_segment_to_segments( segments, &maternal_mismatch, num_segments, &segments_size );
+                break;
+            }
+
+            /*
+             * add segments for normal mismatch
+             */
+            add_segment_to_segments( segments, &paternal_mismatch, num_segments, &segments_size );
+            add_segment_to_segments( segments, &maternal_mismatch, num_segments, &segments_size );
         }
     }
 
-#if 0
-    /* add final_segment to the end of the list of segments */
-    add_segment_to_segments( segments, &final_segment, num_segments, &segments_size );
-#endif
-    
     /* Resize segments to exact size of structs it contains */
     *segments = realloc( *segments, sizeof( struct chr_subregion_t )*(*num_segments) );
     /* This should never fail because I'm always making the allocation smaller */
