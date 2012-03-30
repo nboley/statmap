@@ -36,14 +36,16 @@
 #include "wiggle.h"
 #include "trace.h"
 #include "pseudo_location.h"
+#include "diploid_map_data.h"
 
 /* Set the deafults for these two global variables */
 int num_threads = -1;
 int min_num_hq_bps = -1;
 
+// TODO: update message
 void usage()
 {
-    fprintf(stderr, "Usage: ./statmap -g genome.fa -p men_match_penalty -m max_penalty_spread \n");
+    fprintf(stderr, "Usage: ./statmap -g genome.fa.bin -p men_match_penalty -m max_penalty_spread \n");
     fprintf(stderr, "                 ( -r input.fastq | [ -1 input.pair1.fastq & -2 input.pair2.fastq ] ) \n");
     fprintf(stderr, "      (optional)  [ -o output_directory  -a assay_type -f fragment_lengths ] \n\n" );
 }
@@ -416,10 +418,11 @@ parse_arguments( int argc, char** argv )
 
     /********* CHECK REQUIRED ARGUMENTS *************************************/
     /* Ensure that the required arguments were present */
+
     if( args.genome_fname == NULL )
     {
         usage();
-        fprintf(stderr, "FATAL       :  -g ( reference_genome ) is required\n");
+        fprintf(stderr, "FATAL       :  -g ( binary genome ) is required\n");
         exit( -1 );
     }
     
@@ -507,10 +510,12 @@ parse_arguments( int argc, char** argv )
         exit( -1 );
     }
 
-    if( true ) 
-    {
-        args.genome_index_fname = calloc( sizeof(char), PATH_MAX + 6 );
-        
+    /* Check path of genome file
+     * Expand paths to absolute paths
+     * Set args.genome_index_fname based on args.genome_fname.
+     */ 
+    args.genome_index_fname = calloc( sizeof(char), PATH_MAX + 6 );
+    if( args.genome_fname != NULL ) {
         char* genome_fname = realpath( args.genome_fname, NULL );
         assert( NULL != genome_fname );
         args.genome_fname = genome_fname;
@@ -736,67 +741,57 @@ parse_arguments( int argc, char** argv )
     return args;
 }
 
+/*
+ * Loads the binary genome file
+ */
 void load_genome( struct genome_data** genome, struct args_t* args )
 {
     int rv;
-    
-    /* test to see if this is acorrectly converted binary genome file */
+
+    /* test for a correctly converted binary genome */
     FILE* genome_fp = fopen( args->genome_fname, "r" );
     if( NULL == genome_fp )
     {
         fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
         exit( 1 );
     }
-    
+
     char magic_number[9];
     rv = fread( magic_number, sizeof(char), 9, genome_fp );
     assert( rv == 9 );
-    
-    /* if there isnt a binary index, assume its fasta and build the binary index */
-    if( 0 != strncmp( magic_number, "SM_OD_GEN", 9 ) )
+    fclose( genome_fp );
+
+    if( 0 == strncmp( magic_number, "SM_OD_GEN", 9 ) )
     {
-        fseek( genome_fp, 0, SEEK_SET ); 
-        printf( "NOTICE      :  Assuming genome file is fasta - building binary genome\n" );
-        init_genome( genome );
-        add_chrs_from_fasta_file( *genome, genome_fp );
-        write_genome_to_disk( *genome, GENOME_FNAME  );
-        
-        pid_t pID = fork();
-        /* create the index, and then exit */
-        /* we do this for the separate address space */
-        if( pID == 0 )
-        {
-            index_genome( *genome, args->indexed_seq_len );
-            build_ondisk_index( (*genome)->index, GENOME_INDEX_FNAME  );
-            exit( 0 );
-        } 
-        else if ( pID < 0 )
-        {
-            perror( "FATAL       :  Failed to fork. " );
-            exit( 1 );
-        }
-        /* parent process. just wait until the index is created */
-        else {
-            int status;
-            wait( &status );
-        }
-    } else {
         /* copy the genome into the output directory */
         safe_link_into_output_directory( 
             args->genome_fname, "./", GENOME_FNAME );
+        /* copy genome index into the output directory */
         safe_link_into_output_directory( 
             args->genome_index_fname, "./", GENOME_INDEX_FNAME );
         
+        /* copy pseudo_locs into the output directory */
         char pseudo_loc_ofname[500];
         sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
         safe_link_into_output_directory( 
             pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
+
+        /* copy diploid map data into the output directory */
+        char dmap_ofname[500];
+        sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
+        safe_link_into_output_directory(
+            dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
         
         load_genome_from_disk( genome, GENOME_FNAME );
     }
-    
+    else
+    {
+        fprintf(stderr, "FATAL      :  Genome file '%s' is not in the correct format.\n", args->genome_fname);
+        exit(1);
+    }
+
     load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
-    
+
     return;
 }
 

@@ -24,6 +24,11 @@ struct index_t {
 
     /* the pseudo locations info */
     struct pseudo_locations_t* ps_locs;
+    
+    /* diploid map data */
+    int num_diploid_chrs;
+    /* array of dipoid_map_data_t */
+    struct diploid_map_data_t* map_data;
 };
 
 struct static_node;
@@ -43,15 +48,31 @@ struct genome_data {
     char** chrs;
     /* the length of the chrsomosomes in bps' */
     unsigned int* chr_lens;
+    /* the source the chromosomes */
+    enum CHR_SOURCE* chr_sources;
 
     enum bool is_mmapped;
 };
 
 void
-add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len,  struct genome_data* gen ); 
+add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, enum CHR_SOURCE chr_source, struct genome_data* gen ); 
 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
+
+int
+find_diploid_chr_index(
+    struct genome_data* genome,
+    const char* const prefix,
+    enum CHR_SOURCE source
+);
+
+char* get_chr_prefix( char* chr_name );
+
+int get_map_data_index_from_chr_index(
+    struct genome_data* genome,
+    int chr_index
+);
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
@@ -62,7 +83,7 @@ extern void
 index_genome( struct genome_data* genome, int indexed_seq_len );
 
 extern void 
-add_chrs_from_fasta_file( struct genome_data* gen, FILE* f  );
+add_chrs_from_fasta_file( struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source );
 
 void
 init_genome( struct genome_data** gen );
