@@ -39,7 +39,9 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = False
+# BUG - if CLEANUP is False, test_multi_fasta_mapping() fails because it tries to use the same
+# output directory twice
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -1090,10 +1092,6 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
-    print "Starting test_diploid_genome()"
-    test_diploid_genome()
-    sys.exit(1)
-
     if True:
         print "Starting test_fivep_sequence_finding()"
         test_fivep_sequence_finding()
@@ -1111,6 +1109,9 @@ if __name__ == '__main__':
         test_multi_fasta_mapping( )
         print "Starting test_build_index()"
         test_build_index( )
+        print "Starting test_diploid_genome()"
+        test_diploid_genome()
+
         #print "Starting test_index_probe()"
         #test_short_index_probe()
 
