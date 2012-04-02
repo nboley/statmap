@@ -644,11 +644,6 @@ index_contig(
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
-            // DEBUG
-            printf("NOTICE      :  Could not translate sequence at %i on %s\n",
-                    bp_index,
-                    genome->chr_names[loc.chr]
-                );
             continue;
         }
 
@@ -744,23 +739,12 @@ index_diploid_chrs(
             &num_segments
         );
 
-    // DEBUG
-    FILE* debug_fp = fopen("debug_sequence_segments", "w");
-
     /* loop over sequence segments */
     int i;
     for( i=0; i < num_segments; i++ )
     {
 
         int start_pos; 
-
-        // DEBUG
-        fprintf(debug_fp,
-                "Segment #%i: { %i, %i, %i }\n", i,
-                segments[i].paternal_start_pos,
-                segments[i].maternal_start_pos,
-                segments[i].segment_length
-              );
 
         /*** Set bit flags and chr_index ***/
         /* identical sequence on paternal and maternal */
@@ -807,9 +791,6 @@ index_diploid_chrs(
                 loc
             );
     }
-
-    // DEBUG
-    fclose( debug_fp );
 }
 
 void
@@ -836,7 +817,7 @@ index_haploid_chr(
 }
 
 extern void
-index_genome( struct genome_data* genome, int indexed_seq_len )
+index_genome( struct genome_data* genome )
 {
     /* initialize the constant loc elements */
     GENOME_LOC_TYPE loc;

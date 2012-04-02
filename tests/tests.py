@@ -898,11 +898,10 @@ def test_multi_fasta_mapping( ):
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-def build_diploid_genome( seq_len ):
+def build_diploid_genome( seq_len, chr_name="chr1" ):
     '''
     Generates paternal and maternal genomes with a .map file for testing diploid mapping
     '''
-    chr_name = "chr1"
     paternal_chr_name = chr_name + "_paternal"
     maternal_chr_name = chr_name + "_maternal"
 

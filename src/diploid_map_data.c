@@ -18,7 +18,7 @@ init_diploid_map_data(
 {
     /* NOTE: assumes memory was allocated in calling function */
 
-    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*3 );
+    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*2 );
     
     size_t chr_name_len = strlen(chr_name)+1;
     map_data->chr_name = malloc( chr_name_len  );

@@ -211,7 +211,7 @@ find_child_index_in_dynamic_node (
 );
 
 extern void
-index_genome( struct genome_data* genome, int indexed_seq_len );
+index_genome( struct genome_data* genome );
 
 /*
 find_child_index_in_static_node is done in add_sequence ( it's a simple hash )

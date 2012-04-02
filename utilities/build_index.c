@@ -543,8 +543,8 @@ build_diploid_map_data(
         if( is_diploid_genome( fg->filenames, fg->num_files ) )
         {
             /* parse_map_file for this diploid_map_data_t */
-            parse_diploid_file_group( fg, map_data[map_data_index], genome );
-            index_diploid_map_data( map_data[map_data_index] );
+            parse_diploid_file_group( fg, &((*map_data)[map_data_index]), genome );
+            index_diploid_map_data( &((*map_data)[map_data_index]) );
             map_data_index++; // increment # of map files processed
         }
     }
@@ -577,44 +577,28 @@ main( int argc, char** argv )
     struct genome_data* genome;
     init_genome( &genome );
 
-    /*** Load the genome ***/
+    /*** Load the genome from FASTAs ***/
     add_file_group_list_to_genome( fgl, genome );
 
     /* Initialize the genome data structure */
     init_index( &(genome->index), indexed_seq_len );
 
-    /* set num_diploid_chrs */
+    /* build diploid map data */
     genome->index->num_diploid_chrs = build_diploid_map_data(
             &(genome->index->map_data), fgl, genome
         );
-
-    // DEBUG
-    FILE* fp = fopen( "chr1_debug_dmap", "w" );
-    write_diploid_map_data_to_file(
-            genome->index->map_data,
-            genome->index->num_diploid_chrs,
-            fp
-        );
-    fclose( fp );
 
     /* free file group list */
     free_file_group_list( fgl );
 
     /* index the genome */
-    index_genome( genome, indexed_seq_len );
+    index_genome( genome );
 
     /* write the genome to file */
     write_genome_to_disk( genome, output_fname  );
     
     /* write the index to disk */
     build_ondisk_index( genome->index, index_fname  );
-
-    /* Test the code - make sure the two copies are identical
-    struct genome_data* genome_copy;
-    load_genome_from_disk( &genome_copy, "ODGenome.bin" );
-    // write the genome to file
-    write_genome_to_disk( genome_copy, "ODGenome_2.bin"  );
-    */
 
 #ifdef EXPLICITLY_FREE_INDEX
     free_genome( genome );
