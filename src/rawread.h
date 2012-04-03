@@ -149,14 +149,12 @@ rawread_db_is_empty( struct rawread_db_t* rdb );
 int
 get_next_mappable_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey );
+    struct rawread** r1, struct rawread** r2 );
 
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey );
+    struct rawread** r1, struct rawread** r2 );
 
 /**************** END Raw Read DB **********************/
 

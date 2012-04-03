@@ -42,6 +42,9 @@ struct single_map_thread_data {
     float min_match_penalty;
     float max_penalty_spread;
     int max_subseq_len;
+
+    /* Pointer to error data struct shared by all threads */
+    struct error_data_t* global_error_data;
 };
 
 

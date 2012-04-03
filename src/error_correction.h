@@ -1,21 +1,33 @@
+#include <pthread.h>
+
+#define ERROR_CORRECTION_SYNC_INTERVAL  100
+
 #define max_num_qual_scores 256
 
 struct error_data_t {
     int block_size;
 
+    /* number of reads processed */
     int num_unique_reads;
 
+    /* maximum read length processed */
     int max_read_length;
-    int* position_mismatch_cnts;
+    /* array of counters of mismatches at each index in a read */
+    double* position_mismatch_cnts;
     
-    int qual_score_cnts[max_num_qual_scores];
-    int qual_score_mismatch_cnts[max_num_qual_scores];
+    /* count quality scores */
+    double qual_score_cnts[max_num_qual_scores];
+    /* count quality scores of mismatched bps */
+    double qual_score_mismatch_cnts[max_num_qual_scores];
+
+    /* mutex used by the global error_data_t struct for thread safety */
+    pthread_mutex_t* mutex;
 };
 
 void
 init_error_data( 
     struct error_data_t** data,
-    int max_read_length
+    pthread_mutex_t* mutex
 );
 
 void 
@@ -29,6 +41,15 @@ update_error_data(
     char* error_str,
     int length
 );
+
+void
+sync_global_with_local_error_data(
+    struct error_data_t* global,
+    struct error_data_t* local
+);
+
+void
+clear_error_data( struct error_data_t* data );
 
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data );

@@ -31,8 +31,8 @@ CALL_PEAKS_PATH = '../bin/call_peaks'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_INPUT = False
-if not P_STATMAP_INPUT:
+P_STATMAP_OUTPUT = True
+if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
 else:
@@ -1090,30 +1090,30 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 if __name__ == '__main__':
+
     RUN_SLOW_TESTS = True
 
-    if True:
-        print "Starting test_fivep_sequence_finding()"
-        test_fivep_sequence_finding()
-        print "Starting test_threep_sequence_finding()"
-        test_threep_sequence_finding()
-        print "Starting test_paired_end_sequence_finding()"
-        test_paired_end_sequence_finding( )
-        print "Starting test_repeat_sequence_finding()"
-        test_repeat_sequence_finding()
-        print "Starting test_mutated_read_finding()"
-        test_mutated_read_finding()
-        print "Starting test_multithreaded_mapping()"
-        test_multithreaded_mapping( )
-        print "Starting test_multi_fasta_mapping()"
-        test_multi_fasta_mapping( )
-        print "Starting test_build_index()"
-        test_build_index( )
-        print "Starting test_diploid_genome()"
-        test_diploid_genome()
+    print "Starting test_fivep_sequence_finding()"
+    test_fivep_sequence_finding()
+    print "Starting test_threep_sequence_finding()"
+    test_threep_sequence_finding()
+    print "Starting test_paired_end_sequence_finding()"
+    test_paired_end_sequence_finding( )
+    print "Starting test_repeat_sequence_finding()"
+    test_repeat_sequence_finding()
+    print "Starting test_mutated_read_finding()"
+    test_mutated_read_finding()
+    print "Starting test_multithreaded_mapping()"
+    test_multithreaded_mapping( )
+    print "Starting test_multi_fasta_mapping()"
+    test_multi_fasta_mapping( )
+    print "Starting test_build_index()"
+    test_build_index( )
+    print "Starting test_diploid_genome()"
+    test_diploid_genome()
 
-        #print "Starting test_index_probe()"
-        #test_short_index_probe()
+    #print "Starting test_index_probe()"
+    #test_short_index_probe()
 
     if False:
         print "Starting test_untemplated_g_finding()"

@@ -405,7 +405,7 @@ write_nonmapping_reads_to_fastq(
     );
     
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2, -1 );
+        rdb, &readkey, &rd1, &rd2 );
 
     while( rd1 != NULL ) 
     {    
@@ -467,7 +467,7 @@ write_nonmapping_reads_to_fastq(
         
         /* we always get the next raw read */
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd1, &rd2 );
     }
 
     goto cleanup;
@@ -526,7 +526,7 @@ write_mapped_reads_to_sam(
     );
 
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2, -1 );
+        rdb, &readkey, &rd1, &rd2 );
 
     while( NULL != rd1 
            && NULL != mapped_rd
@@ -540,7 +540,7 @@ write_mapped_reads_to_sam(
         }
         
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd1, &rd2 );
     }
 
     while( rd1 != NULL
@@ -577,7 +577,7 @@ write_mapped_reads_to_sam(
         );
 
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd1, &rd2 );
         
         while( NULL != rd1 
                && NULL != mapped_rd
@@ -591,7 +591,7 @@ write_mapped_reads_to_sam(
             }
             
             get_next_read_from_rawread_db( 
-                rdb, &readkey, &rd1, &rd2, -1 );
+                rdb, &readkey, &rd1, &rd2 );
         }
         
     }

@@ -424,13 +424,12 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
 int 
 get_next_mappable_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey )
+    struct rawread** r1, struct rawread** r2 )
 {
     int rv = -10;
     
     rv = get_next_read_from_rawread_db( 
-        rdb, readkey, r1, r2, max_readkey );
+        rdb, readkey, r1, r2 );
     
     /* While this rawread is unmappable, continue */ 
     /* 
@@ -451,7 +450,7 @@ get_next_mappable_read_from_rawread_db(
             free_rawread( *r2 );
         
         rv = get_next_read_from_rawread_db( 
-            rdb, readkey, r1, r2, max_readkey );
+            rdb, readkey, r1, r2 );
     }
     
     return rv;
@@ -460,19 +459,10 @@ get_next_mappable_read_from_rawread_db(
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey, 
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey )
+    struct rawread** r1, struct rawread** r2 )
 {
     pthread_spin_lock( rdb->lock );
     
-    if( max_readkey >= 0
-        && rdb->readkey >= (readkey_t) max_readkey ) {
-        pthread_spin_unlock( rdb->lock );
-        *r1 = NULL;
-        *r2 = NULL;
-        return EOF;
-    }
-
     /* 
      * Store the return value - 
      * 0 indicates success, negative failure , EOF no more reads.
