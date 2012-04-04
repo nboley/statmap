@@ -739,8 +739,24 @@ index_diploid_chrs(
             &num_segments
         );
 
+
     /* loop over sequence segments */
     int i;
+
+#if 0
+    // DEBUG
+    FILE* debugfp = fopen( "debug_sequence_segments", "w" );
+    for( i=0; i < num_segments; i++ )
+    {
+        fprintf( debugfp, "Segment #%i: %i, %i, %i\n", i,
+                segments[i].paternal_start_pos,
+                segments[i].maternal_start_pos,
+                segments[i].segment_length
+            );
+    }
+    fclose(debugfp);
+#endif
+
     for( i=0; i < num_segments; i++ )
     {
 
