@@ -13,6 +13,7 @@
 #include "fragment_length.h"
 #include "mapped_read.h"
 #include "candidate_mapping.h"
+#include "find_candidate_mappings.h"
 #include "pseudo_location.h"
 
 // this is needed for the wiggle writing code
@@ -284,6 +285,53 @@ mapped_read_from_candidate_mapping_arrays(
     }
     
     return prob_sum;
+}
+
+double
+add_pseudo_loc_to_mapped_read(
+    struct genome_data* genome,
+    candidate_mapping* cm,
+    struct mapped_read_t* mpd_rd
+)
+{
+    /* store local read location data */
+    struct mapped_read_location loc;
+
+    int rv = 
+        convert_unpaired_candidate_mapping_into_mapped_read( 
+            cm, &loc );
+
+    /* if this is a pseudo location, we need to make the offset correction */
+    int read_location = loc.position.start_pos;
+    read_location = modify_mapped_read_location_for_index_probe_offset(  
+        read_location,
+        loc.chr,
+        cm->rd_strnd,
+        cm->subseq_offset,
+        // subseq len? prbly a bug...
+        cm->rd_len - cm->subseq_offset,
+        cm->rd_len,
+        genome
+    );
+
+    // If this location is impossible for some reason ( ie, less than 0 )
+    // then skip adding it
+    if( read_location < 0 ) {
+        return 0;
+    } else {
+        loc.position.start_pos = read_location;
+    }
+
+    double seq_error = 0;
+    /* if the conversion succeeded */
+    if( 1 == rv )
+    {
+        assert( loc.seq_error > 0.0 && loc.seq_error < 1.0 );
+        seq_error = get_seq_error_from_mapped_read_location( &loc );
+        add_location_to_mapped_read( mpd_rd, &loc );
+    }
+
+    return seq_error;
 }
 
 /* CMA = Candidat eMapping Array */
@@ -572,39 +620,22 @@ build_mapped_read_from_unpaired_candidate_mappings(
                 
                 (mappings->mappings)[i].chr = gen_locs[k].chr;
                 (mappings->mappings)[i].start_bp = gen_locs[k].loc;
-                
-                int rv = 
-                    convert_unpaired_candidate_mapping_into_mapped_read( 
-                        mappings->mappings + i, &loc );
-                
-                /* if this is a pseudo location, we need to make the offset correction */
-                int read_location = loc.position.start_pos;
-                read_location = modify_mapped_read_location_for_index_probe_offset(  
-                    read_location,
-                    loc.chr,
-                    mappings->mappings[i].rd_strnd,
-                    mappings->mappings[i].subseq_offset,
-                    // subseq len? prbly a bug...
-                    mappings->mappings[i].rd_len - mappings->mappings[i].subseq_offset,
-                    mappings->mappings[i].rd_len,
-                    genome
-                );
-                
-                // If this location is impossible for some reason ( ie, less than 0 )
-                // then skip adding it
-                if( read_location < 0 ) {
-                    continue;
-                } else {
-                    loc.position.start_pos = read_location;
-                }
-                
-                /* if the conversion succeeded */
-                if( 1 == rv )
+
+                prob_sum += add_pseudo_loc_to_mapped_read( genome, mappings->mappings + i, mpd_rd );
+
+                /*
+                 * if both bit flags are set on a loc in ps_locs->locs,
+                 * add a mapped read for the maternal complement
+                 */
+                if( gen_locs[k].is_paternal && gen_locs[k].is_maternal )
                 {
-                    assert( loc.seq_error > 0.0 && loc.seq_error < 1.0 );
-                    prob_sum += get_seq_error_from_mapped_read_location( &loc );
-                    add_location_to_mapped_read( mpd_rd, &loc );
+                    candidate_mapping maternal =
+                        convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                            genome, *(mappings->mappings + i)
+                        );
+                    prob_sum += add_pseudo_loc_to_mapped_read( genome, &maternal, mpd_rd );
                 }
+                
             }
         } else {
             int rv = 

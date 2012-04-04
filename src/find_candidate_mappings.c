@@ -537,15 +537,9 @@ build_candidate_mappings_from_diploid_mapped_location(
 {
     /*** Add paternal candidate mapping ***/
 
-#if 0
-    // DEBUG
-    printf("Adding paternal cand mapping for diploid, chr_name: %s, bp: %i\n",
-            genome->chr_names[(result->location).chr],
-            result->location.loc );
-#endif
-
-    /* paternal mapping use all of the data in the mapped_location, so we can just add it
-     * the same way we add the other locations */
+    /*
+     * Add the first mapping (paternal, or pseudoloc) as normal
+     */
     build_candidate_mappings_from_haploid_mapped_location(
             genome,
             result, results,
@@ -553,67 +547,20 @@ build_candidate_mappings_from_diploid_mapped_location(
             template_candidate_mapping, mappings
         );
 
-    /*** Add maternal candidate mapping ***/
-
-    /* build maternal candidate mapping */
-    /* look up maternal chr_index */
-    char* prefix = get_chr_prefix( genome->chr_names[result->location.chr] );
-    int maternal_chr_index = find_diploid_chr_index(
-            genome, prefix, MATERNAL
-        );
-    assert( maternal_chr_index >= 0 );
-    free( prefix );
-
-    /* look up associated diploid map data structure */
-    int map_data_index = get_map_data_index_from_chr_index(
-            genome, result->location.chr
-        );
-    assert( map_data_index >= 0 );
-
-    /* get maternal_start from diploid index */
-    /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
-    int maternal_start = find_diploid_locations(
-            &(genome->index->map_data[map_data_index]),
-            result->location.loc + 1
-        ) - 1;
-
-    /*** Add maternal candidate mapping ***/
-
-    /* set the chr */
-    template_candidate_mapping.chr = maternal_chr_index;
-
-    /* check read location from diploid lookup */
-    /* check for overflow error */
-    assert( (result->location).loc >= 0 );
-
-    /* make sure result->location is updatd to the corresponding maternal loc for check */
-    result->location.chr = maternal_chr_index;
-    result->location.loc = maternal_start;
-    int read_location = check_read_location(
-            maternal_start,
-            r, genome, result, results
-        );
-    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
-    {
-#if 0
-        // DEBUG
-        printf("Invalid read location : chr_name : %s, bp : %i\n",
-                genome->chr_names[maternal_chr_index],
-                read_location);
-#endif
+    /*
+     * If this read mapped to a pseudo location, we add a single candidate mapping for it now,
+     * and will expand it into two mappings (one for each chr) later, when we expand all of the
+     * pseudo locs
+     */
+    if( result->location.chr == PSEUDO_LOC_CHR_INDEX )
         return;
-    }
-    template_candidate_mapping.start_bp = read_location;
 
-#if 0
-    // DEBUG
-    printf("Adding maternal cand mapping for diploid, chr_name: %s, bp: %i\n",
-            genome->chr_names[maternal_chr_index],
-            read_location );
-#endif
+    /*** Add maternal candidate mapping ***/
 
-    /* add the candidate mapping */
-    add_candidate_mapping( *mappings, &template_candidate_mapping );
+    candidate_mapping maternal = convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+            genome, template_candidate_mapping
+        );
+    add_candidate_mapping( *mappings, &maternal );
 }
 
 
@@ -699,15 +646,7 @@ build_candidate_mappings_from_mapped_locations(
         /* build mappings depending on chr source of this mapped location */
         /* if read mapped to a location that is present on both the maternal and paternal
          * chrs, add candidate_mappings for both chrs */
-        if( result->location.is_paternal == 1 && result->location.is_maternal == 1 )
-        {
-            // DEBUG
-#if 0
-            printf("Diploid candidate mapping: %i, %i\n",
-                    result->location.chr,
-                    result->location.loc
-                );
-#endif
+        if( result->location.is_paternal && result->location.is_maternal )
 
             build_candidate_mappings_from_diploid_mapped_location(
                     genome,
@@ -715,23 +654,15 @@ build_candidate_mappings_from_mapped_locations(
                     r, 
                     template_candidate_mapping, mappings
                 );
-        }
+
         else
-        {
-#if 0
-            // DEBUG
-            printf("Haploid candidate mapping: %i, %i\n",
-                    result->location.chr,
-                    result->location.loc
-                );
-#endif
+
             build_candidate_mappings_from_haploid_mapped_location(
                     genome,
                     result, results,
                     r,
                     template_candidate_mapping, mappings
                 );
-        }
     }
     
     return;

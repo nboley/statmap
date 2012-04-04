@@ -14,6 +14,7 @@
 #include "mapped_read.h"
 #include "rawread.h"
 #include "genome.h"
+#include "diploid_map_data.h"
 
 struct mapped_read_t;
 
@@ -140,6 +141,57 @@ modify_mapped_read_location_for_index_probe_offset(
     }
     
     return read_location;
+}
+
+/* 
+ * Bastard code for diploid mapping - builds a maternal complement from a
+ * paternal candidate mapping
+ */
+/*
+ * Modifies a paternal candidate mapping to return its maternal complement
+ */
+candidate_mapping
+convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+        struct genome_data* genome,
+        candidate_mapping cm
+    )
+{
+    int paternal_chr_index = cm.chr;
+    int paternal_loc = cm.start_bp;
+
+    /* look up maternal chr_index */
+    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr_index] );
+    int maternal_chr_index = find_diploid_chr_index(
+            genome, prefix, MATERNAL
+        );
+    assert( maternal_chr_index > 0 ); // pseudo chr is not allowed
+    free( prefix );
+
+    /* look up associated diploid map data structure */
+    int map_data_index = get_map_data_index_from_chr_index(
+            genome, paternal_chr_index
+        );
+    assert( map_data_index >= 0 );
+
+    /* get maternal start pos from diploid index */
+    /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
+    int maternal_start = find_diploid_locations(
+            &(genome->index->map_data[map_data_index]),
+            paternal_loc + 1
+        ) - 1;
+
+    /*
+     * we're going to assume that if the paternal cm was valid, then these lookups
+     * are also valid
+     * TODO: is this ok? I think it is
+     */
+    assert( maternal_start >= 0 );
+
+    /* modify cm to be maternal complement of original paternal cm */
+    cm.chr = maternal_chr_index;
+    cm.start_bp = maternal_start;
+
+    return cm;
 }
 
 
