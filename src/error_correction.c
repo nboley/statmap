@@ -65,7 +65,7 @@ update_max_read_length(
 }
 
 /*
- * Merge src into dest
+ * Merge src into dest with weight on src
  */
 void
 merge_error_data_structs_with_weight(
@@ -106,6 +106,49 @@ add_error_data_structs(
     merge_error_data_structs_with_weight( dest, src, 1 );
 }
 
+/*
+ * Weighted average of error data from dest and src, stored in dest
+ */
+void average_error_data_structs(
+    struct error_data_t* dest,
+    struct error_data_t* src,
+    double weight
+)
+{
+    assert( weight >= 0 && weight <= 1 );
+
+    int i;
+    /* check max_read_length on dest and src, update dest if necessary */
+    if( dest->max_read_length < src->max_read_length )
+        update_max_read_length( dest, src->max_read_length );
+
+    /* average position_mismatch_cnts */
+    for( i = 0; i < dest->max_read_length; i++ )
+    {
+        dest->position_mismatch_cnts[ i ] =
+            dest->position_mismatch_cnts[ i ] * weight
+                +
+            src->position_mismatch_cnts[ i ] * ( 1 - weight );
+    }
+
+    /* average quality scores */
+    for( i = 0; i < max_num_qual_scores; i++ )
+    {
+        dest->qual_score_cnts[ i ] =
+            dest->qual_score_cnts[ i ] * weight
+                +
+            src->qual_score_cnts[ i ] * ( 1 - weight );
+
+        dest->qual_score_mismatch_cnts[ i ] =
+            dest->qual_score_mismatch_cnts[ i ] * weight
+                +
+            src->qual_score_mismatch_cnts[ i ] * ( 1 - weight );
+    }
+
+    /* update num_unique_reads in dest */
+    dest->num_unique_reads += src->num_unique_reads;
+}
+
 void
 sync_global_with_local_error_data(
     struct error_data_t* global,
@@ -114,17 +157,24 @@ sync_global_with_local_error_data(
 {
     assert( global->mutex != NULL );
 
+    /* threadsafe update of global error data */
     pthread_mutex_lock( global->mutex );
-    add_error_data_structs( global, local );
+
+    average_error_data_structs( global, local, ERROR_WEIGHT );
+
+    /* Write error data out to file */
+    /*
+     * Do it here so we can take advantage of the global error data's mutex
+     * to avoid contention in writing to the log file
+     */
+    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
+    fprint_error_data( error_stats_log, global );
+    fclose( error_stats_log );
+
     pthread_mutex_unlock( global->mutex );
 
     /* reset local error data */
     clear_error_data( local );
-
-#if 0
-    // DEBUG
-    fprintf_error_data( stdout, global );
-#endif
 }
 
 void
@@ -182,14 +232,14 @@ void
 fprintf_error_data( FILE* stream, struct error_data_t* data )
 {
     fprintf( stream, "Num Unique Reads:\t%i\n", data->num_unique_reads );
+    fprintf( stream, "Max Read Length:\t%i\n", data->max_read_length );
 
     fprintf( stream, "Loc Error Rates:\n" );
 
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%e\n", i+1, 
-                 ((float)data->position_mismatch_cnts[ i ])/data->num_unique_reads );
+        fprintf( stream, "%i\t%e\n", i+1, position_mismatch_cnts[ i ] );
     }
     
     fprintf( stream, "Qual Score Error Rates:\n" );

@@ -873,6 +873,8 @@ find_candidate_mappings( void* params )
             float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
             build_lookup_table_from_rawread(
                 r, 
+                // Pass global error data unless it hasn't been synchronized yet
+                ( global_error_data->num_unique_reads > 0 ) ? global_error_data : NULL,
                 lookuptable_position, 
                 inverse_lookuptable_position,
                 reverse_lookuptable_position, 
@@ -981,7 +983,7 @@ find_candidate_mappings( void* params )
          * check if we've mapped enough reads to sync local error data with
          * global error data
          */
-        if( local_error_data->num_unique_reads >= ERROR_CORRECTION_SYNC_INTERVAL )
+        if( local_error_data->num_unique_reads >= ERROR_INTERVAL )
             sync_global_with_local_error_data( global_error_data, local_error_data );
     }
 

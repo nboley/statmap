@@ -1,6 +1,8 @@
 #include <pthread.h>
 
-#define ERROR_CORRECTION_SYNC_INTERVAL  100
+#define ERROR_INTERVAL  100
+#define ERROR_WEIGHT    0.5
+#define ERROR_STATS_LOG "error_stats.log"
 
 #define max_num_qual_scores 256
 

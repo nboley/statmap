@@ -35,11 +35,14 @@ void convert_into_quality_string( float* mutation_probs, char* quality, int seq_
 /* FIXME - change the name */
 extern void determine_bp_mut_rates( float** );
 
+/* fwd declarations */
 struct rawread;
+struct error_data_t;
 
 /* populate float arrays with mutation probabilities */
 void
 build_lookup_table_from_rawread( struct rawread* rd,
+                                 struct error_data_t* error_data,
                                  float* lookuptable_position,
                                  float* inverse_lookuptable_position,
                                  float* reverse_lookuptable_position,
