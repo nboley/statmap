@@ -664,6 +664,7 @@ char* get_chr_prefix( char* chr_name )
 {
     char* first_underscore = strchr( chr_name, '_' );
     /* TODO: what's the best way to handle this? this is one of our two major assumptions */
+    assert( first_underscore != NULL );
     if( first_underscore == NULL )
     {
         fprintf( stderr, "FATAL : Diploid genome chr names must have a prefix delimited by an underscore. Found %s\n", chr_name );

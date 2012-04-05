@@ -367,6 +367,109 @@ recheck_locations(
     return;
 }
 
+static void
+add_candidate_mapping_from_haploid (
+        struct rawread*     r, 
+        mapped_location*    result,
+        mapped_locations*   results,
+        candidate_mapping   cm,
+        candidate_mappings** mappings,
+        struct genome_data* genome
+    )
+{
+    /* set the chr */
+    cm.chr = (result->location).chr;
+
+    /* set the location. */
+    /* We need to play with this a bit to account
+       for index probes that are shorter than the read. */
+    /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
+    int read_location = (result->location).loc;
+    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
+    {
+        read_location = modify_mapped_read_location_for_index_probe_offset(
+            (result->location).loc, (result->location).chr, result->strnd, 
+            results->subseq_offset, results->subseq_len, r->length,
+            genome
+        );
+    }
+    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
+        return;
+    cm.start_bp = read_location;
+
+    /* add the candidate mapping */
+    add_candidate_mapping( *mappings, &cm );
+}
+
+static void
+add_candidate_mapping_from_diploid (
+        struct rawread*     r, 
+        mapped_location*    result,
+        mapped_locations*   results,
+        candidate_mapping   cm,
+        candidate_mappings** mappings,
+        struct genome_data* genome
+    )
+{
+    /* add the paternal candidate mapping. */
+    add_candidate_mapping_from_haploid(
+        r, result, results, cm, mappings, genome
+    );
+
+    /*
+     * If this read mapped to a pseudo location, don't add another candidate mapping
+     * Expand it when we expand all of the pseudo locs, later
+     */
+    if( result->location.chr == PSEUDO_LOC_CHR_INDEX )
+        return;
+
+    /* named variables for clarity */
+    int paternal_chr_index = (result->location).chr;
+    int paternal_loc = (result->location).loc;
+
+    /* look up maternal chr_index */
+    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr_index] );
+    int maternal_chr_index = find_diploid_chr_index(
+            genome, prefix, MATERNAL
+        );
+    assert( maternal_chr_index > 0 ); // pseudo chr is not allowed
+    free( prefix );
+
+    /* look up associated diploid map data structure */
+    int map_data_index = get_map_data_index_from_chr_index(
+            genome, paternal_chr_index
+        );
+    assert( map_data_index >= 0 );
+
+    /* get maternal start pos from diploid index */
+    /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
+    int maternal_start = find_diploid_locations(
+            &(genome->index->map_data[map_data_index]),
+            paternal_loc + 1
+        ) - 1;
+    assert( maternal_start >= 0 ); // if not, this isn't true shared sequence
+
+    int read_location = (result->location).loc;
+    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
+    {
+        read_location = modify_mapped_read_location_for_index_probe_offset(
+            maternal_start, maternal_chr_index, result->strnd, 
+            results->subseq_offset, results->subseq_len, r->length,
+            genome
+        );
+    }
+    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
+        return;
+
+    /* modify cm to be maternal complement of original paternal cm */
+    cm.start_bp = read_location;
+    cm.chr = maternal_chr_index;
+
+    /* add maternal candidate mapping */
+    add_candidate_mapping( *mappings, &cm );
+}
+
+
 /* build candidate mappings from mapped locations ( 
    the data structure that index lookups return  )    */
 static inline void 
@@ -420,61 +523,20 @@ build_candidate_mappings_from_mapped_locations(
             template_candidate_mapping.rd_strnd = BKWD;
         }
 
-        /* set the chr */
-        template_candidate_mapping.chr = (result->location).chr;
-
-        /* set the location. We need to play with this a bit to account
-           for index probes that are shorter than the read. */
-        /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
-        int read_location = (result->location).loc;
-        if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
-        {
-            read_location = modify_mapped_read_location_for_index_probe_offset(
-                (result->location).loc, (result->location).chr, result->strnd, 
-                results->subseq_offset, results->subseq_len, r->length,
-                genome
-            );
-        }
-        if( read_location < 0 ) // the read location was invalid; skip this mapped_location
-            continue;
-        template_candidate_mapping.start_bp = read_location;
-        
-        /* metadata */
+        /* set metadata */
         template_candidate_mapping.penalty = result->penalty;
         template_candidate_mapping.subseq_offset = results->subseq_offset;
         template_candidate_mapping.trimmed_len = result->trim_offset;
-                
-        /* add the candidate mapping */
-        add_candidate_mapping( *mappings, &template_candidate_mapping );
 
-        /*
-         * if it's a diploid mapping, do a lookup to create the maternal complement
-         * and add an additional candidate mapping for it
-         */
+        /* Build, verify, and add candidate mappings depending on type of loc */
         if( result->location.is_paternal && result->location.is_maternal )
-        {
-            /*
-             * If this read mapped to a pseudo location, we add a single candidate mapping for it now,
-             * and will expand it into two mappings (one for each chr) later, when we expand all of the
-             * pseudo locs
-             */
-            if( result->location.chr == PSEUDO_LOC_CHR_INDEX )
-                continue;
-
-            /*** Add maternal candidate mapping ***/
-
-            /*
-             * XXX: we assume that if the original paternal loc was valid (checked in
-             * build_candidate_mappings_from_mapped_locations), then the diploid lookup
-             * also returns a valid lcoation
-             */
-
-            candidate_mapping maternal = convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
-                    genome, template_candidate_mapping
-                );
-            add_candidate_mapping( *mappings, &maternal );
-        }
-
+            add_candidate_mapping_from_diploid(
+                r, result, results, template_candidate_mapping, mappings, genome
+            );
+        else
+            add_candidate_mapping_from_haploid(
+                r, result, results, template_candidate_mapping, mappings, genome
+            );
     }
     
     return;
