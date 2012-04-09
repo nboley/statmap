@@ -723,6 +723,9 @@ index_diploid_chrs(
     int maternal_chr_index = find_diploid_chr_index(
             genome, prefix, MATERNAL
         );
+    // DEBUG
+    char debug_fname[255];
+    sprintf( debug_fname, "%s_sequence_segments", prefix );
     free( prefix );
 
     /* get corresponding diploid map data struct index */
@@ -740,13 +743,11 @@ index_diploid_chrs(
             &num_segments
         );
 
-
     /* loop over sequence segments */
     int i;
 
-#if 0
     // DEBUG
-    FILE* debugfp = fopen( "debug_sequence_segments", "w" );
+    FILE* debugfp = fopen( debug_fname, "w" );
     for( i=0; i < num_segments; i++ )
     {
         fprintf( debugfp, "Segment #%i: %i, %i, %i\n", i,
@@ -756,7 +757,6 @@ index_diploid_chrs(
             );
     }
     fclose(debugfp);
-#endif
 
     for( i=0; i < num_segments; i++ )
     {
