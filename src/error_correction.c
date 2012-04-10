@@ -50,10 +50,13 @@ update_max_read_length(
     int new_max_read_length
 )
 {
-    /* realloc memory */ data->position_mismatch_cnts = realloc(
+    /* realloc memory */
+    data->position_mismatch_cnts = realloc(
         data->position_mismatch_cnts,
         sizeof(double) * new_max_read_length
     );
+    assert( data->position_mismatch_cnts != NULL );
+
     /* initialize new positions to 0 */
     int i;
     for( i = data->max_read_length; i < new_max_read_length; i++ )
@@ -168,7 +171,7 @@ sync_global_with_local_error_data(
      * to avoid contention in writing to the log file
      */
     FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
-    fprint_error_data( error_stats_log, global );
+    fprintf_error_data( error_stats_log, global );
     fclose( error_stats_log );
 
     pthread_mutex_unlock( global->mutex );
@@ -239,7 +242,7 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%e\n", i+1, position_mismatch_cnts[ i ] );
+        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] );
     }
     
     fprintf( stream, "Qual Score Error Rates:\n" );
@@ -251,10 +254,8 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
         else
             qs_error_rate = data->qual_score_mismatch_cnts[ i ]/data->qual_score_cnts[ i ];
 
-        fprintf( stream, "%i\t%e\n", i+1, qs_error_rate );
+        fprintf( stream, "%i\t%e\n", i, qs_error_rate );
     }
-    
-    fprintf( stream, "\n" );
     
     return;
 }

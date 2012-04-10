@@ -1,6 +1,6 @@
 #include <pthread.h>
 
-#define ERROR_INTERVAL  100
+#define ERROR_INTERVAL  1000
 #define ERROR_WEIGHT    0.5
 #define ERROR_STATS_LOG "error_stats.log"
 
