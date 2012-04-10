@@ -913,9 +913,8 @@ def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1, n_mu
     initial_genome = build_random_genome( [gen_len,], [chr_name,], )
 
     # create array copies of sequence to mutate
-    # duplicate initial random genome n_dups times to simulate heavily repeated sequence
-    mutated_paternal_chr = array.array( 'c', initial_genome[chr_name]*n_dups )
-    mutated_maternal_chr = array.array( 'c', initial_genome[chr_name]*n_dups )
+    mutated_paternal_chr = array.array( 'c', initial_genome[chr_name] )
+    mutated_maternal_chr = array.array( 'c', initial_genome[chr_name] )
 
     # Mutate sequence, building map file along the way
 
@@ -968,7 +967,8 @@ def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1, n_mu
     }
 
     # write genome to multiple fasta files, with filename prefixes matching chr_names
-    output_filenames = write_genome_to_multiple_fastas( genome, "" )
+    # duplicate genome n_dups times to simulate heavily repeated sequence
+    output_filenames = write_genome_to_multiple_fastas( genome, "", n_dups )
     # write .map file
     map_fname = chr_name + "_test.map" # filename has to be chrname_x to be parsed by build_index
     with open( map_fname, "w" ) as f:
@@ -1019,7 +1019,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
         if len(mapped_reads) > 2:
             print "Truth: ", truth
             print "A read sampled from a single diploid chromosome returned more than 2 mappings."
-            print "You are probably indexing some portion of sequence more than once."
+            print "You are probably indexing some portion of the genome more than once."
             raise ValueError, \
                 "Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
                 % ( int(mapped_reads[0][0]), len(mapped_reads) )
@@ -1063,7 +1063,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
-def map_duplicated_diploid_genome( genome, output_filenames, read_len, n_dups, nreads=1000 ):
+def map_duplicated_diploid_genome( genome, output_filenames, read_len, genome_len, n_dups, nreads=1000 ):
     '''
     Given a diploid genome, randomly sample reads and map with statmap.
     Test output of SAM from basis with expectation of duplicates
@@ -1098,9 +1098,14 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len, n_dups, n
     # will be repeated n_dups times * 2, since there will be a paternal and maternal copy for
     # every sampled read
     if len(fragments)*n_dups*2 != total_num_reads:
-        raise ValueError, "Mapping returned too few reads"
+        raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
+                % ( len(fragments)*n_dups*2, total_num_reads )
 
     for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
+
+        if len(mapped_reads) != n_dups*2:
+            raise ValueError, "Mapping returned incorrect number of results (expected %i, got %i)" \
+                    % ( n_dups*2, len(mapped_reads) )
 
         locs = [ (
                     mapped_reads[i][2],
@@ -1121,10 +1126,11 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len, n_dups, n
                     found_read = True
 
             # compare mapped read back to original genome
-            if genome[loc[0]][loc[1]:loc[1]+read_len].upper() != loc[2].upper():
+            # need to mod by genome_len, since we took the original genome and duplicated it many times
+            if genome[loc[0]][loc[1]%genome_len:loc[1]%genome_len+read_len].upper() != loc[2].upper():
                 print "Truth  : ", truth
                 print "Loc    : ", loc
-                print "Genome : %s" % genome[loc[0]][loc[1]:loc[1]+read_len]
+                print "Genome : %s" % genome[loc[0]][loc[1]%genome_len:loc[1]%genome_len+read_len]
                 print "Read   : %s" % loc[2]
                 raise ValueError, \
                     "Mapped perfect read does not match sequence in reference genome."
@@ -1169,10 +1175,17 @@ def test_diploid_genome_with_multiple_chrs():
 def test_lots_of_diploid_repeat_sequence_finding():
     rls = [ 25, ]
     n_dups = 4000
+    genome_len=100
     for rl in rls:
-        genome, output_filenames = build_diploid_genome( rl, gen_len=100, n_dups=n_dups, n_mut=0 )
-        map_duplicated_diploid_genome( genome, output_filenames, rl, n_dups=n_dups, nreads=100 )
+        genome, output_filenames = build_diploid_genome( rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
+        map_duplicated_diploid_genome( genome, output_filenames, rl, genome_len=genome_len, n_dups=n_dups, nreads=100 )
         print "PASS: Highly repetitive diploid genome (pslocs integration) %i BP Test. ( Statmap appears to be mapping highly repetitive diploid genomes correctly )" % rl
+
+def test_paired_end_diploid_repeat_sequence_finding():
+    '''
+    Make sure we are integrating diploid mapping, pslocs, and paired end reads properly
+    '''
+    pass
 
 if False:
     num_repeats = 1
@@ -1200,6 +1213,11 @@ if False:
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
 
+    # DEBUG
+    print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
+    test_paired_end_diploid_repeat_sequence_finding()
+    sys.exit(1)
+
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
@@ -1224,8 +1242,10 @@ if __name__ == '__main__':
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
         test_lots_of_repeat_sequence_finding( )
-        #print "[SLOW] Start test_lots_of_diploid_repeat_sequence_finding()"
-        #test_lots_of_diploid_repeat_sequence_finding()
+        print "[SLOW] Start test_lots_of_diploid_repeat_sequence_finding()"
+        test_lots_of_diploid_repeat_sequence_finding()
+        print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
+        test_paired_end_diploid_repeat_sequence_finding()
 
     #print "Starting test_index_probe()"
     #test_short_index_probe()
