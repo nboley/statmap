@@ -1,9 +1,10 @@
 compiler = clang
-compile_options = -O3 -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
+compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
-# For debugging
+# Debugging
 # compiler = gcc
-# compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra --short-enums -D_FILE_OFFSET_BITS=64 
+# compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
+# NOTE: be careful with --short-enums
 
 # compile_options = -fast
 
@@ -77,7 +78,7 @@ mapped_location.o : mapped_location.c rawread.o mapped_location.h genome.h
 
 mapped_location.h : 
 
-mapped_read.o : mapped_read.c mapped_read.h trace.h fragment_length.h fragment_length.o iterative_mapping.h candidate_mapping.h 
+mapped_read.o : mapped_read.c mapped_read.h trace.h fragment_length.h fragment_length.o iterative_mapping.h candidate_mapping.h find_candidate_mappings.h
 	$(compiler) $(compile_options) -c mapped_read.c
 
 mapped_read.h : iterative_mapping.h trace.h

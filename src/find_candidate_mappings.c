@@ -367,253 +367,106 @@ recheck_locations(
     return;
 }
 
-/*
- * Checks the proposed read_location for result against the genome.
- * Returns -1 if this is invalid, and the valid read location otherwise
- */
-int
-check_read_location(
-    int read_location,
-    struct rawread* r,
-    struct genome_data* genome,
-    mapped_location* result,
-    mapped_locations* results
-)
-{
-    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX ) {
-        /* make sure that the read doesn't start before 0 */
-        
-        /* first deal with reads that map to the 5' genome */
-        if( result->strnd == FWD )
-        {
-            /* if the mapping location of the probe is less than
-               the length of the probe offset, then the actual 
-               read is mapping before the start of the genome, which 
-               is clearly impossible 
-            */
-            if( read_location < results->subseq_offset ) 
-            {
-#if 0
-                // DEBUG
-                printf("Error at checking if read is before the start of the genome\n");
-#endif
-                return -1;
-            } 
-            /* we shift the location to the beginning of the sequence, 
-               rather than the subseq that we looked at in the index  */
-            else {
-                read_location -= results->subseq_offset;
-            }
-            
-            /* if the end of the read extends past the end of the genome
-               then this mapping location is impossible, so ignore it    */
-            /* note that we just shifted the read start, so it's correct to
-               add the full read length without substracting off the probe 
-               offset. */
-            if( read_location + r->length
-                > (long) genome->chr_lens[(result->location).chr]      )
-            {
-#if 0
-                // DEBUG
-                printf("Error at checking to see if read extends past end of genome\n");
-#endif
-                return -1;
-            }
-
-        } else if( result->strnd == BKWD ) {
-            /*
-              This can be very confusing, so we need to draw it out:
-              
-              
-              READ - 20 basepairs
-              RRRR1RRRRRRRRRR2RRRR
-              SUBSEQ - 12 BASEPAIRS w/ 4 BP offset
-                  SSSSSSSSSSSS
-              
-              If the subsequence maps to the 3' genome, that means the reverse
-              complement maps to the 5' genome.
-              
-              GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-                   2SSSSSSSSSS1
-                   L
-              ( where L indicates the start position of the subsequence )
-              
-              So the *start* of the read in the 3' genome is at position 
-              L - 4 ( the subsequence offset ) + 16 ( the read length )
-             */
-            
-            /* this moves the read start to the beginning of the read 
-             <b>in the 3' genome</b>. */
-
-
-            /** check not going past the end of the gneome */
-            
-            /* make sure that the genome is not too short, this case should
-               be pretty rare but it is possible */
-            if( (long) genome->chr_lens[(result->location).chr]
-                < ( results->subseq_len + results->subseq_offset ) )
-            {
-                return -1;
-            }
-            
-            /* this will actually be the read end in the 5' genome,
-               so we check to make sure that it won't make the read extend
-               past the end of the genome */                
-            if( read_location > 
-                (long) genome->chr_lens[(result->location).chr]
-                    - ( results->subseq_len + results->subseq_offset )
-            ) {
-                return -1;
-            }
-            
-            read_location += ( results->subseq_len + results->subseq_offset );             
-            
-            /* now we subtract off the full read length, so that we have the 
-               read *end* in the 5' genome. Which is what our coordinates are 
-               based upon. We do it like this to prevent overflow errors. We
-               first check to make sure we have enough room to subtract, and 
-               then we do 
-            */
-            if( read_location < r->length )
-            {
-                return -1;
-            } else {
-                read_location -= r->length;
-            }
-        } else {
-            perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
-            return -1;
-        }
-        
-    } 
-
-#if 0
-    // DEBUG
-    if( read_location < 0 )
-        printf("read_location adjusted to be < 0 in check_read_location\n");
-#endif
-
-    return read_location;
-}
-
 static void
-build_candidate_mappings_from_haploid_mapped_location(
-        struct genome_data* genome,
-        mapped_location* result,
-        mapped_locations* results,
-        struct rawread* r,
-        candidate_mapping template_candidate_mapping,
-        candidate_mappings** mappings
+add_candidate_mapping_from_haploid (
+        struct rawread*     r, 
+        mapped_location*    result,
+        mapped_locations*   results,
+        candidate_mapping   cm,
+        candidate_mappings** mappings,
+        struct genome_data* genome
     )
 {
     /* set the chr */
-    template_candidate_mapping.chr = (result->location).chr;
+    cm.chr = (result->location).chr;
 
-    /* set the location. We need to play with this a bit to account
+    /* set the location. */
+    /* We need to play with this a bit to account
        for index probes that are shorter than the read. */
-    /* check for overflow error */
-    assert( (result->location).loc >= 0 );
-    int read_location = check_read_location(
-            (result->location).loc,
-            r, genome, result, results
+    /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
+    int read_location = (result->location).loc;
+    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
+    {
+        read_location = modify_mapped_read_location_for_index_probe_offset(
+            (result->location).loc, (result->location).chr, result->strnd, 
+            results->subseq_offset, results->subseq_len, r->length,
+            genome
         );
+    }
     if( read_location < 0 ) // the read location was invalid; skip this mapped_location
         return;
-    template_candidate_mapping.start_bp = read_location;
-    
+    cm.start_bp = read_location;
+
     /* add the candidate mapping */
-    add_candidate_mapping( *mappings, &template_candidate_mapping );
+    add_candidate_mapping( *mappings, &cm );
 }
 
 static void
-build_candidate_mappings_from_diploid_mapped_location(
-        struct genome_data* genome,
-        mapped_location* result,
-        mapped_locations* results,
-        struct rawread* r,
-        candidate_mapping template_candidate_mapping,
-        candidate_mappings** mappings
+add_candidate_mapping_from_diploid (
+        struct rawread*     r, 
+        mapped_location*    result,
+        mapped_locations*   results,
+        candidate_mapping   cm,
+        candidate_mappings** mappings,
+        struct genome_data* genome
     )
 {
-    /*** Add paternal candidate mapping ***/
+    /* add the paternal candidate mapping. */
+    add_candidate_mapping_from_haploid(
+        r, result, results, cm, mappings, genome
+    );
 
-#if 0
-    // DEBUG
-    printf("Adding paternal cand mapping for diploid, chr_name: %s, bp: %i\n",
-            genome->chr_names[(result->location).chr],
-            result->location.loc );
-#endif
+    /*
+     * If this read mapped to a pseudo location, don't add another candidate mapping
+     * Expand it when we expand all of the pseudo locs, later
+     */
+    if( result->location.chr == PSEUDO_LOC_CHR_INDEX )
+        return;
 
-    /* paternal mapping use all of the data in the mapped_location, so we can just add it
-     * the same way we add the other locations */
-    build_candidate_mappings_from_haploid_mapped_location(
-            genome,
-            result, results,
-            r,
-            template_candidate_mapping, mappings
-        );
+    /* named variables for clarity */
+    int paternal_chr_index = (result->location).chr;
+    int paternal_loc = (result->location).loc;
 
-    /*** Add maternal candidate mapping ***/
-
-    /* build maternal candidate mapping */
     /* look up maternal chr_index */
-    char* prefix = get_chr_prefix( genome->chr_names[result->location.chr] );
+    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr_index] );
     int maternal_chr_index = find_diploid_chr_index(
             genome, prefix, MATERNAL
         );
-    assert( maternal_chr_index >= 0 );
+    assert( maternal_chr_index > 0 ); // pseudo chr is not allowed
     free( prefix );
 
     /* look up associated diploid map data structure */
     int map_data_index = get_map_data_index_from_chr_index(
-            genome, result->location.chr
+            genome, paternal_chr_index
         );
     assert( map_data_index >= 0 );
 
-    /* get maternal_start from diploid index */
+    /* get maternal start pos from diploid index */
     /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
     int maternal_start = find_diploid_locations(
             &(genome->index->map_data[map_data_index]),
-            result->location.loc + 1
+            paternal_loc + 1
         ) - 1;
+    assert( maternal_start >= 0 ); // if not, this isn't true shared sequence
 
-    /*** Add maternal candidate mapping ***/
-
-    /* set the chr */
-    template_candidate_mapping.chr = maternal_chr_index;
-
-    /* check read location from diploid lookup */
-    /* check for overflow error */
-    assert( (result->location).loc >= 0 );
-
-    /* make sure result->location is updatd to the corresponding maternal loc for check */
-    result->location.chr = maternal_chr_index;
-    result->location.loc = maternal_start;
-    int read_location = check_read_location(
-            maternal_start,
-            r, genome, result, results
-        );
-    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
+    int read_location = (result->location).loc;
+    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
     {
-#if 0
-        // DEBUG
-        printf("Invalid read location : chr_name : %s, bp : %i\n",
-                genome->chr_names[maternal_chr_index],
-                read_location);
-#endif
-        return;
+        read_location = modify_mapped_read_location_for_index_probe_offset(
+            maternal_start, maternal_chr_index, result->strnd, 
+            results->subseq_offset, results->subseq_len, r->length,
+            genome
+        );
     }
-    template_candidate_mapping.start_bp = read_location;
+    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
+        return;
 
-#if 0
-    // DEBUG
-    printf("Adding maternal cand mapping for diploid, chr_name: %s, bp: %i\n",
-            genome->chr_names[maternal_chr_index],
-            read_location );
-#endif
+    /* modify cm to be maternal complement of original paternal cm */
+    cm.start_bp = read_location;
+    cm.chr = maternal_chr_index;
 
-    /* add the candidate mapping */
-    add_candidate_mapping( *mappings, &template_candidate_mapping );
+    /* add maternal candidate mapping */
+    add_candidate_mapping( *mappings, &cm );
 }
 
 
@@ -670,68 +523,20 @@ build_candidate_mappings_from_mapped_locations(
             template_candidate_mapping.rd_strnd = BKWD;
         }
 
-        /* set the chr */
-        template_candidate_mapping.chr = (result->location).chr;
-
-        /* set the location. We need to play with this a bit to account
-           for index probes that are shorter than the read. */
-        int read_location = (result->location).loc;
-        /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
-        if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
-        {
-            read_location = modify_mapped_read_location_for_index_probe_offset(
-                (result->location).loc, (result->location).chr, result->strnd, 
-                results->subseq_offset, results->subseq_len, r->length,
-                genome
-            );
-        }
-
-        /* check for overflow error */
-        
-        template_candidate_mapping.start_bp = read_location;
-        
-        /* set the penalty */
+        /* set metadata */
         template_candidate_mapping.penalty = result->penalty;
-        
         template_candidate_mapping.subseq_offset = results->subseq_offset;
         template_candidate_mapping.trimmed_len = result->trim_offset;
-                
-        /* build mappings depending on chr source of this mapped location */
-        /* if read mapped to a location that is present on both the maternal and paternal
-         * chrs, add candidate_mappings for both chrs */
-        if( result->location.is_paternal == 1 && result->location.is_maternal == 1 )
-        {
-            // DEBUG
-#if 0
-            printf("Diploid candidate mapping: %i, %i\n",
-                    result->location.chr,
-                    result->location.loc
-                );
-#endif
 
-            build_candidate_mappings_from_diploid_mapped_location(
-                    genome,
-                    result, results, 
-                    r, 
-                    template_candidate_mapping, mappings
-                );
-        }
+        /* Build, verify, and add candidate mappings depending on type of loc */
+        if( result->location.is_paternal && result->location.is_maternal )
+            add_candidate_mapping_from_diploid(
+                r, result, results, template_candidate_mapping, mappings, genome
+            );
         else
-        {
-#if 0
-            // DEBUG
-            printf("Haploid candidate mapping: %i, %i\n",
-                    result->location.chr,
-                    result->location.loc
-                );
-#endif
-            build_candidate_mappings_from_haploid_mapped_location(
-                    genome,
-                    result, results,
-                    r,
-                    template_candidate_mapping, mappings
-                );
-        }
+            add_candidate_mapping_from_haploid(
+                r, result, results, template_candidate_mapping, mappings, genome
+            );
     }
     
     return;

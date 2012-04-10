@@ -644,11 +644,6 @@ index_contig(
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
-            // DEBUG
-            printf("NOTICE      :  Could not translate sequence at %i on %s\n",
-                    bp_index,
-                    genome->chr_names[loc.chr]
-                );
             continue;
         }
 
@@ -669,9 +664,10 @@ char* get_chr_prefix( char* chr_name )
 {
     char* first_underscore = strchr( chr_name, '_' );
     /* TODO: what's the best way to handle this? this is one of our two major assumptions */
+    assert( first_underscore != NULL );
     if( first_underscore == NULL )
     {
-        fprintf( stderr, "FATAL : Diploid genome chr names must have a prefix delimited by an underscore.\n" );
+        fprintf( stderr, "FATAL : Diploid genome chr names must have a prefix delimited by an underscore. Found %s\n", chr_name );
         exit(1);
     }
 
@@ -727,6 +723,9 @@ index_diploid_chrs(
     int maternal_chr_index = find_diploid_chr_index(
             genome, prefix, MATERNAL
         );
+    // DEBUG
+    char debug_fname[255];
+    sprintf( debug_fname, "%s_sequence_segments", prefix );
     free( prefix );
 
     /* get corresponding diploid map data struct index */
@@ -744,23 +743,25 @@ index_diploid_chrs(
             &num_segments
         );
 
-    // DEBUG
-    FILE* debug_fp = fopen("debug_sequence_segments", "w");
-
     /* loop over sequence segments */
     int i;
+
+    // DEBUG
+    FILE* debugfp = fopen( debug_fname, "w" );
+    for( i=0; i < num_segments; i++ )
+    {
+        fprintf( debugfp, "Segment #%i: %i, %i, %i\n", i,
+                segments[i].paternal_start_pos,
+                segments[i].maternal_start_pos,
+                segments[i].segment_length
+            );
+    }
+    fclose(debugfp);
+
     for( i=0; i < num_segments; i++ )
     {
 
         int start_pos; 
-
-        // DEBUG
-        fprintf(debug_fp,
-                "Segment #%i: { %i, %i, %i }\n", i,
-                segments[i].paternal_start_pos,
-                segments[i].maternal_start_pos,
-                segments[i].segment_length
-              );
 
         /*** Set bit flags and chr_index ***/
         /* identical sequence on paternal and maternal */
@@ -807,9 +808,6 @@ index_diploid_chrs(
                 loc
             );
     }
-
-    // DEBUG
-    fclose( debug_fp );
 }
 
 void
@@ -836,7 +834,7 @@ index_haploid_chr(
 }
 
 extern void
-index_genome( struct genome_data* genome, int indexed_seq_len )
+index_genome( struct genome_data* genome )
 {
     /* initialize the constant loc elements */
     GENOME_LOC_TYPE loc;

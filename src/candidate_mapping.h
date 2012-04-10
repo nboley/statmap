@@ -25,7 +25,6 @@ modify_mapped_read_location_for_index_probe_offset(
     struct genome_data* genome
     ) ;
 
-
 /*************************************************************************
  *
  *  Candidate Mapping
@@ -255,5 +254,14 @@ join_all_candidate_mappings(
     struct mapped_reads_db* mpd_rds_db,
     struct genome_data* genome );
 
+
+// fwd declaration of diploid_map_data_t
+struct diploid_map_data_t;
+
+candidate_mapping
+convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+        struct genome_data* genome,
+        candidate_mapping cm
+    );
 
 #endif // #ifdef CANDIDATE_MAPPING

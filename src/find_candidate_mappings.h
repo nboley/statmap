@@ -63,3 +63,4 @@ find_all_candidate_mappings( struct genome_data* genome,
                              float max_seq_length
 
     );
+

@@ -80,7 +80,7 @@ find_seq_ptr( struct genome_data* genome,
               int read_len );
 
 extern void
-index_genome( struct genome_data* genome, int indexed_seq_len );
+index_genome( struct genome_data* genome );
 
 extern void 
 add_chrs_from_fasta_file( struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source );

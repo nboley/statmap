@@ -18,7 +18,7 @@ init_diploid_map_data(
 {
     /* NOTE: assumes memory was allocated in calling function */
 
-    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*3 );
+    memcpy( map_data->chr_lens, chr_lens, sizeof(unsigned int)*2 );
     
     size_t chr_name_len = strlen(chr_name)+1;
     map_data->chr_name = malloc( chr_name_len  );
@@ -336,15 +336,13 @@ find_diploid_locations( struct diploid_map_data_t* data,
     int maternal_pos = data->mappings[index].maternal + 
                        ( paternal_pos - data->mappings[index].paternal );
 
-    // DEBUG
-    //printf("paternal : %i -> maternal : %i\n", paternal_pos, maternal_pos );
-
-    // look ahead to determine the paternal length, returning -1 if in unique paternal sequence
+    // look ahead to determine the paternal length
+    // return 0 (1-indexed) if in unique paternal sequence
     if( data->mappings[index+1].maternal == 0 &&
         data->mappings[index+1].paternal != 0 &&
         paternal_pos >= data->mappings[index+1].paternal )
     {
-        return -1;
+        return 0;
     }
 
     return maternal_pos;
@@ -646,11 +644,11 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
             if( paternal_length < seq_len || maternal_length < seq_len ) // <= ?
             {
                 struct chr_subregion_t short_p = {
-                    paternal_start - seq_len + 1, 0, paternal_length
+                    paternal_start - seq_len + 1, 0, paternal_length - 1
                 };
                 add_segment_to_segments( segments, &short_p, num_segments, &segments_size );
                 struct chr_subregion_t short_m = {
-                    0, maternal_start - seq_len + 1, maternal_length
+                    0, maternal_start - seq_len + 1, maternal_length - 1
                 };
                 add_segment_to_segments( segments, &short_m, num_segments, &segments_size );
             }
