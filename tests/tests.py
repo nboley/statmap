@@ -653,8 +653,7 @@ def test_paired_end_reads( read_len ):
         shutil.rmtree(output_directory)
 
 def test_paired_end_sequence_finding( ):
-    #rls = [ 25, 75  ]
-    rls = [ 25, ]
+    rls = [ 25, 75  ]
     for rl in rls:
         test_paired_end_reads( rl ) 
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
