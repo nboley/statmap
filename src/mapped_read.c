@@ -334,6 +334,53 @@ add_pseudo_loc_to_mapped_read(
     return seq_error;
 }
 
+double
+add_paired_candidate_mappings_to_mapped_read(
+    candidate_mapping* cm1,
+    candidate_mapping* cm2,
+    struct mapped_read_t* mpd_rd
+)
+{
+    /* if the chrs mismatch, this match is impossible continue */
+    double prob_sum = 0;
+    if( cm1->chr != cm2->chr )
+        return prob_sum;
+
+    /*
+     * Determine which of the candidate mappings corresponds 
+     * with the first pair
+     * since pair is a property of the read, the original candidate
+     * mapping results still holds, even if it is a pseudo loc
+     */
+       
+    candidate_mapping* first_read = NULL;
+    candidate_mapping* second_read = NULL;
+
+    if( PAIRED_END_1 == cm1->rd_type ) {
+        first_read = cm1;
+        second_read = cm2;
+    } else {
+        assert( PAIRED_END_1 == cm2->rd_type );
+        first_read = cm2;
+        second_read = cm1;
+    }
+
+    struct mapped_read_location loc;
+    int rv = join_two_candidate_mappings( 
+            first_read, second_read, &loc );
+    loc.position.start_pos -= cm1->subseq_offset; // ?
+
+    /* if the location is valid ( non-zero probability ) */
+    if( rv == 1 )
+    {
+        add_location_to_mapped_read( mpd_rd, &loc );
+        prob_sum = get_seq_error_from_mapped_read_location( &loc );
+    }
+
+    return prob_sum;
+}
+
+
 /* CMA = Candidat eMapping Array */
 static inline double
 mapped_read_from_pseudo_CMA_and_pseudo_CMA( 
@@ -341,24 +388,26 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
     int pseudo_array_1_len,
     candidate_mapping* pseudo_array_2,
     int pseudo_array_2_len,
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     struct mapped_read_t* mpd_rd
 )
 {
-    struct mapped_read_location loc;
-    
     double prob_sum = 0;
     
     int i, j, k, l;
     /* loop through each pseudo read */
     for( i = 0; i < pseudo_array_1_len; i++ )
     {
+        int ps_loc_1_index = pseudo_array_1[i].start_bp;
+        struct pseudo_location_t* ps_loc_1 = ps_locs->locs + ps_loc_1_index;
+
         /* loop through each real read */
         for( j = 0; j < pseudo_array_2_len; j++ )
         {
-            int ps_loc_1_index = pseudo_array_1[i].start_bp;
-            struct pseudo_location_t* ps_loc_1 = ps_locs->locs + ps_loc_1_index;
-            
+            int ps_loc_2_index = pseudo_array_2[j].start_bp;
+            struct pseudo_location_t* ps_loc_2 = ps_locs->locs + ps_loc_2_index;
+
             /* loop through each location in the pseudo reads */
             for( k = 0; k < ps_loc_1->num; k++ )
             {
@@ -367,9 +416,6 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                 pseudo_array_1[i].chr = gen_locs_1[k].chr;
                 pseudo_array_1[i].start_bp = gen_locs_1[k].loc;
                 
-                int ps_loc_2_index = pseudo_array_2[j].start_bp;
-                struct pseudo_location_t* ps_loc_2 = ps_locs->locs + ps_loc_2_index;
-
                 /* loop through each location in the pseudo reads */
                 for( l = 0; l < ps_loc_2->num; l++ )
                 {
@@ -378,39 +424,28 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                     pseudo_array_2[j].chr = gen_locs_2[l].chr;
                     pseudo_array_2[j].start_bp = gen_locs_2[l].loc;
 
-                
-                    /* if the chrs mismatch, this match is impossible continue */
-                    if( pseudo_array_1[i].chr != pseudo_array_2[j].chr )
-                        continue;
-                
-                    /* Determine which of the candidate mappings corresponds 
-                       with the first pair */
-                    /* since pair is a propoerty of the read, the original candidate
-                       mapping results still holds, despite the fact that this is 
-                       a pseudo location */
-                    candidate_mapping* first_read = NULL;
-                    candidate_mapping* second_read = NULL;
-                    if( PAIRED_END_1 == pseudo_array_1[i].rd_type ) {
-                        first_read = pseudo_array_1 + i;
-                        second_read = pseudo_array_2 + j;
-                    } else {
-                        assert( PAIRED_END_1 == pseudo_array_2[j].rd_type );
-                        first_read = pseudo_array_2 + j;
-                        second_read = pseudo_array_1 + i;
-                    }
-                    
-                    int rv = join_two_candidate_mappings( 
-                        first_read, second_read, &loc );
-                    
-                    printf("Subseq Offset: %i\n", pseudo_array_1[i].subseq_offset );
-                    loc.position.start_pos -= pseudo_array_1[i].subseq_offset;
+                    /* both paternal candidate mappings */
+                    prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                        &pseudo_array_1[i], &pseudo_array_2[j], mpd_rd
+                    );
 
-
-                    /* if the location is valid ( non-zero probability ) */
-                    if( rv == 1 )
+                    /* both (complementary) maternal candidate mappings */
+                    if( gen_locs_1[k].is_paternal && gen_locs_1[k].is_maternal 
+                            &&
+                        gen_locs_2[l].is_paternal && gen_locs_2[l].is_maternal )
                     {
-                        add_location_to_mapped_read( mpd_rd, &loc );
-                        prob_sum += get_seq_error_from_mapped_read_location( &loc );
+                        candidate_mapping maternal1 = 
+                            convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                                genome, pseudo_array_1[i]
+                            );
+                        candidate_mapping maternal2 = 
+                            convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                                genome, pseudo_array_2[j]
+                            );
+
+                        prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                            &maternal1, &maternal2, mpd_rd
+                        );
                     }
                 }
             }
@@ -428,6 +463,7 @@ mapped_read_from_CMA_and_pseudo_CMA(
     int pseudo_array_len,
     candidate_mapping* r2_array,
     int r2_array_len,
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     struct mapped_read_t* mpd_rd
 )
@@ -440,12 +476,12 @@ mapped_read_from_CMA_and_pseudo_CMA(
     /* loop through each pseudo read */
     for( i = 0; i < pseudo_array_len; i++ )
     {
+        int ps_loc_index = pseudo_array[i].start_bp;
+        struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
+            
         /* loop through each real read */
         for( j = 0; j < r2_array_len; j++ )
         {
-            int ps_loc_index = pseudo_array[i].start_bp;
-            struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
-            
             /* loop through each location in the pseudo reads */
             for( k = 0; k < ps_loc->num; k++ )
             {
@@ -453,36 +489,24 @@ mapped_read_from_CMA_and_pseudo_CMA(
                 
                 pseudo_array[i].chr = gen_locs[k].chr;
                 pseudo_array[i].start_bp = gen_locs[k].loc;
-                
-                /* if the chrs mismatch, this match is impossible continue */
-                if( gen_locs[k].chr != r2_array[j].chr )
-                    continue;
-                
-                /* Determine which of the candidate mappings corresponds 
-                   with the first pair */
-                /* since pair is a propoerty of the read, the original candidate
-                   mapping results still holds, despite the fact that this is 
-                   a pseudo location */
-                candidate_mapping* first_read = NULL;
-                candidate_mapping* second_read = NULL;
-                if( PAIRED_END_1 == pseudo_array[i].rd_type ) {
-                    first_read = pseudo_array + i;
-                    second_read = r2_array + j;
-                } else {
-                    assert( PAIRED_END_1 == r2_array[j].rd_type );
-                    first_read = r2_array + j;
-                    second_read = pseudo_array + i;
-                }
 
-                int rv = join_two_candidate_mappings( first_read, second_read, &loc );
-                printf("Subseq Offset: %i\n", first_read->subseq_offset );
-                loc.position.start_pos -= first_read->subseq_offset;
-                    
-                /* if the location is valid ( non-zero probability ) */
-                if( rv == 1 )
+                /* add both mappings as they are */
+                prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                    &pseudo_array[i], &r2_array[j], mpd_rd
+                );
+
+                /* if the pseudo location is shared sequence, add paired mappings
+                 * with the maternal version of the pseudo loc */
+                if( gen_locs[k].is_paternal && gen_locs[k].is_maternal )
                 {
-                    add_location_to_mapped_read( mpd_rd, &loc );
-                    prob_sum += get_seq_error_from_mapped_read_location( &loc );
+                    candidate_mapping maternal =
+                        convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                            genome, pseudo_array[i]
+                        );
+
+                    prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                        &maternal, &r2_array[j], mpd_rd
+                    );
                 }
             }
         }
@@ -513,7 +537,7 @@ build_mapped_read_from_paired_candidate_mappings(
        2) p1_start - the start of non pseudo pairs, and the end of p1 pseudo
        3) p1_stop - the end of the first read pairs, and start of p2 pseudo
        4) p2_start - the start of pair 2, and end of pair 2 pseudo
-       5) the end of pair two is mappings->num_mappings
+       5) the end of pair two is mappings->length
     */
     int i;
     for( i=0; i < mappings->length; i++ )
@@ -537,13 +561,21 @@ build_mapped_read_from_paired_candidate_mappings(
         assert( mpd_rd->num_mappings == 0);
         return 0;
     }
-    
+
+    /* if either of these weren't set in the previous loop, there were no
+       non-pseudo reads for that set of read pairs. set start=stop to represent this. */
+    if( p1_start == -1 )
+        p1_start = p1_stop;
+    if( p2_start == -1 )
+        p2_start = mappings->length;
+
     /* join the pseudo location pairs */
     prob_sum += mapped_read_from_pseudo_CMA_and_pseudo_CMA(
         mappings->mappings,
         p1_start,
         mappings->mappings + p1_stop,
         p2_start - p1_stop,
+        genome,
         genome->index->ps_locs,
         mpd_rd
     );
@@ -554,6 +586,7 @@ build_mapped_read_from_paired_candidate_mappings(
         p1_start,
         mappings->mappings + p2_start,
         mappings->length - p2_start,
+        genome,
         genome->index->ps_locs,
         mpd_rd
     );
@@ -573,11 +606,12 @@ build_mapped_read_from_paired_candidate_mappings(
         p2_start - p1_stop,
         mappings->mappings + p1_start,
         p1_stop - p1_start,
+        genome,
         genome->index->ps_locs,
         mpd_rd
     );
     
-    return prob_sum;;
+    return prob_sum;
 }
 
 /* returns the sum of sequencing error probabilities - used for renormalization */
@@ -652,7 +686,7 @@ build_mapped_read_from_unpaired_candidate_mappings(
         }
     }
 
-    return prob_sum;;
+    return prob_sum;
 }
 
 void

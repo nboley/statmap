@@ -653,7 +653,8 @@ def test_paired_end_reads( read_len ):
         shutil.rmtree(output_directory)
 
 def test_paired_end_sequence_finding( ):
-    rls = [ 25, 75  ]
+    #rls = [ 25, 75  ]
+    rls = [ 25, ]
     for rl in rls:
         test_paired_end_reads( rl ) 
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
@@ -1181,11 +1182,55 @@ def test_lots_of_diploid_repeat_sequence_finding():
         map_duplicated_diploid_genome( genome, output_filenames, rl, genome_len=genome_len, n_dups=n_dups, nreads=100 )
         print "PASS: Highly repetitive diploid genome (pslocs integration) %i BP Test. ( Statmap appears to be mapping highly repetitive diploid genomes correctly )" % rl
 
-def test_paired_end_diploid_repeat_sequence_finding():
+def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     '''
     Make sure we are integrating diploid mapping, pslocs, and paired end reads properly
     '''
-    pass
+    output_directory = "smo_test_paired_end_diploid_repeat_sequence_finding_%i" % rl
+
+    # build diploid genome
+    genome, output_filenames = build_diploid_genome( rl, gen_len=100, n_dups=n_dups, n_mut=0 )
+
+    # build the paired end reads
+    # we want to sample whole chunks of the genome, then build_read_from_fragments will take
+    # care of simulating paired end reads
+    assert 2*rl < 50 # make sure the fragments are long enough
+    fragments = sample_uniformily_from_genome( genome, nsamples=100, frag_len=50)
+    reads = build_reads_from_fragments(
+        genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
+
+    # write the reads
+    reads_of_1 = open("tmp.1.fastq", "w")
+    reads_of_2 = open("tmp.2.fastq", "w")
+    build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
+    reads_of_1.close()
+    reads_of_2.close()
+
+    # map with statmap
+    read_fnames = [ "tmp.1.fastq", "tmp.2.fastq" ]
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=rl,
+            genome_fnames = output_filenames
+        )
+
+    # test the sam file
+    sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
+    # we divide by two since there are two lines for each paired end read
+    total_num_reads = sum( 1 for line in sam_fp )/2
+    sam_fp.seek(0)
+
+    # each paired end read should map n_dups**2*2 times
+    # when you duplicate the genome for paired end reads, number of matches grows exponentially
+    # * 2 for diploid
+    if len(fragments)*(n_dups**2)*2 != total_num_reads:
+        raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
+                % ( len(fragments)*(n_dups**2)*2, total_num_reads )
+
+    # Cleanup the created files
+    if CLEANUP:
+        for fn in (read_fnames + output_filenames):
+            os.remove(fn)
+        shutil.rmtree(output_directory)
+
 
 if False:
     num_repeats = 1
@@ -1212,11 +1257,6 @@ if False:
 
 if __name__ == '__main__':
     RUN_SLOW_TESTS = True
-
-    # DEBUG
-    print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
-    test_paired_end_diploid_repeat_sequence_finding()
-    sys.exit(1)
 
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
