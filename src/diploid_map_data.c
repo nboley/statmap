@@ -248,7 +248,7 @@ static int
 search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
 {
     int low = 0;
-    int high = len;
+    int high = len - 1;
     while (low < high) {
         int mid = low + ((high - low) / 2) ;
         //printf("%i-%i-%i\t%i\t%i\n", low, mid, high, index[mid].index, len );
@@ -263,7 +263,7 @@ search_index( struct loc_and_index_t* index, int len, SIGNED_LOC loc)
 
     /* make sure the binary search is working */
     assert( low <= high );
-    assert( low <= len );
+    assert( low < len );
     assert( low >= 0 );
     
     if( index[low].loc == loc )
