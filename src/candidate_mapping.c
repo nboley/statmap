@@ -42,7 +42,7 @@ modify_mapped_read_location_for_index_probe_offset(
     
     // If this is a pseudo chromosome, we need to do these checks later.
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        perror( "ERROR: Pseudol locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
         return -1;
     }
 

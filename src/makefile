@@ -1,9 +1,9 @@
 compiler = clang
-compile_options = -O3 -march=native -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
+compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 # Debugging
 # compiler = gcc
-# compile_options = -O0 -g -march=native -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
+# compile_options = -O0 -g -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
 # NOTE: be careful with --short-enums
 
 # compile_options = -fast

@@ -366,8 +366,7 @@ add_paired_candidate_mappings_to_mapped_read(
     }
 
     struct mapped_read_location loc;
-    int rv = join_two_candidate_mappings( 
-            first_read, second_read, &loc );
+    int rv = join_two_candidate_mappings( first_read, second_read, &loc );
     loc.position.start_pos -= cm1->subseq_offset; // ?
 
     /* if the location is valid ( non-zero probability ) */
@@ -424,29 +423,60 @@ mapped_read_from_pseudo_CMA_and_pseudo_CMA(
                     pseudo_array_2[j].chr = gen_locs_2[l].chr;
                     pseudo_array_2[j].start_bp = gen_locs_2[l].loc;
 
-                    /* both paternal candidate mappings */
+                    /* attempt to add both locs without modification */
                     prob_sum += add_paired_candidate_mappings_to_mapped_read(
                         &pseudo_array_1[i], &pseudo_array_2[j], mpd_rd
                     );
 
-                    /* both (complementary) maternal candidate mappings */
-                    if( gen_locs_1[k].is_paternal && gen_locs_1[k].is_maternal 
-                            &&
-                        gen_locs_2[l].is_paternal && gen_locs_2[l].is_maternal )
+                    /* if the first ps_loc's current loc has both bit flags set,
+                     * expand its maternal complement and attempt to add it to the mapped read
+                     * with the original second loc */
+                    if( gen_locs_1[k].is_paternal && gen_locs_1[k].is_maternal )
                     {
-                        candidate_mapping maternal1 = 
+                        candidate_mapping maternal = 
                             convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
                                 genome, pseudo_array_1[i]
                             );
-                        candidate_mapping maternal2 = 
+
+                        prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                            &maternal, &pseudo_array_2[j], mpd_rd
+                        );
+                    }
+
+                    /* if the second ps_loc's current loc has both bit flags set,
+                     * expand its maternal complement and add it to the mapped read
+                     * with the original first loc */
+                    if( gen_locs_2[l].is_paternal && gen_locs_2[l].is_maternal )
+                    {
+                        candidate_mapping maternal = 
                             convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
                                 genome, pseudo_array_2[j]
                             );
 
                         prob_sum += add_paired_candidate_mappings_to_mapped_read(
-                            &maternal1, &maternal2, mpd_rd
+                            &maternal, &pseudo_array_1[i], mpd_rd
                         );
                     }
+
+                    /* if both ps_loc's current locs have both bit flags set,
+                     * expand both of their maternal complements and add them together */
+                    if( gen_locs_1[k].is_paternal && gen_locs_1[k].is_maternal
+                            &&
+                        gen_locs_2[l].is_paternal && gen_locs_2[l].is_maternal )
+                    {
+                        candidate_mapping maternal_1 = 
+                            convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                                genome, pseudo_array_1[i]
+                            );
+                        candidate_mapping maternal_2 = 
+                            convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+                                genome, pseudo_array_2[j]
+                            );
+                        prob_sum += add_paired_candidate_mappings_to_mapped_read(
+                            &maternal_1, &maternal_2, mpd_rd
+                        );
+                    }
+
                 }
             }
         }
@@ -468,8 +498,6 @@ mapped_read_from_CMA_and_pseudo_CMA(
     struct mapped_read_t* mpd_rd
 )
 {
-    struct mapped_read_location loc;
-    
     double prob_sum = 0;
     
     int i, j, k;
@@ -496,7 +524,7 @@ mapped_read_from_CMA_and_pseudo_CMA(
                 );
 
                 /* if the pseudo location is shared sequence, add paired mappings
-                 * with the maternal version of the pseudo loc */
+                 * with the maternal complement of the pseudo loc */
                 if( gen_locs[k].is_paternal && gen_locs[k].is_maternal )
                 {
                     candidate_mapping maternal =

@@ -368,7 +368,10 @@ parse_arguments( int argc, char** argv )
             
         /* optional arguments ( that you probably want ) */
         case 'o': // output directory
-            args.output_directory = optarg;
+            // since -o might be dynamically allocated (if this argument is not set),
+            // we copy the string here so we can properly free memory when we're done
+            args.output_directory = calloc( strlen(optarg)+1, sizeof( char ) );
+            strcpy( args.output_directory, optarg );
             break;
         case 's': // whether to write sam files or not
             args.sam_output_fname = SAM_MARGINAL_OFNAME;
@@ -1126,6 +1129,7 @@ cleanup:
 
     free( args.genome_fname );
     free( args.genome_index_fname );
+    free( args.output_directory );
 
     return 0;
 }

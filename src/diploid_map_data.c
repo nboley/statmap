@@ -27,7 +27,7 @@ init_diploid_map_data(
     map_data->num_mappings = 0;
     map_data->mappings = NULL;
     map_data->index_len = 0;
-    map_data->index = 0;
+    map_data->index = NULL;
 }
 
 void
@@ -36,7 +36,7 @@ free_diploid_map_data( struct diploid_map_data_t* map_data )
     free( map_data->mappings );
     free( map_data->chr_name );
     free( map_data->index );
-    free( map_data );
+    //free( map_data );
 }
 
 void
