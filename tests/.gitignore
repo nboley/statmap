@@ -3,3 +3,6 @@ tmp*
 *.wig
 *.png
 *_sequence_segments
+*.fa
+*.fastq
+*.map
