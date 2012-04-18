@@ -1,0 +1,7 @@
+# Text editor temporary files
+*.swp
+*~
+
+# Build files
+*.o
+*.pyc
