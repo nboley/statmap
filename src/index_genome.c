@@ -1539,14 +1539,18 @@ free_ondisk_index( struct index_t* index ) {
     }
     
     if( NULL != index->ps_locs ) {
-        free( index->ps_locs->locs );
-        free( index->ps_locs );
+        free_pseudo_locations( index->ps_locs );
+        //free( index->ps_locs->locs );
+        //free( index->ps_locs );
     }
 
-    /* Free diploid map data structure, if it exists */
+    int i;
+    /* Free diploid map data structures, if they exist */
     if( index->map_data != NULL ) {
-        free_diploid_map_data( index->map_data );
+        for( i = 0; i < index->num_diploid_chrs; i++ )
+            free_diploid_map_data( &(index->map_data[i]) );
     }
+    free( index->map_data );
     
     return;
 }

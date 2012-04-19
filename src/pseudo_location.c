@@ -171,7 +171,7 @@ load_pseudo_locations_from_mmapped_data(
     struct pseudo_locations_t** ps_locs, char* data )
 {
     int num = *data;
-    /* if there are no pseudo ocations, dont even init */
+    /* if there are no pseudo locations, dont even init */
     if( num == 0 )
     {
         *ps_locs = NULL;
@@ -189,14 +189,20 @@ load_pseudo_locations_from_mmapped_data(
         
     (*ps_locs)->locs = malloc( (*ps_locs)->num*sizeof(struct pseudo_location_t) );
     
-    int i;
+    int i, j;
     for( i = 0; i < (*ps_locs)->num; i++ )
     {
         (*ps_locs)->locs[i].num = *( (int*) data );
         data += sizeof(int);
 
-        (*ps_locs)->locs[i].locs = ( GENOME_LOC_TYPE* ) data;
-        data += (*ps_locs)->locs[i].num*sizeof(GENOME_LOC_TYPE);
+        // allocate memory for GENOME_LOC_TYPEs
+        (*ps_locs)->locs[i].locs = malloc( (*ps_locs)->locs[i].num * sizeof( GENOME_LOC_TYPE ) );
+        // copy GENOME_LOC_TYPEs
+        for( j = 0; j < (*ps_locs)->locs[i].num; j++ )
+        {
+            memcpy( &((*ps_locs)->locs[i].locs[j]), data, sizeof( GENOME_LOC_TYPE ) );
+            data += sizeof( GENOME_LOC_TYPE );
+        }
     }
 
     return;
@@ -218,7 +224,9 @@ load_pseudo_locations(
     assert( rv == size );
     
     load_pseudo_locations_from_mmapped_data( ps_locs, data );
-    
+
+    free( data );
+
     return;
 }
 
@@ -309,12 +317,14 @@ init_pseudo_locations(
 void
 free_pseudo_locations( struct pseudo_locations_t* locs )
 {
-    int i;
-    for( i = 0; i < locs->num; i++ )
-        free_pseudo_location( locs->locs + i );
-
     if( NULL != locs->locs )
+    {
+        int i;
+        for( i = 0; i < locs->num; i++ )
+            free_pseudo_location( locs->locs + i );
+
         free( locs->locs );
+    }
     
     free( locs );
 }

@@ -42,7 +42,7 @@ modify_mapped_read_location_for_index_probe_offset(
     
     // If this is a pseudo chromosome, we need to do these checks later.
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        perror( "ERROR: Pseudol locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
         return -1;
     }
 
@@ -149,6 +149,7 @@ modify_mapped_read_location_for_index_probe_offset(
  */
 /*
  * Modifies a paternal candidate mapping to return its maternal complement
+ * Don't need to check the offset - that happens in add_pseudo_loc_to_mapped_read
  */
 candidate_mapping
 convert_paternal_candidate_mapping_to_maternal_candidate_mapping(

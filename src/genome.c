@@ -687,7 +687,7 @@ int get_map_data_index_from_chr_index(
     int chr_index
 )
 {
-    /* Get the prefix (i.e. chr1 from chr1_paternal) */
+    /* Get the prefix (e.g. chr1 from chr1_paternal) */
     char* prefix = get_chr_prefix( genome->chr_names[chr_index] );
 
     /* loop over the array of diploid_map_data_t, comparing prefixes */
@@ -699,14 +699,13 @@ int get_map_data_index_from_chr_index(
                          genome->index->map_data[map_data_index].chr_name,
                          strlen(prefix)
                        ) )
-            return map_data_index;
+            break;
     }
-
     free( prefix );
 
     /* This should never happen - an error would have been raised while building the genome */
     assert( map_data_index < genome->index->num_diploid_chrs );
-    return -1;
+    return map_data_index;
 }
 
 void
