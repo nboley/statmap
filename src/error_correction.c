@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <math.h>
 
+#include "config.h"
 #include "error_correction.h"
 
 void
@@ -20,7 +22,6 @@ init_error_data(
     int j;
     for( j = 0; j < max_num_qual_scores; j++ )
     {
-        /* add a little bias to the scores */
         (*data)->qual_score_cnts[j] = 0;
         (*data)->qual_score_mismatch_cnts[j] = 0;
     }
@@ -238,11 +239,13 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     fprintf( stream, "Max Read Length:\t%i\n", data->max_read_length );
 
     fprintf( stream, "Loc Error Rates:\n" );
-
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] );
+        // XXX - since position_mismatch_cnts is getting averaged every sync, it is not correct
+        // to average with reads->num_unique_reads here.
+        // XXX - what if # unique reads is not a multiple of ERROR_INTERVAL ?
+        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ]/ERROR_INTERVAL );
     }
     
     fprintf( stream, "Qual Score Error Rates:\n" );
@@ -259,3 +262,4 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     
     return;
 }
+

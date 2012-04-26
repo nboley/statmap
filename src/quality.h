@@ -94,5 +94,14 @@ penalty_func( LETTER_TYPE reference,
               const float* lookuptable_bp 
 );
 
+float
+compute_error_prb(
+        char bp,
+        char quality_char,
+        enum bool inverse,
+        int pos,
+        float seq_error,
+        struct error_data_t* error_data
+    );
 
 #endif /* #define QUALITY */

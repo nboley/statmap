@@ -228,6 +228,41 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
     return;
 }
 
+/*
+   compute probability that the given base was incorrectly called,
+   given our error model.
+ */
+float
+compute_error_prb(
+        char bp,
+        char quality_char,
+        enum bool inverse,
+        int pos,
+        float seq_error,
+        struct error_data_t* error_data
+    )
+{
+    /*
+       base obs_error_rate on the number of observed mismatches
+       on the quality score of the current bp
+     */
+
+    double obs_error_rate;
+
+    // avoid divide-by-0
+    if( 0 == error_data->qual_score_cnts[ (unsigned char) quality_char ] )
+        obs_error_rate = 0;
+    else
+        obs_error_rate =
+            error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
+            error_data->qual_score_cnts         [ (unsigned char) quality_char ];
+
+    double scale_factor = sqrt( error_data->num_unique_reads ) / ERROR_INTERVAL;
+    float rv = (1 - scale_factor) * seq_error + scale_factor * obs_error_rate;
+
+    return rv;
+}
+
 static inline float
 est_error_prb( char bp, char error_score, enum bool inverse, 
                int pos, struct error_data_t* error_data )
@@ -287,23 +322,9 @@ est_error_prb( char bp, char error_score, enum bool inverse,
     }
 
     /*
-     * compute error score from sequencer estimates and observed error data
-     * currently obs_error_rate is based solely on the number of observed mismatches
-     * on the quality score of the current bp
+       compute error score from sequencer estimates and observed error data
      */
-    double obs_error_rate;
-    // avoid divide by 0
-    if( 0 == error_data->qual_score_cnts[ (unsigned char) quality_char ] ) {
-        obs_error_rate = 0;
-    } else {
-        obs_error_rate =
-            error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
-            error_data->qual_score_cnts[ (unsigned char) quality_char ];
-    }
-    double scale_factor = sqrt( error_data->num_unique_reads ) / ERROR_INTERVAL;
-    float rv = ( 1 - scale_factor ) * seq_error + scale_factor * obs_error_rate;
-
-    return rv;
+    return compute_error_prb( bp, quality_char, inverse, pos, seq_error, error_data );
 }
 
 

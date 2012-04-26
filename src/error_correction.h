@@ -1,6 +1,8 @@
 #include <pthread.h>
 
+// Number of uniquely mapping reads to synchronize at a time
 #define ERROR_INTERVAL  1000
+
 #define ERROR_WEIGHT    0.5
 #define ERROR_STATS_LOG "error_stats.log"
 
@@ -55,3 +57,4 @@ clear_error_data( struct error_data_t* data );
 
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data );
+

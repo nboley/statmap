@@ -1411,8 +1411,8 @@ if __name__ == '__main__':
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
-    print "Start test_error_correction()"
-    test_error_correction()
+    #print "Start test_error_correction()"
+    #test_error_correction()
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
