@@ -5,6 +5,7 @@ Plot error data from FASTQ reads
 '''
 
 import sys
+import os
 
 import matplotlib as mpl
 #mpl.use('Agg') # use if X is not installed/for headless plot generation
@@ -77,46 +78,10 @@ def determine_read_file_type_from_error_scores(error_scores):
     print "Automatically determined filetype: {}".format( filetype )
     return filetype
 
-def load_error_scores_from_file( read_fname ) :
-    '''
-    Given a fastq filename, return a list of the quality score strings for
-    each read
-    '''
-    error_scores = []
-    with open(read_fname) as fp:
-        for i, line in enumerate(fp):
-            if i%4 == 3:
-                # be sure to remove newlines
-                error_scores.append(line.strip())
-
-    return error_scores
-
-def process_error_scores( error_scores ):
-    '''
-    Loops through error_scores, computing file type, location error probs, and qual score error probs
-    '''
-    min_qual, max_qual = 255, 0
-
-    # iterate over quality scores
-    for es in error_scores:
-        for c in es:
-            max_qual = max( max_qual, ord(c) )
-            min_qual = min( min_qual, ord(c) )
-
-def categorize_files(args):
-    files = { "sam": [], "fasta": [] }
-    # Associate by filename extension (not perfect)
-    for arg in args:
-        if arg.endswith( ".sam" ):
-            files["sam"].append(arg)
-        elif arg.endswith( (".fa", ".fasta") ):
-            files["fasta"].append(arg)
-        else:
-            print "Unrecognized file type: %s" % arg
-
-    return files
-
 def build_genome_from_fastas( fastas ):
+    '''
+    Given a list of fasta files, build a dictionary of chr: sequence
+    '''
     # genome is a dictionary of chr_name : sequence
     genome = {}
     chrid = None
@@ -139,46 +104,10 @@ def build_genome_from_fastas( fastas ):
 
     return genome
 
-def build_stats_from_sam_and_genome( sam, genome ):
-    # set up data structures
-    qual_score_cnts = [0]*255
-    qual_score_mismatch_cnts = [0]*255
-    # update length dynamically - should match the length of the longest read
-    position_mismatch_cnts = []
-    num_reads = 0
-
-    sam_fp = open( sam )
-    for line in sam_fp:
-        fields = line.split()
-        chr_name, start_bp, read, quality = (
-            fields[2], int(fields[3]), fields[9], fields[10] )
-
-        # if necessary, resize position_mismatch_cnts
-        if len(read) > len(position_mismatch_cnts):
-            for index in range( len(read) - len(position_mismatch_cnts) ):
-                position_mismatch_cnts.append(0)
-
-        for i, bp in enumerate(read):
-
-            print "READ:   %s" % read
-            print "GENOME: %s" % genome[chr_name][start_bp:start_bp+len(read)]
-            # if bp in the read does not match sequence in the genome
-            if( bp.upper() != genome[chr_name][i].upper() ):
-                print "MISMATCH: %s, %s" % ( bp.upper(), genome[chr_name][i].upper() )
-                qual_score_mismatch_cnts[ ord(bp) ] += 1
-                position_mismatch_cnts[ i ] += 1
-
-            qual_score_cnts[ ord(bp) ] += 1
-
-        num_reads += 1
-
-    print num_reads # may not be accurate for diploid - should do what iter_sam does in tests.py
-    print qual_score_cnts
-    print qual_score_mismatch_cnts
-    print position_mismatch_cnts
-
-
 class ErrorDataStruct():
+    '''
+    Stores error information from a single error_data struct
+    '''
 
     def __init__(self):
         self.num_unique_reads       = 0
@@ -201,13 +130,19 @@ class ErrorDataStruct():
         
 
 class ErrorStatsLog():
+    '''
+    A list of ErrorDataStructs parsed from error_stats.log
+    '''
     
-    def __init__(self, filename):
-        # init list of ErrorDataStruct
+    def __init__(self, fp):
         self.data = []
-        # open filename and load a list of ErrorDataStruct
-        with open(filename) as fp:
-            self._load_from_file( fp )
+        self.error_interval = 0
+
+        # parse a list of ErrorDataStruct from error_stats.log
+        self._load_from_file( fp )
+        # set error_interval
+        self.error_interval = self.data[0].num_unique_reads
+        # remove unused error_stats
 
     def _load_from_file( self, fp ):
         '''
@@ -239,35 +174,103 @@ class ErrorStatsLog():
     def __str__(self):
         return '\n'.join( map(str, self.data) ) 
 
-    def plot(self):
-        '''
-        Plot two subplots for each ErrorDataStruct: one for
-        loc_error_rates and one for qual_score_error_rates
-        '''
-        for i, eds in enumerate(self.data):
-            # subplot indices are 1-based
+class MappedReads:
+    '''
+    Store relevant information about mapped reads so we can compare read
+    quality scores with our error model
+    '''
 
-            # loc_error_rates
-            plt.subplot(len(self.data), 2, (i+1)*2-1)
-            # plot style options: http://matplotlib.sourceforge.net/api/pyplot_api.html#matplotlib.pyplot.plot
-            plt.plot( eds.loc_error_rates )
-            plt.grid(True)
-            plt.xlabel("Loc in read")
-            plt.title("# Reads: %i" % eds.num_unique_reads)
+    def __init__(self, fp):
+        self.reads = []
+        # Load mapped reads from SAM
+        for line in fp:
+            # store chr, start_bp, read, quality score
+            fields = line.split()
+            self.reads.append(
+                (
+                    fields[2], fields[3],   # chr, start_bp
+                    fields[9], fields[10]   # read, quality score
+                )
+            )
 
-            # qual_score_error_rates
-            plt.subplot(len(self.data), 2, (i+1)*2)
-            plt.plot( eds.qual_score_error_rates )
-            plt.grid(True)
-            plt.xlabel("Quality score value")
+class ErrorPlot:
 
-        plt.show()
+    def __init__(self, esl, mpdrds):
+        self.current = 0
+        self.esl = esl
+        self.mpdrds = mpdrds
 
+        # set up GUI callbacks
+        fig = plt.figure()
+        self.key_cid = fig.canvas.mpl_connect('key_press_event', self.on_key)
+        self.scroll_cid = fig.canvas.mpl_connect('scroll_event', self.on_scroll)
+        self.redraw()
+
+    def redraw(self):
+        # NOTE: matplotlib subplot indices are 1-based
+        # NOTE: plot style options: http://matplotlib.sourceforge.net/api/pyplot_api.html#matplotlib.pyplot.plot
+        edstruct = self.esl.data[self.current]
+
+        plt.clf()
+        #plt.title("# Reads: %i" % edstruct.num_unique_reads)
+        print "# Reads: %i" % edstruct.num_unique_reads
+
+        # Plot loc_error_rates
+        plt.subplot(211)
+        plt.plot( edstruct.loc_error_rates ) # hold=False
+        plt.xlabel("Loc in read")
+        plt.ylabel("P(mismatch)")
+        plt.ylim([0,1.0])
+
+        # Plot qual_score_error_rates
+        plt.subplot(212)
+        plt.plot( edstruct.qual_score_error_rates )
+        plt.xlabel("Quality Score")
+        plt.ylabel("P(mismatch)")
+        plt.ylim([0,1.0])
+
+    def on_key(self, event):
+        #print 'you pressed', event.key
+        if event.key == 'right' or event.key == 'up':
+            self.current = min( self.current + 1, len(self.esl.data) - 1 )
+        elif event.key == 'left' or event.key == 'down':
+            self.current = max( self.current - 1, 0 )
+        elif event.key == 'c':
+            plt.clf()
+        self.redraw()
+    
+    def on_scroll(self, event):
+        #print 'you scrolled', event.button, event.step
+        if event.button == 'left':
+            self.current = min( self.current + 1, len(self.esl.data) - 1 )
+        elif event.button == 'down':
+            self.current = max( self.current - 1, 0 )
+        self.redraw()
+
+
+def usage():
+    print "USAGE: ./plot_error_data.py statmap_output_directory/"
+    sys.exit(1)
 
 def main():
-    # load error_stats.log
-    assert len(sys.argv) == 2
-    esl = ErrorStatsLog( sys.argv[1] )
-    esl.plot()
+
+    if len(sys.argv) != 2: usage()
+
+    # change into statmap output directory
+    try:
+        os.chdir(os.path.abspath(sys.argv[1]))
+    except:
+        print "Could not chdir to statmap_output_directory"
+        usage()
+
+    # load error stats and mapped reads
+    with open("error_stats.log") as error_stats_fp:
+        esl = ErrorStatsLog( error_stats_fp )
+    with open("mapped_reads.sam") as mapped_reads_fp:
+        mpdrds = MappedReads( mapped_reads_fp )
+
+    # plot data interactively
+    ep = ErrorPlot( esl, mpdrds )
+    plt.show()
 
 if __name__ == "__main__": main()
