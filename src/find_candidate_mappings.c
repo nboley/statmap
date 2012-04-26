@@ -639,11 +639,27 @@ find_candidate_mappings( void* params )
 
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
-    
-    /* Initialize local error_data_t */
-    struct error_data_t* local_error_data;
-    init_error_data( &local_error_data, NULL );
 
+    /******** cache the candidate mapping results ********/
+    /* cache the candidate mappings so that we can add them ( or not ) together at the
+       end of this mapping */
+    /* We do this so that we can update the error estimates */
+    int curr_read_index = 0;
+    /* we need 2* the step size to account for paired end reads */
+    candidate_mappings* candidate_mappings_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( candidate_mappings_cache, 0,
+            sizeof( candidate_mappings* )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    struct rawread* rawreads_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( rawreads_cache, 0,
+            sizeof( struct rawreads_cache* )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    readkey_t readkeys[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( readkeys, 0,
+            sizeof( readkey_t )*2*READS_STAT_UPDATE_STEP_SIZE );
+
+    int max_read_length = 0;
+    
     /* The current read of interest */
     readkey_t readkey;
     struct rawread *r1, *r2;
@@ -652,7 +668,7 @@ find_candidate_mappings( void* params )
      * in the get next read functions. 
      */
     while( EOF != get_next_mappable_read_from_rawread_db( 
-               rdb, &readkey, &r1, &r2 )  
+               rdb, &readkey, &r1, &r2, td->max_readkey )  
          ) 
     {                
         /* We dont memory lock mapped_cnt because it's read only and we dont 
@@ -713,6 +729,11 @@ find_candidate_mappings( void* params )
             /* make a reference to the current set of mappings. This should be
                optimized out by the compiler */
             candidate_mappings* mappings;
+
+            /* cache current readkey and reads */
+            readkeys[2*curr_read_index + j] = readkey;
+            rawreads_cache[ 2*curr_read_index + j ] = r;
+
             build_candidate_mappings_from_mapped_locations(
                 genome, r, results, 
                 &mappings,
@@ -738,45 +759,14 @@ find_candidate_mappings( void* params )
                 bp_mut_rates 
             );
 
-            /* update the local error estimates */
-            update_error_data_from_candidate_mappings(
-                genome,
-                local_error_data,
-                mappings,
-                r
-            );
+            /* cache candidate mappings */
+            assert( 2*curr_read_index + j < 2*READS_STAT_UPDATE_STEP_SIZE );
+            candidate_mappings_cache[ 2*curr_read_index + j ] = mappings;
 
-            /* add the results to the database */
+            /* update the maximum read length */
+            max_read_length = MAX( max_read_length, r->length );
 
-            /* skip empty mappings */
-            if( NULL == mappings )
-                continue;
-
-            /* increment the number of reads that mapped, if any passed the recheck */
-            int k;
-            for( k = 0; k < mappings->length; k++ )
-            {
-                if( (mappings->mappings + k)->recheck == VALID )
-                {
-                    pthread_mutex_lock( mapped_cnt_mutex );
-                    *mapped_cnt += 1;
-                    pthread_mutex_unlock( mapped_cnt_mutex );
-                    break;
-                }
-            }
-
-            pthread_mutex_lock( mappings_db_mutex );
-            assert( thread_id < num_threads );
-            /* note that we add to the DB even if there are 0 that map,
-               we do this so that we can join with the rawreads easier */
-            add_candidate_mappings_to_db( 
-                mappings_db, mappings, readkey, thread_id );
-            pthread_mutex_unlock( mappings_db_mutex );
-
-            /* free the candidate mappings */
-            free_candidate_mappings( mappings );
-            
-            /* free the mutation lookup tables */
+            /* free the quality score lookup tables */
             free( lookuptable_position );
             free( inverse_lookuptable_position );
             free( reverse_lookuptable_position );
@@ -784,22 +774,61 @@ find_candidate_mappings( void* params )
 
         }
 
-        /*
-         * check if we've mapped enough reads to sync local error data with
-         * global error data
-         */
-        if( local_error_data->num_unique_reads >= ERROR_INTERVAL )
-            sync_global_with_local_error_data( global_error_data, local_error_data );
+        curr_read_index += 1;
     }
 
-    /* synchronize any remaining error data */
-    if( local_error_data->num_unique_reads > 0 )
-        sync_global_with_local_error_data( global_error_data, local_error_data );
+    /******* update the error estimates *******/
+    struct error_data_t* error_data;
+    init_error_data( &error_data, max_read_length );
+    int i;
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
+        update_error_data_from_candidate_mappings(
+            genome,
+            error_data,
+            candidate_mappings_cache[ i ],
+            rawreads_cache[ i ]
+        );
+    }
+    // fprintf_error_data( error_data );
+    free_error_data( error_data );
+
+    /******* add the results to the database *******/
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        /* skip empty mapping lists */
+        if( NULL == candidate_mappings_cache[i] )
+            continue;
+
+        candidate_mappings* mappings = candidate_mappings_cache[i];
+
+        /* increment the number of reads that mapped, if any pass the rechecks */
+        int k;
+        for( k = 0; k < mappings->length; k++ ) {
+            if( (mappings->mappings + k)->recheck == VALID )
+            {
+                pthread_mutex_lock( mapped_cnt_mutex );
+                *mapped_cnt += 1;
+                pthread_mutex_unlock( mapped_cnt_mutex );
+                break;
+            }
+        }
+
+        /* add cms to the db */
+        pthread_mutex_lock( mappings_db_mutex );
+        assert( thread_id < num_threads );
+        /* note that we add to the DB even if there are 0 that map,
+           we do this so it is easier to join with the rawreads later */
+        add_candidate_mappings_to_db(
+            mappings_db, mappings, readkeys[i], thread_id );
+        pthread_mutex_unlock( mappings_db_mutex );
+
+        /* free the cached reads and mappings */
+        free_rawread( rawreads_cache[i] );
+        free_candidate_mappings( mappings );
+    }
     
     /* cleanup the bp mutation rates */
     free( bp_mut_rates );
-    /* free local error data */
-    free_error_data( local_error_data );
     
     return NULL;
 }
@@ -918,7 +947,11 @@ find_all_candidate_mappings( struct genome_data* genome,
     // free_error_data( global_error_data ); // after we're done using it!
 
     /* initialize the threads */
-    spawn_threads( &td_template );
+    while( false == rawread_db_is_empty( rdb ) )
+    {
+        td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
+        spawn_threads( &td_template );
+    }
     
     /* Find all of the candidate mappings */    
     clock_t stop = clock();
