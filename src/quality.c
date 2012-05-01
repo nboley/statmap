@@ -231,7 +231,7 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
 /*
    compute probability that the given base was incorrectly called,
    given our error model.
- */
+*/
 float
 compute_error_prb(
         char bp,
@@ -257,7 +257,7 @@ compute_error_prb(
             error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
             error_data->qual_score_cnts         [ (unsigned char) quality_char ];
 
-    double scale_factor = sqrt( error_data->num_unique_reads ) / ERROR_INTERVAL;
+    double scale_factor = sqrt( error_data->num_unique_reads ) / READS_STAT_UPDATE_STEP_SIZE;
     float rv = (1 - scale_factor) * seq_error + scale_factor * obs_error_rate;
 
     return rv;
@@ -317,9 +317,8 @@ est_error_prb( char bp, char error_score, enum bool inverse,
 
     /* if we don't have any error correction data, 
        then take the estimates as provided by the machines */
-    if( NULL == error_data ) {
+    if( NULL == error_data )
         return seq_error;
-    }
 
     /*
        compute error score from sequencer estimates and observed error data
@@ -339,10 +338,6 @@ build_lookup_table_from_rawread ( struct rawread* rd,
 {
     int i;
 
-    /*
-     * If we've synchronized any reads to the global error data, use this error
-     * to compute the lookup tables
-     */
     for( i = 0; i < rd->length; i++ )
     {
         /* set the log prb of error */
@@ -357,16 +352,9 @@ build_lookup_table_from_rawread ( struct rawread* rd,
         /* and the reverse position */
         reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
-        if( !(isfinite(inverse_lookuptable_position[i])) ) {
-            printf("i : %i\n", i);
-            printf("rd->length-1-i : %i\n", rd->length-1-i);
-            printf("rd->length : %i\n", rd->length );
-            printf("inverse_lookuptable_position[i] : %f\n", inverse_lookuptable_position[i] );
-        }
-        assert( isfinite(inverse_lookuptable_position[i] ));
-    }
 
-    return;
+        assert( isfinite(inverse_lookuptable_position[i]) );
+    }
 }
 
 void

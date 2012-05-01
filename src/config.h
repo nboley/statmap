@@ -263,6 +263,12 @@ enum CHR_SOURCE
     MATERNAL
 };
 
+enum INDEX_SEARCH_MODE
+{
+    BOOTSTRAP,
+    SEARCH
+};
+
 /*** Globally useful macros ***/
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))

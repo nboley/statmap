@@ -1,16 +1,11 @@
 #include <pthread.h>
 
-// Number of uniquely mapping reads to synchronize at a time
-#define ERROR_INTERVAL  1000
-
 #define ERROR_WEIGHT    0.5
 #define ERROR_STATS_LOG "error_stats.log"
 
 #define max_num_qual_scores 256
 
 struct error_data_t {
-    int block_size;
-
     /* number of reads processed */
     int num_unique_reads;
 
@@ -47,7 +42,17 @@ update_error_data(
 );
 
 void
-sync_global_with_local_error_data(
+add_error_data(
+    struct error_data_t* dest,
+    struct error_data_t* src
+);
+
+void average_error_data(
+    struct error_data_t* data
+);
+
+void
+update_global_error_data(
     struct error_data_t* global,
     struct error_data_t* local
 );

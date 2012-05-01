@@ -68,52 +68,63 @@ update_max_read_length(
     data->max_read_length = new_max_read_length;
 }
 
-/*
- * Merge src into dest with weight on src
- */
 void
-merge_error_data_structs_with_weight(
+add_error_data(
     struct error_data_t* dest,
-    struct error_data_t* src,
-    int weight
+    struct error_data_t* src
 )
 {
     int i;
+
+    /* Don't bother trying to add error_data structs that store information about 0 reads */
+    if( src->num_unique_reads == 0 )
+        return;
 
     /* check max_read_length on dest and src, update dest if necessary */
     if( dest->max_read_length < src->max_read_length )
         update_max_read_length( dest, src->max_read_length );
 
-    /* merge position_mismatch_cnts */
-    for( i=0; i < dest->max_read_length; i++ )
+    // add position_mismatch_cnts
+    for( i = 0; i < dest->max_read_length; i++ )
+        dest->position_mismatch_cnts[i] += src->position_mismatch_cnts[i];
+
+    // add qual_score_cnts and qual_score_mismatch_cnts
+    for( i = 0; i < max_num_qual_scores; i++ )
     {
-        dest->position_mismatch_cnts[ i ] += src->position_mismatch_cnts[ i ] * weight;
+        dest->qual_score_cnts[i] += src->qual_score_cnts[i];
+        dest->qual_score_mismatch_cnts[i] += src->qual_score_mismatch_cnts[i];
     }
 
-    /* merge quality scores */
-    for( i=0; i < max_num_qual_scores; i++ )
-    {
-        dest->qual_score_cnts[ i ] += src->qual_score_cnts[ i ] * weight;
-        dest->qual_score_mismatch_cnts[ i ] += src->qual_score_mismatch_cnts[ i ] * weight;
-    }
-
-    /* update num_unique_reads in dest */
+    // add num_unique_reads
     dest->num_unique_reads += src->num_unique_reads;
 }
 
-void
-add_error_data_structs(
-    struct error_data_t* dest,
-    struct error_data_t* src
+void average_error_data(
+    struct error_data_t* data
 )
 {
-    merge_error_data_structs_with_weight( dest, src, 1 );
+    /* Avoid divide by zero if data is initialized, but no reads have been stored */
+    if( data->max_read_length == 0 )
+        return;
+
+    int i;
+
+    // average position_mismatch_cnts
+    for( i = 0; i < data->max_read_length; i++ )
+        data->position_mismatch_cnts[i] = data->position_mismatch_cnts[i] / data->max_read_length;
+
+    // average qual_score_cnts and qual_score_mismatch_cnts
+    for( i = 0; i < max_num_qual_scores; i++ )
+    {
+        data->qual_score_cnts[i] = data->qual_score_cnts[i] / data->max_read_length;
+        data->qual_score_mismatch_cnts[i] = data->qual_score_mismatch_cnts[i] / data->max_read_length;
+    }
 }
 
 /*
  * Weighted average of error data from dest and src, stored in dest
  */
-void average_error_data_structs(
+void weighted_average_error_data(
     struct error_data_t* dest,
     struct error_data_t* src,
     double weight
@@ -150,32 +161,25 @@ void average_error_data_structs(
     }
 
     /* update num_unique_reads in dest */
-    dest->num_unique_reads += src->num_unique_reads;
+    dest->num_unique_reads =
+        dest->num_unique_reads * weight
+            +
+        src->num_unique_reads * ( 1 - weight );
 }
 
 void
-sync_global_with_local_error_data(
+update_global_error_data(
     struct error_data_t* global,
     struct error_data_t* local
 )
 {
-    assert( global->mutex != NULL );
+    weighted_average_error_data( global, local, ERROR_WEIGHT );
 
-    /* threadsafe update of global error data */
-    pthread_mutex_lock( global->mutex );
-
-    average_error_data_structs( global, local, ERROR_WEIGHT );
-
-    /* Write error data out to file */
-    /*
-     * Do it here so we can take advantage of the global error data's mutex
-     * to avoid contention in writing to the log file
-     */
+    /* write global error data, which will be used to map reads in the next set
+     * threads, to log file */
     FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
     fprintf_error_data( error_stats_log, global );
     fclose( error_stats_log );
-
-    pthread_mutex_unlock( global->mutex );
 
     /* reset local error data */
     clear_error_data( local );
@@ -242,10 +246,7 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        // XXX - since position_mismatch_cnts is getting averaged every sync, it is not correct
-        // to average with reads->num_unique_reads here.
-        // XXX - what if # unique reads is not a multiple of ERROR_INTERVAL ?
-        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ]/ERROR_INTERVAL );
+        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] / data->num_unique_reads );
     }
     
     fprintf( stream, "Qual Score Error Rates:\n" );
