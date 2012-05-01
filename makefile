@@ -7,4 +7,4 @@ clean:
 	cd utilities; make clean;
 
 check: 
-	cd tests; rm smo_* -rf; python tests.py && python simulate_chipseq.py;
+	cd tests; rm -rf smo_* *.fa *.map; python tests.py && python simulate_chipseq.py;
