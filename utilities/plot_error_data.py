@@ -220,14 +220,14 @@ class ErrorPlot:
         plt.plot( edstruct.loc_error_rates ) # hold=False
         plt.xlabel("Loc in read")
         plt.ylabel("P(mismatch)")
-        plt.ylim([0,1.0])
+        #plt.ylim([0,1.0])
 
         # Plot qual_score_error_rates
         plt.subplot(212)
         plt.plot( edstruct.qual_score_error_rates )
         plt.xlabel("Quality Score")
         plt.ylabel("P(mismatch)")
-        plt.ylim([0,1.0])
+        #plt.ylim([0,1.0])
 
     def on_key(self, event):
         #print 'you pressed', event.key
