@@ -39,8 +39,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-# BUG - if CLEANUP is False, test_multi_fasta_mapping() fails because it tries to use the same
-# output directory twice
+# TODO - fix so this doesn't create conflicting output directories
 CLEANUP = True
     
 ### END verbosity level information  ############################################################
