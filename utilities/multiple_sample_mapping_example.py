@@ -4,11 +4,14 @@ import subprocess
 import os
 from time import sleep
 
-STATMAP_BIN = "~/statmap/trunk/bin/statmap"
-BUILD_MARGINAL_BIN = "~/statmap/trunk/utilities/build_marginal_mappings_trace_from_mpd_read_db"
+STATMAP_BIN = "~/statmap/bin/statmap"
+BUILD_MARGINAL_BIN = "~/statmap/utilities/build_marginal_mappings_trace_from_mpd_read_db"
+BUILD_AGGREGATES_CMD = "python ~/statmap/utilities/build_aggregates.py"
+CONVERT_TRACE_INTO_WIGGLE_CMD = "~/statmap/bin/convert_trace_into_wiggle"
 PARSE_INTO_PROMOTERS_CMD = "python /users/jbbrown/parse_cage_into_promoters.py"
 
-GENOME_LOC = "/media/scratch/genomes/drosophila/Manuel/genome.20.drosophila"
+#GENOME_LOC = "/media/scratch/genomes/drosophila/Manuel/genome.20.drosophila"
+GENOME_LOC = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosophila"
 NUM_THREAD_PER_PROC = 6
 MAX_NUM_PROC = 4
 
@@ -56,22 +59,39 @@ def log_fname_from_sample_name( sample_name ):
     return sample_name + ".run.log"
 
 def run_statmap( sample_name ):
-    statmap_cmd = " ".join([STATMAP_BIN, \
-                "-g %s" % GENOME_LOC, \
-                "-r %s" % fastq_fname_from_sample_name( sample_name ), \
-                "-t %i" % NUM_THREAD_PER_PROC, \
-                "-o %s" %  output_dir_name_from_sample_name( sample_name ), \
-                "-n 0", "-a a" \
+    statmap_cmd = " ".join([STATMAP_BIN,
+                "-g %s" % GENOME_LOC,
+                "-r %s" % fastq_fname_from_sample_name( sample_name ),
+                "-t %i" % NUM_THREAD_PER_PROC,
+                "-o %s" %  output_dir_name_from_sample_name( sample_name ),
+                "-n 5", "-a a"
                 ])
     
+    # build marginal wiggle
     marginal_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "marginal.wig" )
 
-    build_merginal_cmd = "%s %s 1 > %s" % ( 
-        BUILD_MARGINAL_BIN, \
-        output_dir_name_from_sample_name( sample_name ), \
+    build_marginal_cmd = "%s %s 1 > %s" % ( 
+        BUILD_MARGINAL_BIN,
+        output_dir_name_from_sample_name( sample_name ),
         marginal_wig_fname
     )
+
+    # build minimum aggregate wiggle 
+    aggregate_traces_cmd = "%s %s min" % (
+        BUILD_AGGREGATES_CMD,
+        output_dir_name_from_sample_name( sample_name ),
+    )
+
+    # write min trace to wiggle
+    agg_min_trace_fname = "min_trace.bin.trace"
+    agg_min_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "agg_min.wig" )
+    min_trace_to_wig_cmd = "%s %s > %s" % (
+        CONVERT_TRACE_INTO_WIGGLE_CMD,
+        agg_min_trace_fname,
+        agg_min_wig_fname
+    )
     
+    # parse into promoters
     parse_into_proms_cmd = "%s %s 250 9 25 + > %s" % (
         PARSE_INTO_PROMOTERS_CMD, marginal_wig_fname, \
         os.path.join( output_dir_name_from_sample_name( sample_name ), "marginal.gff" )
@@ -79,7 +99,15 @@ def run_statmap( sample_name ):
     
     log_fp = open( log_fname_from_sample_name( sample_name ), "a" )
 
-    big_cmd = "\n" + ";\n".join( ( statmap_cmd, build_merginal_cmd, parse_into_proms_cmd ) ) + "\n"
+    big_cmd = "\n" + ";\n".join( 
+        (
+            statmap_cmd,
+            build_marginal_cmd,
+            aggregate_traces_cmd,
+            min_trace_to_wig_cmd,
+            parse_into_proms_cmd
+        )
+    ) + "\n"
 
     proc = subprocess.Popen( big_cmd, shell=True, stderr=subprocess.STDOUT, stdout=log_fp )
     
