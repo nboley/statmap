@@ -83,7 +83,7 @@ def run_statmap( sample_name ):
     )
 
     # write min trace to wiggle
-    agg_min_trace_fname = "min_trace.bin.trace"
+    agg_min_trace_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "min_trace.bin.trace" )
     agg_min_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "agg_min.wig" )
     min_trace_to_wig_cmd = "%s %s > %s" % (
         CONVERT_TRACE_INTO_WIGGLE_CMD,
