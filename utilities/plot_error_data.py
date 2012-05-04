@@ -135,44 +135,36 @@ class ErrorStatsLog():
     '''
     
     def __init__(self, fp):
-        self.data = []
-        self.error_interval = 0
-
-        # parse a list of ErrorDataStruct from error_stats.log
+        # parse a list of ErrorDataStructs from error_stats.log
+        self.structs = []
         self._load_from_file( fp )
-        # set error_interval
-        self.error_interval = self.data[0].num_unique_reads
-        # remove unused error_stats
 
     def _load_from_file( self, fp ):
         '''
         Read error_stats.log, store each set of error data as an ErrorDataStruct
         '''
-        index = -1
+        #index = -1
+        struct = None
         curr_err_type = None
         for line in fp:
             if line.startswith("Num Unique Reads:"):
-                # start of a new struct
-                self.data.append( ErrorDataStruct() )
-                index += 1
-                # set num_unique_reads
-                self.data[index].num_unique_reads = int(line.split()[-1].strip())
+                struct = ErrorDataStruct() # make a new struct
+                self.structs.append( struct ) # append to list of structs
+                struct.num_unique_reads = int(line.split()[-1].strip()) # set num_unique_reads
             elif line.startswith("Max Read Length:"):
-                self.data[index].max_read_length = int(line.split()[-1].strip())
+                struct.max_read_length = int(line.split()[-1].strip())
             elif line.startswith("Loc Error Rates:"):
                 curr_err_type = "loc"
             elif line.startswith("Qual Score Error Rates:"):
                 curr_err_type = "qual"
             else:
                 if curr_err_type == "loc":
-                    self.data[index].loc_error_rates.append(
-                        float(line.split()[-1].strip()) )
+                    struct.loc_error_rates.append( float(line.split()[-1].strip()) )
                 elif curr_err_type == "qual":
-                    self.data[index].qual_score_error_rates.append(
-                        float(line.split()[-1].strip()) )
+                    struct.qual_score_error_rates.append( float(line.split()[-1].strip()) )
 
     def __str__(self):
-        return '\n'.join( map(str, self.data) ) 
+        return '\n'.join( map(str, self.structs) ) 
 
 class MappedReads:
     '''
@@ -194,10 +186,20 @@ class MappedReads:
             )
 
 class ErrorPlot:
+    '''
+    Creates an interactive plot of the error_stats.log using matplotlib
 
-    def __init__(self, esl, mpdrds):
+    The plot displays the data from error_stats.log in two tables:
+        1) the location error rates
+        2) the quality score error rates
+
+    You can use the arrow keys or mouse scroll wheel to move through the list
+    of error data structs.
+    '''
+
+    def __init__(self, eslog, mpdrds):
         self.current = 0
-        self.esl = esl
+        self.eslog = eslog
         self.mpdrds = mpdrds
 
         # set up GUI callbacks
@@ -209,30 +211,28 @@ class ErrorPlot:
     def redraw(self):
         # NOTE: matplotlib subplot indices are 1-based
         # NOTE: plot style options: http://matplotlib.sourceforge.net/api/pyplot_api.html#matplotlib.pyplot.plot
-        edstruct = self.esl.data[self.current]
+        edstruct = self.eslog.structs[self.current]
 
         plt.clf()
         #plt.title("# Reads: %i" % edstruct.num_unique_reads)
-        print "# Reads: %i" % edstruct.num_unique_reads
+        print "On error data struct #%i" % self.current
 
         # Plot loc_error_rates
         plt.subplot(211)
         plt.plot( edstruct.loc_error_rates ) # hold=False
-        plt.xlabel("Loc in read")
-        plt.ylabel("P(mismatch)")
+        plt.xlabel("Loc in read"); plt.ylabel("P(mismatch)")
         #plt.ylim([0,1.0])
 
         # Plot qual_score_error_rates
         plt.subplot(212)
         plt.plot( edstruct.qual_score_error_rates )
-        plt.xlabel("Quality Score")
-        plt.ylabel("P(mismatch)")
+        plt.xlabel("Quality Score"); plt.ylabel("P(mismatch)")
         #plt.ylim([0,1.0])
 
     def on_key(self, event):
         #print 'you pressed', event.key
         if event.key == 'right' or event.key == 'up':
-            self.current = min( self.current + 1, len(self.esl.data) - 1 )
+            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
         elif event.key == 'left' or event.key == 'down':
             self.current = max( self.current - 1, 0 )
         elif event.key == 'c':
@@ -242,25 +242,24 @@ class ErrorPlot:
     def on_scroll(self, event):
         #print 'you scrolled', event.button, event.step
         if event.button == 'left':
-            self.current = min( self.current + 1, len(self.esl.data) - 1 )
+            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
         elif event.button == 'down':
             self.current = max( self.current - 1, 0 )
         self.redraw()
 
 
 def usage():
-    print "USAGE: ./plot_error_data.py statmap_output_directory/"
-    sys.exit(1)
+    print "USAGE: ./plot_error_data.py statmap_output_directory"; sys.exit(1)
 
 def main():
-
     if len(sys.argv) != 2: usage()
 
     # change into statmap output directory
     try:
         os.chdir(os.path.abspath(sys.argv[1]))
     except:
-        print "Could not chdir to statmap_output_directory"
+        print "Could not chdir to Statmap output directory %s" % \
+                os.path.abspath(sys.argv[1])
         usage()
 
     # load error stats and mapped reads
