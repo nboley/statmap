@@ -69,6 +69,57 @@ update_max_read_length(
 }
 
 void
+update_error_data(
+    struct error_data_t* data,
+    char* genome_seq,
+    char* read,
+    char* error_str,
+    int length
+)
+{
+    int i;
+    data->num_unique_reads += 1;
+
+    /*
+     * check length against max_read_length; if it is longer,
+     * reallocate memory, initialize new memory to 0, and update max_read_length
+     */
+    if( data->max_read_length < length )
+        update_max_read_length( data, length );
+    
+    for( i = 0; i < length; i++ )
+    {
+        if( toupper(read[i]) != toupper(genome_seq[i])  )
+        {
+            data->qual_score_mismatch_cnts[ (unsigned char) error_str[i] ] += 1;
+            data->position_mismatch_cnts[ i ] += 1;
+        }
+        
+        data->qual_score_cnts[ (unsigned char) error_str[i] ] += 1;
+    }
+    
+    return;
+}
+
+void
+clear_error_data( struct error_data_t* data )
+{
+    int j;
+    /* reset quality score counts */
+    for( j = 0; j < max_num_qual_scores; j++ )
+    {
+        data->qual_score_cnts[j] = 0;
+        data->qual_score_mismatch_cnts[j] = 0;
+    }
+    /* reset position mismatch counts - free allocated memory and start over */
+    free( data->position_mismatch_cnts );
+    data->position_mismatch_cnts = NULL;
+    
+    data->num_unique_reads = 0;
+    data->max_read_length = 0;
+}
+
+void
 add_error_data(
     struct error_data_t* dest,
     struct error_data_t* src
@@ -132,6 +183,10 @@ void weighted_average_error_data(
 {
     assert( weight >= 0 && weight <= 1 );
 
+    /* If there are no unique mappers, we can't say anything new about the error estimates */
+    if( src->max_read_length == 0 )
+        return; // return dest unchanged
+
     int i;
     /* check max_read_length on dest and src, update dest if necessary */
     if( dest->max_read_length < src->max_read_length )
@@ -186,57 +241,6 @@ update_global_error_data(
 }
 
 void
-update_error_data(
-    struct error_data_t* data,
-    char* genome_seq,
-    char* read,
-    char* error_str,
-    int length
-)
-{
-    int i;
-    data->num_unique_reads += 1;
-
-    /*
-     * check length against max_read_length; if it is longer,
-     * reallocate memory, initialize new memory to 0, and update max_read_length
-     */
-    if( data->max_read_length < length )
-        update_max_read_length( data, length );
-    
-    for( i = 0; i < length; i++ )
-    {
-        if( toupper(read[i]) != toupper(genome_seq[i])  )
-        {
-            data->qual_score_mismatch_cnts[ (unsigned char) error_str[i] ] += 1;
-            data->position_mismatch_cnts[ i ] += 1;
-        }
-        
-        data->qual_score_cnts[ (unsigned char) error_str[i] ] += 1;
-    }
-    
-    return;
-}
-
-void
-clear_error_data( struct error_data_t* data )
-{
-    int j;
-    /* reset quality score counts */
-    for( j = 0; j < max_num_qual_scores; j++ )
-    {
-        data->qual_score_cnts[j] = 0;
-        data->qual_score_mismatch_cnts[j] = 0;
-    }
-    /* reset position mismatch counts - free allocated memory and start over */
-    free( data->position_mismatch_cnts );
-    data->position_mismatch_cnts = NULL;
-    
-    data->num_unique_reads = 0;
-    data->max_read_length = 0;
-}
-
-void
 fprintf_error_data( FILE* stream, struct error_data_t* data )
 {
     fprintf( stream, "Num Unique Reads:\t%i\n", data->num_unique_reads );
@@ -263,4 +267,3 @@ fprintf_error_data( FILE* stream, struct error_data_t* data )
     
     return;
 }
-
