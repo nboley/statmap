@@ -6,6 +6,7 @@ Plot error data from FASTQ reads
 
 import sys
 import os
+from subprocess import call
 
 import matplotlib as mpl
 #mpl.use('Agg') # use if X is not installed/for headless plot generation
@@ -202,6 +203,29 @@ class ErrorPlot:
         self.eslog = eslog
         self.mpdrds = mpdrds
 
+        # compute ylimits over ALL error data structs, so scale on plots is less confusing
+        # figure out ylimits for loc_error_rates and qual_score_error_rates
+        self.ymin_loc_error_rates = min(
+            (
+                min( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
+            )
+        )
+        self.ymax_loc_error_rates = max(
+            (
+                max( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
+            )
+        )
+        self.ymin_qual_score_error_rates = min(
+            (
+                min( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
+            )
+        )
+        self.ymax_qual_score_error_rates = max(
+            (
+                max( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
+            )
+        )
+
         # set up GUI callbacks
         fig = plt.figure()
         self.key_cid = fig.canvas.mpl_connect('key_press_event', self.on_key)
@@ -221,13 +245,13 @@ class ErrorPlot:
         plt.subplot(211)
         plt.plot( edstruct.loc_error_rates ) # hold=False
         plt.xlabel("Loc in read"); plt.ylabel("P(mismatch)")
-        #plt.ylim([0,1.0])
+        plt.ylim( [self.ymin_loc_error_rates, self.ymax_loc_error_rates] )
 
         # Plot qual_score_error_rates
         plt.subplot(212)
         plt.plot( edstruct.qual_score_error_rates )
         plt.xlabel("Quality Score"); plt.ylabel("P(mismatch)")
-        #plt.ylim([0,1.0])
+        plt.ylim( [self.ymin_qual_score_error_rates, self.ymax_qual_score_error_rates ] )
 
     def on_key(self, event):
         #print 'you pressed', event.key
@@ -265,6 +289,19 @@ def main():
     # load error stats and mapped reads
     with open("error_stats.log") as error_stats_fp:
         esl = ErrorStatsLog( error_stats_fp )
+
+    # check to see if mapped_reads.sam exists; if not, create it
+    if "mapped_reads.sam" not in os.listdir("."):
+        print "mapped_reads.sam not found, building it..."
+        buildsam_cmd = "%s %s > %s" % (
+                "~/statmap/bin/mapped_reads_into_sam",
+                ".",
+                "mapped_reads.sam"
+            )
+        rv = call( buildsam_cmd, shell=True )
+        if rv != 0:
+            raise "Could not build SAM file from mapped reads"
+
     with open("mapped_reads.sam") as mapped_reads_fp:
         mpdrds = MappedReads( mapped_reads_fp )
 
