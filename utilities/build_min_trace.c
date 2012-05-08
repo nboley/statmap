@@ -12,13 +12,16 @@
 #include "../src/trace.h"
 #include "../src/trace_agg_fns.h"
 
+#define DEFAULT_NUM_BOOTSTRAP_SAMPLES 25
+
 /* make it possible to link */
 int min_num_hq_bps = -1;
-int num_threads = 2;
+int num_threads = 1;
+int num_bootstrap_samples = -1;
 
 void usage()
 {
-    fprintf(stderr, "Usage: ./build_min_trace (min|max|sum) output.bin.trace statmap_output_directory/ sample_number\n");
+    fprintf(stderr, "Usage: ./build_min_trace (min|max|sum) output.bin.trace statmap_output_directory/ sample_number [num_bootstrap_samples]\n");
 }
 
 void
@@ -41,7 +44,7 @@ bootstrap_trace(
 int
 main(int argc, char** argv)
 {
-    if( argc != 5 )
+    if( argc < 5 || argc > 6 )
     {
         usage();
         exit( -1 );
@@ -60,6 +63,13 @@ main(int argc, char** argv)
     } else {
         fprintf( stderr, "FATAL     : Unrecognized aggregate '%s'\n", argv[1] );
         exit( -1 );
+    }
+
+    /*** set num_bootstrap_samples ***/
+    if( argc == 6 ) {
+        num_bootstrap_samples = atoi( argv[5] );
+    } else {
+        num_bootstrap_samples = DEFAULT_NUM_BOOTSTRAP_SAMPLES;
     }
 
     /*** load data structures and metadata from statmap output directory ***/
@@ -156,17 +166,17 @@ main(int argc, char** argv)
                                                 genome,
                                                 assay_type );
 
-    fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
+    fprintf( stderr, "Bootstrapping %i samples.", num_bootstrap_samples );
 
     /* build min aggregate, two traces at a time */
-    int i;
-    // TODO - NUM_BOOTSTRAP_SAMPLES as parameter
     struct trace_t* curr_trace;
     init_trace( genome, &curr_trace, 2, track_names );
-    for( i = 1; i < NUM_BOOTSTRAP_SAMPLES; i++ )
+
+    int i;
+    for( i = 1; i < num_bootstrap_samples; i++ )
     {
-        if(  i%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
-            fprintf( stderr, " %.1f%%...", (100.0*i)/NUM_BOOTSTRAP_SAMPLES );
+        if(  i%(num_bootstrap_samples/10)  == 0 )
+            fprintf( stderr, " %.1f%%...", (100.0*i)/num_bootstrap_samples );
 
         /* bootstrap current trace */
         /* note - bootstrap_trace calls bootstrap_traces_from_mapped_reads,
@@ -180,6 +190,7 @@ main(int argc, char** argv)
         /* aggregate curr_trace into update_trace with agg_fn */
         aggregate_over_trace_pairs( update_trace, curr_trace, agg_fn );
     }
+
     close_traces( curr_trace );
 
     write_trace_to_file( update_trace, argv[2] );
