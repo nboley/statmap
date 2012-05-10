@@ -4,13 +4,23 @@ import subprocess
 import os
 from time import sleep
 
-STATMAP_BIN = "~/statmap/trunk/bin/statmap"
-BUILD_MARGINAL_BIN = "~/statmap/trunk/utilities/build_marginal_mappings_trace_from_mpd_read_db"
-PARSE_INTO_PROMOTERS_CMD = "python /users/jbbrown/parse_cage_into_promoters.py"
+# assumes this script is in /path/to/statmap_dir/utilities/
+# build base script for statmap files
+STATMAP_PATH = os.path.abspath( os.path.join(os.path.dirname(__file__), "..") )
 
-GENOME_LOC = "/media/scratch/genomes/drosophila/Manuel/genome.20.drosophila"
+STATMAP_BIN = os.path.join( STATMAP_PATH, "bin/statmap" )
+BUILD_MARGINAL_BIN = os.path.join( STATMAP_PATH, "utilities/build_marginal_mappings_trace_from_mpd_read_db" )
+BUILD_AGGREGATES_CMD = os.path.join( STATMAP_PATH, "utilities/build_aggregates.py" )
+AGGREGATE_OVER_TRACES_BIN = os.path.join( STATMAP_PATH, "bin/aggregate_over_traces" )
+CONVERT_TRACE_INTO_WIGGLE_CMD = os.path.join( STATMAP_PATH, "bin/convert_trace_into_wiggle" )
+PARSE_INTO_PROMOTERS_CMD = "python /users/jbbrown/parse_cage_into_promoters.py"
+BUILD_MIN_TRACE_BIN = os.path.join( STATMAP_PATH, "bin/build_min_trace" )
+
+GENOME_PATH = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosophila"
 NUM_THREAD_PER_PROC = 6
 MAX_NUM_PROC = 4
+
+NUM_STARTING_SAMPLES = 2
 
 def get_filenames_by_sample():
     conn = psycopg2.connect("host=eel dbname=labtrack user=nboley")
@@ -56,17 +66,22 @@ def log_fname_from_sample_name( sample_name ):
     return sample_name + ".run.log"
 
 def run_statmap( sample_name ):
-    statmap_cmd = " ".join([STATMAP_BIN, \
-                "-g %s" % GENOME_LOC, \
-                "-r %s" % fastq_fname_from_sample_name( sample_name ), \
-                "-t %i" % NUM_THREAD_PER_PROC, \
-                "-o %s" %  output_dir_name_from_sample_name( sample_name ), \
-                "-n 0", "-a a" \
-                ])
+
+    statmap_cmd = " ".join(
+        (
+            STATMAP_BIN,
+            "-g %s" % GENOME_PATH,
+            "-r %s" % fastq_fname_from_sample_name( sample_name ),
+            "-t %i" % NUM_THREAD_PER_PROC,
+            "-o %s" % output_dir_name_from_sample_name( sample_name ),
+            "-n %i" % NUM_STARTING_SAMPLES,
+            "-a a"
+        )
+    )
     
     marginal_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "marginal.wig" )
 
-    build_merginal_cmd = "%s %s 1 > %s" % ( 
+    build_marginal_cmd = "%s %s 1 > %s" % ( 
         BUILD_MARGINAL_BIN, \
         output_dir_name_from_sample_name( sample_name ), \
         marginal_wig_fname
@@ -76,11 +91,57 @@ def run_statmap( sample_name ):
         PARSE_INTO_PROMOTERS_CMD, marginal_wig_fname, \
         os.path.join( output_dir_name_from_sample_name( sample_name ), "marginal.gff" )
     )
+
+    # build min bootstrap traces over each sample
+    bootstrap_samples_cmds = ";\n".join([
+        "%s %s %s %s %i" % (
+            BUILD_MIN_TRACE_BIN,
+            "min",
+            "min_trace%i.bin.trace" % sample_number, # build_min_trace cd's into smo_dir
+            output_dir_name_from_sample_name( sample_name ),
+            sample_number
+        )
+        for sample_number in range(1, NUM_STARTING_SAMPLES+1)
+    ])
+
+    # aggregate min bootstrap traces from each sample into single min trace
+    aggregated_min_trace_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "aggregated_min.trace" )
+    aggregate_bootstraps_cmd = "%s min %s %s" % (
+        AGGREGATE_OVER_TRACES_BIN,
+        aggregated_min_trace_fname,
+        " ".join([
+            os.path.join(
+                output_dir_name_from_sample_name( sample_name ),
+                "min_trace%i.bin.trace" % sample_number
+            )
+            for sample_number in range(1, NUM_STARTING_SAMPLES+1)
+        ])
+    )
+
+    # covert min trace to wiggle
+    aggregated_min_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "aggregated_min.trace.wig" )
+    convert_aggregated_min_trace_to_wig_cmd = "%s %s > %s" % (
+        CONVERT_TRACE_INTO_WIGGLE_CMD,
+        aggregated_min_trace_fname,
+        aggregated_min_wig_fname
+    )
     
     log_fp = open( log_fname_from_sample_name( sample_name ), "a" )
 
-    big_cmd = "\n" + ";\n".join( ( statmap_cmd, build_merginal_cmd, parse_into_proms_cmd ) ) + "\n"
+    big_cmd = "\n" + ";\n".join(
+        (
+            statmap_cmd,
+            # generate marginal.gff
+            build_marginal_cmd,
+            parse_into_proms_cmd,
+            # generate aggregated_min.trace.wig
+            bootstrap_samples_cmds,
+            aggregate_bootstraps_cmd,
+            convert_aggregated_min_trace_to_wig_cmd,
+        )
+    ) + "\n"
 
+    #print big_cmd
     proc = subprocess.Popen( big_cmd, shell=True, stderr=subprocess.STDOUT, stdout=log_fp )
     
     return proc, log_fp
@@ -96,7 +157,6 @@ for sample_name, fnames in get_filenames_by_sample():
     ofp.close()
     
     proc_queue.append( sample_name )
-
 
 running_procs = []
 while len(proc_queue) > 0 or len( running_procs ) > 0:
