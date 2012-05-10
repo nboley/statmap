@@ -74,7 +74,7 @@ except ImportError:
 
 from ctypes import *
 # load the trace library
-trace_o = cdll.LoadLibrary("../src/libtrace.so")
+trace_o = cdll.LoadLibrary("../src/libstatmap.so")
 
 class c_trace_t(Structure):
     """
@@ -117,6 +117,8 @@ class trace_t(OrderedDict):
         # call the parent's initializer
         OrderedDict.__init__(self)
         
+        # keep a reference to c_trace_p?
+
         # de-reference the trace
         c_trace = c_trace_p[0]
         
@@ -132,18 +134,28 @@ class trace_t(OrderedDict):
                         = c_trace.traces[track_index][chr_index][index]
         return
 
-def load_c_trace_from_file( fname  ):
+def load_c_trace_from_file( fname ):
     c_trace_p = c_void_p()    
     data = trace_o.load_trace_from_file( byref(c_trace_p), fname )
     c_trace_p = cast( trace_p, POINTER(c_trace_t) )
     return c_trace_p
 
-def load_trace_from_file( fname  ):
+def load_trace_from_file( fname ):
     c_trace_p = c_void_p()    
     data = trace_o.load_trace_from_file( byref(c_trace_p), c_char_p(fname) )
     c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
     return trace_t( c_trace_p )
 
+def write_c_trace_to_file( c_trace, fname ):
+    '''
+    Writes c_trace_t c_trace to fname using C function write_trace_to_file
+    '''
+    trace_o.write_trace_to_file( byref(c_trace), c_char_p(fname) )
+
+def close_c_trace( c_trace ):
+    '''
+    Closes the trace c_trace
+    '''
 
 if __name__ == "__main__":
     trace = load_trace_from_file( sys.argv[1] )

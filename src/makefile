@@ -17,7 +17,7 @@ objects = statmap.o genome.o index_genome.o rawread.o sequences_node.o \
 	  fragment_length.o wiggle.o sam.o pseudo_location.o peak_calling.o \
 	  config_parsing.o error_correction.o diploid_map_data.o
 
-all: statmap trace.so
+all: statmap statmap.so
 
 statmap : $(objects)
 	$(compiler) -o statmap \
@@ -25,6 +25,14 @@ statmap : $(objects)
 	$(compile_options) \
 	-lm -lpthread # -fopenmp #  -fprofile-arcs
 	cp statmap ../bin/
+
+statmap.so : $(objects)
+	$(compiler) $(compile_options) -fpic -shared -Wl,-soname,libstatmap.so.1 -o libstatmap.so \
+	candidate_mapping.c config_parsing.c diploid_map_data.c dna_sequence.c \
+	error_correction.c find_candidate_mappings.c fragment_length.c genome.c \
+	index_genome.c iterative_mapping.c mapped_location.c mapped_read.c \
+	peak_calling.c pseudo_location.c quality.c rawread.c sam.c sequences_node.c \
+	statmap.c trace.c
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
 	index_genome.h quality.h config.h fragment_length.h sam.h
