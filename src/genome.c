@@ -548,7 +548,9 @@ add_chrs_from_fasta_file(
 
                 /* OVERFLOW BUG - check chr_name */
                 /* read in the next string as the chromosome */
-                error = fscanf(f, "%s\n", chr_name );
+                error = fscanf(f, "%254s", chr_name );
+                while( fgetc(f) != '\n' )
+                    ;
 
                 /* if we are at the end of the file, break */
                 if( feof(f) ) {
