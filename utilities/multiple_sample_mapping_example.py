@@ -17,7 +17,7 @@ PARSE_INTO_PROMOTERS_CMD = "python /users/jbbrown/parse_cage_into_promoters.py"
 BUILD_MIN_TRACE_BIN = os.path.join( STATMAP_PATH, "bin/build_min_trace" )
 
 GENOME_PATH = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosophila"
-NUM_THREAD_PER_PROC = 6
+NUM_THREAD_PER_PROC = 7
 MAX_NUM_PROC = 4
 
 NUM_STARTING_SAMPLES = 2
@@ -31,6 +31,7 @@ def get_filenames_by_sample():
              SELECT sample_name, originating_lab_id, unnest(file) as file 
                FROM solexa_lane_view 
               WHERE sample_name ~ 'CAGE' 
+                AND sample_name ~ 'kc167'
     ) as foo 
     WHERE file IS NOT NULL 
     GROUP BY sample_name, originating_lab_id;
