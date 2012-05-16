@@ -140,3 +140,4 @@ clean :
 	-rm build_marginal_mappings_trace_from_mpd_read_db
 	-rm verify_mapped_read_locations
 	-rm build_min_trace
+	-rm mapped_reads_into_sam_from_trace 

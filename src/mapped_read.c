@@ -936,6 +936,8 @@ get_next_read_from_mapped_reads_db(
         if( rdb->current_read == rdb->num_mmapped_reads )
         {
             pthread_spin_unlock( &(rdb->access_lock) );
+            free_mapped_read( *rd );
+            *rd = NULL;
             return EOF;
         }
         
