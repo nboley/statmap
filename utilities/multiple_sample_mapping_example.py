@@ -39,7 +39,8 @@ def get_filenames_by_sample():
     
     cur.execute( query )
     # remove spaces from the sample names, and return  the results
-    return [ ( sn.replace(" ", "_"), lab_id.split(";")[1], fns ) for sn, lab_id, fns in cur.fetchall() ]
+    return [ ( sn.replace(" ", "_"), lab_id.split(";")[1], fns )
+             for sn, lab_id, fns in cur.fetchall() ]
 
 
 def strip_and_cat_files( fnames, ofp, chars_to_strip ):
@@ -80,11 +81,13 @@ def run_statmap( sample_name, bs_id ):
         )
     )
     
-    marginal_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name, bs_id ), "marginal.wig" )
+    marginal_wig_fname = os.path.join(
+        output_dir_name_from_sample_name( sample_name, bs_id ),
+        "marginal.wig" )
 
     build_marginal_cmd = "%s %s 1 > %s" % ( 
-        BUILD_MARGINAL_BIN, \
-        output_dir_name_from_sample_name( sample_name, bs_id ), \
+        BUILD_MARGINAL_BIN,
+        output_dir_name_from_sample_name( sample_name, bs_id ),
         marginal_wig_fname
     )
 
@@ -95,8 +98,12 @@ def run_statmap( sample_name, bs_id ):
     )
 
     # write min trace to wiggle
-    agg_min_trace_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "min_trace.bin.trace" )
-    agg_min_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name ), "agg_min.wig" )
+    agg_min_trace_fname = os.path.join(
+        output_dir_name_from_sample_name( sample_name ),
+        "min_trace.bin.trace" )
+    agg_min_wig_fname = os.path.join(
+        output_dir_name_from_sample_name( sample_name ),
+        "agg_min.wig" )
     min_trace_to_wig_cmd = "%s %s > %s" % (
         CONVERT_TRACE_INTO_WIGGLE_CMD,
         agg_min_trace_fname,
@@ -105,8 +112,10 @@ def run_statmap( sample_name, bs_id ):
     
     # parse into promoters
     parse_into_proms_cmd = "%s %s 250 9 25 + > %s" % (
-        PARSE_INTO_PROMOTERS_CMD, marginal_wig_fname, \
-        os.path.join( output_dir_name_from_sample_name( sample_name, bs_id ), "marginal.gff" )
+        PARSE_INTO_PROMOTERS_CMD, marginal_wig_fname,
+        os.path.join(
+            output_dir_name_from_sample_name( sample_name, bs_id ),
+            "marginal.gff" )
     )
 
     # build min bootstrap traces over each sample
@@ -114,7 +123,8 @@ def run_statmap( sample_name, bs_id ):
         "%s %s %s %s %i" % (
             BUILD_MIN_TRACE_BIN,
             "min",
-            "min_trace%i.bin.trace" % sample_number, # build_min_trace cd's into smo_dir
+            # build_min_trace cd's into smo_dir
+            "min_trace%i.bin.trace" % sample_number,
             output_dir_name_from_sample_name( sample_name, bs_id ),
             sample_number
         )
@@ -122,7 +132,9 @@ def run_statmap( sample_name, bs_id ):
     ])
 
     # aggregate min bootstrap traces from each sample into single min trace
-    aggregated_min_trace_fname = os.path.join( output_dir_name_from_sample_name( sample_name, bs_id ), "aggregated_min.trace" )
+    aggregated_min_trace_fname = os.path.join(
+        output_dir_name_from_sample_name( sample_name, bs_id ),
+        "aggregated_min.trace" )
     aggregate_bootstraps_cmd = "%s min %s %s" % (
         AGGREGATE_OVER_TRACES_BIN,
         aggregated_min_trace_fname,
@@ -136,7 +148,9 @@ def run_statmap( sample_name, bs_id ):
     )
 
     # covert min trace to wiggle
-    aggregated_min_wig_fname = os.path.join( output_dir_name_from_sample_name( sample_name, bs_id ), "aggregated_min.trace.wig" )
+    aggregated_min_wig_fname = os.path.join(
+        output_dir_name_from_sample_name( sample_name, bs_id ),
+        "aggregated_min.trace.wig" )
     convert_aggregated_min_trace_to_wig_cmd = "%s %s > %s" % (
         CONVERT_TRACE_INTO_WIGGLE_CMD,
         aggregated_min_trace_fname,
@@ -158,8 +172,9 @@ def run_statmap( sample_name, bs_id ):
         )
     ) + "\n"
 
-    #print big_cmd
-    proc = subprocess.Popen( big_cmd, shell=True, stderr=subprocess.STDOUT, stdout=log_fp )
+    proc = subprocess.Popen(
+        big_cmd, shell=True,
+        stderr=subprocess.STDOUT, stdout=log_fp )
     
     return proc, log_fp
 
@@ -183,7 +198,8 @@ while len(proc_queue) > 0 or len( running_procs ) > 0:
             print proc.returncode, log_fp.name
     
     # empty out the finished processes
-    procs_to_remove = [ i for i, (proc, log_fp) in enumerate( running_procs ) if proc.returncode != None  ]
+    procs_to_remove = [ i for i, (proc, log_fp) in enumerate( running_procs )
+                        if proc.returncode != None  ]
     for proc_i in reversed(sorted( procs_to_remove )):
         running_procs[ proc_i ][1].close()
         del running_procs[ proc_i ]
