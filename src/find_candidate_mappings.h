@@ -21,7 +21,9 @@ search_index( struct index_t* index,
               float* lookuptable_position,
               float* inverse_lookuptable_position,
               float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position
+              float* reverse_inverse_lookuptable_position,
+
+              enum INDEX_SEARCH_MODE mode
     );
 
 
@@ -42,6 +44,16 @@ struct single_map_thread_data {
     float min_match_penalty;
     float max_penalty_spread;
     int max_subseq_len;
+
+    /* global_error_data contains the weighted average of error data so far
+     * and is used to calculate the lookup tables */
+    struct error_data_t* global_error_data;
+    /* scratch_error_data contains the error data from the current set of
+     * running threads, and is synchronized with global_error_data every
+     * READS_STAT_UPDATE_STEP_SIZE reads */
+    struct error_data_t* scratch_error_data;
+
+    enum INDEX_SEARCH_MODE mode;
 };
 
 

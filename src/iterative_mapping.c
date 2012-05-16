@@ -889,44 +889,6 @@ sample_random_trace(
         fflush( s_mi );
     }
         
-    if( NUM_BOOTSTRAP_SAMPLES > 0 )
-    {
-        fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
-        char buffer[200];
-        sprintf( buffer, "mkdir %ssample%i/",
-                 BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1 );
-        int error = system( buffer );
-        if (WIFSIGNALED(error) &&
-            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-        {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
-        }
-            
-        int j;
-        for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-        {                
-                
-            if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
-                fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
-
-            /* actually perform the bootstrap */
-            bootstrap_traces_from_mapped_reads( 
-                rdb, cond_prbs_db, sample_trace, update_trace_expectation_from_location );
-                
-            if( SAVE_BOOTSTRAP_SAMPLES )
-            {
-                sprintf( buffer, "%ssample%i/bssample%i.bin.trace", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
-                    
-                write_trace_to_file( sample_trace, buffer );                    
-            }    
-        }
-        fprintf( stderr, " 100%%\n");
-    }
-        
     close_traces( sample_trace );
     
     return 0;

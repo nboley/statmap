@@ -228,13 +228,49 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
     return;
 }
 
+/*
+   compute probability that the given base was incorrectly called,
+   given our error model.
+*/
+float
+compute_error_prb(
+        char bp,
+        char quality_char,
+        enum bool inverse,
+        int pos,
+        float seq_error,
+        struct error_data_t* error_data
+    )
+{
+    /*
+       base obs_error_rate on the number of observed mismatches
+       on the quality score of the current bp
+     */
+
+    double obs_error_rate;
+
+    // avoid divide-by-0
+    if( 0 == error_data->qual_score_cnts[ (unsigned char) quality_char ] )
+        obs_error_rate = 0;
+    else
+        obs_error_rate =
+            error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
+            error_data->qual_score_cnts         [ (unsigned char) quality_char ];
+
+    double scale_factor = sqrt( error_data->num_unique_reads ) / READS_STAT_UPDATE_STEP_SIZE;
+    float rv = (1 - scale_factor) * seq_error + scale_factor * obs_error_rate;
+
+    return rv;
+}
+
 static inline float
 est_error_prb( char bp, char error_score, enum bool inverse, 
                int pos, struct error_data_t* error_data )
 {
-    float rv = -1;
-    
-    /* silenmce the warning */
+    /* error estimate from sequencer, based on quality score */
+    float seq_error = -1;
+
+    /* silence the warning */
     assert( pos >= 0 );
 
     /*
@@ -246,19 +282,21 @@ est_error_prb( char bp, char error_score, enum bool inverse,
     */
     unsigned char quality_char = MAX(QUAL_SHIFT, ((unsigned char) error_score)) - QUAL_SHIFT;
     assert( quality_char < 100 );
+
+    /**** compute err prb from quality score ****/
     
     if( inverse == false ) {
         /* check to see if the read is an 'N'. If it is, set the qual to the min */
         if( bp == 'N' || bp == 'n' )
         {
             /* set the probability that this is incorrect to 0.75 */
-            rv = -0.1249387;
+            seq_error = -0.1249387;
         } else {
             if( ARE_LOG_ODDS == false )
             {
-                rv = logodds_lookuptable_score[ quality_char ];
+                seq_error = logodds_lookuptable_score[ quality_char ];
             } else {
-                rv = logprb_lookuptable_score[ quality_char ];
+                seq_error = logprb_lookuptable_score[ quality_char ];
             }
         }
     } else {
@@ -266,29 +304,32 @@ est_error_prb( char bp, char error_score, enum bool inverse,
         if( bp == 'N' || bp == 'n' )
         {
             /* set the probability that this is correct to 0.25 */
-            rv = -0.60206;
+            seq_error = -0.60206;
         } else {
             if( ARE_LOG_ODDS == false )
             {
-                rv = logodds_inverse_lookuptable_score[ quality_char ];
+                seq_error = logodds_inverse_lookuptable_score[ quality_char ];
             } else {
-                rv = logprb_inverse_lookuptable_score[ quality_char ];
+                seq_error = logprb_inverse_lookuptable_score[ quality_char ];
             }
         }
     }
 
     /* if we don't have any error correction data, 
-       then take the estiamtes as provided by the machines */
-    if( NULL == error_data ) {
-        return rv;
-    }
+       then take the estimates as provided by the machines */
+    if( NULL == error_data )
+        return seq_error;
 
-    return rv;
+    /*
+       compute error score from sequencer estimates and observed error data
+     */
+    return compute_error_prb( bp, quality_char, inverse, pos, seq_error, error_data );
 }
 
 
 void
 build_lookup_table_from_rawread ( struct rawread* rd,
+                                  struct error_data_t* error_data,
                                   float* lookuptable_position,
                                   float* inverse_lookuptable_position,
                                   float* reverse_lookuptable_position,
@@ -296,30 +337,24 @@ build_lookup_table_from_rawread ( struct rawread* rd,
     )
 {
     int i;
+
     for( i = 0; i < rd->length; i++ )
     {
         /* set the log prb of error */
         lookuptable_position[i] 
-            = est_error_prb( rd->char_seq[i], rd->error_str[i], false, i, NULL );
+            = est_error_prb( rd->char_seq[i], rd->error_str[i], false, i, error_data );
         /* set the reverse position */
         reverse_lookuptable_position[rd->length-1-i] = lookuptable_position[i];
 
         /* set the log prb of no error */
         inverse_lookuptable_position[i] 
-            = est_error_prb( rd->char_seq[i], rd->error_str[i], true, i, NULL );
+            = est_error_prb( rd->char_seq[i], rd->error_str[i], true, i, error_data );
         /* and the reverse position */
         reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
-        if( !(isfinite(inverse_lookuptable_position[i])) ) {
-            printf("i : %i\n", i);
-            printf("rd->length-1-i : %i\n", rd->length-1-i);
-            printf("rd->length : %i\n", rd->length );
-            printf("inverse_lookuptable_position[i] : %f\n", inverse_lookuptable_position[i] );
-        }
-        assert( isfinite(inverse_lookuptable_position[i] ));
-    }
 
-    return;
+        assert( isfinite(inverse_lookuptable_position[i]) );
+    }
 }
 
 void

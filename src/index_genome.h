@@ -249,7 +249,9 @@ find_matches( void* node,
               const float* lookuptable_position_2,
               const float* inverse_lookuptable_position_2,
               
-              const float* lookuptable_bp
+              const float* lookuptable_bp,
+
+              enum INDEX_SEARCH_MODE mode
 );
 
 
@@ -270,7 +272,9 @@ find_matches_from_root( struct index_t* index,
                         float* lookuptable_position_2,
                         float* inverse_lookuptable_position_2,
                         
-                        float* lookuptable_bp
+                        float* lookuptable_bp,
+
+                        enum INDEX_SEARCH_MODE mode 
 );
 
 size_t

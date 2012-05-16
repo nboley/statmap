@@ -999,7 +999,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               const float* const position_mutation_prs_2,
               const float* const inverse_position_mutation_prs_2,
 
-              const float* const lookuptable_bp
+              const float* const lookuptable_bp,
+
+              enum INDEX_SEARCH_MODE mode 
     )
 
 {
@@ -1021,6 +1023,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
     while( pmatch_stack_length( stack ) > 0 )
     {
+
         potential_match match = pop_pmatch( stack );
 
         /* add the index offset so that this is a phsyical location */
@@ -1256,6 +1259,25 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             print_mapped_locations( results );
             */
         }
+
+        /******* bootstrap check *******/
+        /* for the bootstrap mode, we only want unique mappers - so we can
+         * optimize by immediately terminating search when there are more than
+         * 1 mappings reported */
+        if( mode == BOOTSTRAP &&
+           (node_type == 'q' || node_type == 'l') )
+        {
+            /* if we're in bootstrap mode, and just processed a node that could
+               have added mapped results, check if we have more than 1 mapped
+               result - if so, set results to NULL and stop searching */
+            // XXX - check correctness. Poor search branches? Recheck?
+            if( results->length > 1 ) {
+                /* set results->length to 0 as flag for bootstrap check in find_candidate_mappings */
+                results->length = 0;
+                break;
+            }
+        }
+
     }
 
     free_pmatch_stack( stack );
@@ -1283,7 +1305,9 @@ find_matches_from_root( struct index_t* index,
                         float* lookuptable_position_2,
                         float* inverse_lookuptable_position_2,
 
-                        float* lookuptable_bp
+                        float* lookuptable_bp,
+
+                        enum INDEX_SEARCH_MODE mode 
 )
 {
     assert( index->index_type == TREE );
@@ -1306,7 +1330,9 @@ find_matches_from_root( struct index_t* index,
                          lookuptable_position_2,
                          inverse_lookuptable_position_2,
 
-                         lookuptable_bp
+                         lookuptable_bp,
+
+                         mode
     ); 
 }
 
