@@ -17,6 +17,7 @@ CONVERT_TRACE_INTO_WIGGLE_CMD = os.path.join( STATMAP_PATH, "bin/convert_trace_i
 
 # Path to genome file
 GENOME_PATH = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosophila"
+#GENOME_PATH = "/media/scratch/genomes/D.pseudoobscura/genome.20.D.pseudoobscura"
 
 # Performance configuration
 NUM_THREAD_PER_PROC = 7
@@ -33,8 +34,10 @@ def read_samples_file( fname ):
     samples = []
     with open( fname ) as fp:
         for line in fp:
-            sn, lab_id, fns = line.split('\t')  # split sample line into fields
-            fns = fns.split(',')                # comma-sep list of filenames
+            # split sample line into fields
+            sn, lab_id, fns = line.strip().split('\t')
+            # list of comma-sep filenames
+            fns = fns.split(',')
             samples.append( (sn, lab_id, fns) )
 
     return samples
@@ -160,14 +163,14 @@ def main():
 
     # add samples from file to process queue
     proc_queue = []
-    for sample_name, bs_id, fnames in read_sample_file( sample_filename ):
+    for sample_name, bs_id, fnames in read_samples_file( sample_filename ):
         fastq_fname = fastq_fname_from_sample_name( sample_name, bs_id )
 
         # write out the trimmed, merged fastq's
         ofp = open( fastq_fname, "w" )
         strip_and_cat_files( fnames, ofp, 9 )
         ofp.close()
-        
+
         proc_queue.append( (sample_name, bs_id) )
 
     # map all samples, MAX_NUM_PROC at a time
