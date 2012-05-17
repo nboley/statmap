@@ -116,8 +116,10 @@ will be produced.
 
 -n : the number of samples to take
 
-This is the number of samples to take from the mapping posterior. This defaults to 10 ( there
-is absolutely no basis for that except that it has been reasonable )
+This is the number of samples to take from the mapping posterior. This defaults
+to 0 - Statmap will set up the iterative mapping framework, but will not actually
+iteratively map unless this parameter is set to non-zero. You can always do iterative
+mapping later with sample_mapping. Empirically, 10 has been a reasonable default.
 
 -t : Number of threads
 

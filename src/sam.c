@@ -549,7 +549,7 @@ write_mapped_reads_to_sam(
         assert( readkey == mapped_rd->read_id );
         
         if( readkey > 0 && readkey%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %ui reads to sam\n", readkey );
+            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", readkey );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 

@@ -453,7 +453,7 @@ add_candidate_mapping_from_diploid (
         ) - 1;
     assert( maternal_start >= 0 ); // if not, this isn't true shared sequence
 
-    int read_location = (result->location).loc;
+    int read_location;
     if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
     {
         read_location = modify_mapped_read_location_for_index_probe_offset(

@@ -8,7 +8,7 @@ compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enum
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	call_peaks aggregate_over_traces convert_trace_into_wiggle \
 	build_marginal_mappings_trace_from_mpd_read_db verify_mapped_read_locations \
-	build_min_trace
+	build_min_trace mapped_reads_into_sam_from_trace 
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -76,6 +76,17 @@ mapped_reads_into_sam : mapped_reads_into_sam.c
 	-lm -pthread
 	cp mapped_reads_into_sam ../bin/
 
+mapped_reads_into_sam_from_trace : write_sam_from_mapped_reads_db_and_trace.c
+	$(compiler) $(compile_options) -o mapped_reads_into_sam_from_trace \
+	write_sam_from_mapped_reads_db_and_trace.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/sam.o  ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/iterative_mapping.o ../src/config_parsing.o ../src/diploid_map_data.o \
+	../src/candidate_mapping.o \
+	-lm -pthread
+	cp mapped_reads_into_sam_from_trace ../bin/
+
 mapped_reads_into_sam.c :
 
 build_marginal_mappings_trace_from_mpd_read_db : build_marginal_mappings_trace_from_mpd_read_db.c
@@ -129,3 +140,4 @@ clean :
 	-rm build_marginal_mappings_trace_from_mpd_read_db
 	-rm verify_mapped_read_locations
 	-rm build_min_trace
+	-rm mapped_reads_into_sam_from_trace 

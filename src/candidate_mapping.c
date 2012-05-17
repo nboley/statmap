@@ -146,10 +146,9 @@ modify_mapped_read_location_for_index_probe_offset(
 /* 
  * Bastard code for diploid mapping - builds a maternal complement from a
  * paternal candidate mapping
- */
-/*
+ *
  * Modifies a paternal candidate mapping to return its maternal complement
- * Don't need to check the offset - that happens in add_pseudo_loc_to_mapped_read
+ * Make sure to check the read location before using
  */
 candidate_mapping
 convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
@@ -180,12 +179,6 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
             &(genome->index->map_data[map_data_index]),
             paternal_loc + 1
         ) - 1;
-
-    /*
-     * we're going to assume that if the paternal cm was valid, then these lookups
-     * are also valid
-     * TODO: is this ok? I think it is
-     */
     assert( maternal_start >= 0 );
 
     /* modify cm to be maternal complement of original paternal cm */

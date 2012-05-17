@@ -548,7 +548,9 @@ add_chrs_from_fasta_file(
 
                 /* OVERFLOW BUG - check chr_name */
                 /* read in the next string as the chromosome */
-                error = fscanf(f, "%s\n", chr_name );
+                error = fscanf(f, "%254s", chr_name );
+                while( fgetc(f) != '\n' )
+                    ;
 
                 /* if we are at the end of the file, break */
                 if( feof(f) ) {
@@ -624,9 +626,6 @@ index_contig(
 {
     SIGNED_LOC bp_index;
 
-    // TODO: is tmp_seq even necessary?
-    char* tmp_seq = malloc( seq_len*sizeof(char) );
-
     for( bp_index = start; bp_index < stop; bp_index += 1 )
     {
         /* skip negative bp indices explicitly */
@@ -635,12 +634,9 @@ index_contig(
 
         loc.loc = bp_index;
 
-        memcpy( tmp_seq, genome->chrs[loc.chr] + bp_index, sizeof(char)*seq_len );
-
         /* Add the normal sequence */
-        // TODO: does this make sense? return translation?
         LETTER_TYPE *translation;
-        translate_seq( tmp_seq, seq_len, &(translation) );
+        translate_seq( genome->chrs[loc.chr] + bp_index, seq_len, &translation );
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
@@ -652,8 +648,6 @@ index_contig(
 
         free( translation );
     }
-
-    free( tmp_seq );
 }
 
 /* 

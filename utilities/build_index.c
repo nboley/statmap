@@ -322,6 +322,8 @@ verify_file_groups(
     }
 }
 
+/* Tries to determine the source of a diploid chromosome based on the suffix
+ * of the chromosome name -- must be either "paternal" or "maternal" */
 enum CHR_SOURCE
 get_chr_source_from_fasta_file(
     char* filename
@@ -380,13 +382,14 @@ add_file_group_to_genome(
     for( i=0; i < fg->num_files; i++ )
     {
         char* filename = fg->filenames[i];
+
         // if file is not .map, we assume it's fasta and add it
         if( 0 != strcmp( ".map", filename + (strlen(filename) - 4)) )
         {
             /* Determine chromosome source */
             enum CHR_SOURCE chr_source; 
             if( diploid_group )
-                chr_source = get_chr_source_from_fasta_file( fg->filenames[i] );
+                chr_source = get_chr_source_from_fasta_file( filename );
             else
                 chr_source = REFERENCE;
 
@@ -555,6 +558,7 @@ build_diploid_map_data(
 int 
 main( int argc, char** argv )
 {
+    /* Requires indexed_seq_len, output_filename, and at least 1 fasta */
     if( argc < 4 )
     {
         usage();
