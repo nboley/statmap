@@ -179,4 +179,4 @@ config_parsing.o : config_parsing.c config_parsing.h
 clean :
 	-rm $(objects)
 	-rm statmap
-	-rm libtrace.so
+	-rm libstatmap.so
