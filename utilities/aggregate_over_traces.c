@@ -5,7 +5,6 @@
 #include <assert.h>
 
 #include "../src/trace.h"
-#include "../src/trace_agg_fns.h"
 
 void usage()
 {
@@ -26,11 +25,11 @@ main( int argc, char** argv )
 
     if( 0 == strcmp("max", argv[1] ) )
     {
-        agg_fn = max;
+        agg_fn = trace_max_agg;
     } else if( 0 == strcmp("min", argv[1] ) ) {
-        agg_fn = min;
+        agg_fn = trace_min_agg;
     } else if( 0 == strcmp("sum", argv[1] ) ) {
-        agg_fn = sum;
+        agg_fn = trace_sum_agg;
     } else {
         fprintf( stderr, "FATAL     : Unrecognized aggregate '%s'\n", argv[1] );
         exit( -1 );
@@ -55,5 +54,4 @@ main( int argc, char** argv )
     
     return 0;
 }
-
 

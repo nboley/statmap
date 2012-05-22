@@ -841,6 +841,19 @@ build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
 }
 
 void
+build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
+{
+    FILE* fl_fp = fopen( filename, "r" );
+    if( fl_fp == NULL )
+    {
+        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename );
+        exit(-1);
+    }
+    init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
+    fclose( fl_fp );
+}
+
+void
 close_mapped_reads_db( struct mapped_reads_db** rdb )
 
 {

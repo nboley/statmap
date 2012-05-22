@@ -380,6 +380,9 @@ void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
 
 void
+build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename );
+
+void
 close_mapped_reads_db( struct mapped_reads_db** rdb );
 
 void

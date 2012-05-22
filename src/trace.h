@@ -1,6 +1,5 @@
 #ifndef TRACE_H
-#define TRACE_H
-
+#define TRACE_H 
 #define TRACE_TYPE float
 
 #define TRACE_MAGIC_NUMBER "BTRACE"
@@ -130,5 +129,19 @@ load_trace_from_stream( struct trace_t** trace, FILE* is );
 
 void
 load_trace_from_file( struct trace_t** trace, char* fname );
+
+/********************************************************************
+ * Trace aggregate functions
+ *
+ ********************************************************************/
+
+TRACE_TYPE
+trace_sum_agg( const TRACE_TYPE a, const TRACE_TYPE b );
+
+TRACE_TYPE
+trace_min_agg( const TRACE_TYPE a, const TRACE_TYPE b );
+
+TRACE_TYPE
+trace_max_agg( const TRACE_TYPE a, const TRACE_TYPE b );
 
 #endif // #define TRACE_H

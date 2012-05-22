@@ -791,3 +791,32 @@ load_trace_from_file( struct trace_t** trace, char* fname )
     load_trace_from_stream( trace, fp );
     fclose(fp);
 }
+
+/********************************************************************
+ * Trace aggregate functions
+ *
+ ********************************************************************/
+
+TRACE_TYPE
+trace_sum_agg( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    return a+b;
+}
+
+TRACE_TYPE
+trace_min_agg( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    if ( a < b )
+        return a;
+    
+    return b;
+}
+
+TRACE_TYPE
+trace_max_agg( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    if ( a > b )
+        return a;
+    
+    return b;
+}
