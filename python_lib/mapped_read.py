@@ -77,8 +77,8 @@ struct mapped_reads_db {
 
         ("num_succ_iterations", c_char_p),
 
-        #("fl_dist", POINTER(c_fragment_length_dst_t)), # unused (might need this later)
-        ("fl_dist", c_void_p), # unused (might need this later)
+        ("fl_dist", POINTER(c_fragment_length_dst_t)),
+        #("fl_dist", c_void_p), # unused (might need this later)
 
         ("current_read", c_ulong),
 
