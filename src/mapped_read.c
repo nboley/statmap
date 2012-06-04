@@ -802,7 +802,8 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
     /* whether or not the DB is mmapped */
     (*rdb)->write_locked = false;
     
-    pthread_spin_init( &((*rdb)->access_lock), PTHREAD_PROCESS_PRIVATE ); 
+    (*rdb)->access_lock = malloc( sizeof(pthread_spinlock_t) );
+    pthread_spin_init( (*rdb)->access_lock, PTHREAD_PROCESS_PRIVATE ); 
 
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
@@ -944,11 +945,11 @@ get_next_read_from_mapped_reads_db(
     if ( true == rdb->write_locked )
     {
         /** Get the next read **/
-        pthread_spin_lock( &(rdb->access_lock) );
+        pthread_spin_lock( rdb->access_lock );
         /* if we have read every read */
         if( rdb->current_read == rdb->num_mmapped_reads )
         {
-            pthread_spin_unlock( &(rdb->access_lock) );
+            pthread_spin_unlock( rdb->access_lock );
             free_mapped_read( *rd );
             *rd = NULL;
             return EOF;
@@ -956,7 +957,7 @@ get_next_read_from_mapped_reads_db(
         
         unsigned int current_read_id = rdb->current_read;
         rdb->current_read += 1;
-        pthread_spin_unlock( &(rdb->access_lock) );
+        pthread_spin_unlock( rdb->access_lock );
 
         assert( current_read_id < rdb->num_mmapped_reads );
         
@@ -975,14 +976,14 @@ get_next_read_from_mapped_reads_db(
         (*rd)->free_locations = false;
         
     } else {
-        pthread_spin_lock( &(rdb->access_lock) );
+        pthread_spin_lock( rdb->access_lock );
         
         /* Read in the read id */
         rv = fread( 
             &((*rd)->read_id), sizeof((*rd)->read_id), 1, rdb->fp );
         if( 1 != rv )
         {
-            pthread_spin_unlock( &(rdb->access_lock) );
+            pthread_spin_unlock( rdb->access_lock );
             assert( feof( rdb->fp ) );
             free_mapped_read( *rd );
             *rd = NULL;
@@ -994,7 +995,7 @@ get_next_read_from_mapped_reads_db(
             &((*rd)->num_mappings), sizeof((*rd)->num_mappings), 1, rdb->fp );
         if( 1 != rv )
         {
-            pthread_spin_unlock( &(rdb->access_lock) );
+            pthread_spin_unlock( rdb->access_lock );
             fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
             assert( false );
             exit( -1 );
@@ -1010,7 +1011,7 @@ get_next_read_from_mapped_reads_db(
                     (*rd)->num_mappings, 
                     rdb->fp );
 
-        pthread_spin_unlock( &(rdb->access_lock) );
+        pthread_spin_unlock( rdb->access_lock );
    
         if( (*rd)->num_mappings != rv )
         {

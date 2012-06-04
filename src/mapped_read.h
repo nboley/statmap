@@ -345,7 +345,7 @@ struct mapped_reads_db {
     */
     enum bool write_locked;
     
-    pthread_spinlock_t access_lock;
+    pthread_spinlock_t* access_lock;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */

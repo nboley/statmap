@@ -40,9 +40,6 @@ estimate_fl_dist_from_mapped_reads( struct mapped_reads_db* rdb );
 void
 build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist );
 
-void
-build_chipseq_bs_density_in_mpd_rdb( struct mapped_reads_db* mpd_rdb );
-
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl );
 

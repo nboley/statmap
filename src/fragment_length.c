@@ -301,16 +301,6 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist )
     return;
 }
 
-/*
- * DEBUG - wrapper for build_chipseq_bs_density
- * having trouble passing mpd_rdb->fl_dist from ctypes
- */
-void
-build_chipseq_bs_density_in_mpd_rdb( struct mapped_reads_db* mpd_rdb )
-{
-    build_chipseq_bs_density( mpd_rdb->fl_dist );
-}
-
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl )
 {

@@ -78,7 +78,6 @@ struct mapped_reads_db {
         ("num_succ_iterations", c_char_p),
 
         ("fl_dist", POINTER(c_fragment_length_dst_t)),
-        #("fl_dist", c_void_p), # unused (might need this later)
 
         ("current_read", c_ulong),
 
@@ -114,15 +113,14 @@ def open_mapped_reads_db( fname ):
 def build_fl_dist_from_filename( mpd_rd_db_p, filename ):
     statmap_o.build_fl_dist_from_filename( mpd_rd_db_p, filename )
 
-def build_chipseq_bs_density( mpd_rdb ):
-    #statmap_o.build_chipseq_bs_density( fl_dist_p )
-    statmap_o.build_chipseq_bs_density_in_mpd_rdb( mpd_rdb )
-
 def mmap_mapped_reads_db( mpd_rd_db_p ):
     statmap_o.mmap_mapped_reads_db( mpd_rd_db_p )
 
 def index_mapped_reads_db( mpd_rd_db_p ):
     statmap_o.index_mapped_reads_db( mpd_rd_db_p )
+
+def build_chipseq_bs_density( fl_dist_p ):
+    statmap_o.build_chipseq_bs_density( fl_dist_p )
 
 def init_cond_prbs_db_from_mpd_rdb( mpd_rd_db ):
     '''
@@ -130,9 +128,13 @@ def init_cond_prbs_db_from_mpd_rdb( mpd_rd_db ):
     '''
     c_cond_prbs_db_p = c_void_p()
     statmap_o.init_cond_prbs_db_from_mpd_rdb(
-        byref(c_cond_prbs_db_p), mpd_rd_db )
+            byref(c_cond_prbs_db_p),
+            mpd_rd_db )
     c_cond_prbs_db_p = cast( c_cond_prbs_db_p, POINTER(c_cond_prbs_db_t) )
     return c_cond_prbs_db_p
+
+def reset_all_read_cond_probs( mpd_rdb, cond_prbs_db ):
+    statmap_o.reset_all_read_cond_probs( mpd_rdb, cond_prbs_db )
 
 def test():
     '''
@@ -141,6 +143,7 @@ def test():
     mpd_rd_db_p = open_mapped_reads_db( sys.argv[1] )
     mmap_mapped_reads_db( mpd_rd_db_p )
     index_mapped_reads_db( mpd_rd_db_p )
-    cp_db = init_cond_prbs_db_from_mpd_rdb( mpd_rd_db_p )
+    cp_db_p = init_cond_prbs_db_from_mpd_rdb( mpd_rd_db_p )
+    reset_all_read_cond_probs( mpd_rd_db_p, cp_db_p )
 
 if __name__ == "__main__": test()
