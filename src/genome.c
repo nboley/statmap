@@ -473,10 +473,18 @@ add_chr_to_genome( char* chr_name,
 
 extern void 
 add_chrs_from_fasta_file( 
-    struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source
+    struct genome_data* gen, char* fname, enum CHR_SOURCE chr_source
     )
 {
     int error;
+
+    /* open the input file */
+    f = fopen( fname, "r" );
+    if( NULL == f )
+    {
+        fprintf( stderr, "FATAL    : Error opening input file %s.\n", fname );
+        exit( -1 );
+    }
     
     /* FIXME - get rid of this via mmap */
     // int max_num_bytes = MAX_GENOME_LOC;

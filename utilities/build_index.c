@@ -393,19 +393,8 @@ add_file_group_to_genome(
             else
                 chr_source = REFERENCE;
 
-            FILE* genome_fp = fopen( filename, "r" );
-            if( NULL == genome_fp )
-            {
-                fprintf( stderr, "FATAL : Error opening input file %s. Source : %i", filename, chr_source );
-                exit( -1 );
-            }
-
             /* Add to genome */
-            //fprintf( stdout, "NOTICE : Adding %s to genome\n", filename );
-            add_chrs_from_fasta_file( genome, genome_fp, chr_source );
-
-            //TODO: add_chrs closes input FILE*. This behavior should be consistent.
-            //fclose( genome_fp );
+            add_chrs_from_fasta_file( genome, filename, chr_source );
         }
     }
 }
