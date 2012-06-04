@@ -54,11 +54,11 @@ main(int argc, char** argv)
 
     if( 0 == strcmp("max", argv[1] ) )
     {
-        agg_fn = trace_max_agg;
+        agg_fn = trace_agg_max;
     } else if( 0 == strcmp("min", argv[1] ) ) {
-        agg_fn = trace_min_agg;
+        agg_fn = trace_agg_min;
     } else if( 0 == strcmp("sum", argv[1] ) ) {
-        agg_fn = trace_sum_agg;
+        agg_fn = trace_agg_sum;
     } else {
         fprintf( stderr, "FATAL     : Unrecognized aggregate '%s'\n", argv[1] );
         exit( -1 );

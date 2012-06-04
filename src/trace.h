@@ -106,6 +106,12 @@ write_wiggle_from_trace_to_stream(
 );
 
 extern void
+write_wiggle_from_trace_to_stdout(
+    struct trace_t* traces,
+    const double filter_threshold
+);
+
+extern void
 write_wiggle_from_trace( 
     struct trace_t* traces,
     const char* output_fname,                           
@@ -136,12 +142,12 @@ load_trace_from_file( struct trace_t** trace, char* fname );
  ********************************************************************/
 
 TRACE_TYPE
-trace_sum_agg( const TRACE_TYPE a, const TRACE_TYPE b );
+trace_agg_sum( const TRACE_TYPE a, const TRACE_TYPE b );
 
 TRACE_TYPE
-trace_min_agg( const TRACE_TYPE a, const TRACE_TYPE b );
+trace_agg_min( const TRACE_TYPE a, const TRACE_TYPE b );
 
 TRACE_TYPE
-trace_max_agg( const TRACE_TYPE a, const TRACE_TYPE b );
+trace_agg_max( const TRACE_TYPE a, const TRACE_TYPE b );
 
 #endif // #define TRACE_H
