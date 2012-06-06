@@ -8,35 +8,65 @@ import os
 
 from config_parsing import *
 from genome import *
+from rawread import *
 from mapped_read import *
 from trace import *
 
-CONFIG_FNAME            = "config.dat"
-GENOME_FNAME            = "genome.bin"
-MAPPED_READS_DB_FNAME   = "mapped_reads.db"
-FL_DIST_FNAME           = "estimated_fl_dist.txt"
+### FILE* <-> Python File Object ###
+# http://svn.python.org/projects/ctypes/trunk/ctypeslib/ctypeslib/contrib/pythonhdr.py
+import ctypes
+try:
+    class FILE(ctypes.Structure):
+        pass
+    FILE_ptr = ctypes.POINTER(FILE)
 
-RAWREADS_FNAMES         = [
-                            "reads.unpaired",
-                            "reads.pair1",
-                            "reads.pair2",
-                          ]
+    PyFile_FromFile = ctypes.pythonapi.PyFile_FromFile
+    PyFile_FromFile.restype = ctypes.py_object
+    PyFile_FromFile.argtypes = [FILE_ptr,
+                                ctypes.c_char_p,
+                                ctypes.c_char_p,
+                                ctypes.CFUNCTYPE(ctypes.c_int, FILE_ptr)]
 
-NC_RAWREADS_FNAMES      = [
-                            "reads.NC.unpaired",
-                            "reads.NC.pair1",
-                            "reads.NC.pair2",
-                          ]
+    PyFile_AsFile = ctypes.pythonapi.PyFile_AsFile
+    PyFile_AsFile.restype = FILE_ptr
+    PyFile_AsFile.argtypes = [ctypes.py_object]
+except AttributeError:
+    del FILE_ptr
+
+### StatmapOutput ###
+
+CONFIG_FNAME                = "config.dat"
+GENOME_FNAME                = "genome.bin"
+MAPPED_READS_DB_FNAME       = "mapped_reads.db"
+MAPPED_NC_READS_DB_FNAME    = "mapped_NC_reads.db"
+FL_DIST_FNAME               = "estimated_fl_dist.txt"
+
+RAWREADS_FNAMES             = [
+                                "reads.unpaired",
+                                "reads.pair1",
+                                "reads.pair2",
+                              ]
+
+NC_RAWREADS_FNAMES          = [
+                                "reads.NC.unpaired",
+                                "reads.NC.pair1",
+                                "reads.NC.pair2",
+                              ]
 
 class StatmapOutput:
     '''
     Loads all configuration information from a Statmap output directory so it
     can be post-processed by utilities
+
+    Loads data structures into memory lazily. Defaults to only loading the
+    genome - use load_ flags to load additional data structures.
     '''
     def __init__(   self,
                     output_directory,
-                    num_threads=1,
-                    load_rawread_db=False, ):
+                    num_threads=0,
+                    load_mapped_reads=False,
+                    load_raw_reads=False,
+                    load_nc=False, ):
 
         # change working directory to statmap output directory
         try:
@@ -44,47 +74,82 @@ class StatmapOutput:
         except IOError as e:
             print "Could not change to directory : %s" % output_directory; raise
 
+        # load statmap run's configuration
         self.config = load_config_from_file( CONFIG_FNAME )
-
+        
         # set global variables in shared library
+        if num_threads < 1: # num_threads not set by caller
+            try:
+                # try to determine number of available threads from os
+                import multiprocessing
+                num_threads = multiprocessing.cpu_count()
+                # never set the number of threads to more than 8, by default */
+                if num_threads > 8: num_threads = 8
+            except NotImplementedError:
+                # if we can't determine the number of threads, set it to 1
+                num_threads = 1
+            
         statmap_o.set_num_threads( num_threads )
         statmap_o.set_min_num_hq_bps(
-            self.config.contents.min_num_hq_bps) # stored in config
+            self.config.contents.min_num_hq_bps ) # stored in config
 
-        # load genome and mapped reads db
+        # load genome
         self.genome = load_genome_from_disk( GENOME_FNAME )
-        self.mpd_rdb = open_mapped_reads_db( MAPPED_READS_DB_FNAME )
 
-        # load fl dist if necessary
-        if self.config.contents.assay_type == CHIP_SEQ:
-            build_fl_dist_from_filename( self.mpd_rdb, FL_DIST_FNAME )
-            # TODO: make so parameter is fl_dist_t
-            build_chipseq_bs_density( self.mpd_rdb )
+        # set trace update function to use ( depends on assay type )
+        if self.config.contents.assay_type == CAGE:
+            self.trace_update_fn = \
+                statmap_o.update_CAGE_trace_expectation_from_location
+        elif self.config.contents.assay_type == CHIP_SEQ:
+            self.trace_update_fn = \
+                statmap_o.update_chipseq_trace_expectation_from_location
 
-        # load cond probs db
-        self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
+        # load mapped reads
+        if load_mapped_reads:
+            # load default mapped reads db
+            self.mpd_rdb = open_mapped_reads_db( MAPPED_READS_DB_FNAME )
+            mmap_mapped_reads_db( self.mpd_rdb )
+            index_mapped_reads_db( self.mpd_rdb )
 
-        # prepare mapped reads db
-        mmap_mapped_reads_db( self.mpd_rdb )
-        index_mapped_reads_db( self.mpd_rdb )
+            # load fl dist (if needed - depends on assay type)
+            if self.config.contents.assay_type == CHIP_SEQ:
+                build_fl_dist_from_filename( self.mpd_rdb, FL_DIST_FNAME )
+                build_chipseq_bs_density( self.mpd_rdb.contents.fl_dist )
 
-        # load the rawread db (only if we need it)
-        self.rawread_db, self.NC_rawread_db = None, None
-        # if loading rawread db does not work, will return None (NULL ptr)
-        if load_rawread_db:
+            # load cond probs db
+            self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
+
+            if load_nc:
+                # load negative control reads
+                self.NC_mpd_rdb = open_mapped_reads_db( MAPPED_NC_READS_DB_FNAME )
+                mmap_mapped_reads_db( self.NC_mpd_rdb )
+                index_mapped_reads_db( self.NC_mpd_rdb )
+
+                # load the fragment length distribution estimate
+                build_fl_dist_from_filename( self.NC_mpd_rdb, FL_DIST_FNAME )
+                build_chipseq_bs_density( self.NC_mpd_rdb.contents.fl_dist )
+
+                self.NC_cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.NC_mpd_rdb )
+
+        # load the rawread db (if requested)
+        if load_raw_reads:
+            # Note: if loading rawread db does not work, None is returned (NULL ptr)
             self.rawread_db = populate_rawread_db( *RAWREADS_FNAMES )
-            self.NC_rawread_db = populate_rawread_db( *NC_RAWREADS_FNAMES )
+            if load_nc:
+                self.NC_rawread_db = populate_rawread_db( *NC_RAWREADS_FNAMES )
 
 def test():
     """test code in this file"""
     if len(sys.argv) != 2:
         print "Usage: ./utils.py statmap_output_directory/"; sys.exit(1)
 
-    smo = StatmapOutput( sys.argv[1] )
+    smo = StatmapOutput( sys.argv[1],
+                         load_mapped_reads=True,
+                         load_raw_reads=True, )
 
     # see if everything loaded properly
 
-    # did config loaded properly?
+    # did config load properly?
     print "==== CONFIG ===="
     print "genome_fname:", smo.config.contents.genome_fname
     print "min_match_penalty:", smo.config.contents.min_match_penalty
@@ -105,16 +170,18 @@ def test():
     print "num_mmapped_reads:", smo.mpd_rdb.contents.num_mmapped_reads
 
     # if necessary, did the frequency length distribution load correctly?
-    # TODO: crux of double pointer indirection issue. wtf
-    '''
     if smo.config.contents.assay_type == CHIP_SEQ:
         print "==== FL_DIST ===="
-        print "min_fl:", smo.mpd_rdb.contents.fl_dist
-        print "max_fl:", smo.mpd_rdb.contents.fl_dist
-    '''
+        print "min_fl:", smo.mpd_rdb.contents.fl_dist.contents.min_fl
+        print "max_fl:", smo.mpd_rdb.contents.fl_dist.contents.max_fl
 
     # did cond_prbs_db load properly?
     print "==== COND_PRBS_DB ===="
     print "max_rd_id:", smo.cond_prbs_db.contents.max_rd_id
+
+    # did rawread db load properly?
+    print "==== RAWREAD_DB ===="
+    print "readkey:", smo.rawread_db.contents.readkey
+    print "file_type:", smo.rawread_db.contents.file_type
 
 if __name__ == "__main__": test()

@@ -479,7 +479,7 @@ add_chrs_from_fasta_file(
     int error;
 
     /* open the input file */
-    f = fopen( fname, "r" );
+    FILE* f = fopen( fname, "r" );
     if( NULL == f )
     {
         fprintf( stderr, "FATAL    : Error opening input file %s.\n", fname );

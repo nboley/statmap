@@ -5,6 +5,34 @@ statmap_o = cdll.LoadLibrary("../src/libstatmap.so")
 
 from enums import *
 
+class c_index_t(Structure):
+    """
+struct index_t {
+    void* index;
+    enum INDEX_TYPE index_type;
+    /* the length of a sequence in the index */
+    int seq_length;
+
+    /* the pseudo locations info */
+    struct pseudo_locations_t* ps_locs;
+    
+    /* diploid map data */
+    int num_diploid_chrs;
+    /* array of dipoid_map_data_t */
+    struct diploid_map_data_t* map_data;
+};
+    """
+    _fields_ = [
+        ("index", c_void_p),
+        ("index_type", c_uint),
+        ("seq_length", c_int),
+
+        ("ps_locs", c_void_p), # unused
+
+        ("num_diploid_chrs", c_int),
+        ("map_data", c_void_p),
+    ]
+
 class c_genome_data_t(Structure):
     """
 struct genome_data {
@@ -29,7 +57,7 @@ struct genome_data {
 };
     """
     _fields_ = [
-        ("index", c_void_p), # unused
+        ("index", POINTER(c_index_t)),
 
         ("ps_locs", c_void_p), # unused
 
@@ -44,6 +72,12 @@ struct genome_data {
 
 ### Functions ###
 
+def init_genome():
+    c_genome_p = c_void_p()
+    statmap_o.init_genome( byref(c_genome_p) )
+    c_genome_p = cast( c_genome_p, POINTER(c_genome_data_t ) )
+    return c_genome_p
+
 def load_genome_from_disk( fname ):
     '''
     Given the name of a genome file, returns a pointer to c_genome_data_t
@@ -52,6 +86,21 @@ def load_genome_from_disk( fname ):
     statmap_o.load_genome_from_disk( byref(c_genome_data_p), c_char_p(fname) )
     c_genome_data_p = cast( c_genome_data_p, POINTER(c_genome_data_t) )
     return c_genome_data_p
+
+def add_chrs_from_fasta_file( genome, filename, chr_source ):
+    statmap_o.add_chrs_from_fasta_file( genome, filename, chr_source )
+
+def init_index( index, seq_len ):
+    statmap_o.init_index( index, seq_len )
+
+def index_genome( genome ):
+    statmap_o.index_genome( genome )
+
+def write_genome_to_disk( genome, output_fname ):
+    statmap_o.write_genome_to_disk( genome, output_fname )
+
+def build_ondisk_index( index, index_fname ):
+    statmap_o.build_ondisk_index( index, index_fname )
 
 def test():
     '''

@@ -3,6 +3,8 @@ import sys
 from ctypes import *
 statmap_o = cdll.LoadLibrary("../src/libstatmap.so")
 
+from enums import *
+
 class c_fragment_length_dst_t(Structure):
     """
 struct fragment_length_dist_t {

@@ -173,10 +173,16 @@ def close_c_traces( c_trace_p ):
     '''
     statmap_o.close_traces( c_trace_p )
 
-def update_cond_prbs_from_trace_and_assay_type(
-        mpd_rd_db_p, cond_prbs_db_p, c_trace_p, genome_p, assay_type ):
+def update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, trace, update_fn ):
+    statmap_o.update_traces_from_mapped_reads(
+        mpd_rdb, cond_prbs_db, trace, update_fn
+    )
+
+def update_cond_prbs_from_trace_and_assay_type( mpd_rd_db_p, cond_prbs_db_p,
+        c_trace_p, genome_p, assay_type ):
     statmap_o.update_cond_prbs_from_trace_and_assay_type(
-            mpd_rd_db_p, cond_prbs_db_p, c_trace_p, genome_p, assay_type )
+        mpd_rd_db_p, cond_prbs_db_p, c_trace_p, genome_p, assay_type
+    )
 
 def bootstrap_trace( c_trace_p,
                      mpd_rd_db_p,

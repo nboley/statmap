@@ -1,9 +1,9 @@
-compiler = clang
-compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
+#compiler = clang
+#compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 # Debugging
-#compiler = gcc
-#compile_options = -O0 -g -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
+compiler = gcc
+compile_options = -O0 -g -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
 # NOTE: be careful with --short-enums
 
 # compile_options = -fast
@@ -32,7 +32,7 @@ statmap.so : $(objects)
 	error_correction.c find_candidate_mappings.c fragment_length.c genome.c \
 	index_genome.c iterative_mapping.c mapped_location.c mapped_read.c \
 	peak_calling.c pseudo_location.c quality.c rawread.c sam.c sequences_node.c \
-	statmap.c trace.c
+	statmap.c trace.c wiggle.c
 
 statmap.o : statmap.c statmap.h find_candidate_mappings.h \
 	index_genome.h quality.h config.h fragment_length.h sam.h

@@ -87,7 +87,7 @@ main(int argc, char** argv)
     read_config_file_fname_from_disk( "config.dat", &args );
 
     int sample_num = atoi( argv[4] );
-    int USE_IP = -1;
+    int USE_IP = 1;
 
     /* determine assay type and # of starting locations from configuration file
      * (so we can set update_trace_expectation_from_location accordingly) */
@@ -132,6 +132,15 @@ main(int argc, char** argv)
     struct cond_prbs_db_t* cond_prbs_db = NULL;
     init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb );
 
+    /* if necessary, load the fragment length distribution estimate */    
+    if( args->assay_type == CHIP_SEQ ) {
+        FILE* frag_len_fp = fopen( "estimated_fl_dist.txt", "r" );
+        build_fl_dist_from_file( mpd_rdb, frag_len_fp );
+        fclose(frag_len_fp);
+        
+        build_chipseq_bs_density( mpd_rdb->fl_dist );
+        assert( mpd_rdb->fl_dist != NULL );    
+    }
     /*** bootstrap traces ***/
 
     /* build the first trace as the trace to update - if sample_number was specified,

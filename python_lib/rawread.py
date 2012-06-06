@@ -3,6 +3,8 @@ import sys
 from ctypes import *
 statmap_o = cdll.LoadLibrary("../src/libstatmap.so")
 
+from enums import *
+
 class c_rawread_db_t(Structure):
     """
 struct rawread_db_t {
@@ -91,6 +93,6 @@ def test():
     """
     test functions in this file
     """
-    init_rawread_db()
+    pass
 
 if __name__ == "__main__": test()

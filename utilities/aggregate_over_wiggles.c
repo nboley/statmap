@@ -5,6 +5,8 @@
 
 #include "../src/wiggle.h"
 
+#define THRESHOLD 1e-6
+
 int min_num_hq_bps = -1;
 int num_threads = 1;
 
@@ -51,7 +53,7 @@ main( int argc, char** argv )
         }
     }
 
-    aggregate_over_wiggles( wigs, argc-2, stdout, FLT_EPSILON, agg_fn );
+    aggregate_over_wiggles( wigs, argc-2, stdout, THRESHOLD, agg_fn );
     
     for( i = 0; i < argc-2; i++ )
         fclose( wigs[i] );
