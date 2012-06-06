@@ -1087,6 +1087,17 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     /* make sure the entire file has been written to disk */
     fflush( rdb->fp );
 
+    /* check that the file is not empty before trying to mmap */
+    fseek(rdb->fp, 0L, SEEK_END);   // seek to end
+    long fp_size = ftell(rdb->fp);  // tell() to get size
+    if( fp_size == 0 )
+    {
+        fprintf( stderr,
+                 "FATAL:     : Cannot mmap empty mapped reads db.\n" );
+        exit( 1 );
+    }
+    rewind( rdb->fp ); // reset fp
+
     /* find the size of the opened file */
     struct stat buf;
     fstat(fdin, &buf);
