@@ -1,4 +1,5 @@
-# assume this is in utilities
+#!/usr/bin/python
+
 import sys
 import os
 
