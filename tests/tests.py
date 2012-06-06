@@ -24,7 +24,8 @@ import numpy
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../bin/mapped_reads_into_sam'
-BUILD_INDEX_PATH = '../bin/build_index'
+#BUILD_INDEX_PATH = '../bin/build_index'
+BUILD_INDEX_PATH = '../utilities/build_index.py'
 CALL_PEAKS_PATH = '../bin/call_peaks'
 
 #################################################################################################

@@ -1134,8 +1134,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     {
         char* buffer;
         buffer = malloc( sizeof(char)*500 );
-        sprintf(buffer, "Can not mmap the fdescriptor '%u'", fdin );
-	perror( buffer );
+        sprintf(buffer, "Can not mmap the fdescriptor '%i'", fdin );
+        perror( buffer );
         assert( false );
         exit( -1 );
     }

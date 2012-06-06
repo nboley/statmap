@@ -12,15 +12,15 @@ import sys
 import os
 import re
 
-# add python_lib to sys.path (at the front, since there's a trace module in 
-# the standard library )
-sys.path.insert(0, "../python_lib/" )
+# add python_lib to sys.path
+sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
 
 from config_parsing import *
 from genome import *
 from mapped_read import *
 from trace import *
 from enums import *
+from diploid_map_data import *
 
 def usage():
     print "Usage: ./build_index.py indexed_seq_len output_filename genome.fa(s) [diploid.map(s)]"
@@ -42,7 +42,8 @@ def verify_groups( groups ):
     for prefix, group in groups.items():
         if len(group) == 1:
             # check fasta
-            if group[0].endswith(".fa"): pass
+            # for now, assume any non-.map file is a fasta
+            if not group[0].endswith(".map"): pass
             else:
                 print "FATAL    : Haploid file group contains non-FASTA file: %s" % group[0]
                 sys.exit(1)
@@ -50,7 +51,8 @@ def verify_groups( groups ):
             # check 2 .fa, 1 .map
             num_fa, num_map = 0, 0
             for fn in group:
-                if fn.endswith(".fa"):
+                # for now, assume any non-.map file is a fasta
+                if not fn.endswith(".map"):
                     num_fa += 1
                 elif fn.endswith(".map"):
                     num_map += 1
@@ -91,6 +93,14 @@ def group_input_files( files ):
 
     return groups, is_diploid
 
+def get_chr_name( filename ):
+    """
+    Get the chromsome name from a FASTA file
+    Removes newline and leading ">"
+    """
+    with open(filename) as fp:
+        return fp.readline().strip(">\n")
+
 def get_chr_source( filename ):
     """
     Get chromosome source from a FASTA file
@@ -105,6 +115,51 @@ def get_chr_source( filename ):
             return MATERNAL
         else:
             return UNKNOWN
+
+def is_diploid_group( group ):
+    for fname in group:
+        if fname.endswith(".map"):
+            return True
+
+    return False
+
+def get_diploid_groups( groups ):
+    diploid_groups = []
+    for group in groups:
+        if is_diploid_group( group ):
+            diploid_groups.append( group )
+
+    return diploid_groups
+
+def build_diploid_map_data_from_group( group, map_data_t, genome ):
+    # loop through files in group to get specific filenames
+    for fn in group:
+        if fn.endswith(".map"):
+            map_fname = fn
+        else:
+            chr_source = get_chr_source( fn )
+            if chr_source == PATERNAL:
+                paternal_fname = fn
+            elif chr_source == MATERNAL:
+                maternal_fname = fn
+            else:
+                print >> sys.stderr, (
+                    "Encounted chr of invalid origin %i "
+                    "while parsing diploid genome" % chr_source )
+                sys.exit(1)
+
+    # get chr names from fasta files
+    paternal_chr_name = get_chr_name( paternal_fname )
+    maternal_chr_name = get_chr_name( maternal_fname )
+
+    # get chr indexes from genome lookup
+    paternal_chr_index = get_chr_index( genome, paternal_chr_name )
+    maternal_chr_index = get_chr_index( genome, maternal_chr_name )
+
+    # build diploid_map_data_t struct
+    parse_map_file( map_fname, map_data_t, genome,
+                    paternal_chr_index, maternal_chr_index )
+    index_diploid_map_data( map_data_t )
 
 def main():
     if len(sys.argv) < 4: usage()
@@ -121,17 +176,27 @@ def main():
     genome = init_genome()
     # add groups to genome
     for prefix, group in groups.items():
-        for filename in group:
-            # Add fasta files
-            if not filename.endswith(".map"):
-                chr_source = get_chr_source( filename )
-                add_chrs_from_fasta_file( genome, filename, chr_source )
+        if is_diploid_group( group ):
+            for filename in group:
+                # Add fasta files
+                if not filename.endswith(".map"):
+                    chr_source = get_chr_source( filename )
+                    add_chrs_from_fasta_file( genome, filename, chr_source )
+        else:
+            for filename in group:
+                add_chrs_from_fasta_file( genome, filename, REFERENCE )
 
+    # get diploid chromosome file groups
+    diploid_groups = get_diploid_groups( groups.values() )
     # initialize the index
-    init_index( genome.contents.index, indexed_seq_len )
+    init_index( byref(genome.contents.index), indexed_seq_len,
+                len(diploid_groups) )
 
-    # build diploid map data
-    # TODO
+    # TODO: build diploid map data for each diploid chr (file group)
+    for i, group in enumerate(diploid_groups):
+        build_diploid_map_data_from_group( group,
+            byref(genome.contents.index.contents.diploid_maps.contents.maps[i]),
+            genome )
 
     # index the genome
     index_genome( genome )

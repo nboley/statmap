@@ -5,6 +5,39 @@ statmap_o = cdll.LoadLibrary("../src/libstatmap.so")
 
 from enums import *
 
+class c_diploid_map_data_t(Structure):
+    """
+struct diploid_map_data_t {
+    char* chr_name;
+    unsigned int chr_lens[2];
+    size_t num_mappings;
+    struct diploid_mapping_t* mappings;
+    size_t index_len;
+    struct loc_and_index_t* index;
+};
+    """
+    _fields_ = [
+        ("chr_name", c_char_p),
+        ("chr_lens", c_uint*2),
+        ("num_mappings", c_size_t),
+        ("mappings", c_void_p), # unused
+        ("index_len", c_size_t),
+        ("index", c_void_p), # unused
+    ]
+
+class c_diploid_maps_t(Structure):
+    """
+struct diploid_maps_t {
+    int count;
+    struct diploid_map_data_t* maps;
+};
+
+    """
+    _fields_ = [
+        ("count", c_int),
+        ("maps", POINTER(c_diploid_map_data_t)),
+    ]
+
 class c_index_t(Structure):
     """
 struct index_t {
@@ -29,8 +62,7 @@ struct index_t {
 
         ("ps_locs", c_void_p), # unused
 
-        ("num_diploid_chrs", c_int),
-        ("map_data", c_void_p),
+        ("diploid_maps", POINTER(c_diploid_maps_t)),
     ]
 
 class c_genome_data_t(Structure):
@@ -90,8 +122,8 @@ def load_genome_from_disk( fname ):
 def add_chrs_from_fasta_file( genome, filename, chr_source ):
     statmap_o.add_chrs_from_fasta_file( genome, filename, chr_source )
 
-def init_index( index, seq_len ):
-    statmap_o.init_index( index, seq_len )
+def init_index( index, seq_len, num_diploid_chrs ):
+    statmap_o.init_index( index, seq_len, num_diploid_chrs )
 
 def index_genome( genome ):
     statmap_o.index_genome( genome )

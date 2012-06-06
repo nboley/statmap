@@ -327,7 +327,7 @@ size_of_dnode( const dynamic_node* const node )
 
 
 extern void 
-init_index( struct index_t** index, int seq_length )
+init_index( struct index_t** index, int seq_length, int num_diploid_chrs )
 {   
     /* init tree */
     *index = malloc( sizeof( struct index_t ) );
@@ -341,9 +341,9 @@ init_index( struct index_t** index, int seq_length )
     (*index)->ps_locs = NULL;
     init_pseudo_locations( &((*index)->ps_locs) );
 
-    /* init diploid map data */
-    (*index)->num_diploid_chrs = 0;
-    (*index)->map_data = NULL;
+    /* init diploid_maps */
+    (*index)->diploid_maps = NULL;
+    init_diploid_maps_t( &((*index)->diploid_maps), num_diploid_chrs );
 }
 
  dynamic_node*
@@ -514,7 +514,7 @@ void free_tree( struct index_t* index )
     assert( index->index_type == TREE );
     free_node_and_children( (static_node*) index->index, 's');
 
-    free( index->map_data );
+    //free_diploid_maps_t( index->diploid_maps );
 
     free( index );
 }
@@ -1570,14 +1570,12 @@ free_ondisk_index( struct index_t* index ) {
         //free( index->ps_locs );
     }
 
-    int i;
-    /* Free diploid map data structures, if they exist */
-    if( index->map_data != NULL ) {
-        for( i = 0; i < index->num_diploid_chrs; i++ )
-            free_diploid_map_data( &(index->map_data[i]) );
-    }
-    free( index->map_data );
-    
+    // DEBUG - wtf
+    /*
+    if( NULL != index->diploid_maps )
+        free_diploid_maps_t( index->diploid_maps );
+        */
+
     return;
 }
 
@@ -1679,10 +1677,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     sprintf( dmap_ofname, "%s.dmap", index_fname );
     FILE* dmap_fp = fopen( dmap_ofname, "r" );
     assert( NULL != dmap_fp );
-    (*index)->num_diploid_chrs = load_diploid_map_data_from_file(
-        &((*index)->map_data),
-        dmap_fp
-    );
+    load_diploid_maps_from_file( &((*index)->diploid_maps), dmap_fp );
     fclose( dmap_fp );
     
     return;
@@ -1866,11 +1861,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
         perror( buffer );
         exit( -1 );
     }
-    write_diploid_map_data_to_file(
-        index->map_data,
-        index->num_diploid_chrs,
-        dmap_of
-    );
+    write_diploid_maps_to_file( index->diploid_maps, dmap_of );
     fclose( dmap_of );
 
     return;
