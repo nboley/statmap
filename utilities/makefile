@@ -1,9 +1,9 @@
-#compiler = clang
-#compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
+compiler = clang
+compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enums
 
 # Debugging
-compiler = gcc
-compile_options = -O0 -g -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
+#compiler = gcc
+#compile_options = -O0 -g -ftree-vectorize -msse2 -msse -mmmx --unroll-loops --fast-math -Wall -Wextra -D_FILE_OFFSET_BITS=64 #--short-enums 
 
 all: aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	call_peaks aggregate_over_traces convert_trace_into_wiggle \
