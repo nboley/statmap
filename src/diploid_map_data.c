@@ -8,6 +8,35 @@
 #include "genome.h"
 #include "diploid_map_data.h"
 
+/**** INTERFACE ****/
+void
+init_diploid_maps_t(
+    struct diploid_maps_t** dmt,
+    int num_maps
+)
+{
+    *dmt = malloc( sizeof( struct diploid_maps_t ) );
+
+    (*dmt)->count = num_maps;
+    (*dmt)->maps  = malloc( num_maps*sizeof( struct diploid_map_data_t ) );
+}
+
+void
+free_diploid_maps_t(
+    struct diploid_maps_t* dmt
+)
+{
+    if( dmt->maps != NULL ) {
+        int i;
+        for( i=0; i < dmt->count; i++ )
+            free_diploid_map_data( &(dmt->maps[i]) );
+
+        free( dmt->maps );
+    }
+
+    free( dmt );
+}
+
 /**** FILE I/O ****/
 
 void
@@ -103,35 +132,33 @@ write_diploid_map_data_t_to_file(
 }
 
 /* Writes an array of diploid_map_data_t structs to file */
-void write_diploid_map_data_to_file(
-    struct diploid_map_data_t* map_data,
-    int num_chrs,
+void
+write_diploid_maps_to_file(
+    struct diploid_maps_t* dmt,
     FILE* fp
 )
 {
     int rv;
 
     /* Set first byte to zero if there's no data to write */
-    if( map_data == NULL )
+    if( dmt->count == 0 )
     {
-        rv = fprintf( fp, "%i\n", 0 );
-        assert( rv > 0 );
+        rv = fprintf( fp, "%i\n", 0 ); assert( rv > 0 );
         return;
     } else {
         /* Set it to 1 if there is data */
-        rv = fprintf( fp, "%i\n", 1 );
-        assert( rv > 0 );
+        rv = fprintf( fp, "%i\n", 1 ); assert( rv > 0 );
     }
 
     /* Write the number of structs that will be written */
-    rv = fprintf( fp, "num_diploid_chrs : %i\n", num_chrs );
+    rv = fprintf( fp, "num_diploid_chrs : %i\n", dmt->count );
     assert( rv > 0 );
 
     /* Write the diploid_map_data_t structs */
     int i;
-    for( i=0; i < num_chrs; i++ )
+    for( i=0; i < dmt->count; i++ )
     {
-        write_diploid_map_data_t_to_file( &(map_data[i]), fp );
+        write_diploid_map_data_t_to_file( &(dmt->maps[i]), fp );
     }
 }
 
@@ -196,22 +223,18 @@ load_diploid_map_data_t_from_file(
     }
 }
 
-/* Read diploid_map_data_t structs from file, returns number of structs read */
-int
-load_diploid_map_data_from_file(
-    struct diploid_map_data_t** map_data,
+/* Build diploid_maps_t struct from .dmap file */
+void
+load_diploid_maps_from_file(
+    struct diploid_maps_t** dmt,
     FILE* fp
 )
 {
-    // Initialize array of diploid map data
-    *map_data = NULL;
-
     int rv;
 
     /* Check if there is diploid map data to read, marked by first byte */
     int marker;
-    rv = fscanf( fp, "%i\n", &marker );
-    assert( rv == 1 );
+    rv = fscanf( fp, "%i\n", &marker ); assert( rv == 1 );
     if( marker == 0 )
         return 0;
 
@@ -221,19 +244,15 @@ load_diploid_map_data_from_file(
     assert( rv == 1 );
     assert( num_structs > 0 );
 
-    /* Allocate memory for the diploid_map_data_t structs */
-    (*map_data) = malloc(
-        num_structs * sizeof( struct diploid_map_data_t )
-    );
+    /* Initialize the collection of diploid maps */
+    init_diploid_maps_t( dmt, num_structs );
 
-    /* Read in the diploid_map_data_t structs */
+    /* Load the diploid_map_data_t structs */
     int i;
     for( i=0; i < num_structs; i++ )
     {
-        load_diploid_map_data_t_from_file( &((*map_data)[i]), fp );
+        load_diploid_map_data_t_from_file( &((*dmt)->maps[i]), fp );
     }
-
-    return num_structs;
 }
 
 /**** DIPLOID INDEXING CODE ****/
@@ -386,7 +405,7 @@ parse_map_file( char* fname,
         assert( 0 );
         exit( 1 );
     }
-    
+
     /* verify that this is a '.map' file ( just search for the suffix ) */
     if( 0 != strcmp( ".map", fname + (strlen(fname) - 4) ) )
     {
@@ -700,54 +719,3 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     assert( *segments != NULL );
 
 }
-
-#if 0
-int 
-main( int argc, char** argv )
-{
-    struct genome_data* genome;
-    init_genome( &genome );
-    add_chrs_from_fasta_file( genome, fopen( argv[2], "r" ), PATERNAL );
-    add_chrs_from_fasta_file( genome, fopen( argv[3], "r" ), MATERNAL );
-
-    struct diploid_map_data_t* map_data;
-    parse_map_file( argv[1], &map_data, genome, 1, 2 );
-    if( NULL == map_data )
-    {
-        fprintf( stderr, "fatal         :  can not parse map file.\n" );
-        return -1;
-    }
-    
-
-    index_diploid_map_data( map_data );
-
-    // test writing and reading from file
-    // write map_data to file
-    FILE* ofp = fopen( "test.dmap", "r" );
-    write_diploid_map_data_to_file( map_data, 1, ofp );
-    fclose( ofp );
-
-    // read map_data from saved file
-    struct diploid_map_data_t* input_map_data;
-    FILE* ifp = fopen( "test.dmap", "r" );
-    int num_structs = read_diploid_map_data_from_file( &input_map_data, ifp );
-    fclose( ifp );
-
-    // write it out again; then diff the output files
-    FILE* check_fp = fopen( "check_test.dmap", "r" );
-    write_diploid_map_data_to_file( input_map_data, 1, check_fp );
-    fclose( check_fp );
-
-    struct chr_subregion_t* segments;
-    int num_segments;
-    int seq_len = 10;
-    build_unique_sequence_segments( map_data, seq_len, &segments, &num_segments );
-    
-    struct genome_data* genome;
-    init_genome( &genome );
-    add_chrs_from_fasta_file( genome, fopen( argv[2], "r" ) );
-    add_chrs_from_fasta_file( genome, fopen( argv[3], "r" ) );
-
-    return 0;
-}
-#endif

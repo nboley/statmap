@@ -24,11 +24,16 @@ struct index_t {
 
     /* the pseudo locations info */
     struct pseudo_locations_t* ps_locs;
+
+    /* diploid map data */
+    struct diploid_maps_t* diploid_maps;
     
+#if 0
     /* diploid map data */
     int num_diploid_chrs;
     /* array of dipoid_map_data_t */
     struct diploid_map_data_t* map_data;
+#endif
 };
 
 struct static_node;
@@ -83,7 +88,7 @@ extern void
 index_genome( struct genome_data* genome );
 
 extern void 
-add_chrs_from_fasta_file( struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source );
+add_chrs_from_fasta_file( struct genome_data* gen, char* fname, enum CHR_SOURCE chr_source );
 
 void
 init_genome( struct genome_data** gen );

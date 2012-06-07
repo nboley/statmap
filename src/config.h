@@ -257,10 +257,10 @@ typedef struct __attribute__((__packed__))
 
 enum CHR_SOURCE
 {
-    //UNKNOWN,
-    REFERENCE,
-    PATERNAL,
-    MATERNAL
+    // UNKNOWN = 0,
+    REFERENCE = 1,
+    PATERNAL  = 2,
+    MATERNAL  = 3
 };
 
 enum INDEX_SEARCH_MODE

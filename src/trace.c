@@ -584,6 +584,16 @@ write_wiggle_from_trace_to_stream(
     return;
 }
 
+/* Wrapper to write wiggle to stdout from Python API */
+extern void
+write_wiggle_from_trace_to_stdout(
+    struct trace_t* traces,
+    const double filter_threshold
+)
+{
+    write_wiggle_from_trace_to_stream( traces, stdout, filter_threshold );
+}
+
 extern void
 write_wiggle_from_trace( struct trace_t* traces,
                          const char* output_fname,                           
@@ -790,4 +800,33 @@ load_trace_from_file( struct trace_t** trace, char* fname )
     FILE* fp = open_check_error( fname, "r" );
     load_trace_from_stream( trace, fp );
     fclose(fp);
+}
+
+/********************************************************************
+ * Trace aggregate functions
+ *
+ ********************************************************************/
+
+TRACE_TYPE
+trace_agg_sum( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    return a+b;
+}
+
+TRACE_TYPE
+trace_agg_min( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    if ( a < b )
+        return a;
+    
+    return b;
+}
+
+TRACE_TYPE
+trace_agg_max( const TRACE_TYPE a, const TRACE_TYPE b )
+{
+    if ( a > b )
+        return a;
+    
+    return b;
 }

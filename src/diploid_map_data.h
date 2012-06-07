@@ -59,15 +59,14 @@ free_diploid_map_data(
 );
 
 void
-write_diploid_map_data_to_file(
-    struct diploid_map_data_t* map_data,
-    int num_chrs,
+load_diploid_maps_from_file(
+    struct diploid_maps_t** dmt,
     FILE* fp
 );
 
-int
-load_diploid_map_data_from_file(
-    struct diploid_map_data_t** map_data,
+void
+write_diploid_maps_to_file(
+    struct diploid_maps_t* dmt,
     FILE* fp
 );
 
@@ -97,5 +96,21 @@ build_unique_sequence_segments(
     int seq_len,
     struct chr_subregion_t** segments,
     int* num_segments 
+);
+
+struct diploid_maps_t {
+    int count;
+    struct diploid_map_data_t* maps;
+};
+
+void
+init_diploid_maps_t(
+    struct diploid_maps_t** dmt,
+    int num_maps
+);
+
+void
+free_diploid_maps_t(
+    struct diploid_maps_t* dmt
 );
 #endif // #ifndef DIPLOID_MAP

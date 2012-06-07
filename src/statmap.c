@@ -42,6 +42,12 @@
 int num_threads = -1;
 int min_num_hq_bps = -1;
 
+/* Getters and setters for utilities written using ctypes */
+int get_num_threads() { return num_threads;}
+void set_num_threads(int n) { num_threads = n; }
+int get_min_num_hq_bps() { return min_num_hq_bps; }
+void set_min_num_hq_bps(int n) { min_num_hq_bps = n; }
+
 // TODO: update message
 void usage()
 {

@@ -91,7 +91,7 @@ if __name__ == "__main__":
     output_dir = sys.argv[1]    
     # the path to this script. The C aggregate utility will be in the same directory.
     aggregate_exec = os.path.join( \
-        os.path.abspath( os.path.split(sys.argv[0])[0] ), "aggregate_over_traces" \
+        os.path.abspath( os.path.split(sys.argv[0])[0] ), "aggregate_over_traces.py" \
     )
     os.chdir(output_dir)
 

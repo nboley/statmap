@@ -1,4 +1,9 @@
 import sys
+import os
+
+from ctypes import *
+statmap_o = cdll.LoadLibrary( os.path.normpath( sys.path[0] +
+                              "/../src/libstatmap.so" ) )
 
 import numpy
 
@@ -72,10 +77,6 @@ except ImportError:
                 d[key] = value
             return d
 
-from ctypes import *
-# load the trace library
-trace_o = cdll.LoadLibrary("../src/libtrace.so")
-
 class c_trace_t(Structure):
     """
 #define TRACE_TYPE float
@@ -117,6 +118,8 @@ class trace_t(OrderedDict):
         # call the parent's initializer
         OrderedDict.__init__(self)
         
+        # keep a reference to c_trace_p?
+
         # de-reference the trace
         c_trace = c_trace_p[0]
         
@@ -132,18 +135,68 @@ class trace_t(OrderedDict):
                         = c_trace.traces[track_index][chr_index][index]
         return
 
-def load_c_trace_from_file( fname  ):
-    c_trace_p = c_void_p()    
-    data = trace_o.load_trace_from_file( byref(c_trace_p), fname )
-    c_trace_p = cast( trace_p, POINTER(c_trace_t) )
+def init_trace( genome_p, num_tracks, track_names ):
+    '''
+    Init a trace and return it
+    '''
+
+    # convert python list of strings into C array of char*
+    c_track_names = (c_char_p * num_tracks)()
+    for i, c_track in enumerate(c_track_names):
+        c_track_names[i] = c_char_p( track_names[i] )
+
+    c_trace_p = c_void_p()
+    statmap_o.init_trace( genome_p, byref(c_trace_p), num_tracks, c_track_names )
+    c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
     return c_trace_p
 
-def load_trace_from_file( fname  ):
+def load_c_trace_from_file( fname ):
     c_trace_p = c_void_p()    
-    data = trace_o.load_trace_from_file( byref(c_trace_p), c_char_p(fname) )
+    statmap_o.load_trace_from_file( byref(c_trace_p), fname )
+    c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
+    return c_trace_p
+
+def load_trace_from_file( fname ):
+    c_trace_p = c_void_p()    
+    statmap_o.load_trace_from_file( byref(c_trace_p), c_char_p(fname) )
     c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
     return trace_t( c_trace_p )
 
+def write_c_trace_to_file( c_trace_p, fname ):
+    '''
+    Writes c_trace_t c_trace to fname using C function write_trace_to_file
+    '''
+    statmap_o.write_trace_to_file( c_trace_p, c_char_p(fname) )
+
+def close_c_traces( c_trace_p ):
+    '''
+    Closes the trace c_trace
+    '''
+    statmap_o.close_traces( c_trace_p )
+
+def update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, trace, update_fn ):
+    statmap_o.update_traces_from_mapped_reads(
+        mpd_rdb, cond_prbs_db, trace, update_fn
+    )
+
+def update_cond_prbs_from_trace_and_assay_type( mpd_rd_db_p, cond_prbs_db_p,
+        c_trace_p, genome_p, assay_type ):
+    statmap_o.update_cond_prbs_from_trace_and_assay_type(
+        mpd_rd_db_p, cond_prbs_db_p, c_trace_p, genome_p, assay_type
+    )
+
+def bootstrap_trace( c_trace_p,
+                     mpd_rd_db_p,
+                     cond_prbs_db_p,
+                     update_trace_expectation_from_location ):
+    statmap_o.bootstrap_traces_from_mapped_reads(
+            mpd_rd_db_p,
+            cond_prbs_db_p,
+            c_trace_p,
+            update_trace_expectation_from_location )
+
+def aggregate_over_trace_pairs( update_trace_p, curr_trace_p, agg_fn ):
+    statmap_o.aggregate_over_trace_pairs( update_trace_p, curr_trace_p, agg_fn )
 
 if __name__ == "__main__":
     trace = load_trace_from_file( sys.argv[1] )

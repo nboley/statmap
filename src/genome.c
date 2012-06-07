@@ -473,10 +473,18 @@ add_chr_to_genome( char* chr_name,
 
 extern void 
 add_chrs_from_fasta_file( 
-    struct genome_data* gen, FILE* f, enum CHR_SOURCE chr_source
+    struct genome_data* gen, char* fname, enum CHR_SOURCE chr_source
     )
 {
     int error;
+
+    /* open the input file */
+    FILE* f = fopen( fname, "r" );
+    if( NULL == f )
+    {
+        fprintf( stderr, "FATAL    : Error opening input file %s.\n", fname );
+        exit( -1 );
+    }
     
     /* FIXME - get rid of this via mmap */
     // int max_num_bytes = MAX_GENOME_LOC;
@@ -686,11 +694,13 @@ int get_map_data_index_from_chr_index(
 
     /* loop over the array of diploid_map_data_t, comparing prefixes */
     int map_data_index;
-    for( map_data_index=0; map_data_index < genome->index->num_diploid_chrs; map_data_index++ )
+    for( map_data_index=0;
+         map_data_index < genome->index->diploid_maps->count;
+         map_data_index++ )
     {
         /* diploid_map_data_t->chr_name is the same as the prefix of a chr_name */
         if( 0 == strncmp( prefix,
-                         genome->index->map_data[map_data_index].chr_name,
+                         genome->index->diploid_maps->maps[map_data_index].chr_name,
                          strlen(prefix)
                        ) )
             break;
@@ -698,7 +708,7 @@ int get_map_data_index_from_chr_index(
     free( prefix );
 
     /* This should never happen - an error would have been raised while building the genome */
-    assert( map_data_index < genome->index->num_diploid_chrs );
+    assert( map_data_index < genome->index->diploid_maps->count );
     return map_data_index;
 }
 
@@ -721,6 +731,10 @@ index_diploid_chrs(
     sprintf( debug_fname, "%s_sequence_segments", prefix );
     free( prefix );
 
+    // DEBUG
+    //fprintf( stderr, "Paternal index: %d\n", paternal_chr_index );
+    //fprintf( stderr, "Maternal index: %d\n", maternal_chr_index );
+
     /* get corresponding diploid map data struct index */
     int map_data_index = get_map_data_index_from_chr_index(
             genome, paternal_chr_index
@@ -730,7 +744,7 @@ index_diploid_chrs(
     struct chr_subregion_t* segments;
     int num_segments;
     build_unique_sequence_segments(
-            &(genome->index->map_data[map_data_index]),
+            &(genome->index->diploid_maps->maps[map_data_index]),
             seq_len,
             &segments,
             &num_segments
