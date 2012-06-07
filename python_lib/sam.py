@@ -1,7 +1,9 @@
 import sys
+import os
 
-import ctypes
-statmap_o = ctypes.cdll.LoadLibrary("../src/libstatmap.so")
+from ctypes import *
+statmap_o = cdll.LoadLibrary( os.path.normpath( sys.path[0] +
+                              "/../src/libstatmap.so" ) )
 
 from enums import *
 from utils import *

@@ -3,9 +3,8 @@
 import sys
 import os
 
-# add python_lib to sys.path (at the front, since there's a trace module in 
-# the standard library )
-sys.path.insert(0, "../python_lib/" )
+# add python_lib to sys.path
+sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
 
 from config_parsing import *
 from genome import *

@@ -1,4 +1,9 @@
 import sys
+import os
+
+from ctypes import *
+statmap_o = cdll.LoadLibrary( os.path.normpath( sys.path[0] +
+                              "/../src/libstatmap.so" ) )
 
 import numpy
 
@@ -71,10 +76,6 @@ except ImportError:
             for key in iterable:
                 d[key] = value
             return d
-
-from ctypes import *
-# load the trace library
-statmap_o = cdll.LoadLibrary("../src/libstatmap.so")
 
 class c_trace_t(Structure):
     """
