@@ -345,7 +345,7 @@ struct mapped_reads_db {
     */
     enum bool write_locked;
     
-    pthread_spinlock_t access_lock;
+    pthread_spinlock_t* access_lock;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
@@ -378,6 +378,9 @@ open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
+
+void
+build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename );
 
 void
 close_mapped_reads_db( struct mapped_reads_db** rdb );

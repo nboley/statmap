@@ -176,7 +176,7 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
     /* get maternal start pos from diploid index */
     /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
     int maternal_start = find_diploid_locations(
-            &(genome->index->map_data[map_data_index]),
+            &(genome->index->diploid_maps->maps[map_data_index]),
             paternal_loc + 1
         ) - 1;
     assert( maternal_start >= 0 );

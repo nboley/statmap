@@ -23,9 +23,9 @@ import tempfile
 import numpy
 
 STATMAP_PATH = '../bin/statmap'
-BUILD_SAM_PATH = '../bin/mapped_reads_into_sam'
-BUILD_INDEX_PATH = '../bin/build_index'
-CALL_PEAKS_PATH = '../bin/call_peaks'
+BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
+BUILD_INDEX_PATH = '../utilities/build_index.py'
+CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 
 #################################################################################################
 ### verbosity level information 

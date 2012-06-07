@@ -1,7 +1,3 @@
-
-#ifndef TRACE_AGG_FNS
-#define TRACE_AGG_FNS
-
 #include "../src/trace.h"
 
 static inline TRACE_TYPE
@@ -27,5 +23,3 @@ max( const TRACE_TYPE a, const TRACE_TYPE b )
     
     return b;
 }
-
-#endif // ifndef TRACE_AGG_FNS
