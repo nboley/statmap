@@ -1107,7 +1107,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     if( fp_size == 0 )
     {
         fprintf( stderr,
-                 "FATAL:     : Cannot mmap empty mapped reads db.\n" );
+                 "FATAL       : Cannot mmap empty mapped reads db.\n" );
         exit( 1 );
     }
     rewind( rdb->fp ); // reset fp
