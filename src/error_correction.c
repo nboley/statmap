@@ -222,6 +222,14 @@ void weighted_average_error_data(
         src->num_unique_reads * ( 1 - weight );
 }
 
+void log_error_data( struct error_data_t* ed )
+{
+    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
+    assert( error_stats_log != NULL );
+    fprintf_error_data( error_stats_log, ed );
+    fclose( error_stats_log );
+}
+
 void
 update_global_error_data(
     struct error_data_t* global,
@@ -230,11 +238,10 @@ update_global_error_data(
 {
     weighted_average_error_data( global, local, ERROR_WEIGHT );
 
-    /* write global error data, which will be used to map reads in the next set
-     * threads, to log file */
-    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
-    fprintf_error_data( error_stats_log, global );
-    fclose( error_stats_log );
+    /* write global error data
+     * (which will be used to map reads in the next set of threads ),
+     * to log file */
+    log_error_data( global );
 
     /* reset local error data */
     clear_error_data( local );
