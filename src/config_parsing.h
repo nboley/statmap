@@ -43,7 +43,9 @@ enum input_file_type_t {
     TEST_SUITE_FORMAT = 2,
     // Marks SOLEXA ( from his ChIP-seq )
     // Maximum is ASCII V
-    MARKS_SOLEXA = 4
+    MARKS_SOLEXA = 4,
+    // Illumina 1.8+
+    ILLUMINA_v18_FQ = 1,
 };
 
 /* Store parsed options */

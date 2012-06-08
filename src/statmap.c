@@ -169,13 +169,16 @@ guess_input_file_type( struct args_t* args )
        this is almost certainly a sanger format */
     if( max_qual == 73 ) {
         input_file_type = SANGER_FQ ;
-    } else if( max_qual > 73 && max_qual <= 90 )
-    {
+    } else if( max_qual == 74 ) {
+        /* if the max quality score is 74, ('J'), then
+         * this is almost certainly Illumina 1.8+ */
+        input_file_type = ILLUMINA_v18_FQ;
+    } else if( max_qual > 74 && max_qual <= 90 ) {
         input_file_type = MARKS_SOLEXA;
     } else {
         // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
-        if( max_qual > 73 ) {
+        if( max_qual > 74 ) {
             if( max_qual < 104 )
             {
                 /* If the maximum quality is less than 104 but greater than 73, it's probably the
