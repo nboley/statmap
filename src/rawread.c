@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "statmap.h"
+#include "error_correction.h"
 #include "rawread.h"
 #include "quality.h"
 #include "dna_sequence.h"
@@ -205,12 +206,17 @@ populate_read_from_fastq_file(
 }
 
 enum bool
-filter_rawread( struct rawread* r )
+filter_rawread( struct rawread* r,
+                struct error_data_t* ed )
 {
+    /* Might pass a NULL read (r2 in the single read case) from find_candidate_mappings */
+    if( r == NULL )
+        return false; // Do not filter nonexistent read
+
     /***************************************************************
      * check to make sure this read is mappable
      * we consider a read 'mappable' if:
-     * 1) The penalties array is not too low
+     * 1) There are enough hq bps
      *
      */
 
@@ -218,15 +224,12 @@ filter_rawread( struct rawread* r )
        ( it's initialized to -1 ); */
     assert( min_num_hq_bps >= 0 );
 
-    /* 
-     * count the number of a's and t's. 
-     */
     int num_hq_bps = 0;
     int i;
     for( i = 0; i < r->length; i++ )
     {
-        double qual = 1 - mutation_probability( 
-            ( (unsigned char) (r->error_str)[i] )
+        double qual = 1 - est_error_prb( 
+            r->char_seq[i], r->error_str[i], false, i, ed
         );
         
         /* count the number of hq basepairs */
@@ -422,6 +425,7 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     
 }
 
+#if 0
 int 
 get_next_mappable_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
@@ -457,6 +461,7 @@ get_next_mappable_read_from_rawread_db(
     
     return rv;
 }
+#endif
 
 int
 get_next_read_from_rawread_db( 

@@ -61,7 +61,8 @@ populate_read_from_fastq_file( FILE* f, struct rawread** r, enum READ_END end );
 
 /* determine whether reads are mappable */
 enum bool
-filter_rawread( struct rawread* r );
+filter_rawread( struct rawread* r,
+                struct error_data_t* ed );
 
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 

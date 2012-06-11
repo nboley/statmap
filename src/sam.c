@@ -381,6 +381,7 @@ fprintf_mapped_read_to_sam(
     return;
 }
 
+#if 0
 void
 write_nonmapping_reads_to_fastq( 
     struct rawread_db_t* rdb,
@@ -491,6 +492,7 @@ cleanup:
     
     return;
 }
+#endif
 
 
 void

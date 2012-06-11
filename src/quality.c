@@ -263,15 +263,16 @@ compute_error_prb(
     return rv;
 }
 
-static inline float
+float
 est_error_prb( char bp, char error_score, enum bool inverse, 
                int pos, struct error_data_t* error_data )
 {
+    /* if we don't have any error data, we are in BOOTSTRAP mode.
+     * Return 0 - don't want to use the sequencer's estimates */
+    if( NULL == error_data ) return 0;
+
     /* error estimate from sequencer, based on quality score */
     float seq_error = -1;
-
-    /* silence the warning */
-    assert( pos >= 0 );
 
     /*
         Make sure our quality score is not less than 0
@@ -314,11 +315,6 @@ est_error_prb( char bp, char error_score, enum bool inverse,
             }
         }
     }
-
-    /* if we don't have any error correction data, 
-       then take the estimates as provided by the machines */
-    if( NULL == error_data )
-        return seq_error;
 
     /*
        compute error score from sequencer estimates and observed error data
@@ -467,6 +463,32 @@ determine_bp_mut_rates( float** lookuptable_bp_ref )
     lookuptable_bp[4*3+3] = -1000;                /*T->T*/   
 
     return;         
+}
+
+extern void determine_bp_mut_rates_for_bootstrap( float** lookuptable_bp_ref )
+{
+    *lookuptable_bp_ref = malloc(16*sizeof(float));
+    float* lookuptable_bp = *lookuptable_bp_ref;
+
+    lookuptable_bp[4*0+0] = 0;          /*A->A*/
+    lookuptable_bp[4*0+1] = 1;          /*A->C*/
+    lookuptable_bp[4*0+2] = 1;          /*A->G*/
+    lookuptable_bp[4*0+3] = 1;          /*A->T*/
+
+    lookuptable_bp[4*1+0] = 1;          /*C->A*/   
+    lookuptable_bp[4*1+1] = 0;          /*C->C*/
+    lookuptable_bp[4*1+2] = 1;          /*C->G*/
+    lookuptable_bp[4*1+3] = 1;          /*C->T*/
+
+    lookuptable_bp[4*2+0] = 1;          /*G->A*/
+    lookuptable_bp[4*2+1] = 1;          /*G->C*/
+    lookuptable_bp[4*2+2] = 0;          /*G->G*/
+    lookuptable_bp[4*2+3] = 1;          /*G->T*/
+
+    lookuptable_bp[4*3+0] = 1;          /*T->A*/
+    lookuptable_bp[4*3+1] = 1;          /*T->C*/    
+    lookuptable_bp[4*3+2] = 1;          /*T->G*/
+    lookuptable_bp[4*3+3] = 0;          /*T->T*/   
 }
 
  int 

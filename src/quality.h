@@ -34,6 +34,7 @@ void convert_into_quality_string( float* mutation_probs, char* quality, int seq_
 
 /* FIXME - change the name */
 extern void determine_bp_mut_rates( float** );
+extern void determine_bp_mut_rates_for_bootstrap( float** );
 
 /* fwd declarations */
 struct rawread;
@@ -103,5 +104,9 @@ compute_error_prb(
         float seq_error,
         struct error_data_t* error_data
     );
+
+float
+est_error_prb( char bp, char error_score, enum bool inverse, 
+               int pos, struct error_data_t* error_data );
 
 #endif /* #define QUALITY */

@@ -643,7 +643,10 @@ find_candidate_mappings( void* params )
     
     /* build the basepair mutation rate lookup table */
     float* bp_mut_rates;
-    determine_bp_mut_rates( &bp_mut_rates );
+    if( mode == BOOTSTRAP )
+        determine_bp_mut_rates_for_bootstrap( &bp_mut_rates );
+    else
+        determine_bp_mut_rates( &bp_mut_rates );
 
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
@@ -675,10 +678,18 @@ find_candidate_mappings( void* params )
      * While there are still mappable reads in the read DB. All locking is done
      * in the get next read functions. 
      */
-    while( EOF != get_next_mappable_read_from_rawread_db( 
+    while( EOF != get_next_read_from_rawread_db(
                rdb, &readkey, &r1, &r2, td->max_readkey )  
          ) 
-    {                
+    {
+        /* Check that this read is mappable */
+        if( mode == SEARCH )
+        {
+            if( filter_rawread( r1, global_error_data ) ||
+                filter_rawread( r2, global_error_data ) )
+                continue;
+        }
+
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
