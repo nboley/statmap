@@ -34,6 +34,9 @@ FILE_TYPES = {
     'MARKS_SOLEXA':         FORMAT_TYPES[3],
 }
 
+def usage():
+    print "USAGE: ./plot_error_data.py statmap_output_directory"; sys.exit(1)
+
 def determine_read_file_type_from_error_scores(error_scores):
     '''
     error_scores - a list of read quality score strings
@@ -117,17 +120,17 @@ class ErrorDataStruct():
         self.qual_score_error_rates = []
 
     def __str__(self):
-        rep = []
-        rep.append("Num Unique Reads:\t%i" % self.num_unique_reads)
-        rep.append("Max Read Length:\t%i" % self.max_read_length)
-        rep.append("Loc Error Rates:")
+        lines = []
+        lines.append("Num Unique Reads:\t%i" % self.num_unique_reads)
+        lines.append("Max Read Length:\t%i" % self.max_read_length)
+        lines.append("Loc Error Rates:")
         for i, ler in enumerate(self.loc_error_rates):
-            rep.append("%i\t%i" % (i, ler))
-        rep.append("Qual Score Error Rates:")
+            lines.append("%i\t%i" % (i, ler))
+        lines.append("Qual Score Error Rates:")
         for i, qser in enumerate(self.qual_score_error_rates):
-            rep.append("%i\t%i" % (i, qser))
+            lines.append("%i\t%i" % (i, qser))
 
-        return '\n'.join(rep)
+        return '\n'.join(lines)
         
 
 class ErrorStatsLog():
@@ -186,94 +189,17 @@ class MappedReads:
                 )
             )
 
-class ErrorPlot:
-    '''
-    Creates an interactive plot of the error_stats.log using matplotlib
-
-    The plot displays the data from error_stats.log in two tables:
-        1) the location error rates
-        2) the quality score error rates
-
-    You can use the arrow keys or mouse scroll wheel to move through the list
-    of error data structs.
-    '''
-
-    def __init__(self, eslog, mpdrds):
-        self.current = 0
-        self.eslog = eslog
-        self.mpdrds = mpdrds
-
-        # compute ylimits over ALL error data structs, so scale on plots is less confusing
-        # figure out ylimits for loc_error_rates and qual_score_error_rates
-        self.ymin_loc_error_rates = min(
-            (
-                min( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymax_loc_error_rates = max(
-            (
-                max( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymin_qual_score_error_rates = min(
-            (
-                min( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymax_qual_score_error_rates = max(
-            (
-                max( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-
-        # set up GUI callbacks
-        fig = plt.figure()
-        self.key_cid = fig.canvas.mpl_connect('key_press_event', self.on_key)
-        self.scroll_cid = fig.canvas.mpl_connect('scroll_event', self.on_scroll)
-        self.redraw()
-
-    def redraw(self):
-        # NOTE: matplotlib subplot indices are 1-based
-        # NOTE: plot style options: http://matplotlib.sourceforge.net/api/pyplot_api.html#matplotlib.pyplot.plot
-        edstruct = self.eslog.structs[self.current]
-
-        plt.clf()
-        #plt.title("# Reads: %i" % edstruct.num_unique_reads)
-        print "On error data struct #%i" % self.current
-
+def plot_error_stats( esl, mpdrds ):
+    for edt in esl.structs:
         # Plot loc_error_rates
         plt.subplot(211)
-        plt.plot( edstruct.loc_error_rates ) # hold=False
+        plt.plot( edt.loc_error_rates )
         plt.xlabel("Loc in read"); plt.ylabel("P(mismatch)")
-        plt.ylim( [self.ymin_loc_error_rates, self.ymax_loc_error_rates] )
 
         # Plot qual_score_error_rates
         plt.subplot(212)
-        plt.plot( edstruct.qual_score_error_rates )
+        plt.plot( edt.qual_score_error_rates )
         plt.xlabel("Quality Score"); plt.ylabel("P(mismatch)")
-        plt.ylim( [self.ymin_qual_score_error_rates, self.ymax_qual_score_error_rates ] )
-
-    def on_key(self, event):
-        #print 'you pressed', event.key
-        if event.key == 'right' or event.key == 'up':
-            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
-        elif event.key == 'left' or event.key == 'down':
-            self.current = max( self.current - 1, 0 )
-        elif event.key == 'c':
-            plt.clf()
-        self.redraw()
-    
-    def on_scroll(self, event):
-        #print 'you scrolled', event.button, event.step
-        if event.button == 'left':
-            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
-        elif event.button == 'down':
-            self.current = max( self.current - 1, 0 )
-        self.redraw()
-
-
-def usage():
-    print "USAGE: ./plot_error_data.py statmap_output_directory"; sys.exit(1)
 
 def main():
     if len(sys.argv) != 2: usage()
@@ -300,13 +226,13 @@ def main():
             )
         rv = call( buildsam_cmd, shell=True )
         if rv != 0:
-            raise "Could not build SAM file from mapped reads"
+            raise RuntimeError("Could not build SAM file from mapped reads")
 
     with open("mapped_reads.sam") as mapped_reads_fp:
         mpdrds = MappedReads( mapped_reads_fp )
 
     # plot data interactively
-    ep = ErrorPlot( esl, mpdrds )
+    plot_error_stats( esl, mpdrds )
     plt.show()
 
 if __name__ == "__main__": main()
