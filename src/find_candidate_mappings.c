@@ -1019,6 +1019,15 @@ find_all_candidate_mappings( struct genome_data* genome,
     //global_error_data->num_unique_reads = 0;
     clear_error_data( td_template.scratch_error_data );
 
+    /*
+     * check that there were some unique mappers - warn if no
+     */
+    if( !(global_error_data->num_unique_reads > 0) )
+    {
+        fprintf( stderr, "FATAL       :  Statmap could not map any unique reads in the bootstrap.\n" );
+        exit(1);
+    }
+
     /* 
        map reads with the bootstrapped error data
        reset td_template parameters to initial states
