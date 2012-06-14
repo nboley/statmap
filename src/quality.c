@@ -476,6 +476,32 @@ extern void determine_bp_mut_rates_for_bootstrap( float** lookuptable_bp_ref )
     lookuptable_bp[4*3+3] = 0;          /*T->T*/   
 }
 
+extern void determine_bp_mut_rates_for_mismatches( float** lookuptable_bp_ref )
+{
+    *lookuptable_bp_ref = malloc(16*sizeof(float));
+    float* lookuptable_bp = *lookuptable_bp_ref;
+
+    lookuptable_bp[4*0+0] = 0;          /*A->A*/
+    lookuptable_bp[4*0+1] = -1;          /*A->C*/
+    lookuptable_bp[4*0+2] = -1;          /*A->G*/
+    lookuptable_bp[4*0+3] = -1;          /*A->T*/
+
+    lookuptable_bp[4*1+0] = -1;          /*C->A*/   
+    lookuptable_bp[4*1+1] = 0;          /*C->C*/
+    lookuptable_bp[4*1+2] = -1;          /*C->G*/
+    lookuptable_bp[4*1+3] = -1;          /*C->T*/
+
+    lookuptable_bp[4*2+0] = -1;          /*G->A*/
+    lookuptable_bp[4*2+1] = -1;          /*G->C*/
+    lookuptable_bp[4*2+2] = 0;          /*G->G*/
+    lookuptable_bp[4*2+3] = -1;          /*G->T*/
+
+    lookuptable_bp[4*3+0] = -1;          /*T->A*/
+    lookuptable_bp[4*3+1] = -1;          /*T->C*/    
+    lookuptable_bp[4*3+2] = -1;          /*T->G*/
+    lookuptable_bp[4*3+3] = 0;          /*T->T*/   
+}
+
  int 
 bp_code( const char letter )
 {

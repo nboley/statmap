@@ -265,8 +265,14 @@ enum CHR_SOURCE
 
 enum INDEX_SEARCH_MODE
 {
-    BOOTSTRAP,
-    SEARCH
+    BOOTSTRAP   = 1,
+    SEARCH      = 2
+};
+
+enum SEARCH_TYPE
+{
+    OBS_ERRORS  = 1,
+    MISMATCHES  = 2
 };
 
 /*** Globally useful macros ***/

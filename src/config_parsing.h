@@ -79,6 +79,8 @@ struct args_t {
 
     int indexed_seq_len;
     int num_threads;
+
+    enum SEARCH_TYPE search_type;
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 

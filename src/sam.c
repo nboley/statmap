@@ -4,6 +4,7 @@
 
 #include "sam.h"
 
+#include "config.h"
 #include "genome.h"
 #include "rawread.h"
 #include "mapped_read.h"
@@ -385,7 +386,8 @@ fprintf_mapped_read_to_sam(
 void
 write_nonmapping_reads_to_fastq( 
     struct rawread_db_t* rdb,
-    struct mapped_reads_db* mappings_db
+    struct mapped_reads_db* mappings_db,
+    enum SEARCH_TYPE search_type
 )
 {
     int error;
@@ -401,7 +403,9 @@ write_nonmapping_reads_to_fastq(
     struct mapped_read_t* mapped_rd;
 
     struct error_data_t* saved_ed = NULL;
-    FILE* elogfp = fopen( ERROR_STATS_LOG, "r" );
+    FILE* elogfp = NULL;
+    if( search_type == OBS_ERRORS )
+        elogfp = fopen( ERROR_STATS_LOG, "r" );
 
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
@@ -414,8 +418,11 @@ write_nonmapping_reads_to_fastq(
     while( rd1 != NULL ) 
     {    
         /* load error data (if necessary) */
-        if( readkey%READS_STAT_UPDATE_STEP_SIZE == 1 )
-            load_next_error_data_t_from_log_fp( &saved_ed, elogfp );
+        if( search_type == OBS_ERRORS )
+        {
+            if( readkey%READS_STAT_UPDATE_STEP_SIZE == 1 )
+                load_next_error_data_t_from_log_fp( &saved_ed, elogfp );
+        }
 
         /* if this read doesn't have an associated mapped reads */
         if( mapped_rd == NULL
@@ -430,7 +437,8 @@ write_nonmapping_reads_to_fastq(
             /* If this is a single end read */
             if( rd2 == NULL )
             {
-                if( filter_rawread( rd1, saved_ed ) )
+                if( search_type == OBS_ERRORS &&
+                    filter_rawread( rd1, saved_ed ) )
                 {
                     fprintf_rawread_to_fastq( 
                         rdb->unmappable_single_end_reads, rd1 );
@@ -439,7 +447,8 @@ write_nonmapping_reads_to_fastq(
                         rdb->non_mapping_single_end_reads, rd1 );                    
                 }
             } else {
-                if( filter_rawread( rd1, saved_ed ) ||
+                if( search_type == OBS_ERRORS &&
+                    filter_rawread( rd1, saved_ed ) ||
                     filter_rawread( rd2, saved_ed ) )
                 {
                     fprintf_rawread_to_fastq( 
@@ -484,7 +493,8 @@ write_nonmapping_reads_to_fastq(
 
 cleanup:
     /* Close the error stats log */
-    fclose( elogfp );
+    if( search_type == OBS_ERRORS )
+        fclose( elogfp );
 
     if( NULL != mapped_rd )
         free_mapped_read( mapped_rd );

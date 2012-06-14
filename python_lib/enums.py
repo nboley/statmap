@@ -22,3 +22,6 @@ Most, but not all of these, are defined in src/config.h
 
 # UNKNOWN
 (UNKNOWN, ) = (0, )
+
+# enum SEARCH_TYPE
+(OBS_ERRORS, MISMATCHES) = (1, 2)

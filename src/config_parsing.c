@@ -72,6 +72,8 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
 
     fprintf( arg_fp, "num_threads:\t%i\n", args->num_threads );
 
+    fprintf( arg_fp, "search_type:\t%i\n", args->search_type );
+
     fprintf( arg_fp, "input_file_type:\t%i\n", args->input_file_type );
     fprintf( arg_fp, "assay_type:\t%i\n", args->assay_type );
 
@@ -168,6 +170,9 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
+
+    fscanf( arg_fp, "search_type:\t%d\n",
+            &((*args)->search_type) );
 
     fscanf( arg_fp, "input_file_type:\t%d\n", 
             &( (*args)->input_file_type) );

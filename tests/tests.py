@@ -31,7 +31,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = True
+P_STATMAP_OUTPUT = False
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -103,6 +103,7 @@ def map_with_statmap( read_fnames, output_dir,
                       indexed_seq_len,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
+                      search_type=None,
                       assay=None,
                       genome_fnames=["*.fa",]):
     # build the input fnames str
@@ -133,6 +134,8 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
+    if search_type != None:
+        call += " -y " + search_type
 
     print >> stdout, re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -447,7 +450,8 @@ def build_expected_map_locations_from_repeated_genome( \
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0 ):
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
+        search_type=None ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len )
 
@@ -487,7 +491,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
     assay = None if untemplated_gs_perc == 0.0 else 'a'
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len, assay=assay  )
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len, assay=assay, 
+            search_type=search_type )
 
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -534,6 +539,12 @@ def test_fivep_sequence_finding( ):
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
+
+def test_mismatch_searching():
+    rls = [ 15, 25, 50, 75  ]
+    for rl in rls:
+        test_sequence_finding( rl, False, search_type='m' )
+        print "PASS: Mismatch Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly using mismatches )" % rl
 
 def test_untemplated_g_finding( ):
     rls = [ 15, 25, 50, 75  ]
@@ -692,8 +703,8 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory, 
                       num_threads = n_threads, 
-                      indexed_seq_len = read_len-2  )
-
+                      indexed_seq_len = read_len-2,
+                      search_type='m' ) # map with mismatches, since we won't be able to bootstrap error scores from perfectly repeated genome (no unique mappers)
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
@@ -1392,12 +1403,14 @@ if __name__ == '__main__':
 
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
+    print "Starting test_mismatch_searching()"
+    test_mismatch_searching()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
     print "Starting test_paired_end_sequence_finding()"
     test_paired_end_sequence_finding( )
-    #print "Starting test_repeat_sequence_finding()"
-    #test_repeat_sequence_finding()
+    print "Starting test_repeat_sequence_finding()"
+    test_repeat_sequence_finding()
     #print "Starting test_mutated_read_finding()"
     #test_mutated_read_finding()
     #print "Starting test_multithreaded_mapping()"
@@ -1414,8 +1427,8 @@ if __name__ == '__main__':
     #test_error_correction()
 
     if RUN_SLOW_TESTS:
-        #print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
-        #test_lots_of_repeat_sequence_finding( )
+        print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
+        test_lots_of_repeat_sequence_finding( )
         print "[SLOW] Start test_lots_of_diploid_repeat_sequence_finding()"
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"

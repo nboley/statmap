@@ -334,9 +334,10 @@ parse_arguments( int argc, char** argv )
     args.assay_type = UNKNOWN;
 
     char* assay_name = NULL;
+    char* search_type = NULL;
 
     int c;
-    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:f:l:a:w:t:q:")) != -1) {
+    while ((c = getopt(argc, argv, "9hg:n:r:1:2:3:4:c:o:sp:m:f:l:a:w:t:q:y:")) != -1) {
         switch (c) {
         /* Required Argumnets */
         case 'g': // reference genome fasta file
@@ -401,7 +402,11 @@ parse_arguments( int argc, char** argv )
         case 't': // number of threads
             args.num_threads = atoi( optarg );
             break;
-            
+
+        case 'y': // type of marginal mapping to do - mismatches, or error data
+            search_type = optarg;
+            break;
+
         /* optional arguments ( that you probably dont want ) */
         case 'i': // indexed sequence length
                   // defaults to the read length of the first read
@@ -497,6 +502,28 @@ parse_arguments( int argc, char** argv )
             assert( false );
             exit( -1 );
         }
+    }
+
+    /* set the search type */
+    if( search_type != NULL )
+    {
+        switch( search_type[0] )
+        {
+        case 'e':
+            args.search_type = OBS_ERRORS;
+            break;
+        case 'm':
+            args.search_type = MISMATCHES;
+            break;
+        default:
+            fprintf(stderr,
+                    "FATAL       :  Unrecognized search type: '%s'\n",
+                    search_type );
+            exit(-1);
+        }
+    } else {
+        /* set default to be using the observed error rates */
+        args.search_type = OBS_ERRORS;
     }
 
     /* Make the output directory */
@@ -838,7 +865,8 @@ map_marginal( struct args_t* args,
         &candidate_mappings,
         args->min_match_penalty,
         args->max_penalty_spread,
-        args->indexed_seq_len );
+        args->indexed_seq_len,
+        args->search_type );
         
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
@@ -855,7 +883,7 @@ map_marginal( struct args_t* args,
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
-    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
+    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db, args->search_type );
     gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
                     (float)(stop.tv_sec - start.tv_sec) 

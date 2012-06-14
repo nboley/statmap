@@ -39,6 +39,10 @@ init_error_data(
 void 
 free_error_data( struct error_data_t* data )
 {
+    /* don't free unallocated memory */
+    if( data == NULL )
+        return;
+
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
     free( data );

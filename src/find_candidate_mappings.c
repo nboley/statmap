@@ -646,6 +646,7 @@ find_candidate_mappings( void* params )
     struct error_data_t* scratch_error_data = td->scratch_error_data;
     /* Flag - are we bootstrapping error data, or mapping? */
     enum INDEX_SEARCH_MODE mode = td->mode;
+    enum SEARCH_TYPE search_type = td->search_type;
 
     /* END parameter 'recreation' */
 
@@ -656,8 +657,10 @@ find_candidate_mappings( void* params )
     
     /* build the basepair mutation rate lookup table */
     float* bp_mut_rates;
-    if( mode == BOOTSTRAP )
+    if( search_type == OBS_ERRORS && mode == BOOTSTRAP )
         determine_bp_mut_rates_for_bootstrap( &bp_mut_rates );
+    else if( search_type == MISMATCHES )
+        determine_bp_mut_rates_for_mismatches( &bp_mut_rates );
     else
         determine_bp_mut_rates( &bp_mut_rates );
 
@@ -696,7 +699,7 @@ find_candidate_mappings( void* params )
          ) 
     {
         /* Check that this read is mappable */
-        if( mode == SEARCH )
+        if( search_type == OBS_ERRORS && mode == SEARCH )
         {
             if( filter_rawread( r1, global_error_data ) ||
                 filter_rawread( r2, global_error_data ) )
@@ -727,10 +730,17 @@ find_candidate_mappings( void* params )
             float* inverse_lookuptable_position = malloc(sizeof(float)*r->length);
             float* reverse_lookuptable_position = malloc(sizeof(float)*r->length);
             float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
+
+            /* determine whether to pass NULL or the global error data to build lookup tables */
+            struct error_data_t* lookup_table_error_data;
+            if( search_type == MISMATCHES || mode == BOOTSTRAP )
+                lookup_table_error_data = NULL;
+            else
+                lookup_table_error_data = global_error_data;
+
             build_lookup_table_from_rawread(
                 r,
-                // pass error data unless we're in bootstrap mode
-                (mode == BOOTSTRAP) ? NULL : global_error_data,
+                lookup_table_error_data,
                 lookuptable_position, 
                 inverse_lookuptable_position,
                 reverse_lookuptable_position, 
@@ -822,28 +832,33 @@ cleanup:
     }
 
     /******* update the error estimates *******/
-    struct error_data_t* error_data;
-    init_error_data( &error_data, 0, NULL );
-    int i;
-    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
-        update_error_data_from_candidate_mappings(
-            genome,
-            error_data,
-            candidate_mappings_cache[ i ],
-            rawreads_cache[ i ]
-        );
+    if( search_type == OBS_ERRORS )
+    {
+        struct error_data_t* error_data;
+        init_error_data( &error_data, 0, NULL );
+
+        int i;
+        for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
+            update_error_data_from_candidate_mappings(
+                genome,
+                error_data,
+                candidate_mappings_cache[ i ],
+                rawreads_cache[ i ]
+            );
+        }
+        // add error_data to scratch_error_data
+        pthread_mutex_lock( scratch_error_data->mutex );
+        add_error_data( scratch_error_data, error_data );
+        pthread_mutex_unlock( scratch_error_data->mutex );
+        // free local copy of error data
+        free_error_data( error_data );
     }
-    // add error_data to scratch_error_data
-    pthread_mutex_lock( scratch_error_data->mutex );
-    add_error_data( scratch_error_data, error_data );
-    pthread_mutex_unlock( scratch_error_data->mutex );
-    // free local copy of error data
-    free_error_data( error_data );
 
     /* cleanup the bp mutation rates */
     free( bp_mut_rates );
     
     /******* add the results to the database *******/
+    int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
     {
         /* skip empty mapping lists */
@@ -954,8 +969,9 @@ find_all_candidate_mappings( struct genome_data* genome,
                              candidate_mappings_db* mappings_db,
                              float min_match_penalty,
                              float max_penalty_spread,
-                             float max_seq_length
+                             float max_seq_length,
 
+                             enum SEARCH_TYPE search_type
     )
 {
     clock_t start = clock();
@@ -992,50 +1008,64 @@ find_all_candidate_mappings( struct genome_data* genome,
     td_template.max_penalty_spread = max_penalty_spread;
     td_template.max_subseq_len = max_seq_length;
 
-    /*
-     * initialize global error_data and scratch error_data
-     * scratch error_data has a mutex so it can be safely updated by each thread
-     */
-    struct error_data_t* global_error_data;
-    init_error_data( &global_error_data, 0, NULL );
-    td_template.global_error_data = global_error_data;
+    /* set up search depending on chosen search_type */
+    assert( search_type == OBS_ERRORS || search_type == MISMATCHES );
+    td_template.search_type = search_type;
 
-    struct error_data_t* scratch_error_data;
+    struct error_data_t* global_error_data = NULL;
+    struct error_data_t* scratch_error_data = NULL;
     pthread_mutex_t scratch_err_mutex = PTHREAD_MUTEX_INITIALIZER;
-    init_error_data( &scratch_error_data, 0, &scratch_err_mutex );
-    td_template.scratch_error_data = scratch_error_data;
 
-    /*
-       bootstrap global error data
-     */
-    /* bootstrap error data from first READS_STAT_UPDATE_STEP_SIZE reads */
-    td_template.max_readkey = READS_STAT_UPDATE_STEP_SIZE;
-    td_template.mode = BOOTSTRAP;
-    spawn_threads( &td_template );
-
-    /* set global_error_data to bootstrap's averaged scratch_error_data, and reset scratch */
-    //average_error_data( scratch_error_data );
-    add_error_data( global_error_data, scratch_error_data );
-    //global_error_data->num_unique_reads = 0;
-    clear_error_data( td_template.scratch_error_data );
-
-    /*
-     * check that there were some unique mappers - warn if no
-     */
-    if( !(global_error_data->num_unique_reads > 0) )
+    /* do search-type-specific setup */
+    if( search_type == OBS_ERRORS )
     {
-        fprintf( stderr, "FATAL       :  Statmap could not map any unique reads in the bootstrap.\n" );
-        exit(1);
+        init_error_data( &global_error_data, 0, NULL );
+        init_error_data( &scratch_error_data, 0, &scratch_err_mutex );
+
+        /* set the error data structs for the thread.
+         *
+         * If we're in OBS_ERRORS mode, global_error_data will have the bootstrapped
+         * error data and scratch_error_data will be initialized for updating. */
+        td_template.global_error_data = global_error_data;
+        td_template.scratch_error_data = scratch_error_data;
+
+        /*
+           bootstrap global error data
+         */
+        /* bootstrap error data from first READS_STAT_UPDATE_STEP_SIZE reads */
+        td_template.max_readkey = READS_STAT_UPDATE_STEP_SIZE;
+        td_template.mode = BOOTSTRAP;
+        spawn_threads( &td_template );
+        
+        /* copy bootstrapped error data to global_error_data, and reset scratch */
+        add_error_data( global_error_data, scratch_error_data );
+        clear_error_data( td_template.scratch_error_data );
+
+        /*
+         * check that there were some unique mappers - warn if no
+         */
+        if( global_error_data->num_unique_reads == 0 )
+        {
+            fprintf( stderr, "FATAL       :  Statmap could not map any unique reads in the bootstrap.\n" );
+            fprintf( stderr, "FATAL       :  Cannot map in observed errors mode with failing bootstrap.\n" );
+            exit(1);
+        }
+
+        /* rewind rawread db to beginning for mapping */
+        rewind_rawread_db( rdb );
+        /* reset max_readkey to first read */
+        td_template.max_readkey = 0;
+    } else {
+        /* set the error data structs for the thread.
+         *
+         * If we're in MISMATCHES, both will be set to NULL, which triggers
+         * searching using mismatches */
+        td_template.global_error_data = global_error_data;
+        td_template.scratch_error_data = scratch_error_data;
     }
 
-    /* 
-       map reads with the bootstrapped error data
-       reset td_template parameters to initial states
-     */
-    td_template.max_readkey = 0;
+    /* set mode to search the index */
     td_template.mode = SEARCH;
-    /* rewind rawread db to beginning and now we'll actually map */
-    rewind_rawread_db( rdb );
 
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
@@ -1044,14 +1074,15 @@ find_all_candidate_mappings( struct genome_data* genome,
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
 
         /* log the error data we're using for this round of mapping */
-        log_error_data( global_error_data );
+        if( search_type == OBS_ERRORS )
+            log_error_data( global_error_data );
 
         spawn_threads( &td_template );
 
-        /* after threads are done, average scratch data over the reads processed
-           by all threads, then weighted average into global_error_data */
-        //average_error_data( scratch_error_data );
-        update_global_error_data( global_error_data, scratch_error_data );
+        /* after threads are done, weighted average this round's error data
+         * into global_error_data */
+        if( search_type == OBS_ERRORS )
+            update_global_error_data( global_error_data, scratch_error_data );
     }
 
     // free error data structs

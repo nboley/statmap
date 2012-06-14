@@ -54,6 +54,7 @@ struct single_map_thread_data {
     struct error_data_t* scratch_error_data;
 
     enum INDEX_SEARCH_MODE mode;
+    enum SEARCH_TYPE search_type;
 };
 
 
@@ -69,7 +70,8 @@ find_all_candidate_mappings( struct genome_data* genome,
                              candidate_mappings_db* mappings_db,
                              float min_match_penalty,
                              float max_penalty_spread,
-                             float max_seq_length
+                             float max_seq_length,
 
+                             enum SEARCH_TYPE search_type
     );
 

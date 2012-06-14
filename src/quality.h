@@ -35,6 +35,7 @@ void convert_into_quality_string( float* mutation_probs, char* quality, int seq_
 /* FIXME - change the name */
 extern void determine_bp_mut_rates( float** );
 extern void determine_bp_mut_rates_for_bootstrap( float** );
+extern void determine_bp_mut_rates_for_mismatches( float** );
 
 /* fwd declarations */
 struct rawread;

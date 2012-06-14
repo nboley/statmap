@@ -41,6 +41,8 @@ struct args_t {
 
     int indexed_seq_len;
     int num_threads;
+
+    enum SEARCH_TYPE search_type;
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
@@ -78,6 +80,8 @@ struct args_t {
 
         ("indexed_seq_len", c_int),
         ("num_threads", c_int),
+
+        ("search_type", c_uint),        # enum SEARCH_TYPE
         
         ("input_file_type", c_uint),    # enum input_file_type_t
         ("assay_type", c_uint),         # enum assay_type_t
