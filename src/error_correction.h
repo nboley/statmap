@@ -65,6 +65,8 @@ clear_error_data( struct error_data_t* data );
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data );
 
+void log_error_data( struct error_data_t* ed );
+
 void
 load_next_error_data_t_from_log_fp( struct error_data_t** ed,
                                     FILE* fp );

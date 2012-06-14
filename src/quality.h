@@ -97,16 +97,6 @@ penalty_func( LETTER_TYPE reference,
 );
 
 float
-compute_error_prb(
-        char bp,
-        char quality_char,
-        enum bool inverse,
-        int pos,
-        float seq_error,
-        struct error_data_t* error_data
-    );
-
-float
 est_error_prb( char bp, char error_score, enum bool inverse, 
                int pos, struct error_data_t* error_data );
 

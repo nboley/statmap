@@ -448,8 +448,8 @@ write_nonmapping_reads_to_fastq(
                 }
             } else {
                 if( search_type == OBS_ERRORS &&
-                    filter_rawread( rd1, saved_ed ) ||
-                    filter_rawread( rd2, saved_ed ) )
+                    ( filter_rawread( rd1, saved_ed ) ||
+                      filter_rawread( rd2, saved_ed ) ) )
                 {
                     fprintf_rawread_to_fastq( 
                         rdb->unmappable_paired_end_1_reads, rd1 );

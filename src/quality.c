@@ -228,41 +228,6 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
     return;
 }
 
-/*
-   compute probability that the given base was incorrectly called,
-   given our error model.
-*/
-float
-compute_error_prb(
-        char bp,
-        char quality_char,
-        enum bool inverse,
-        int pos,
-        float seq_error,
-        struct error_data_t* error_data
-    )
-{
-    /*
-       base obs_error_rate on the number of observed mismatches
-       on the quality score of the current bp
-     */
-
-    double obs_error_rate;
-
-    // avoid divide-by-0
-    if( 0 == error_data->qual_score_cnts[ (unsigned char) quality_char ] )
-        obs_error_rate = 0;
-    else
-        obs_error_rate =
-            error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
-            error_data->qual_score_cnts         [ (unsigned char) quality_char ];
-
-    double scale_factor = sqrt( error_data->num_unique_reads ) / READS_STAT_UPDATE_STEP_SIZE;
-    float rv = (1 - scale_factor) * seq_error + scale_factor * obs_error_rate;
-
-    return rv;
-}
-
 float
 est_error_prb( char bp, char error_score, enum bool inverse, 
                int pos, struct error_data_t* error_data )
@@ -290,12 +255,12 @@ est_error_prb( char bp, char error_score, enum bool inverse,
 
     // avoid divide-by-0
     double mismatch_component;
-    if( error_data->qual_score_cnts[error_score] == 0 )
+    if( error_data->qual_score_cnts[(unsigned char) error_score] == 0 )
     {
         mismatch_component = 0;
     } else {
-        mismatch_component = ( error_data->qual_score_mismatch_cnts[error_score] /
-                               error_data->qual_score_cnts[error_score] );
+        mismatch_component = ( error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
+                               error_data->qual_score_cnts[(unsigned char) error_score] );
     }
 
     float prb = ( loc_component + mismatch_component ) / 2 + FUDGE;
