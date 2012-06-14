@@ -1207,100 +1207,6 @@ def parse_error_data_log( log_fname ):
 
     return ed_structs
 
-def test_error_correction( read_len=20, nsamples=10000 ):
-    '''
-    Test error correction behavior based on output in error_stats.log
-    '''
-    output_directory = "smo_test_error_correction"
-
-    # these settings should match src/error_correction.h
-    ERROR_INTERVAL = 1000
-    ERROR_WEIGHT = 0.5
-    ERROR_STATS_LOG = "error_stats.log"
-
-    assert ERROR_INTERVAL < nsamples, "not much of a test then, is it?"
-
-    # build random genome
-    genome = build_random_genome( [10000,], ["1",] )
-
-    # write genome to disk
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( genome, genome_of, 1 )
-    genome_of.close()
-
-    # sample reads uniformly from genome
-    fragments = sample_uniformily_from_genome( genome, nsamples=nsamples, frag_len=read_len )
-    reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
-        )
-
-    # TEST: this shows that we are doing the weighted average of the local error rates
-    # based on ERROR_INTERVAL and ERROR_WEIGHT
-
-    # mutate reads predictably
-    # bp of every 1000th read is mutated, starting with the bp at index 0, then 1, ...
-    i = 0
-    for n in xrange(0, nsamples, ERROR_INTERVAL):
-        # don't accidentally substitue a different-cased copy of the same bp
-        curr_bps = ( reads[n][i], reads[n][i].swapcase() )
-        valid_bps = [ bp for bp in bps_set if bp not in curr_bps ]
-        reads[n] = reads[n][:i] + random.choice( valid_bps ) + reads[n][i+1:]
-        i += 1
-
-    # write the reads to file
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
-    reads_of.close()
-
-    # map
-    read_fnames = [ "tmp.fastq" ]
-    # we assume statmap is single threaded and processing the reads sequentially
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len, num_threads=1 )
-
-    # open error_stats.log
-    ed_structs = parse_error_data_log( "./%s/error_stats.log" % output_directory )
-
-    # loop over each struct in the order they were saved - so we get a snapshot of
-    # the global error data every ERROR_INTERVAL reads
-
-    # save location error rates from last seen struct
-    loc_error_rates = []
-    for i, struct in enumerate( ed_structs ):
-
-        # test of weighted average -
-        # loc error rate should be 1/2, 1/4, 1/8, ... starting at the 1st, 2nd, 3rd, indices
-        # since the only errors are at
-        # 1st bp in a read in the first 100 reads
-        # 2nd bp in a read in the next 100 reads
-        # etc.
-        # The errors should initially be 0.5 and halve each time (as subsequent syncs don't add
-        # additional errors in the same location)
-
-        for j in range( len(loc_error_rates) ):
-            # compare current struct with the last
-            if struct.loc_error_rates[j] != loc_error_rates[j]/2:
-                raise ValueError, "Contrived weighted average value is not what was expected: found %f, expected %f" \
-                    % ( struct.loc_error_rates[j], loc_error_rates[j]/2 )
-            else:
-                # update loc_error_rates
-                loc_error_rates[j] = struct.loc_error_rates[j]
-
-        # each subsequent struct should have an additonal loc error of ERROR_WEIGHT
-        # unless it's the final cleanup sync
-        if struct.loc_error_rates[i] != ERROR_WEIGHT:
-            print struct.loc_error_rates[i]
-            raise ValueError, "Initial loc error from mutated read was not ERROR_WEIGHT: found %f, expected %f" \
-                % ( struct.loc_error_rates[i], ERROR_WEIGHT )
-        else:
-            loc_error_rates.append( struct.loc_error_rates[i] )
-
-    print "PASS: Error correction weighted average calculation appears to be working"
-
-    if CLEANUP:
-        os.remove("./tmp.genome.fa")
-        os.remove("./tmp.fastq")
-        shutil.rmtree(output_directory)
-
 def test_diploid_genome_with_multiple_chrs():
     '''
     Make sure the machinery for handling multiple diploid chrs is working by mapping
@@ -1423,8 +1329,6 @@ if __name__ == '__main__':
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
-    #print "Start test_error_correction()"
-    #test_error_correction()
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
