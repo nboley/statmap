@@ -805,8 +805,15 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     unmappable_fp = open( "./%s/reads.unpaired.unmappable" % output_directory )
     num_unmappable_reads = sum( 1 for line in unmappable_fp )/4
     unmappable_fp.seek(0)
-    unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
+    unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0 )
     unmappable_fp.close()
+
+    # find the nonmapping reads
+    nonmapping_fp = open( "./%s/reads.unpaired.nonmapping" % output_directory )
+    num_nonmapping_reads = sum(1 for line in nonmapping_fp)/4
+    nonmapping_fp.seek(0)
+    nonmapping_reads_set = set( line.strip()[1:] for i, line in enumerate(nonmapping_fp) if i%4 == 0 )
+    nonmapping_fp.close()
 
     all_read_ids = set(map(str, range(100)))
     all_read_ids = all_read_ids - mapped_read_ids
@@ -815,14 +822,19 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     
     all_read_ids.sort( )
 
-    if len(fragments) != total_num_reads + num_unmappable_reads:
+    if len(fragments) != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
         raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
             % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
     
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
-    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference( unmappable_reads_set.union( set(mapped_reads_dict.keys()) ) )
+    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference(
+            nonmapping_reads_set.union(
+                unmappable_reads_set.union(
+                    set(mapped_reads_dict.keys())
+        ) ))
+
     if len( unmapped_reads ) != 0:
         for key, entry in enumerate(mutated_reads):
             print key, entry
@@ -1317,12 +1329,12 @@ if __name__ == '__main__':
     test_paired_end_sequence_finding( )
     print "Starting test_repeat_sequence_finding()"
     test_repeat_sequence_finding()
-    #print "Starting test_mutated_read_finding()"
-    #test_mutated_read_finding()
-    #print "Starting test_multithreaded_mapping()"
-    #test_multithreaded_mapping( )
-    #print "Starting test_multi_fasta_mapping()"
-    #test_multi_fasta_mapping( )
+    print "Starting test_mutated_read_finding()"
+    test_mutated_read_finding()
+    print "Starting test_multithreaded_mapping()"
+    test_multithreaded_mapping( )
+    print "Starting test_multi_fasta_mapping()"
+    test_multi_fasta_mapping( )
     print "Starting test_build_index()"
     test_build_index( )
     print "Starting test_diploid_genome()"
