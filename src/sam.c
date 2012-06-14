@@ -8,6 +8,7 @@
 #include "rawread.h"
 #include "mapped_read.h"
 #include "pseudo_location.h"
+#include "error_correction.h"
 
 void
 fprintf_nonpaired_mapped_read_as_sam( 
@@ -381,7 +382,6 @@ fprintf_mapped_read_to_sam(
     return;
 }
 
-#if 0
 void
 write_nonmapping_reads_to_fastq( 
     struct rawread_db_t* rdb,
@@ -400,6 +400,9 @@ write_nonmapping_reads_to_fastq(
     struct rawread *rd1, *rd2;
     struct mapped_read_t* mapped_rd;
 
+    struct error_data_t* saved_ed = NULL;
+    FILE* elogfp = fopen( ERROR_STATS_LOG, "r" );
+
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
         &mapped_rd
@@ -410,6 +413,10 @@ write_nonmapping_reads_to_fastq(
 
     while( rd1 != NULL ) 
     {    
+        /* load error data (if necessary) */
+        if( readkey%READS_STAT_UPDATE_STEP_SIZE == 1 )
+            load_next_error_data_t_from_log_fp( &saved_ed, elogfp );
+
         /* if this read doesn't have an associated mapped reads */
         if( mapped_rd == NULL
             || ( mapped_rd != NULL
@@ -423,7 +430,7 @@ write_nonmapping_reads_to_fastq(
             /* If this is a single end read */
             if( rd2 == NULL )
             {
-                if( filter_rawread( rd1 ) )
+                if( filter_rawread( rd1, saved_ed ) )
                 {
                     fprintf_rawread_to_fastq( 
                         rdb->unmappable_single_end_reads, rd1 );
@@ -432,7 +439,8 @@ write_nonmapping_reads_to_fastq(
                         rdb->non_mapping_single_end_reads, rd1 );                    
                 }
             } else {
-                if( filter_rawread( rd1 ) || filter_rawread( rd2 ) )
+                if( filter_rawread( rd1, saved_ed ) ||
+                    filter_rawread( rd2, saved_ed ) )
                 {
                     fprintf_rawread_to_fastq( 
                         rdb->unmappable_paired_end_1_reads, rd1 );
@@ -469,11 +477,15 @@ write_nonmapping_reads_to_fastq(
         /* we always get the next raw read */
         get_next_read_from_rawread_db( 
             rdb, &readkey, &rd1, &rd2, -1 );
+
     }
 
     goto cleanup;
 
 cleanup:
+    /* Close the error stats log */
+    fclose( elogfp );
+
     if( NULL != mapped_rd )
         free_mapped_read( mapped_rd );
 
@@ -492,8 +504,6 @@ cleanup:
     
     return;
 }
-#endif
-
 
 void
 write_mapped_reads_to_sam( 

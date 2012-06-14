@@ -18,6 +18,7 @@
 #include "error_correction.h"
 #include "diploid_map_data.h"
 #include "genome.h" // TODO: or incorporate diploid stuff into index_genome?
+#include "rawread.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
@@ -586,9 +587,21 @@ update_error_data_from_candidate_mappings(
         
     char* error_str = r->error_str + loc->trimmed_len;
 
-    char* read_seq = r->char_seq + loc->trimmed_len;
-        
+    /* get the read sequence - rev complement if on reverse strand */
+    char* read_seq;
+    if( loc->rd_strnd == BKWD )
+    {
+        read_seq = calloc( r->length + 1, sizeof(char) );
+        rev_complement_read( r->char_seq + loc->trimmed_len, read_seq, r->length );
+    } else {
+        read_seq = r->char_seq + loc->trimmed_len;
+    }
+
     update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+
+    /* free memory if we allocated it */
+    if( loc->rd_strnd == BKWD )
+        free( read_seq );
 
     return;
 }
@@ -687,7 +700,10 @@ find_candidate_mappings( void* params )
         {
             if( filter_rawread( r1, global_error_data ) ||
                 filter_rawread( r2, global_error_data ) )
+            {
+                /* skip the unmappable read */
                 continue;
+            }
         }
 
         /* We dont memory lock mapped_cnt because it's read only and we dont 
@@ -807,7 +823,7 @@ cleanup:
 
     /******* update the error estimates *******/
     struct error_data_t* error_data;
-    init_error_data( &error_data, NULL );
+    init_error_data( &error_data, 0, NULL );
     int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
         update_error_data_from_candidate_mappings(
@@ -981,12 +997,12 @@ find_all_candidate_mappings( struct genome_data* genome,
      * scratch error_data has a mutex so it can be safely updated by each thread
      */
     struct error_data_t* global_error_data;
-    init_error_data( &global_error_data, NULL );
+    init_error_data( &global_error_data, 0, NULL );
     td_template.global_error_data = global_error_data;
 
     struct error_data_t* scratch_error_data;
     pthread_mutex_t scratch_err_mutex = PTHREAD_MUTEX_INITIALIZER;
-    init_error_data( &scratch_error_data, &scratch_err_mutex );
+    init_error_data( &scratch_error_data, 0, &scratch_err_mutex );
     td_template.scratch_error_data = scratch_error_data;
 
     /*
@@ -998,7 +1014,7 @@ find_all_candidate_mappings( struct genome_data* genome,
     spawn_threads( &td_template );
 
     /* set global_error_data to bootstrap's averaged scratch_error_data, and reset scratch */
-    average_error_data( scratch_error_data );
+    //average_error_data( scratch_error_data );
     add_error_data( global_error_data, scratch_error_data );
     //global_error_data->num_unique_reads = 0;
     clear_error_data( td_template.scratch_error_data );
@@ -1018,13 +1034,15 @@ find_all_candidate_mappings( struct genome_data* genome,
         // update the maximum allowable readkey
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
 
+        /* log the error data we're using for this round of mapping */
+        log_error_data( global_error_data );
+
         spawn_threads( &td_template );
 
         /* after threads are done, average scratch data over the reads processed
            by all threads, then weighted average into global_error_data */
-        average_error_data( scratch_error_data );
+        //average_error_data( scratch_error_data );
         update_global_error_data( global_error_data, scratch_error_data );
-
     }
 
     // free error data structs

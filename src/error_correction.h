@@ -26,6 +26,8 @@ struct error_data_t {
 void
 init_error_data( 
     struct error_data_t** data,
+    /* set to 0 if unknown, will be dynamically updated by all fns */
+    int max_read_length, 
     pthread_mutex_t* mutex
 );
 
@@ -63,3 +65,6 @@ clear_error_data( struct error_data_t* data );
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data );
 
+void
+load_next_error_data_t_from_log_fp( struct error_data_t** ed,
+                                    FILE* fp );

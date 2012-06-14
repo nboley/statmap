@@ -852,7 +852,6 @@ map_marginal( struct args_t* args,
     /*  close candidate mappings db */
     close_candidate_mappings_db( &candidate_mappings );
     
-#if 0
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
@@ -861,7 +860,6 @@ map_marginal( struct args_t* args,
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
                     (float)(stop.tv_sec - start.tv_sec) 
                         + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-#endif
 
     return;
 }

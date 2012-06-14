@@ -10,14 +10,15 @@
 void
 init_error_data( 
     struct error_data_t** data,
+    int max_read_length, /* set to 0 if unknown, will be updated by all fns */
     pthread_mutex_t* mutex
 )
 {
-    *data = calloc(  sizeof(struct error_data_t), 1 );
+    *data = calloc( sizeof(struct error_data_t), 1 );
     
     (*data)->num_unique_reads = 0;
-    (*data)->max_read_length = 0;
-    (*data)->position_mismatch_cnts = NULL;
+    (*data)->max_read_length = max_read_length;
+    (*data)->position_mismatch_cnts = malloc( max_read_length*sizeof(double) );
     
     int j;
     for( j = 0; j < max_num_qual_scores; j++ )
@@ -41,8 +42,6 @@ free_error_data( struct error_data_t* data )
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
     free( data );
-    
-    return;
 }
 
 void
@@ -238,11 +237,6 @@ update_global_error_data(
 {
     weighted_average_error_data( global, local, ERROR_WEIGHT );
 
-    /* write global error data
-     * (which will be used to map reads in the next set of threads ),
-     * to log file */
-    log_error_data( global );
-
     /* reset local error data */
     clear_error_data( local );
 }
@@ -250,27 +244,65 @@ update_global_error_data(
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data )
 {
-    fprintf( stream, "Num Unique Reads:\t%i\n", data->num_unique_reads );
-    fprintf( stream, "Max Read Length:\t%i\n", data->max_read_length );
+    fprintf( stream, "num_unique_reads:\t%i\n", data->num_unique_reads );
+    fprintf( stream, "max_read_length:\t%i\n", data->max_read_length );
 
-    fprintf( stream, "Loc Error Rates:\n" );
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] / data->num_unique_reads );
+        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] );
     }
     
-    fprintf( stream, "Qual Score Error Rates:\n" );
     for( i = 0; i < max_num_qual_scores; i++ )
     {
-        float qs_error_rate;
-        if( data->qual_score_cnts[ i ] == 0 ) // avoid NaNs
-            qs_error_rate = 0;
-        else
-            qs_error_rate = data->qual_score_mismatch_cnts[ i ]/data->qual_score_cnts[ i ];
-
-        fprintf( stream, "%i\t%e\n", i, qs_error_rate );
+        fprintf( stream, "%i\t%e\t%e\n", i, 
+                 data->qual_score_mismatch_cnts[ i ],
+                 data->qual_score_cnts[i] );
     }
-    
-    return;
+}
+
+void
+load_next_error_data_t_from_log_fp( struct error_data_t** ed,
+                                    FILE* fp )
+{
+    /* clear old error data */
+    if( *ed != NULL )
+        free_error_data( *ed );
+
+    /* set ed to NULL if we're at EOF */
+    if( feof(fp) ) {
+        *ed = NULL;
+        return;
+    }
+
+    /* otherwise, the fp should be on the first line of an error_data_t entry */
+    int rv, num_unique_reads, max_read_length;
+    rv = fscanf( fp, "num_unique_reads:\t%i\n", &num_unique_reads );
+    assert( rv == 1 ); // make sure the fp was on the first line of a new entry
+    fscanf( fp, "max_read_length:\t%i\n", &max_read_length );
+    assert( rv == 1 );
+
+    /* set up error_data_t */
+    init_error_data( ed, max_read_length, NULL );
+    (*ed)->num_unique_reads = num_unique_reads;
+
+    // load position_mismatch_cnts
+    int i;
+    for( i = 0; i < max_read_length; i++ )
+    {
+        double pmc;
+        rv = fscanf( fp, "%*i %le", &pmc );
+        assert( rv == 1 );
+        (*ed)->position_mismatch_cnts[i] = pmc;
+    }
+
+    // load qual_score_cnts and qual_score_mismatch_cnts
+    for( i = 0; i < max_num_qual_scores; i++ )
+    {
+        double qsc, qsmc;
+        rv = fscanf( fp, "%*i %le %le", &qsmc, &qsc );
+        assert( rv == 2 );
+        (*ed)->qual_score_cnts[i] = qsc;
+        (*ed)->qual_score_mismatch_cnts[i] = qsmc;
+    }
 }

@@ -32,6 +32,9 @@ struct rawread {
     // float* mutation_type_penalties;
 };
 
+/* fwd declaration for error_data_t */
+struct error_data_t;
+
 /* Initialize a raw read. The length's are needed to init the char strings */
 void 
 init_rawread( struct rawread** r,

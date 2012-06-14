@@ -13,7 +13,7 @@ verify_mapped_read_locations : verify_mapped_read_locations.c
 	../src/quality.o ../src/genome.o  ../src/sam.o  ../src/pseudo_location.o \
 	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
 	../src/iterative_mapping.o ../src/config_parsing.o ../src/diploid_map_data.o \
-	../src/candidate_mapping.o \
+	../src/candidate_mapping.o ../src/error_correction.o \
 	-lm -pthread
 	cp verify_mapped_read_locations ../bin/
 

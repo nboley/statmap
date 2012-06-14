@@ -31,7 +31,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = False
+P_STATMAP_OUTPUT = True
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -1396,14 +1396,14 @@ if __name__ == '__main__':
     test_threep_sequence_finding()
     print "Starting test_paired_end_sequence_finding()"
     test_paired_end_sequence_finding( )
-    print "Starting test_repeat_sequence_finding()"
-    test_repeat_sequence_finding()
-    print "Starting test_mutated_read_finding()"
-    test_mutated_read_finding()
-    print "Starting test_multithreaded_mapping()"
-    test_multithreaded_mapping( )
-    print "Starting test_multi_fasta_mapping()"
-    test_multi_fasta_mapping( )
+    #print "Starting test_repeat_sequence_finding()"
+    #test_repeat_sequence_finding()
+    #print "Starting test_mutated_read_finding()"
+    #test_mutated_read_finding()
+    #print "Starting test_multithreaded_mapping()"
+    #test_multithreaded_mapping( )
+    #print "Starting test_multi_fasta_mapping()"
+    #test_multi_fasta_mapping( )
     print "Starting test_build_index()"
     test_build_index( )
     print "Starting test_diploid_genome()"
@@ -1414,8 +1414,8 @@ if __name__ == '__main__':
     #test_error_correction()
 
     if RUN_SLOW_TESTS:
-        print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
-        test_lots_of_repeat_sequence_finding( )
+        #print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
+        #test_lots_of_repeat_sequence_finding( )
         print "[SLOW] Start test_lots_of_diploid_repeat_sequence_finding()"
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"

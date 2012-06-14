@@ -228,10 +228,10 @@ filter_rawread( struct rawread* r,
     int i;
     for( i = 0; i < r->length; i++ )
     {
-        double qual = 1 - est_error_prb( 
-            r->char_seq[i], r->error_str[i], false, i, ed
+        double qual = 1 - pow(10, 
+            est_error_prb( r->char_seq[i], r->error_str[i], false, i, ed )
         );
-        
+
         /* count the number of hq basepairs */
         if( qual > 0.999 )
             num_hq_bps += 1;

@@ -269,57 +269,44 @@ est_error_prb( char bp, char error_score, enum bool inverse,
 {
     /* if we don't have any error data, we are in BOOTSTRAP mode.
      * Return 0 - don't want to use the sequencer's estimates */
-    if( NULL == error_data ) return 0;
 
-    /* error estimate from sequencer, based on quality score */
-    float seq_error = -1;
+    /* Since log10(0) is undefined, we use a tiny fudge factor */
+    #define FUDGE 1e-6
 
-    /*
-        Make sure our quality score is not less than 0
-        Sometimes the max/min heuristic fails to find the true minimum
-        (we can't always scan through EVERY read, could be an enormous amount).
-        IF the heuristic fails, then this will slightly round up the worst quality
-        scores. 
-    */
-    unsigned char quality_char = MAX(QUAL_SHIFT, ((unsigned char) error_score)) - QUAL_SHIFT;
-    assert( quality_char < 100 );
-
-    /**** compute err prb from quality score ****/
-    
-    if( inverse == false ) {
-        /* check to see if the read is an 'N'. If it is, set the qual to the min */
-        if( bp == 'N' || bp == 'n' )
-        {
-            /* set the probability that this is incorrect to 0.75 */
-            seq_error = -0.1249387;
-        } else {
-            if( ARE_LOG_ODDS == false )
-            {
-                seq_error = logodds_lookuptable_score[ quality_char ];
-            } else {
-                seq_error = logprb_lookuptable_score[ quality_char ];
-            }
-        }
-    } else {
-        /* check to see if the read is an 'N'. If it is, set the qual to the min */
-        if( bp == 'N' || bp == 'n' )
-        {
-            /* set the probability that this is correct to 0.25 */
-            seq_error = -0.60206;
-        } else {
-            if( ARE_LOG_ODDS == false )
-            {
-                seq_error = logodds_inverse_lookuptable_score[ quality_char ];
-            } else {
-                seq_error = logprb_inverse_lookuptable_score[ quality_char ];
-            }
-        }
+    if( NULL == error_data )
+    {
+        if( inverse )
+            return log10(1 - FUDGE);
+        else
+            return log10(FUDGE);
     }
 
     /*
-       compute error score from sequencer estimates and observed error data
+       compute error score from observed error data
      */
-    return compute_error_prb( bp, quality_char, inverse, pos, seq_error, error_data );
+
+    double loc_component = ( error_data->position_mismatch_cnts[pos] /
+                             error_data->num_unique_reads );
+
+    // avoid divide-by-0
+    double mismatch_component;
+    if( error_data->qual_score_cnts[error_score] == 0 )
+    {
+        mismatch_component = 0;
+    } else {
+        mismatch_component = ( error_data->qual_score_mismatch_cnts[error_score] /
+                               error_data->qual_score_cnts[error_score] );
+    }
+
+    float prb = ( loc_component + mismatch_component ) / 2 + FUDGE;
+
+    assert( prb > 0 && prb <= 1 ); // make sure prb is, in fact, a probability
+    /* convert to log prb */
+    if( inverse ) {
+        return log10(1 - prb);
+    } else {
+        return log10(prb);
+    }
 }
 
 
@@ -348,8 +335,6 @@ build_lookup_table_from_rawread ( struct rawread* rd,
         /* and the reverse position */
         reverse_inverse_lookuptable_position[rd->length-1-i] 
             = inverse_lookuptable_position[i];
-
-        assert( isfinite(inverse_lookuptable_position[i]) );
     }
 }
 
