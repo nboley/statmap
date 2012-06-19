@@ -48,18 +48,24 @@ begin with the name of the chromosome followed by an underscore, and then option
 other text. We require that this name match the prefix of the identifier in each
 associated FASTA file.
 
-===== Input =========================================================================
+Input
+=====
 
-Statmap requires 2 types of input: a binary genome and reads in the FASTQ format.
+Statmap **requires** a reference genome and reads to map.
 
-REFERENCE GENOME:
+Options are provided in both long and short forms. To see the full list, run
+`statmap --help` or `statmap -?`.
 
-Currently, statmap accepts a reference genome as a binary genome file. To create
-the binary genome file, use utilities/build_index.
+Genome
+------
+
+Currently, statmap accepts a reference genome as a Statmap binary genome file.
+To create the binary genome file, use `utilities/build_index.py`.
 
 -g - reference genome - in binary format
 
-INPUT READS:
+Reads
+-----
 
 Currently, statmap ONLY ACCEPTS READS IN THE FASTQ FORMAT
 
@@ -79,17 +85,11 @@ OR
 -3 : Specifies pair 1 negative control data ( only Chip Seq )
 -4 : Specifies pair 2 negative control data ( only Chip Seq )
 
-===== Arguments ====================================================================
 
-Required Arguments:
-
-CURRENTLY NONE
-
-Suggested Arguments:
+Optional arguments
+------------------
 
 -o : directory to write output to.
-
-Optional Arguments:
 
 -p : The minimum match penalty.
 
@@ -153,12 +153,13 @@ necessarily correct - so be careful.
 In addition, there is a script for generating this file in utilities.
 
 Arguments that you probably dont want to touch unless you know what you are doing:
+(note: **deprecated**)
 
 -i : Indexed sequence length
 -l : ( DEBUG ) debugging  log file
--c : ( DEBUG ) candidate mapping db directory
 
-===== Output ========================================================================
+Output
+======
 
 Statmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min ), in
 which it stores all of the mapping results. The list of saved output depends on the 
