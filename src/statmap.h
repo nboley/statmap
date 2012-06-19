@@ -19,8 +19,6 @@ struct rawread_db_t;
 struct args_t;
 enum input_file_type_t;
 
-void usage();
-
 /*
  * Try and determine the file type. 
  *
@@ -44,9 +42,6 @@ guess_input_file_type( struct args_t* args );
  */
 int
 guess_optimal_indexed_seq_len( struct args_t* args);
-
-struct args_t
-parse_arguments( int argc, char** argv );
 
 struct mapped_reads_db;
 
