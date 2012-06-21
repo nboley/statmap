@@ -235,8 +235,10 @@ load_diploid_maps_from_file(
     /* Check if there is diploid map data to read, marked by first byte */
     int marker;
     rv = fscanf( fp, "%i\n", &marker ); assert( rv == 1 );
-    if( marker == 0 )
-        return 0;
+    if( marker == 0 ) {
+        *dmt = NULL;
+        return;
+    }
 
     /* Read the number of structs in the file */
     int num_structs;

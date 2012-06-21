@@ -211,53 +211,53 @@ const char* argp_program_bug_address =
 static struct argp_option options[] = 
 {
     /* genome file -- required */
-    {0, 0, 0, 0, "Genome:"},
+    {0, 0, 0, 0, "Genome:", 0},
     {"genome", 'g', "GENOME", 0,
-        "Path to Statmap format genome file"},
+     "Path to Statmap format genome file", 0},
 
     /* input reads -- required */
-    {0, 0, 0, 0, "Single End Reads:"},
+    {0, 0, 0, 0, "Single End Reads:", 0},
     {"unpaired", 'r', "READS", 0, 
-        "FASTQ input file for single end reads"},
+     "FASTQ input file for single end reads", 0},
     {"unpaired-negative-control", 'c', "NCONTROL", 0,
-        "Specifies negative control data (ChIP-Seq only, optional)"},
+     "Specifies negative control data (ChIP-Seq only, optional)", 0},
 
-    {0, 0, 0, 0, "Paired End Reads:"},
+    {0, 0, 0, 0, "Paired End Reads:", 0},
     {"paired-1", '1', "READS1", 0,
-        "FASTQ input for for the first set of read pairs"},
+     "FASTQ input for for the first set of read pairs", 0},
     {"paired-2", '2', "READS2", 0,
-        "FASTQ input for for the second set of read pairs"},
+     "FASTQ input for for the second set of read pairs", 0},
     {"negative-control-1", '3', "NCONTROL1", 0,
-        "Specifies pair 1 negative control data (ChIP-Seq only, optional)"},
+     "Specifies pair 1 negative control data (ChIP-Seq only, optional)", 0},
     {"negative-control-2", '4', "NCONTROL2", 0,
-        "Specifies pair 1 negative control data (ChIP-Seq only, optional)"},
+     "Specifies pair 1 negative control data (ChIP-Seq only, optional)", 0},
 
     /* optional arguments */
-    {0, 0, 0, 0, "Optional Arguments:"},
+    {0, 0, 0, 0, "Optional Arguments:", 0},
     {"min-match-penalty", 'p', "PENALTY", 0,
-        "Lower bound that we will map to (in log10 probability space)"},
+     "Lower bound that we will map to (in log10 probability space)", 0},
     {"max-penalty-spread", 'm', "SPREAD", 0,
-        "Upper bound of the difference of probabilities between the top matching sequence and the sequence of interest (in log10 probaiblity space)"},
+     "Upper bound of the difference of probabilities between the top matching sequence and the sequence of interest (in log10 probaiblity space)", 0},
     {"assay", 'a', "ASSAY", 0,
-        "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq and 'a' for CAGE"},
+     "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq and 'a' for CAGE", 0},
     {"num-samples", 'n', "SAMPLES", 0,
-        "In iterative mapping, number of samples to take from the mapping posterior"},
+     "In iterative mapping, number of samples to take from the mapping posterior", 0},
     {"threads", 't', "THREADS", 0,
-        "Number of threads to use. Defaults to all available, but no more than 8."},
+     "Number of threads to use. Defaults to all available, but no more than 8.", 0},
     {"min-num-hq-bps", 'q', "NUM", 0,
-        "Number of HQ (above 99% prob correctness) bps needed in order to map a read"},
+     "Number of HQ (above 99% prob correctness) bps needed in order to map a read", 0},
     {"frag-len-dist", 'f', "DIST", 0,
-        "Fragment length distribution file"},
+     "Fragment length distribution file", 0},
     {"output-dir", 'o', "DIR", 0,
-        "Directory to write Statmap output to" },
+     "Directory to write Statmap output to", 0 },
     {"indexed-seq-len", 'i', "LEN", 0,
-        "Indexed sequence length (defaults to length of first read)" },
+     "Indexed sequence length (defaults to length of first read)", 0 },
     {"log", 'l', "FILE", 0,
-        "File to log debugging info to" },
+     "File to log debugging info to", 0 },
     // -i, -l, -c ...
 
     /* must end with an entry containing all zeros */
-    {0}
+    {0,0,0,0,0,0}
 };
 
 /*
@@ -359,7 +359,7 @@ static char doc[] =
 "Statmap is a fast alignment tool for mapping short reads to a reference.";
 
 /* the ARGP structure */
-static struct argp argp = {options, parse_opt, args_doc, doc};
+static struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
 
 struct args_t
 parse_arguments( int argc, char** argv )

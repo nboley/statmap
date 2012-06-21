@@ -250,14 +250,16 @@ compute_error_prb(
     double obs_error_rate;
 
     // avoid divide-by-0
-    if( 0 == error_data->qual_score_cnts[ (unsigned char) quality_char ] )
-        obs_error_rate = 0;
+    if( 0 == error_data->qual_score_cnts[(unsigned char) quality_char] )
+        obs_error_rate = seq_error;
     else
         obs_error_rate =
-            error_data->qual_score_mismatch_cnts[ (unsigned char) quality_char ] /
-            error_data->qual_score_cnts         [ (unsigned char) quality_char ];
+            error_data->qual_score_mismatch_cnts[(unsigned char) quality_char] /
+            error_data->qual_score_cnts         [(unsigned char) quality_char];
 
-    double scale_factor = sqrt( error_data->num_unique_reads ) / READS_STAT_UPDATE_STEP_SIZE;
+    double scale_factor = sqrt( error_data->num_unique_reads
+                                / READS_STAT_UPDATE_STEP_SIZE );
+        
     float rv = (1 - scale_factor) * seq_error + scale_factor * obs_error_rate;
 
     return rv;
