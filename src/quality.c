@@ -29,6 +29,48 @@ enum bool ARE_LOG_ODDS = true;
  */
 int QUAL_SHIFT = -1;
 
+/**** Penalty array functions ****/
+
+void
+init_penalty_array( int x, int y, int z, struct penalty_array* pa )
+{
+    /* Set dimensions of array */
+    pa->x = x; pa->y = y; pa->z = z;
+
+    /* Allocate pointer to first level (x) */
+    pa->array = malloc( x * sizeof(float**) );
+
+    /* Allocate pointers for second and third levels */
+    int i, j;
+    for( i = 0; i < x; i++ )
+    {
+        /* Allocate pointers to second level (y) */
+        pa->array = malloc( y * sizeof(float *) );
+
+        /* Allocate pointers to third level (z) */
+        for( j = 0; j < y; j++ )
+        {
+            pa->array[i][j] = malloc( z * sizeof(float) );
+        }
+    }
+}
+
+void
+free_penalty_array( struct penalty_array* pa )
+{
+    int i, j;
+    for( i = 0; i < pa->x; i++ )
+    {
+        for( j = 0; j < pa->y; j++ )
+        {
+            free( pa->array[i][j] );
+        }
+
+        free( pa->array[i] );
+    }
+
+    free( pa->array );
+}
 
 /*
  * quality.c
@@ -302,6 +344,7 @@ build_lookup_table_from_rawread ( struct rawread* rd,
             = inverse_lookuptable_position[i];
     }
 }
+
 
 void
 build_mismatch_lookup_table( float** lookuptable_position,

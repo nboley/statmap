@@ -16,6 +16,22 @@
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
 
+/*
+   3d array of penalties:
+   length of read * ref bp * obs bp
+ */
+struct penalty_array {
+    /* Array dimensions */
+    int x, y, z;
+
+    float*** array;
+};
+
+void
+init_penalty_array( int x, int y, int z, struct penalty_array* pa );
+
+void
+free_penalty_array( struct penalty_array* pa );
 
 // const int solexa_qual_start = 64;
 // const int num_possible_quality_chars = 85;
