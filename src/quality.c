@@ -29,6 +29,53 @@ enum bool ARE_LOG_ODDS = true;
  */
 int QUAL_SHIFT = -1;
 
+/* Utility functions to convert bps (char) to their encoded numerical reprs */
+int 
+bp_code( const char letter )
+{
+    switch( letter )
+    {
+    case 'A':
+    case 'a':
+        return 0;
+    case 'C':
+    case 'c':
+        return 1;
+    case 'G':
+    case 'g':
+        return 2;
+    case 'T':
+    case 't':
+        return 3;
+    }
+
+    fprintf(stderr, "PANIC - Error converting '%c' in recheck\n", letter );
+    assert( false );
+    exit( -1 );
+}
+
+char
+code_bp( int code )
+{
+    switch( code )
+    {
+        case 0:
+            return 'A';
+        case 1:
+            return 'C':
+        case 2:
+            return 'G';
+        case 3:
+            return 'T';
+    }
+
+    fprintf(stderr, "PANIC - Error converting bp code %i in "
+                    "penalty array build.\n"
+        );
+    exit( -1 );
+}
+
+
 /**** Penalty array functions ****/
 
 void
@@ -101,10 +148,14 @@ build_error_data_penalty_array_from_rawread(
                 /* estimate error probability based on observed sequence and
                    error data */
                 pa->penalties[i].array[j][k] = est_error_prb(
-                        rd->char_seq[i], rd->error_str[i], false, i, error_data
+                        code_bp(j),
+                        code_bp(k),
+                        rd->error_str[i],
+                        i,
+                        error_data
                     );
 
-                /* add penalty if bp's mismatch */
+                /* add mismatch penalty */
                 if( j != k )
                 {
                     /* log10(1/3) = -0.4771213 */
@@ -146,165 +197,6 @@ build_mismatch_penalty_array_from_rawread(
     }
 }
 
-/*
- * quality.c
- *
- * Functions and data types for converting fastq quality strings into
- * mutation probability arrays, and vice versa.
- *
- */
-
-/* 
- * Quality Lookup Tables
- * 
- * This converts the integer quality score returned by
- * solexa sequencing machines from the GA pipeline v <1.3.
- *
- * The sanger standard is that the Quality score is
- * Q_sanger = -10*log_10( p ), where p is the probability 
- * of a mutation. 
- *
- * Solexa calculates the quality as
- * Q_solexa = -10*log_10( p / 1-p )
- *
- * ( see http://en.wikipedia.org/wiki/FASTQ_format#Variations )
- *
- * The table, solexa_lookuptable_score stores the value of p
- * for quality scores ranging from -5 to 62. That is, there are
- * 68 entries total. 
- *
- *
- * here is the python code that generated these table:
-
-from math import log10
-npc = 4 # number per column
-
-# generate the logodd q's
-qs = [ pow(10, s/-10.0)/(1+pow(10, s/-10.0)) \
-     for s in range(-5, 63) ]
-
-
-
-# generate the log-odds mutation table
-for i in range(0, len(qs), npc ):
-    print ",\t".join( "%.3e" % log10(qs[j])
-                  for j in xrange(i, i+npc) 
-                            if j < len(qs) ) + ","
-
-# generate the log-odds inverse mutation table
-for i in range(0, len(qs), npc ):
-    print ",\t".join( "%.3e" % log10(1-qs[j])
-                  for j in xrange(i, i+npc) 
-                            if j < len(qs) ) + ","
-
-# generate the logprb q's
-qs = [ min( 1-1e-15, pow(10, s/-10.0) ) for s in range(0, 63) ]
-     
-# generate the log-odds mutation table
-for i in range(0, len(qs), npc ):
-    print ",\t".join( "%.3e" % log10(qs[j])
-                  for j in xrange(i, i+npc) 
-                            if j < len(qs) ) + ","
-
-# generate the log-odds inverse mutation table
-for i in range(0, len(qs), npc ):
-    print ",\t".join( "%.3e" % log10(1-qs[j])
-                  for j in xrange(i, i+npc) 
-                            if j < len(qs) ) + ","
-
- *
- *
- */
-
-/* 
-   the probability of observing obs given that the ref basepair is unobservable. 
-   this is just log10( 0.25 ) - the N gives us 0 information. 
-*/
-static const double N_penalty = -0.60206;
-
-static const double 
-logodds_lookuptable_score[ 68 ] = {
-    -1.193e-01, -1.455e-01, -1.764e-01, -2.124e-01,
-    -2.539e-01, -3.010e-01, -3.539e-01, -4.124e-01,
-    -4.764e-01, -5.455e-01, -6.193e-01, -6.973e-01,
-    -7.790e-01, -8.639e-01, -9.515e-01, -1.041e+00,
-    -1.133e+00, -1.227e+00, -1.321e+00, -1.417e+00,
-    -1.514e+00, -1.611e+00, -1.709e+00, -1.807e+00,
-    -1.905e+00, -2.004e+00, -2.103e+00, -2.203e+00,
-    -2.302e+00, -2.402e+00, -2.501e+00, -2.601e+00,
-    -2.701e+00, -2.801e+00, -2.901e+00, -3.000e+00,
-    -3.100e+00, -3.200e+00, -3.300e+00, -3.400e+00,
-    -3.500e+00, -3.600e+00, -3.700e+00, -3.800e+00,
-    -3.900e+00, -4.000e+00, -4.100e+00, -4.200e+00,
-    -4.300e+00, -4.400e+00, -4.500e+00, -4.600e+00,
-    -4.700e+00, -4.800e+00, -4.900e+00, -5.000e+00,
-    -5.100e+00, -5.200e+00, -5.300e+00, -5.400e+00,
-    -5.500e+00, -5.600e+00, -5.700e+00, -5.800e+00,
-    -5.900e+00, -6.000e+00, -6.100e+00, -6.200e+00
-};
-
-static const double 
-logodds_inverse_lookuptable_score[ 68 ] = {
-    -6.193e-01, -5.455e-01, -4.764e-01, -4.124e-01,
-    -3.539e-01, -3.010e-01, -2.539e-01, -2.124e-01,
-    -1.764e-01, -1.455e-01, -1.193e-01, -9.732e-02,
-    -7.901e-02, -6.389e-02, -5.150e-02, -4.139e-02,
-    -3.320e-02, -2.657e-02, -2.124e-02, -1.695e-02,
-    -1.352e-02, -1.077e-02, -8.580e-03, -6.829e-03,
-    -5.433e-03, -4.321e-03, -3.436e-03, -2.732e-03,
-    -2.171e-03, -1.726e-03, -1.371e-03, -1.090e-03,
-    -8.657e-04, -6.878e-04, -5.464e-04, -4.341e-04,
-    -3.448e-04, -2.739e-04, -2.176e-04, -1.729e-04,
-    -1.373e-04, -1.091e-04, -8.664e-05, -6.883e-05,
-    -5.467e-05, -4.343e-05, -3.450e-05, -2.740e-05,
-    -2.177e-05, -1.729e-05, -1.373e-05, -1.091e-05,
-    -8.665e-06, -6.883e-06, -5.467e-06, -4.343e-06,
-    -3.450e-06, -2.740e-06, -2.177e-06, -1.729e-06,
-    -1.373e-06, -1.091e-06, -8.665e-07, -6.883e-07,
-    -5.467e-07, -4.343e-07, -3.450e-07, -2.740e-07
-};
-
-static const double 
-logprb_lookuptable_score[ 63 ] = {
-     0.000e+00, -1.000e-01, -2.000e-01, -3.000e-01,
-    -4.000e-01, -5.000e-01, -6.000e-01, -7.000e-01,
-    -8.000e-01, -9.000e-01, -1.000e+00, -1.100e+00,
-    -1.200e+00, -1.300e+00, -1.400e+00, -1.500e+00,
-    -1.600e+00, -1.700e+00, -1.800e+00, -1.900e+00,
-    -2.000e+00, -2.100e+00, -2.200e+00, -2.300e+00,
-    -2.400e+00, -2.500e+00, -2.600e+00, -2.700e+00,
-    -2.800e+00, -2.900e+00, -3.000e+00, -3.100e+00,
-    -3.200e+00, -3.300e+00, -3.400e+00, -3.500e+00,
-    -3.600e+00, -3.700e+00, -3.800e+00, -3.900e+00,
-    -4.000e+00, -4.100e+00, -4.200e+00, -4.300e+00,
-    -4.400e+00, -4.500e+00, -4.600e+00, -4.700e+00,
-    -4.800e+00, -4.900e+00, -5.000e+00, -5.100e+00,
-    -5.200e+00, -5.300e+00, -5.400e+00, -5.500e+00,
-    -5.600e+00, -5.700e+00, -5.800e+00, -5.900e+00,
-    -6.000e+00, -6.100e+00, -6.200e+00
-};
-
-static const double 
-logprb_inverse_lookuptable_score[ 63 ] = {
-    -1.000e-01, -6.868e-01, -4.329e-01, -3.021e-01,
-    -2.205e-01, -1.651e-01, -1.256e-01, -9.665e-02,
-    -7.494e-02, -5.844e-02, -4.576e-02, -3.594e-02,
-    -2.830e-02, -2.233e-02, -1.764e-02, -1.396e-02,
-    -1.105e-02, -8.753e-03, -6.938e-03, -5.502e-03,
-    -4.365e-03, -3.463e-03, -2.749e-03, -2.182e-03,
-    -1.732e-03, -1.376e-03, -1.092e-03, -8.674e-04,
-    -6.889e-04, -5.471e-04, -4.345e-04, -3.451e-04,
-    -2.741e-04, -2.177e-04, -1.729e-04, -1.374e-04,
-    -1.091e-04, -8.666e-05, -6.884e-05, -5.468e-05,
-    -4.343e-05, -3.450e-05, -2.740e-05, -2.177e-05,
-    -1.729e-05, -1.373e-05, -1.091e-05, -8.665e-06,
-    -6.883e-06, -5.467e-06, -4.343e-06, -3.450e-06,
-    -2.740e-06, -2.177e-06, -1.729e-06, -1.373e-06,
-    -1.091e-06, -8.665e-07, -6.883e-07, -5.467e-07,
-    -4.343e-07, -3.450e-07, -2.740e-07,
-};
-
-
 double
 mutation_probability( int qscore )
 {
@@ -345,23 +237,14 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
 }
 
 float
-est_error_prb( char bp, char error_score, enum bool inverse, 
-               int pos, struct error_data_t* error_data )
+error_prb(
+        char ref,
+        char obs,
+        char error_score,
+        int pos,
+        struct error_data_t* error_data
+    )
 {
-    /* if we don't have any error data, we are in BOOTSTRAP mode.
-     * Return 0 - don't want to use the sequencer's estimates */
-
-    /* Since log10(0) is undefined, we use a tiny fudge factor */
-    #define FUDGE 1e-6
-
-    if( NULL == error_data )
-    {
-        if( inverse )
-            return log10(1 - FUDGE);
-        else
-            return log10(FUDGE);
-    }
-
     /*
        compute error score from observed error data
      */
@@ -369,124 +252,59 @@ est_error_prb( char bp, char error_score, enum bool inverse,
     double loc_component = ( error_data->position_mismatch_cnts[pos] /
                              error_data->num_unique_reads );
 
-    // avoid divide-by-0
     double mismatch_component;
+    // avoid divide-by-0
     if( error_data->qual_score_cnts[(unsigned char) error_score] == 0 )
     {
         mismatch_component = 0;
-    } else {
+    }
+    else {
         mismatch_component =
             error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
             error_data->qual_score_cnts[(unsigned char) error_score];
     }
 
-    float prb = ( loc_component + mismatch_component ) / 2 + FUDGE;
+    float prb = ( loc_component + mismatch_component ) / 2 + LOG_FFACTOR;
 
     assert( prb > 0 && prb <= 1 ); // make sure prb is, in fact, a probability
+
     /* convert to log prb */
-    if( inverse ) {
-        return log10(1 - prb);
-    } else {
-        return log10(prb);
-    }
+    float log_prb;
+    /* if the bp's match, we return the inverse of the probability of error */
+    if( ref == obs )
+        log_prb = log10(1 - prb);
+    else
+        log_prb = log10(prb);
+
+    return log_prb;
 }
 
+float 
+multiple_letter_penalty(
+        const LETTER_TYPE* const reference,
+        const LETTER_TYPE* const observed,
 
-void
-build_lookup_table_from_rawread ( struct rawread* rd,
-                                  struct error_data_t* error_data,
-                                  float* lookuptable_position,
-                                  float* inverse_lookuptable_position,
-                                  float* reverse_lookuptable_position,
-                                  float* reverse_inverse_lookuptable_position
-    )
-{
-    int i;
+        const int start_position,
+        const int seq_length,
+        const int num_letters,
+        const float min_penalty,
 
-    for( i = 0; i < rd->length; i++ )
-    {
-        /* set the log prb of error */
-        lookuptable_position[i] 
-            = est_error_prb( rd->char_seq[i], rd->error_str[i], false, i, error_data );
-        /* set the reverse position */
-        reverse_lookuptable_position[rd->length-1-i] = lookuptable_position[i];
-
-        /* set the log prb of no error */
-        inverse_lookuptable_position[i] 
-            = est_error_prb( rd->char_seq[i], rd->error_str[i], true, i, error_data );
-        /* and the reverse position */
-        reverse_inverse_lookuptable_position[rd->length-1-i] 
-            = inverse_lookuptable_position[i];
-    }
-}
-
-
-void
-build_mismatch_lookup_table( float** lookuptable_position,
-                             float** inverse_lookuptable_position,
-                             float** lookuptable_bp,
-                             int seq_len
-    )
-{
-    *lookuptable_position = malloc( sizeof(float)*seq_len );
-    *inverse_lookuptable_position = malloc( sizeof(float)*seq_len );
-    *lookuptable_bp = malloc( sizeof(float)*16 );
-
-    int i;
-    for( i = 0; i < seq_len; i++ )
-    {
-        (*lookuptable_position)[i] = -1.0;
-        (*inverse_lookuptable_position)[i] = 0.0;
-    }
-
-    for( i = 0; i < 16; i++ )
-    {
-        (*lookuptable_bp)[i] = 0;
-    }
-
-    return;
-}
-
-
-void
-print_lookup_table( float* lookuptable_position, 
-                    float* inverse_lookuptable_position,
-                    int seq_len )
-{
-    int i;
-    for( i = 0; i < seq_len; i++ )
-    {        
-        fprintf(stdout, "%i\t%e\t%e\n", 
-                i+1, lookuptable_position[i], inverse_lookuptable_position[i]);
-    }
-}
-
- float 
-multiple_letter_penalty( const LETTER_TYPE* const reference,
-                         const LETTER_TYPE* const observed,
-                         const int start_position,
-                         const int seq_length,
-                         const int num_letters,
-                         const float min_penalty,
-                         const float* const lookuptable_position,
-                         const float* const inverse_lookuptable_position,
-                         const float* const lookuptable_bp
+        struct penalty_array_t* pa
     )
 {
     int j;
     float cum_penalty = 0;
+
     for( j = 0; j < num_letters - start_position; j++ )
     {
         /* determine the penalty contribution from letter j in seq i */ 
-        float added_penalty = penalty_func( 
-            reference[j], observed[j],
-            start_position + j, 
-            seq_length,
-            min_penalty - cum_penalty,
-            lookuptable_position,
-            inverse_lookuptable_position,
-            lookuptable_bp
-        );
+        float added_penalty = compute_penalty(
+                reference[j], observed[j],
+                start_position + j,
+                seq_length,
+                min_penalty - cum_penalty,
+                pa
+            );
         
         /* 
          * if the penalty is > 0, then that indicates that it exceeded the
@@ -501,233 +319,66 @@ multiple_letter_penalty( const LETTER_TYPE* const reference,
             cum_penalty += added_penalty;
         }
     }
+
     return cum_penalty;
 }
 
-extern void 
-determine_bp_mut_rates( float** lookuptable_bp_ref )
+float
+recheck_penalty(
+        char* reference,
+        char* observed,
+        const int seq_length,
+
+        struct penalty_array_t* pa
+    )
 {
-    *lookuptable_bp_ref = malloc(16*sizeof(float));
-    float* lookuptable_bp = *lookuptable_bp_ref;
-
-    lookuptable_bp[4*0+0] = -1000;                /*A->A*/
-    lookuptable_bp[4*0+1] = -0.4771213;           /*A->C*/
-    lookuptable_bp[4*0+2] = -0.4771213;           /*A->G*/
-    lookuptable_bp[4*0+3] = -0.4771213;           /*A->T*/
-
-    lookuptable_bp[4*1+0] = -0.4771213;           /*C->A*/   
-    lookuptable_bp[4*1+1] = -1000;                /*C->C*/
-    lookuptable_bp[4*1+2] = -0.4771213;           /*C->G*/
-    lookuptable_bp[4*1+3] = -0.4771213;           /*C->T*/
-
-    lookuptable_bp[4*2+0] = -0.4771213;           /*G->A*/
-    lookuptable_bp[4*2+1] = -0.4771213;           /*G->C*/
-    lookuptable_bp[4*2+2] = -1000;                /*G->G*/
-    lookuptable_bp[4*2+3] = -0.4771213;           /*G->T*/
-
-    lookuptable_bp[4*3+0] = -0.4771213;           /*T->A*/
-    lookuptable_bp[4*3+1] = -0.4771213;           /*T->C*/    
-    lookuptable_bp[4*3+2] = -0.4771213;           /*T->G*/
-    lookuptable_bp[4*3+3] = -1000;                /*T->T*/   
-
-    return;         
-}
-
-extern void determine_bp_mut_rates_for_bootstrap( float** lookuptable_bp_ref )
-{
-    *lookuptable_bp_ref = malloc(16*sizeof(float));
-    float* lookuptable_bp = *lookuptable_bp_ref;
-
-    lookuptable_bp[4*0+0] = 0;          /*A->A*/
-    lookuptable_bp[4*0+1] = 1;          /*A->C*/
-    lookuptable_bp[4*0+2] = 1;          /*A->G*/
-    lookuptable_bp[4*0+3] = 1;          /*A->T*/
-
-    lookuptable_bp[4*1+0] = 1;          /*C->A*/   
-    lookuptable_bp[4*1+1] = 0;          /*C->C*/
-    lookuptable_bp[4*1+2] = 1;          /*C->G*/
-    lookuptable_bp[4*1+3] = 1;          /*C->T*/
-
-    lookuptable_bp[4*2+0] = 1;          /*G->A*/
-    lookuptable_bp[4*2+1] = 1;          /*G->C*/
-    lookuptable_bp[4*2+2] = 0;          /*G->G*/
-    lookuptable_bp[4*2+3] = 1;          /*G->T*/
-
-    lookuptable_bp[4*3+0] = 1;          /*T->A*/
-    lookuptable_bp[4*3+1] = 1;          /*T->C*/    
-    lookuptable_bp[4*3+2] = 1;          /*T->G*/
-    lookuptable_bp[4*3+3] = 0;          /*T->T*/   
-}
-
-extern void determine_bp_mut_rates_for_mismatches( float** lookuptable_bp_ref )
-{
-    *lookuptable_bp_ref = malloc(16*sizeof(float));
-    float* lookuptable_bp = *lookuptable_bp_ref;
-
-    lookuptable_bp[4*0+0] = 0;          /*A->A*/
-    lookuptable_bp[4*0+1] = -1;          /*A->C*/
-    lookuptable_bp[4*0+2] = -1;          /*A->G*/
-    lookuptable_bp[4*0+3] = -1;          /*A->T*/
-
-    lookuptable_bp[4*1+0] = -1;          /*C->A*/   
-    lookuptable_bp[4*1+1] = 0;          /*C->C*/
-    lookuptable_bp[4*1+2] = -1;          /*C->G*/
-    lookuptable_bp[4*1+3] = -1;          /*C->T*/
-
-    lookuptable_bp[4*2+0] = -1;          /*G->A*/
-    lookuptable_bp[4*2+1] = -1;          /*G->C*/
-    lookuptable_bp[4*2+2] = 0;          /*G->G*/
-    lookuptable_bp[4*2+3] = -1;          /*G->T*/
-
-    lookuptable_bp[4*3+0] = -1;          /*T->A*/
-    lookuptable_bp[4*3+1] = -1;          /*T->C*/    
-    lookuptable_bp[4*3+2] = -1;          /*T->G*/
-    lookuptable_bp[4*3+3] = 0;          /*T->T*/   
-}
-
- int 
-bp_code( const char letter )
-{
-    switch( letter )
-    {
-    case 'A':
-    case 'a':
-        return 0;
-    case 'C':
-    case 'c':
-        return 1;
-    case 'G':
-    case 'g':
-        return 2;
-    case 'T':
-    case 't':
-        return 3;
-    }
-
-    fprintf(stderr, "PANIC - Error converting '%c' in recheck\n", letter );
-    assert( false );
-    exit( -1 );
-}
-
-float 
-recheck_penalty( char* reference, 
-                 char* observed, 
-                 const int seq_length,
-                 const float* n_lookuptable_position,
-                 const float* n_inverse_lookuptable_position,
-                 const float* n_lookuptable_bp )
-{
-    int i = 0;
+    int i;
     float penalty = 0;
+
     for( i = 0; i < seq_length; i++ )
     {
         char ref = toupper( reference[i] );
         char obs = toupper( observed[i] );
-        
+
         /* if it's an N, put in a max penalty substitution */
         if( ref == 'N' || obs == 'N' )
         {
             penalty += N_penalty;
-            assert( isfinite( penalty ) );
         } else {
-            if( ref == obs )
-            {
-                /* the marginal probability of a match */
-                penalty = penalty 
-                    + n_inverse_lookuptable_position[ i ] ;
-                if( !isfinite( penalty ) ) {
-                    printf("n_inverse_lookuptable_position : %f\n", n_inverse_lookuptable_position [ i ]);
-                }
-                assert( isfinite( penalty ) );
-            } else {
-                /* the marginal penalty of a mismatch */
-                penalty += n_lookuptable_position[ i ];
-                assert( isfinite( penalty ) );
-                
-                /* make the bp specific correction */
-                int bp_lookup = bp_code( ref );
-                bp_lookup = (bp_lookup << 2);
-                bp_lookup += bp_code( obs );
-                
-                penalty += n_lookuptable_bp[ bp_lookup ];
-                assert( isfinite( penalty ) );
-            }
-        }
+            penalty += pa->array[i].penalties[bp_code(ref)][bp_code(obs)];
     }
-    
-    assert( isfinite( penalty ) );
+
     return penalty;
 }
 
-
-float 
-penalty_func( /* 
-               * these aren't const because they are copies. I bit shift
-               * them while calculating the penalty.
-               */
-              LETTER_TYPE reference, 
-              LETTER_TYPE observed, 
-              /* the position in the sequence - this should be
-                 zero indexed */
-              const int position, 
-              /* the length of a full sequence */
-              const int seq_length,
-              /* the minimum allowable penalty */
-              const float min_penalty,
-              const float* const n_lookuptable_position,
-              const float* const n_inverse_lookuptable_position,
-              const float* const n_lookuptable_bp )
-{ 
-    int i;    
-    float penalty = 0; 
-
-    assert( position >= 0 );
-
-    // it doesnt matter that the data type sapce is too big, givem
-    // the alignment concerns
-    for ( i = 0; i < LETTER_LEN; i++)
-    {    
+float
+compute_penalty(
         /* 
-            The naive way of doing this...        
-        
-        unsigned short ref_bp = (unsigned short) reference;
-        ref_bp = ref_bp >> 2*i;      // ref_bp /= pow(4, i);
-        ref_bp = ref_bp&3;  // ref_bp = ref_bp%4;
-
-        unsigned short seq_bp = (unsigned  short) observed;
-        seq_bp = seq_bp >> 2*i;      // seq_bp /= pow(4, i);
-        seq_bp = seq_bp&3;  // seq_bp = seq_bp%4;
-        */
-        
-        /* 
-         * If the basepairs are the different, find out what the penalty is.
-         * TODO make this an XOR for a ( very ) minor speed up
+         * these aren't const because they are copies. I bit shift
+         * them while calculating the penalty.
          */
-        if ( (reference&3) != (observed&3) ) 
-        {
-            /* penalty due to the position */
-            /* 
-             * position is the position of the node in the tree, ie level. Thus, 
-             * since we are considering the lowest order bits first ( we bit shift 
-             * right at each iteration ) and we bitmask by 3, the bp_position
-             * is given by level*LETTER_LEN - i. ie, if the letter length is 4
-             * and we are in the first loop iteration( i = 0 ) then for TCGT we have
-             * 10110110, so 10110110&00000011 = 00000010 which corresponds to the 
-             * 4th letter in 1 indexing, or LETTER_LEN - 1 in 0 indexing.
-             */
+        LETTER_TYPE ref,
+        LETTER_TYPE obs,
 
-            /* TODO a potential optimization may be to cache the lookup table */
-            penalty = penalty 
-                    + n_lookuptable_position[ LETTER_LEN*position + i ]
-                    + n_lookuptable_bp[ ((reference&3)<<2) + (observed&3) ];
-            
-        } 
-        /* otherwise, calulate the penalty if they do match */
-        else {
-            if( LETTER_LEN*position + i < seq_length  ) {
-                penalty += n_inverse_lookuptable_position[ LETTER_LEN*position + i ];
-            }
-        }
+        /* the position in the sequence - this should be
+           zero indexed */
+        const int position, 
+        /* the length of a full sequence */
+        const int seq_length,
+        /* the minimum allowable penalty */
+        const float min_penalty,
+
+        /* the penalty array */
+        struct penalty_array_t* pa
+    )
+{
+    int i;
+    float penalty = 0;
+
+    for( i = 0; i < LETTER_LEN; i++ )
+    {
+        // NOTE - penalty_t float array and LETTER_TYPE must use same encoding
+        penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];
 
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 
@@ -744,6 +395,6 @@ penalty_func( /*
         reference = reference >> 2;
         observed = observed >> 2;
     }
+
     return penalty;
 }
-
