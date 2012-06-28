@@ -19,7 +19,7 @@ extern int QUAL_SHIFT;
 /* Stores the penalty data for a single character at a specific position
    in a read */
 struct penalty_t {
-    /* 4x4 array of penalties - ref bp * obs bp */
+    /* 4x4 array of penalties - ref bp x obs bp */
     float array[4][4];
 }
 
