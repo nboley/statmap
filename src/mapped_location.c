@@ -104,6 +104,8 @@ init_mapped_locations( mapped_locations** results )
     
     (*results)->subseq_len = -1;
     (*results)->subseq_offset = -1;
+
+    (*results)->skip = false;
     
     return;
 }

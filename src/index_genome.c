@@ -1273,7 +1273,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             // XXX - check correctness. Poor search branches? Recheck?
             if( results->length > 1 ) {
                 /* set results->length to 0 as flag for bootstrap check in find_candidate_mappings */
-                results->length = 0;
+                results->skip = true;
                 break;
             }
         }
