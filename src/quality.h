@@ -16,22 +16,52 @@
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
 
+/* Stores the penalty data for a single character at a specific position
+   in a read */
+struct penalty_t {
+    /* 4x4 array of penalties - ref bp * obs bp */
+    float array[4][4];
+}
+
 /*
    3d array of penalties:
    length of read * ref bp * obs bp
  */
-struct penalty_array {
-    /* Array dimensions */
-    int x, y, z;
+struct penalty_array_t {
+    /* length of read */
+    int len;
 
-    float*** array;
+    /* array of penalty structs, for each position in the read */
+    struct penalty_t* penalties;
 };
 
 void
-init_penalty_array( int x, int y, int z, struct penalty_array* pa );
+init_penalty_array( int len, struct penalty_array_t* pa );
 
 void
-free_penalty_array( struct penalty_array* pa );
+free_penalty_array( struct penalty_array_t* pa );
+
+/**** penalty array builders ****/
+void
+build_error_data_bootstrap_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    );
+
+void
+build_error_data_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    );
+
+void
+build_mismatch_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    );
 
 // const int solexa_qual_start = 64;
 // const int num_possible_quality_chars = 85;

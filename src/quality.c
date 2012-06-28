@@ -32,44 +32,118 @@ int QUAL_SHIFT = -1;
 /**** Penalty array functions ****/
 
 void
-init_penalty_array( int x, int y, int z, struct penalty_array* pa )
+init_penalty_array( int len, struct penalty_array_t* pa )
 {
     /* Set dimensions of array */
-    pa->x = x; pa->y = y; pa->z = z;
+    pa->len = len;
 
-    /* Allocate pointer to first level (x) */
-    pa->array = malloc( x * sizeof(float**) );
+    /* Allocate memory for array of len penalty_t structs */
+    pa->penalties = malloc( len * sizeof(penalty_t) );
+}
 
-    /* Allocate pointers for second and third levels */
-    int i, j;
-    for( i = 0; i < x; i++ )
+void
+free_penalty_array( struct penalty_array_t* pa )
+{
+    if( pa == NULL ) return;
+
+    free( pa->penalties );
+}
+
+/**** penalty array builders ****/
+void
+build_error_data_bootstrap_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    )
+{
+    int i, j, k;
+    /* for each position in the rawread */
+    for( i = 0; i < pa->len; i++ )
     {
-        /* Allocate pointers to second level (y) */
-        pa->array = malloc( y * sizeof(float *) );
-
-        /* Allocate pointers to third level (z) */
-        for( j = 0; j < y; j++ )
+        /* for each possible basepair (A,C,G,T) in the reference sequence */
+        for( j = 0; j < 4; j++ )
         {
-            pa->array[i][j] = malloc( z * sizeof(float) );
+            /* for each possible basepair (A,C,G,T) in the observed sequence */
+            for( k = 0; k < 4; k++ )
+            {
+                if( j == k ) // if bp's match
+                    pa->penalties[i].array[j][k] = 0;
+                else
+                    /*
+                       we only want perfect mappers - if the bp's mismatch,
+                       return 1, which is an invalid penalty score and will
+                       cause the search to terminate immediately
+                    */
+                    pa->penalties[i].array[j][k] = 1;
+            }
         }
     }
 }
 
 void
-free_penalty_array( struct penalty_array* pa )
+build_error_data_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    )
 {
-    int i, j;
-    for( i = 0; i < pa->x; i++ )
+    int i, j, k;
+    /* for each position in the rawread */
+    for( i = 0; i < pa->len; i++ )
     {
-        for( j = 0; j < pa->y; j++ )
+        /* for each possible basepair (A,C,G,T) in the reference sequence */
+        for( j = 0; j < 4; j++ )
         {
-            free( pa->array[i][j] );
+            /* for each possible basepair (A,C,G,T) in the observed sequence */
+            for( k = 0; k < 4; k++ )
+            {
+                /* estimate error probability based on observed sequence and
+                   error data */
+                pa->penalties[i].array[j][k] = est_error_prb(
+                        rd->char_seq[i], rd->error_str[i], false, i, error_data
+                    );
+
+                /* add penalty if bp's mismatch */
+                if( j != k )
+                {
+                    /* log10(1/3) = -0.4771213 */
+                    pa->penalties[i].array[j][k] += -0.4771213;
+                }
+            }
         }
-
-        free( pa->array[i] );
     }
+}
 
-    free( pa->array );
+void
+build_mismatch_penalty_array_from_rawread(
+        struct rawread* rd,
+        struct error_data_t* error_data,
+        struct penalty_array_t* pa,
+    )
+{
+    int i, j, k;
+    /* for each position in the rawread */
+    for( i = 0; i < pa->len; i++ )
+    {
+        /* for each possible basepair (A,C,G,T) in the reference sequence */
+        for( j = 0; j < 4; j++ )
+        {
+            /* for each possible basepair (A,C,G,T) in the observed sequence */
+            for( k = 0; k < 4; k++ )
+            {
+                if( j == k ) // if bp's match
+                    pa->penalties[i].array[j][k] = 0;
+                else
+                    /*
+                       each mismatch is treated as -1 penalty score, so we
+                       can intutively control the number of mismatches allowed
+                       with existing parameters
+                    */
+                    pa->penalties[i].array[j][k] = -1;
+            }
+        }
+    }
 }
 
 /*
@@ -301,8 +375,9 @@ est_error_prb( char bp, char error_score, enum bool inverse,
     {
         mismatch_component = 0;
     } else {
-        mismatch_component = ( error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
-                               error_data->qual_score_cnts[(unsigned char) error_score] );
+        mismatch_component =
+            error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
+            error_data->qual_score_cnts[(unsigned char) error_score];
     }
 
     float prb = ( loc_component + mismatch_component ) / 2 + FUDGE;
