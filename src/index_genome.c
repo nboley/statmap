@@ -991,17 +991,16 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
               /* fwd stranded data  */
               LETTER_TYPE* seq_1, 
-              const float* const position_mutation_prs_1,
-              const float* const inverse_position_mutation_prs_1,
-
               /* rev stranded data */
               LETTER_TYPE* seq_2, 
-              const float* const position_mutation_prs_2,
-              const float* const inverse_position_mutation_prs_2,
 
-              const float* const lookuptable_bp,
+              struct penalty_array* pa,
 
-              enum INDEX_SEARCH_MODE mode 
+              /*
+                 we pass this flag all the way down to optimize the error data
+                 bootstrap by terminating early on multimappers
+               */
+              bool only_find_unique_mappers
     )
 
 {
@@ -1019,7 +1018,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                         node_level, num_letters, 
                         curr_penalty, 
                         min_match_penalty, max_penalty_spread );
-
 
     while( pmatch_stack_length( stack ) > 0 )
     {
@@ -1040,20 +1038,12 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         float curr_penalty = match.penalty;
         enum STRAND strnd = match.strnd;
         
+        // TODO: need to handle inverse sequence and penalty array
         LETTER_TYPE* seq;
-        const float* position_mutation_prs;
-        const float* inverse_position_mutation_prs;
- 
         if( strnd == FWD )
-        {
             seq = seq_1;
-            position_mutation_prs = position_mutation_prs_1;
-            inverse_position_mutation_prs = inverse_position_mutation_prs_1;
-        } else {
+        else
             seq = seq_2;
-            position_mutation_prs = position_mutation_prs_2;
-            inverse_position_mutation_prs = inverse_position_mutation_prs_2;
-        }
 
         /* TODO */
         /* 
@@ -1087,13 +1077,11 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     continue;
 
                 /* this should be optimized out */
-                float penalty_addition = penalty_func(
+                float penalty_addition = compute_penalty(
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    position_mutation_prs,
-                    inverse_position_mutation_prs,
-                    lookuptable_bp
+                    pa
                 );
 
                 /* if this letter exceeds the max, continue */
@@ -1136,17 +1124,15 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* this should be optimized out */
                 LETTER_TYPE letter = children[i].letter;
 
-                float penalty_addition = penalty_func(
+                float penalty_addition = compute_penalty(
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    position_mutation_prs,
-                    inverse_position_mutation_prs,
-                    lookuptable_bp
+                    pa
                 );
 
                 /* 
-                 * If penalty_func returns a value >= 1
+                 * If compute_penalty returns a value >= 1
                  * ( we say > 0.5 to deal with rounding errors )
                  * then that means that the letter at the level returned,
                  * minus 1 is the letter that exceeded the penalty. As
@@ -1238,9 +1224,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 curr_penalty, min_match_penalty,
                 seq, seq_length, num_letters, node_level, 
                 strnd, results,
-                position_mutation_prs,
-                inverse_position_mutation_prs,
-                lookuptable_bp
+                pa
             );
 
             /* 
@@ -1264,7 +1248,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         /* for the bootstrap mode, we only want unique mappers - so we can
          * optimize by immediately terminating search when there are more than
          * 1 mappings reported */
-        if( mode == BOOTSTRAP &&
+        if( only_find_unique_mappers &&
            (node_type == 'q' || node_type == 'l') )
         {
             /* if we're in bootstrap mode, and just processed a node that could
@@ -1297,17 +1281,12 @@ find_matches_from_root( struct index_t* index,
 
                         /* the fwd stranded data */
                         LETTER_TYPE* seq_1,
-                        float* lookuptable_position_1,
-                        float* inverse_lookuptable_position_1,
-
                         /* the bkwd stranded data */
                         LETTER_TYPE* seq_2,
-                        float* lookuptable_position_2,
-                        float* inverse_lookuptable_position_2,
 
-                        float* lookuptable_bp,
+                        struct penalty_array_t* pa,
 
-                        enum INDEX_SEARCH_MODE mode 
+                        bool only_find_unique_mappers
 )
 {
     assert( index->index_type == TREE );
@@ -1323,16 +1302,11 @@ find_matches_from_root( struct index_t* index,
                          results,
 
                          seq_1,
-                         lookuptable_position_1,
-                         inverse_lookuptable_position_1,
-
                          seq_2,
-                         lookuptable_position_2,
-                         inverse_lookuptable_position_2,
 
-                         lookuptable_bp,
+                         pa,
 
-                         mode
+                         only_find_unique_mappers
     ); 
 }
 

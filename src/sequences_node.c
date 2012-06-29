@@ -966,9 +966,7 @@ find_sequences_in_sequences_node(   const sequences_node* const seqs,
                     
                                     mapped_locations* results,
 
-                                    const float* const lookuptable_position,
-                                    const float* const inverse_lookuptable_position,
-                                    const float* const lookuptable_bp
+                                    struct penalty_array_t* pa
     )
 {
     /* store the updated maximum penalty, for if we find matches */
@@ -1009,9 +1007,7 @@ find_sequences_in_sequences_node(   const sequences_node* const seqs,
             seq_length, 
             num_letters,
             min_match_penalty - curr_penalty,
-            lookuptable_position,
-            inverse_lookuptable_position,
-            lookuptable_bp
+            pa
         );
         
         /* // debugging code

@@ -244,16 +244,11 @@ find_matches( void* node,
               mapped_locations* results,
               
               LETTER_TYPE* seq_1, 
-              const float* lookuptable_position_1,
-              const float* inverse_lookuptable_position_1,
-              
               LETTER_TYPE* seq_2, 
-              const float* lookuptable_position_2,
-              const float* inverse_lookuptable_position_2,
-              
-              const float* lookuptable_bp,
 
-              enum INDEX_SEARCH_MODE mode
+              struct penalty_array* pa,
+
+              bool only_find_unique_mappers
 );
 
 
@@ -267,16 +262,11 @@ find_matches_from_root( struct index_t* index,
                         const int read_len,
 
                         LETTER_TYPE* seq_1, 
-                        float* lookuptable_position_1,
-                        float* inverse_lookuptable_position_1,
-                        
                         LETTER_TYPE* seq_2, 
-                        float* lookuptable_position_2,
-                        float* inverse_lookuptable_position_2,
-                        
-                        float* lookuptable_bp,
 
-                        enum INDEX_SEARCH_MODE mode 
+                        struct penalty_array_t* pa,
+
+                        bool only_find_unique_mappers
 );
 
 size_t

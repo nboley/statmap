@@ -275,23 +275,28 @@ raw_print_sequences_node( sequences_node* seqs );
 
 void print_sequences_node( sequences_node* seqs, int seq_length );
 
-inline float
+float
 find_sequences_in_sequences_node(   const sequences_node* const seqs,
+                                    /* the curr penalty for seq */
                                     float curr_penalty,
+                                    /* the maximum allowable penalty */
                                     float min_match_penalty,
-
+                                    
+                                    /* the seq of interest */
                                     const LETTER_TYPE* const seq,
+                                    /* the length of a full sequence */
                                     const int seq_length,
+                                    /* the total num of letters in a seq */
                                     const int num_letters,
+                                    /* the current level in the tree */
                                     const int node_level,
-                                    const enum STRAND strnd,            
-                        
+                                    /* the strand of the search seq */
+                                    const enum STRAND strnd,
+                    
                                     mapped_locations* results,
 
-                                    const float* const lookuptable_position,
-                                    const float* const inverse_lookuptable_position,
-                                    const float* const lookuptable_bp
-);
+                                    struct penalty_array_t* pa
+    );
 
 /* FWD declaration */
 struct pseudo_locations_t;

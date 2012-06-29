@@ -16,14 +16,10 @@ search_index( struct index_t* index,
               mapped_locations** results,
 
               struct rawread* r,
-              float* bp_mut_rates,
 
-              float* lookuptable_position,
-              float* inverse_lookuptable_position,
-              float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position,
+              struct penalty_array_t* pa,
 
-              enum INDEX_SEARCH_MODE mode
+              bool only_find_unique_mappers
     );
 
 
@@ -53,8 +49,14 @@ struct single_map_thread_data {
      * READS_STAT_UPDATE_STEP_SIZE reads */
     struct error_data_t* scratch_error_data;
 
-    enum INDEX_SEARCH_MODE mode;
-    enum SEARCH_TYPE search_type;
+    /* fn ptr to build penalty array for a read */
+    void (*build_penalty_array_from_rawread)(
+            struct rawread*,
+            struct error_data_t*,
+            struct penalty_array_t*
+        );
+
+    bool only_find_unique_mappers;
 };
 
 
