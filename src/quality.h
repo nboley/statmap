@@ -12,6 +12,7 @@
  */
 
 #include "dna_sequence.h"
+#include "rawread.h"
 
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
@@ -26,8 +27,8 @@ static const double N_penalty = -0.60206;
    in a read */
 struct penalty_t {
     /* 4x4 array of penalties - ref bp x obs bp */
-    float array[4][4];
-}
+    float penalties[4][4];
+};
 
 /*
    3d array of penalties:
@@ -38,7 +39,7 @@ struct penalty_array_t {
     int len;
 
     /* array of penalty structs, for each position in the read */
-    struct penalty_t* penalties;
+    struct penalty_t* array;
 };
 
 void
@@ -52,21 +53,21 @@ void
 build_error_data_bootstrap_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     );
 
 void
 build_error_data_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     );
 
 void
 build_mismatch_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     );
 
 /* convert a solexa quality score into a mutation probability */

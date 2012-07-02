@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 
+#include "quality.h"
 #include "genome.h"
 #include "rawread.h"
 #include "candidate_mapping.h"
@@ -17,11 +18,11 @@ search_index( struct index_t* index,
 
               struct rawread* r,
 
-              struct penalty_array_t* pa,
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
-              bool only_find_unique_mappers
+              enum bool only_find_unique_mappers
     );
-
 
 struct single_map_thread_data {
     int thread_id;
@@ -56,7 +57,8 @@ struct single_map_thread_data {
             struct penalty_array_t*
         );
 
-    bool only_find_unique_mappers;
+    enum SEARCH_TYPE search_type;
+    enum bool only_find_unique_mappers;
 };
 
 

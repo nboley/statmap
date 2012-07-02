@@ -990,19 +990,19 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               mapped_locations* results,
 
               /* fwd stranded data  */
-              LETTER_TYPE* seq_1, 
+              LETTER_TYPE* fwd_seq, 
               /* rev stranded data */
-              LETTER_TYPE* seq_2, 
+              LETTER_TYPE* rev_seq, 
 
-              struct penalty_array* pa,
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
               /*
                  we pass this flag all the way down to optimize the error data
                  bootstrap by terminating early on multimappers
                */
-              bool only_find_unique_mappers
+              enum bool only_find_unique_mappers
     )
-
 {
     const int num_letters = calc_num_letters( seq_length );
 
@@ -1038,12 +1038,16 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         float curr_penalty = match.penalty;
         enum STRAND strnd = match.strnd;
         
-        // TODO: need to handle inverse sequence and penalty array
+        /* select sequence and penalty_array depending on fwd/bkwd strand */
         LETTER_TYPE* seq;
-        if( strnd == FWD )
-            seq = seq_1;
-        else
-            seq = seq_2;
+        struct penalty_array_t* penalty_array;
+        if( strnd == FWD ) {
+            seq = fwd_seq;
+            penalty_array = fwd_pa;
+        } else {
+            seq = rev_seq;
+            penalty_array = rev_pa;
+        }
 
         /* TODO */
         /* 
@@ -1081,7 +1085,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    pa
+                    penalty_array 
                 );
 
                 /* if this letter exceeds the max, continue */
@@ -1128,7 +1132,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    pa
+                    penalty_array
                 );
 
                 /* 
@@ -1222,9 +1226,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             find_sequences_in_sequences_node( 
                 node, 
                 curr_penalty, min_match_penalty,
-                seq, seq_length, num_letters, node_level, 
-                strnd, results,
-                pa
+                seq, seq_length, num_letters, node_level, strnd,
+                results,
+                penalty_array
             );
 
             /* 
@@ -1256,7 +1260,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                result - if so, set results to NULL and stop searching */
             // XXX - check correctness. Poor search branches? Recheck?
             if( results->length > 1 ) {
-                /* set results->length to 0 as flag for bootstrap check in find_candidate_mappings */
                 results->skip = true;
                 break;
             }
@@ -1280,13 +1283,14 @@ find_matches_from_root( struct index_t* index,
                         const int read_len,
 
                         /* the fwd stranded data */
-                        LETTER_TYPE* seq_1,
+                        LETTER_TYPE* fwd_seq, 
                         /* the bkwd stranded data */
-                        LETTER_TYPE* seq_2,
+                        LETTER_TYPE* rev_seq, 
 
-                        struct penalty_array_t* pa,
+                        struct penalty_array_t* fwd_pa,
+                        struct penalty_array_t* rev_pa,
 
-                        bool only_find_unique_mappers
+                        enum bool only_find_unique_mappers
 )
 {
     assert( index->index_type == TREE );
@@ -1301,10 +1305,11 @@ find_matches_from_root( struct index_t* index,
                          max_penalty_spread,
                          results,
 
-                         seq_1,
-                         seq_2,
+                         fwd_seq,
+                         rev_seq,
 
-                         pa,
+                         fwd_pa,
+                         rev_pa,
 
                          only_find_unique_mappers
     ); 

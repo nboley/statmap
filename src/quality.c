@@ -62,7 +62,7 @@ code_bp( int code )
         case 0:
             return 'A';
         case 1:
-            return 'C':
+            return 'C';
         case 2:
             return 'G';
         case 3:
@@ -85,7 +85,7 @@ init_penalty_array( int len, struct penalty_array_t* pa )
     pa->len = len;
 
     /* Allocate memory for array of len penalty_t structs */
-    pa->penalties = malloc( len * sizeof(penalty_t) );
+    pa->array = malloc( len * sizeof(struct penalty_t) );
 }
 
 void
@@ -93,7 +93,28 @@ free_penalty_array( struct penalty_array_t* pa )
 {
     if( pa == NULL ) return;
 
-    free( pa->penalties );
+    free( pa->array );
+}
+
+void
+fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
+{
+    int i;
+    for( i = 0; i < pa->len; i++ )
+    {
+        fprintf(fp, "%i: ", i); // index
+        int x, y;
+        for( x = 0; x < 4; x++ )
+        {
+            for( y = 0; y < 4; y++ )
+            {
+                fprintf(fp, "%f ", pa->array[i].penalties[x][y]);
+            }
+            if( x < 3 )
+                fprintf(fp, "| ");
+        }
+        fprintf(fp, "\n");
+    }
 }
 
 /**** penalty array builders ****/
@@ -101,7 +122,7 @@ void
 build_error_data_bootstrap_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     )
 {
     int i, j, k;
@@ -115,14 +136,14 @@ build_error_data_bootstrap_penalty_array_from_rawread(
             for( k = 0; k < 4; k++ )
             {
                 if( j == k ) // if bp's match
-                    pa->penalties[i].array[j][k] = 0;
+                    pa->array[i].penalties[j][k] = 0;
                 else
                     /*
                        we only want perfect mappers - if the bp's mismatch,
                        return 1, which is an invalid penalty score and will
                        cause the search to terminate immediately
                     */
-                    pa->penalties[i].array[j][k] = 1;
+                    pa->array[i].penalties[j][k] = 1;
             }
         }
     }
@@ -132,7 +153,7 @@ void
 build_error_data_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     )
 {
     int i, j, k;
@@ -147,7 +168,7 @@ build_error_data_penalty_array_from_rawread(
             {
                 /* estimate error probability based on observed sequence and
                    error data */
-                pa->penalties[i].array[j][k] = est_error_prb(
+                pa->array[i].penalties[j][k] = error_prb(
                         code_bp(j),
                         code_bp(k),
                         rd->error_str[i],
@@ -159,7 +180,7 @@ build_error_data_penalty_array_from_rawread(
                 if( j != k )
                 {
                     /* log10(1/3) = -0.4771213 */
-                    pa->penalties[i].array[j][k] += -0.4771213;
+                    pa->array[i].penalties[j][k] += -0.4771213;
                 }
             }
         }
@@ -170,7 +191,7 @@ void
 build_mismatch_penalty_array_from_rawread(
         struct rawread* rd,
         struct error_data_t* error_data,
-        struct penalty_array_t* pa,
+        struct penalty_array_t* pa
     )
 {
     int i, j, k;
@@ -184,16 +205,34 @@ build_mismatch_penalty_array_from_rawread(
             for( k = 0; k < 4; k++ )
             {
                 if( j == k ) // if bp's match
-                    pa->penalties[i].array[j][k] = 0;
+                    pa->array[i].penalties[j][k] = 0;
                 else
                     /*
                        each mismatch is treated as -1 penalty score, so we
                        can intutively control the number of mismatches allowed
                        with existing parameters
                     */
-                    pa->penalties[i].array[j][k] = -1;
+                    pa->array[i].penalties[j][k] = -1;
             }
         }
+    }
+}
+
+/**** build reverse penalty array ****/
+/* simply reverses the forward penalty array */
+void
+build_reverse_penalty_array(
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa
+    )
+{
+    // the underlying penalty arrays must be the same length
+    assert( fwd_pa->len == rev_pa->len );
+
+    int i;
+    for( i = 0; i < fwd_pa->len; i++ )
+    {
+        rev_pa->array[rev_pa->len-1-i] = fwd_pa->array[i];
     }
 }
 
@@ -346,6 +385,7 @@ recheck_penalty(
             penalty += N_penalty;
         } else {
             penalty += pa->array[i].penalties[bp_code(ref)][bp_code(obs)];
+        }
     }
 
     return penalty;
@@ -392,8 +432,8 @@ compute_penalty(
         }
 
         /* Shift the bits down to consider the next basepair */
-        reference = reference >> 2;
-        observed = observed >> 2;
+        ref = ref >> 2;
+        obs = obs >> 2;
     }
 
     return penalty;

@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "quality.h"
 #include "mapped_location.h"
 
 /*** Locations Node Type ********************************************************/
@@ -276,26 +277,27 @@ raw_print_sequences_node( sequences_node* seqs );
 void print_sequences_node( sequences_node* seqs, int seq_length );
 
 float
-find_sequences_in_sequences_node(   const sequences_node* const seqs,
-                                    /* the curr penalty for seq */
-                                    float curr_penalty,
-                                    /* the maximum allowable penalty */
-                                    float min_match_penalty,
-                                    
-                                    /* the seq of interest */
-                                    const LETTER_TYPE* const seq,
-                                    /* the length of a full sequence */
-                                    const int seq_length,
-                                    /* the total num of letters in a seq */
-                                    const int num_letters,
-                                    /* the current level in the tree */
-                                    const int node_level,
-                                    /* the strand of the search seq */
-                                    const enum STRAND strnd,
-                    
-                                    mapped_locations* results,
+find_sequences_in_sequences_node(
+        const sequences_node* const seqs,
+        /* the curr penalty for seq */
+        float curr_penalty,
+        /* the maximum allowable penalty */
+        float min_match_penalty,
 
-                                    struct penalty_array_t* pa
+        /* the seq of interest */
+        const LETTER_TYPE* const seq,
+        /* the length of a full sequence */
+        const int seq_length,
+        /* the total num of letters in a seq */
+        const int num_letters,
+        /* the current level in the tree */
+        const int node_level,
+        /* the strand of the search seq */
+        const enum STRAND strnd,
+
+        mapped_locations* results,
+
+        struct penalty_array_t* pa
     );
 
 /* FWD declaration */

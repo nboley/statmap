@@ -65,9 +65,10 @@ search_index( struct index_t* index,
 
               struct rawread* r,
 
-              struct penalty_array_t* pa,
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
-              bool only_find_unique_mappers
+              enum bool only_find_unique_mappers
     )
 {
     /**** Prepare the read for the index search */
@@ -126,7 +127,8 @@ search_index( struct index_t* index,
                             /* the bkwd stranded sequence */
                             bkwd_seq, 
 
-                            pa,
+                            fwd_pa,
+                            rev_pa,
 
                             only_find_unique_mappers
         );
@@ -192,7 +194,8 @@ recheck_location(
         struct rawread* r, 
         candidate_mapping* loc,
 
-        struct penalty_array_t* pa
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa
     )
 {
     if( PSEUDO_LOC_CHR_INDEX == loc->chr ) {
@@ -227,20 +230,26 @@ recheck_location(
     char* mut_genome_seq = NULL;
     mut_genome_seq = malloc(sizeof(char)*(r->length+1));
     assert( mut_genome_seq != NULL ); 
+
+    struct penalty_array_t* penalty_array;
                     
     if( BKWD == loc->rd_strnd )
     {
         rev_complement_read( genome_seq, mut_genome_seq, r->length );
+
+        penalty_array = rev_pa;
     } else {
         memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
         mut_genome_seq[r->length] = '\0';
+
+        penalty_array = fwd_pa;
     }
     
     float rechecked_penalty = recheck_penalty( 
             mut_genome_seq, 
             r->char_seq + loc->trimmed_len,
             mapped_length,
-            pa
+            penalty_array 
         );
 
     loc->penalty = rechecked_penalty + marginal_log_prb;
@@ -258,7 +267,9 @@ recheck_locations(
     float min_match_penalty,
     float max_penalty_spread,
     
-    struct penalty_array_t* pa
+    struct penalty_array_t* fwd_pa,
+    struct penalty_array_t* rev_pa 
+
 )
 {
     /* 
@@ -287,7 +298,7 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        recheck_location( genome, r, mappings->mappings + k, pa );
+        recheck_location( genome, r, mappings->mappings + k, fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
         if( (mappings->mappings + k)->penalty > max_penalty ) {
@@ -613,7 +624,8 @@ find_candidate_mappings( void* params )
             struct rawread*, struct error_data_t*, struct penalty_array_t*
         ) = td->build_penalty_array_from_rawread;
 
-    bool only_find_unique_mappers = td->only_find_unique_mappers;
+    enum SEARCH_TYPE search_type = td->search_type;
+    enum bool only_find_unique_mappers = td->only_find_unique_mappers;
 
     /* END parameter 'recreation' */
 
@@ -686,13 +698,16 @@ find_candidate_mappings( void* params )
             /*
                initialize read penalty array
             */
-            struct penalty_array pa;
-            init_penalty_array( r->length, &pa );
+            struct penalty_array_t fwd_pa, rev_pa;
+            init_penalty_array( r->length, &fwd_pa );
+            init_penalty_array( r->length, &rev_pa );
+
             /* fn ptr to penalty array builder - build different penalty
                array depending on type of search */
             build_penalty_array_from_rawread(
-                    r, global_error_data, &pa
+                    r, global_error_data, &fwd_pa
                 );
+            build_reverse_penalty_array( &fwd_pa, &rev_pa );
 
             /**** go to the index for mapping locations */
             mapped_locations *results = NULL;
@@ -706,10 +721,21 @@ find_candidate_mappings( void* params )
 
                           r,
 
-                          &pa,
+                          &fwd_pa,
+                          &rev_pa,
 
                           only_find_unique_mappers
                 );
+
+            fprintf(stderr, 
+"==========================================================================\n");
+            // DEBUG nonmapping reads in test
+            if( results->length == 0 )
+            {
+                fprintf(stderr, "ERROR       :  0 results returned for test read\n");
+
+            }
+            fprintf_penalty_array(stderr, &fwd_pa);
 
             /* if bootstrapping, we only want to work with unique mappers.
              * find_matches would have terminated early for this read */
@@ -746,7 +772,8 @@ find_candidate_mappings( void* params )
                 min_match_penalty,
                 max_penalty_spread,
                                
-                &pa
+                &fwd_pa,
+                &rev_pa
             );
 
             /* cache candidate mappings */
@@ -757,8 +784,9 @@ find_candidate_mappings( void* params )
             max_read_length = MAX( max_read_length, r->length );
 
 cleanup:
-            /* free the penalty array */
-            free_penalty_array( &pa );
+            /* free the penalty arrays */
+            free_penalty_array( &fwd_pa );
+            free_penalty_array( &rev_pa );
 
             /* free the mapped_locations */
             free_mapped_locations( results );
@@ -789,9 +817,6 @@ cleanup:
         // free local copy of error data
         free_error_data( error_data );
     }
-
-    /* cleanup the bp mutation rates */
-    free( bp_mut_rates );
     
     /******* add the results to the database *******/
     int i;
@@ -803,8 +828,9 @@ cleanup:
 
         candidate_mappings* mappings = candidate_mappings_cache[i];
 
-        /* if we're running in search mode, add reads to the candidate mappings db and update mapped_cnts */
-        if( mode == SEARCH )
+        /* unless we're bootstrapping, add reads to the candidate mappings db and update mapped_cnts */
+        if( build_penalty_array_from_rawread != 
+                build_error_data_penalty_array_from_rawread )
         {
             /* increment the number of reads that mapped, if any pass the rechecks */
             int k;
@@ -949,6 +975,7 @@ find_all_candidate_mappings( struct genome_data* genome,
     pthread_mutex_t scratch_err_mutex = PTHREAD_MUTEX_INITIALIZER;
 
     /* do search-type-specific setup */
+    td_template.search_type = search_type;
     if( search_type == OBS_ERRORS )
     {
         init_error_data( &global_error_data, 0, NULL );

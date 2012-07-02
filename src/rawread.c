@@ -228,8 +228,13 @@ filter_rawread( struct rawread* r,
     int i;
     for( i = 0; i < r->length; i++ )
     {
-        double qual = 1 - pow(10, 
-            est_error_prb( r->char_seq[i], r->error_str[i], false, i, ed )
+        /*
+           compute the inverse probability of error (quality)
+           NOTE when error_prb receieves identical bp's, it returns the
+           inverse automatically
+         */
+        double qual = pow(10,
+            error_prb( r->char_seq[i], r->char_seq[i], r->error_str[i], i, ed )
         );
 
         /* count the number of hq basepairs */

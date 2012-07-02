@@ -232,42 +232,51 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
- void 
-find_matches( void* node, 
-              NODE_TYPE node_type, 
-              int node_level, 
-              
+void 
+find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 
               float min_match_penalty,
+              /* 
+               * the maximum spread between the highest penalty 
+               * match and any other valid match 
+               */
               float max_penalty_spread,
               mapped_locations* results,
-              
-              LETTER_TYPE* seq_1, 
-              LETTER_TYPE* seq_2, 
 
-              struct penalty_array* pa,
+              /* fwd stranded data  */
+              LETTER_TYPE* fwd_seq, 
+              /* rev stranded data */
+              LETTER_TYPE* rev_seq, 
 
-              bool only_find_unique_mappers
-);
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
+              /*
+                 we pass this flag all the way down to optimize the error data
+                 bootstrap by terminating early on multimappers
+               */
+              enum bool only_find_unique_mappers
+    );
 
 extern void
-find_matches_from_root( struct index_t* index, 
+find_matches_from_root(
+        struct index_t* index, 
 
-                        float min_match_penalty,
-                        float max_penalty_spread,
-                        mapped_locations* results,
+        float min_match_penalty,
+        float max_penalty_spread,
+        mapped_locations* results,
 
-                        const int read_len,
+        const int read_len,
 
-                        LETTER_TYPE* seq_1, 
-                        LETTER_TYPE* seq_2, 
+        LETTER_TYPE* fwd_seq, 
+        LETTER_TYPE* rev_seq, 
 
-                        struct penalty_array_t* pa,
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa,
 
-                        bool only_find_unique_mappers
-);
+        enum bool only_find_unique_mappers
+    );
 
 size_t
 size_of_snode( );
