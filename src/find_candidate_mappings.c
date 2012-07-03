@@ -727,16 +727,6 @@ find_candidate_mappings( void* params )
                           only_find_unique_mappers
                 );
 
-            fprintf(stderr, 
-"==========================================================================\n");
-            // DEBUG nonmapping reads in test
-            if( results->length == 0 )
-            {
-                fprintf(stderr, "ERROR       :  0 results returned for test read\n");
-
-            }
-            fprintf_penalty_array(stderr, &fwd_pa);
-
             /* if bootstrapping, we only want to work with unique mappers.
              * find_matches would have terminated early for this read */
             if( results->skip )

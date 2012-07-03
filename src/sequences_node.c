@@ -970,6 +970,7 @@ find_sequences_in_sequences_node(
         struct penalty_array_t* pa
     )
 {
+
     /* store the updated maximum penalty, for if we find matches */
     float max_penalty = -FLT_MAX;
 

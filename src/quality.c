@@ -418,7 +418,18 @@ compute_penalty(
     for( i = 0; i < LETTER_LEN; i++ )
     {
         // NOTE - penalty_t float array and LETTER_TYPE must use same encoding
-        penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];
+        //penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];
+
+        /* if they don't match */
+        if( (ref&3) != (obs&3) )
+        {
+            penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
+        } else {
+            /* XXX not sure why we have this check */
+            if( LETTER_LEN*position + i < seq_length  ) {
+                penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];
+            }
+        }
 
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 

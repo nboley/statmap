@@ -420,7 +420,7 @@ write_nonmapping_reads_to_fastq(
         /* load error data (if necessary) */
         if( search_type == OBS_ERRORS )
         {
-            if( readkey%READS_STAT_UPDATE_STEP_SIZE == 1 )
+            if( readkey%READS_STAT_UPDATE_STEP_SIZE == 0 )
                 load_next_error_data_t_from_log_fp( &saved_ed, elogfp );
         }
 

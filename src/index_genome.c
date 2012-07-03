@@ -1231,6 +1231,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 penalty_array
             );
 
+            // DEBUG
+            //fprintf( stderr, "max_added_penalty: %f\n", max_added_penalty);
+
             /* 
              * if we are using the max penalty spread criteria, and 
              * the newest penalty 0 the amx spread is greater than 
