@@ -204,11 +204,7 @@ recheck_location(
     
     float marginal_log_prb = 0;
     
-    const float* correct_lookuptable_position = NULL;
-    const float* correct_inverse_lookuptable_position = NULL;
-    
     /* find a pointer to the sequence at this genomic location */
-    
     int mapped_length = r->length - loc->trimmed_len;
     
     char* genome_seq = find_seq_ptr( 
@@ -236,12 +232,10 @@ recheck_location(
     if( BKWD == loc->rd_strnd )
     {
         rev_complement_read( genome_seq, mut_genome_seq, r->length );
-
         penalty_array = rev_pa;
     } else {
         memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
         mut_genome_seq[r->length] = '\0';
-
         penalty_array = fwd_pa;
     }
     
@@ -820,7 +814,7 @@ cleanup:
 
         /* unless we're bootstrapping, add reads to the candidate mappings db and update mapped_cnts */
         if( build_penalty_array_from_rawread != 
-                build_error_data_penalty_array_from_rawread )
+                build_error_data_bootstrap_penalty_array_from_rawread )
         {
             /* increment the number of reads that mapped, if any pass the rechecks */
             int k;
