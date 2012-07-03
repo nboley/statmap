@@ -451,7 +451,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
-        search_type=None ):
+        search_type=None, min_penalty=-7.0, max_penalty_spread=2.1 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len )
 
@@ -491,8 +491,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
     assay = None if untemplated_gs_perc == 0.0 else 'a'
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len, assay=assay, 
-            search_type=search_type )
+    map_with_statmap( read_fnames, output_directory,
+            indexed_seq_len=indexed_seq_len, assay=assay, 
+            search_type=search_type,
+            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread )
 
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -543,7 +545,7 @@ def test_fivep_sequence_finding( ):
 def test_mismatch_searching():
     rls = [ 15, 25, 50, 75  ]
     for rl in rls:
-        test_sequence_finding( rl, False, search_type='m' )
+        test_sequence_finding( rl, False, search_type='m', min_penalty=0, max_penalty_spread=0 )
         print "PASS: Mismatch Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly using mismatches )" % rl
 
 def test_untemplated_g_finding( ):
