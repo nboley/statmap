@@ -70,6 +70,12 @@ build_mismatch_penalty_array_from_rawread(
         struct penalty_array_t* pa
     );
 
+void
+build_reverse_penalty_array(
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa
+    );
+
 /* convert a solexa quality score into a mutation probability */
 double mutation_probability( int );
 
