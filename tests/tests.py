@@ -27,7 +27,7 @@ BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
 BUILD_INDEX_PATH = '../utilities/build_index.py'
 CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 
-#################################################################################################
+################################################################################
 ### verbosity level information 
 #
 # whether or not to print statmap output
@@ -40,7 +40,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -701,7 +701,10 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     map_with_statmap( read_fnames, output_directory, 
                       num_threads = n_threads, 
                       indexed_seq_len = read_len-2,
-                      search_type='m' ) # map with mismatches, since we won't be able to bootstrap error scores from perfectly repeated genome (no unique mappers)
+                      search_type='m' ) # map with mismatches, since we won't be
+                                        # able to bootstrap error scores from a
+                                        # perfectly repeated genome
+                                        # (no unique mappers)
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
@@ -1001,13 +1004,16 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads, frag_len=read_len )
+    fragments = sample_uniformily_from_genome( genome, nsamples=nreads,
+            frag_len=read_len )
+    # note: if we do rev_comp, statmap still correctly maps the read, but our
+    # comparison back to the original genome will fail (incorrectly). Since
+    # comparison back to the genome is an important test for diploid mapping
+    # (to make sure contigs actually make sense), we don't rev_comp.
     reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
+            genome, fragments, read_len=read_len,
+            rev_comp=False, paired_end=False
         )
-    # note: if we do rev_comp, statmap still correctly maps the read, but our comparison back to
-    # the original genome will fail (incorrectly). Since comparison back to the genome is an 
-    # important test for diploid mapping (to make sure contigs actually make sense), we don't rev_comp.
 
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
@@ -1034,16 +1040,19 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
                  )
                     for i in xrange(len(mapped_reads)) ]
 
-        # mapping reads to one diploid chr should return a maximum of 2 results for each read
+        # mapping reads to one diploid chr should return a maximum of 2 results
+        # for each read
         if len(mapped_reads) > 2:
             print "Truth: ", truth
-            print "A read sampled from a single diploid chromosome returned more than 2 mappings."
-            print "You are probably indexing some portion of the genome more than once."
+            print \
+"A read sampled from a single diploid chromosome returned more than 2 mappings."
+            print \
+"You are probably indexing some portion of the genome more than once."
             raise ValueError, \
-                "Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
+"Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
                 % ( int(mapped_reads[0][0]), len(mapped_reads) )
 
-        # compare mapped reads with original genome to make sure sequence matches
+        # compare mapped reads with original genome to make sure they match
         found_read = False
         for loc in locs:
 
@@ -1218,8 +1227,8 @@ def parse_error_data_log( log_fname ):
 
 def test_diploid_genome_with_multiple_chrs():
     '''
-    Make sure the machinery for handling multiple diploid chrs is working by mapping
-    two separately generated diploid chrs
+    Make sure the machinery for handling multiple diploid chrs is working by
+    mapping two separately generated diploid chrs
     '''
     rls = [ 20, 50, 75 ]
     for rl in rls:
@@ -1228,16 +1237,23 @@ def test_diploid_genome_with_multiple_chrs():
         genome = dict( g1.items() + g2.items() )
         output_filenames = of1 + of2
         map_diploid_genome( genome, output_filenames, rl )
-        print "PASS: Diploid genome with multiple chrs %i BP Test. ( Statmap appears to be mapping diploid genomes with multiple chromosomes correctly )" % rl
+        print ( "PASS: Diploid genome with multiple chrs %i BP Test. "
+                "( Statmap appears to be mapping diploid genomes with multiple "
+                "chromosomes correctly )" % rl )
 
 def test_lots_of_diploid_repeat_sequence_finding():
     rls = [ 25, ]
     n_dups = 4000
     genome_len=100
     for rl in rls:
-        genome, output_filenames = build_diploid_genome( rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
-        map_duplicated_diploid_genome( genome, output_filenames, rl, genome_len=genome_len, n_dups=n_dups, nreads=100 )
-        print "PASS: Highly repetitive diploid genome (pslocs integration) %i BP Test. ( Statmap appears to be mapping highly repetitive diploid genomes correctly )" % rl
+        genome, output_filenames = build_diploid_genome(
+                rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
+        map_duplicated_diploid_genome( genome, output_filenames, rl,
+                genome_len=genome_len, n_dups=n_dups, nreads=100 )
+        print (
+"PASS: Highly repetitive diploid genome (pslocs integration)  %i BP Test. "
+"( Statmap appears to be mapping highly repetitive diploid genomes correctly )"
+            % rl )
 
 def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     '''
@@ -1313,6 +1329,8 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
+    print "Starting test_mutated_read_finding()"
+    test_mutated_read_finding()
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
