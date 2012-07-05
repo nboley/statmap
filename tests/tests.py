@@ -106,6 +106,12 @@ def map_with_statmap( read_fnames, output_dir,
                       search_type=None,
                       assay=None,
                       genome_fnames=["*.fa",]):
+    if not P_STATMAP_OUTPUT:
+        stderr.seek( 0 )
+        stderr.truncate()
+        stdout.seek( 0 )
+        stdout.truncate()
+    
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
     read_fname_str = None
@@ -122,10 +128,9 @@ def map_with_statmap( read_fnames, output_dir,
                 ' '.join(genome_fnames)
             )
 
-    print >> stdout, re.sub( "\s+", " ", call)
+    print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print call
         raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
             % str( ret_code )
 
@@ -137,15 +142,14 @@ def map_with_statmap( read_fnames, output_dir,
     if search_type != None:
         call += " -y " + search_type
 
-    print >> stdout, re.sub( "\s+", " ", call)    
+    print >> stderr, "========", re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print call
         raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
     
     # build the sam file
     call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
-    print >> stdout, re.sub( "\s+", " ", call)
+    print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
         raise ValueError, "TEST FAILED: build_sam_from_mapped_reads call returned error code '%s'" \
@@ -417,13 +421,9 @@ def mutate_reads( reads, error_strs ):
             read_error_str = (read_error_str[0]*multiplier)[:read_len]
             mr = mutate_solexa_read( read, read_error_str )
             mutated_reads.append( mut_read_t(mr, read_error_str, read) )
-        try:
-            assert 1 == len( set( map( len, mutated_reads[-1]  ) ) ) 
-        except:
-            print mutated_reads[-1]
-            print multiplier, read_len, error_str_len, map( len, mutated_reads[-1]  )
-            import pdb
-            pdb.set_trace()
+    
+        assert 1 == len( set( map( len, mutated_reads[-1]  ) ) ) 
+    
     return mutated_reads
 
 def build_expected_map_locations_from_repeated_genome( \
@@ -608,11 +608,6 @@ def test_paired_end_reads( read_len ):
     fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=200 )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
-
-    # rev complement the second read in the pair
-    #for i, read in enumerate(reads):
-    #    print read[0], read[1].translate( rev_comp_table )
-    #    reads[i] = ( read[0], read[1].translate( rev_comp_table ) )
     
     ###### Write out the test files, and run statmap ################################
     # write genome
@@ -643,7 +638,7 @@ def test_paired_end_reads( read_len ):
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != 2:
-            print reads_data
+            print >> stderr, reads_data
             raise ValueError, "Mapping returned too many results."
         
         loc = ( reads_data[0][2], int(reads_data[0][3]) )
@@ -1317,10 +1312,7 @@ if False:
                       num_chr_repeats=1, \
                       min_penalty=-10, max_penalty_spread=2 )
 
-if __name__ == '__main__':
-
-    RUN_SLOW_TESTS = True
-
+def main( RUN_SLOW_TESTS ):
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
@@ -1355,7 +1347,7 @@ if __name__ == '__main__':
     if False:
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
-    
+
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 
@@ -1363,4 +1355,15 @@ if __name__ == '__main__':
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )
     # test_short_sequences()
+
+if __name__ == '__main__':
+    try:
+        main( RUN_SLOW_TESTS=True )
+    except Exception, inst:
+        if not P_STATMAP_OUTPUT:
+            stderr.seek(0)
+            print stderr.read()
+        
+        raise
+        
     

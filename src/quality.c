@@ -175,13 +175,6 @@ build_error_data_penalty_array_from_rawread(
                         i,
                         error_data
                     );
-
-                /* add mismatch penalty */
-                if( j != k )
-                {
-                    /* log10(1/3) = -0.4771213 */
-                    pa->array[i].penalties[j][k] += -0.4771213;
-                }
             }
         }
     }

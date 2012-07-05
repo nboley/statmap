@@ -27,8 +27,6 @@ search_index( struct index_t* index,
 struct single_map_thread_data {
     int thread_id;
     struct genome_data* genome;
-    FILE* log_fp;
-    pthread_mutex_t* log_fp_mutex;
 
     struct rawread_db_t* rdb;
     
@@ -68,7 +66,6 @@ find_candidate_mappings( void* params );
 
 void
 find_all_candidate_mappings( struct genome_data* genome,
-                             FILE* log_fp,
                              struct rawread_db_t* rdb,
 
                              candidate_mappings_db* mappings_db,

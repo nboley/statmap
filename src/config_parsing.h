@@ -67,10 +67,7 @@ struct args_t {
     char* output_directory;
 
     char* sam_output_fname;
-
-    char* log_fname;
-    FILE* log_fp;
-
+    
     float min_match_penalty;
     float max_penalty_spread;
     int min_num_hq_bps;

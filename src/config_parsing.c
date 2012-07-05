@@ -53,15 +53,7 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
 
     fprintf_name_or_null( 
         arg_fp, "sam_output_fname", args->sam_output_fname );
-
-
-    fprintf_name_or_null( 
-        arg_fp, "log_fname", args->log_fname );
-    // FILE* log_fp;
-
-    fprintf_name_or_null( 
-        arg_fp, "log_fname", args->log_fname );
-
+    
     fprintf( arg_fp, "min_match_penalty:\t%.4f\n", args->min_match_penalty );
     fprintf( arg_fp, "max_penalty_spread:\t%.4f\n", args->max_penalty_spread );
     fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
@@ -146,15 +138,7 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 
     fscanf_name_or_null( 
         arg_fp, "sam_output_fname", &((*args)->sam_output_fname) );
-
-
-    fscanf_name_or_null( 
-        arg_fp, "log_fname", &((*args)->log_fname) );
-    // FILE* log_fp;
-
-    fscanf_name_or_null( 
-        arg_fp, "log_fname", &((*args)->log_fname) );
-
+    
     fscanf( arg_fp, "min_match_penalty:\t%f\n", 
             &((*args)->min_match_penalty) );
     fscanf( arg_fp, "max_penalty_spread:\t%f\n", 

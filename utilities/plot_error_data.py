@@ -247,7 +247,7 @@ def main():
     if "mapped_reads.sam" not in os.listdir("."):
         print "mapped_reads.sam not found, building it..."
         buildsam_cmd = "%s %s > %s" % (
-                "~/statmap/bin/mapped_reads_into_sam",
+                "~/Desktop/statmap/bin/mapped_reads_into_sam",
                 ".",
                 "mapped_reads.sam"
             )

@@ -82,7 +82,6 @@ update_error_data(
 {
     int i;
     data->num_unique_reads += 1;
-
     /*
      * check length against max_read_length; if it is longer,
      * reallocate memory, initialize new memory to 0, and update max_read_length

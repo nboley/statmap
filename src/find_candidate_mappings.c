@@ -516,37 +516,99 @@ build_candidate_mappings_from_mapped_locations(
     return;
 }
 
-static inline void
-update_error_data_from_candidate_mappings(
+/* 
+   Returns true if these candidate mappigns can be used to update the error 
+   data. Basically, we just test for uniqueness. 
+*/
+static inline enum bool
+can_be_used_to_update_error_data(
     struct genome_data* genome,
-    struct error_data_t* error_data,
     candidate_mappings* mappings,
     struct rawread* r
 )
 {
     /* skip empty mappings */
     if( NULL == mappings )
-        return;
+        return false;
         
     /*** we only want unique mappers for the error estiamte updates */        
-    if( mappings->length != 1 ) {
-        return;
+    // We allow lengths of 2 because we may have diploid locations
+    if( mappings->length < 1 || mappings->length > 2 ) {
+        return false;
     }
-        
-    /* we know that the length is one from right above */
-    assert( mappings->length == 1 );
-    if( mappings->mappings[0].recheck != VALID ) {
-        return;
+    
+    /* we know that the length is at least 1 from directly above */
+    assert( mappings->length >= 1 );
+    
+    candidate_mapping* loc = mappings->mappings + 0; 
+    int mapped_length = r->length - loc->trimmed_len;
+    
+    if( loc->recheck != VALID ) {
+        return false;
     }
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp, 
+        mapped_length
+    );
         
+    /* 
+       if there are two mappings, make sure that they have the same 
+       genome sequence. They actually may not be mapping to the same, 
+       corresponding diploid locations, but as long as there isn't a second
+       competing sequence, we really don't care because the mutation rates 
+       should still be fine.
+    */
+    if( mappings->length > 1 )
+    {
+        if( mappings->mappings[1].recheck != VALID ) {
+            return false;
+        }
+        
+        if( mappings->mappings[1].trimmed_len != loc->trimmed_len )
+            return false;
+        
+        /* this is guaranteed at the start of the function */
+        assert( mappings->length == 2 );
+        char* genome_seq_2 = find_seq_ptr( 
+            genome, 
+            mappings->mappings[1].chr, 
+            mappings->mappings[1].start_bp, 
+            r->length - mappings->mappings[1].trimmed_len
+        );
+        
+        /* if the sequences aren't identical, then return */
+        if( 0 != strncmp( genome_seq, genome_seq_2, mapped_length ) )
+            return false;
+    }
+    
+    return true;
+}
+
+static inline void
+update_error_data_from_candidate_mappings(
+    struct genome_data* genome,
+    candidate_mappings* mappings,
+    struct rawread* r,
+    struct error_data_t* error_data
+)
+{
+    if( !can_be_used_to_update_error_data( genome, mappings, r ) )
+        return;
+    
+    /* we need at least one valid mapping ( although this case should be handled
+       above by can_be_used_to_update_error_data */
+    if( mappings->length == 0 )
+        return;
+    
     // emphasize the array aspect with the + 0
     // but, since the length is exactly 1, we know that
     // we only need to deal with this read
-    candidate_mapping* loc = mappings->mappings + 0; 
-    assert( mappings->length == 1 && loc->recheck == VALID );
-        
+    candidate_mapping* loc = mappings->mappings + 0;         
     int mapped_length = r->length - loc->trimmed_len;
-        
+    
     char* genome_seq = find_seq_ptr( 
         genome, 
         loc->chr, 
@@ -561,17 +623,18 @@ update_error_data_from_candidate_mappings(
     if( loc->rd_strnd == BKWD )
     {
         read_seq = calloc( r->length + 1, sizeof(char) );
-        rev_complement_read( r->char_seq + loc->trimmed_len, read_seq, r->length );
+        rev_complement_read( r->char_seq+loc->trimmed_len, read_seq, r->length);
     } else {
         read_seq = r->char_seq + loc->trimmed_len;
     }
 
-    update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+    update_error_data( 
+        error_data, genome_seq, read_seq, error_str, mapped_length );
 
     /* free memory if we allocated it */
     if( loc->rd_strnd == BKWD )
         free( read_seq );
-
+    
     return;
 }
 
@@ -789,9 +852,9 @@ cleanup:
         for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
             update_error_data_from_candidate_mappings(
                 genome,
-                error_data,
                 candidate_mappings_cache[ i ],
-                rawreads_cache[ i ]
+                rawreads_cache[ i ],
+                error_data
             );
         }
         // add error_data to scratch_error_data
@@ -909,7 +972,6 @@ spawn_threads( struct single_map_thread_data* td_template )
 
 void
 find_all_candidate_mappings( struct genome_data* genome,
-                             FILE* log_fp,
                              struct rawread_db_t* rdb,
 
                              candidate_mappings_db* mappings_db,
@@ -929,7 +991,6 @@ find_all_candidate_mappings( struct genome_data* genome,
      */
 
     /* initialize the necessary mutex's */
-    pthread_mutex_t log_fp_mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t mapped_cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -937,9 +998,6 @@ find_all_candidate_mappings( struct genome_data* genome,
     struct single_map_thread_data td_template;
     td_template.genome = genome;
     
-    td_template.log_fp = log_fp;
-    td_template.log_fp_mutex = &log_fp_mutex;
-
     unsigned int mapped_cnt = 0;
     td_template.mapped_cnt = &mapped_cnt;
     td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
@@ -1046,6 +1104,12 @@ find_all_candidate_mappings( struct genome_data* genome,
             update_global_error_data( global_error_data, scratch_error_data );
     }
 
+    if( search_type == OBS_ERRORS )
+    {
+        update_global_error_data( global_error_data, scratch_error_data );
+        log_error_data( global_error_data );
+    }
+    
     // free error data structs
     free_error_data( scratch_error_data );
     free_error_data( global_error_data );

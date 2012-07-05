@@ -318,9 +318,6 @@ parse_arguments( int argc, char** argv )
     
     args.sam_output_fname = NULL;
     
-    args.log_fname = NULL;
-    args.log_fp = NULL;
-    
     args.min_match_penalty = 1;
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
@@ -412,10 +409,7 @@ parse_arguments( int argc, char** argv )
                   // defaults to the read length of the first read
             args.indexed_seq_len = atoi(optarg);
             break;
-        case 'l': // log output 
-            args.log_fname = optarg;
-            break;
-
+        
         /* utility options */
         case 'h':
             usage();
@@ -747,10 +741,6 @@ parse_arguments( int argc, char** argv )
     } else {
         num_threads = args.num_threads;
     }
-
-    /* initialize the log file */
-    if( args.log_fname != NULL )
-        args.log_fp = fopen( args.log_fname, "a");
     
     /* set the min num hq basepairs if it's unset */
     if( args.min_num_hq_bps == -1 )
@@ -860,7 +850,6 @@ map_marginal( struct args_t* args,
     
     find_all_candidate_mappings( 
         genome,
-        args->log_fp,
         rdb,
         &candidate_mappings,
         args->min_match_penalty,
@@ -1152,10 +1141,6 @@ cleanup:
     
     if( args.NC_rdb != NULL )
         close_rawread_db( args.NC_rdb );
-    
-    /* Close the log file */
-    if( args.log_fp != NULL )
-        fclose(args.log_fp);
     
     if( args.frag_len_fp != NULL ) {
         fclose( args.frag_len_fp );
