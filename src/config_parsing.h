@@ -73,8 +73,7 @@ struct args_t {
     int min_num_hq_bps;
 
     int num_starting_locations;
-
-    int indexed_seq_len;
+    
     int num_threads;
 
     enum SEARCH_TYPE search_type;

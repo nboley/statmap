@@ -37,6 +37,7 @@
 #include "trace.h"
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
+#include "error_correction.h"
 
 /* Set the deafults for these two global variables */
 int num_threads = -1;
@@ -325,7 +326,6 @@ parse_arguments( int argc, char** argv )
     args.num_starting_locations = DEFAULT_NUM_SAMPLES;
 
     args.num_threads = -1;
-    args.indexed_seq_len = -1;
     
     args.input_file_type = UNKNOWN;
     args.assay_type = UNKNOWN;
@@ -402,12 +402,6 @@ parse_arguments( int argc, char** argv )
 
         case 'y': // type of marginal mapping to do - mismatches, or error data
             search_type = optarg;
-            break;
-
-        /* optional arguments ( that you probably dont want ) */
-        case 'i': // indexed sequence length
-                  // defaults to the read length of the first read
-            args.indexed_seq_len = atoi(optarg);
             break;
         
         /* utility options */
@@ -504,7 +498,7 @@ parse_arguments( int argc, char** argv )
         switch( search_type[0] )
         {
         case 'e':
-            args.search_type = OBS_ERRORS;
+            args.search_type = ESTIMATE_ERROR_MODEL;
             break;
         case 'm':
             args.search_type = MISMATCHES;
@@ -517,7 +511,7 @@ parse_arguments( int argc, char** argv )
         }
     } else {
         /* set default to be using the observed error rates */
-        args.search_type = OBS_ERRORS;
+        args.search_type = ESTIMATE_ERROR_MODEL;
     }
 
     /* Make the output directory */
@@ -614,20 +608,6 @@ parse_arguments( int argc, char** argv )
     }
 
     
-    /*
-     * If the sequence length is not set, then try and determine it automatically.
-     */    
-    if( args.indexed_seq_len == -1 )
-    {
-        args.indexed_seq_len = guess_optimal_indexed_seq_len( &args );
-        
-        if( args.indexed_seq_len <= 11 ) 
-        {
-            fprintf( stderr, "FATAL       :  Can not index sequences less than 12 basepairs long.\n" );
-            exit( -1 );
-        }
-    }
-
     if( args.frag_len_fname != NULL )
     {
         safe_copy_into_output_directory( 
@@ -745,17 +725,10 @@ parse_arguments( int argc, char** argv )
     /* set the min num hq basepairs if it's unset */
     if( args.min_num_hq_bps == -1 )
     {
-        args.min_num_hq_bps = MAX( 12, (8 + args.indexed_seq_len/2) );
+        args.min_num_hq_bps = 12;
     }
     min_num_hq_bps = args.min_num_hq_bps;
-
-    /* make sure that we dont filter *every* read */
-    if( min_num_hq_bps > args.indexed_seq_len )
-    {
-        fprintf( stderr, "WARNING     :  Required number of HQ bps set higher than the seq length. Setting it to seq length.\n" );
-        min_num_hq_bps = args.indexed_seq_len;
-    }
-
+    
     /* 
      * Dont allow penalty spreads greater than the min match penalty - 
      * they are worthless and mess up my search heuristics 
@@ -848,15 +821,48 @@ map_marginal( struct args_t* args,
     
     /***** END initialize the mappings dbs */
     
+    /* 
+       if the error data is not initalized, then we need to bootstrap it. We 
+       do this by mapping the reads using a mismatch procedure until we have 
+       enough to estiamte the errors
+    */
+    // bootstrap_error_data
+
+    struct error_model_t* error_model = NULL;
+    if( args->search_type == ESTIMATE_ERROR_MODEL )
+    {
+        init_error_model( &error_model, ESTIMATED );
+        bootstrap_estimated_error_model( 
+            genome,
+            rdb,
+            &candidate_mappings,
+            error_model
+        );
+        
+        /* rewind rawread db to beginning for mapping */
+        rewind_rawread_db( rdb );
+    } else if(args->search_type == PROVIDED_ERROR_MODEL) {
+        fprintf(stderr, "FATAL       :  PROVIDED_ERROR_MODEL is not implemented yet\n" );
+        exit( 1 );
+    } else if(args->search_type == MISMATCHES) {
+        init_error_model( &error_model, MISMATCH );
+    } else {
+        fprintf(stderr, "FATAL       :  Unrecognized index search type '%i'\n",
+            args->search_type);
+        exit( 1 );
+    }
+    
     find_all_candidate_mappings( 
         genome,
         rdb,
         &candidate_mappings,
+        error_model,
         args->min_match_penalty,
-        args->max_penalty_spread,
-        args->indexed_seq_len,
-        args->search_type );
-        
+        args->max_penalty_spread
+    );
+    
+    free_error_model( error_model );
+    
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
@@ -872,7 +878,7 @@ map_marginal( struct args_t* args,
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
-    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db, args->search_type );
+    write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
     gettimeofday( &stop, NULL );
     fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
                     (float)(stop.tv_sec - start.tv_sec) 

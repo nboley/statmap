@@ -33,8 +33,8 @@ struct rawread {
     // float* mutation_type_penalties;
 };
 
-/* fwd declaration for error_data_t */
-struct error_data_t;
+/* fwd declaration for error_model_t */
+struct error_model_t;
 
 /* Initialize a raw read. The length's are needed to init the char strings */
 void 
@@ -66,7 +66,7 @@ populate_read_from_fastq_file( FILE* f, struct rawread** r, enum READ_END end );
 /* determine whether reads are mappable */
 enum bool
 filter_rawread( struct rawread* r,
-                struct error_data_t* ed );
+                struct error_model_t* error_model );
 
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 

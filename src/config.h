@@ -263,16 +263,11 @@ enum CHR_SOURCE
     MATERNAL  = 3
 };
 
-enum INDEX_SEARCH_MODE
-{
-    BOOTSTRAP   = 1,
-    SEARCH      = 2
-};
-
 enum SEARCH_TYPE
 {
-    OBS_ERRORS  = 1,
-    MISMATCHES  = 2
+    PROVIDED_ERROR_MODEL  = 1,
+    ESTIMATE_ERROR_MODEL  = 2,
+    MISMATCHES            = 3
 };
 
 /*** Globally useful macros ***/

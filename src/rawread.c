@@ -207,7 +207,7 @@ populate_read_from_fastq_file(
 
 enum bool
 filter_rawread( struct rawread* r,
-                struct error_data_t* ed )
+                struct error_model_t* error_model )
 {
     /* Might pass a NULL read (r2 in the single read case) from find_candidate_mappings */
     if( r == NULL )
@@ -233,10 +233,10 @@ filter_rawread( struct rawread* r,
            NOTE when error_prb receieves identical bp's, it returns the
            inverse automatically
          */
-        double qual = pow(10,
-            error_prb( r->char_seq[i], r->char_seq[i], r->error_str[i], i, ed )
-        );
-
+        double error = error_prb( r->char_seq[i], r->char_seq[i], 
+                                  r->error_str[i], i, error_model );
+        double qual = pow(10, error );
+        
         /* count the number of hq basepairs */
         if( qual > 0.999 )
             num_hq_bps += 1;

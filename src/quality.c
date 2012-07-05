@@ -75,6 +75,89 @@ code_bp( int code )
     exit( -1 );
 }
 
+/**** penalty functions ****/
+
+float
+error_prb_for_mismatch( char ref, char obs )
+{
+    if( ref == obs )
+        return 0;
+    
+    return -1;
+}
+
+
+float
+error_prb_for_estimated_model(
+        char ref,
+        char obs,
+        char error_score,
+        int pos,
+        struct error_data_t* error_data
+    )
+{
+    /*
+       compute error score from observed error data
+     */
+    double loc_component = 0;
+    double mismatch_component = 0;
+    if( pos < error_data->max_read_length && error_data->num_unique_reads > 0 )
+    {
+        loc_component = ( error_data->position_mismatch_cnts[pos] /
+                                 error_data->num_unique_reads );
+    }
+    
+    // avoid divide-by-0
+    if( error_data->qual_score_cnts[(unsigned char) error_score] == 0 )
+    {
+        mismatch_component = 0;
+    }
+    else {
+        mismatch_component =
+            error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
+            error_data->qual_score_cnts[(unsigned char) error_score];
+    }
+
+    float prb = ( loc_component + mismatch_component ) / 2 + LOG_FFACTOR;
+
+    assert( prb > 0 && prb <= 1 ); // make sure prb is, in fact, a probability
+
+    /* convert to log prb */
+    float log_prb;
+    /* if the bp's match, we return the inverse of the probability of error */
+    if( ref == obs )
+        log_prb = log10(1 - prb);
+    else
+        log_prb = log10(prb);
+
+    return log_prb;
+}
+
+
+float
+error_prb(
+        char ref,
+        char obs,
+        char error_score,
+        int pos,
+        struct error_model_t* error_model
+    )
+{
+    switch ( error_model->error_model_type ) 
+    {
+    case MISMATCH:
+        return error_prb_for_mismatch( ref, obs );
+    case FASTQ_MODEL:
+        assert( false );
+        return 0;
+    case ESTIMATED:
+        return error_prb_for_estimated_model( 
+            ref, obs, error_score, pos, error_model->data );
+    default:
+        assert( false );
+    }
+}
+
 
 /**** Penalty array functions ****/
 
@@ -119,93 +202,31 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 
 /**** penalty array builders ****/
 void
-build_error_data_bootstrap_penalty_array_from_rawread(
+build_penalty_array(
         struct rawread* rd,
-        struct error_data_t* error_data,
+        struct error_model_t* error_model,
         struct penalty_array_t* pa
     )
 {
-    int i, j, k;
+    int pos, ref_bp, seq_bp;
     /* for each position in the rawread */
-    for( i = 0; i < pa->len; i++ )
+    for( pos = 0; pos < pa->len; pos++ )
     {
         /* for each possible basepair (A,C,G,T) in the reference sequence */
-        for( j = 0; j < 4; j++ )
+        for( ref_bp = 0; ref_bp < 4; ref_bp++ )
         {
             /* for each possible basepair (A,C,G,T) in the observed sequence */
-            for( k = 0; k < 4; k++ )
-            {
-                if( j == k ) // if bp's match
-                    pa->array[i].penalties[j][k] = 0;
-                else
-                    /*
-                       we only want perfect mappers - if the bp's mismatch,
-                       return 1, which is an invalid penalty score and will
-                       cause the search to terminate immediately
-                    */
-                    pa->array[i].penalties[j][k] = 1;
-            }
-        }
-    }
-}
-
-void
-build_error_data_penalty_array_from_rawread(
-        struct rawread* rd,
-        struct error_data_t* error_data,
-        struct penalty_array_t* pa
-    )
-{
-    int i, j, k;
-    /* for each position in the rawread */
-    for( i = 0; i < pa->len; i++ )
-    {
-        /* for each possible basepair (A,C,G,T) in the reference sequence */
-        for( j = 0; j < 4; j++ )
-        {
-            /* for each possible basepair (A,C,G,T) in the observed sequence */
-            for( k = 0; k < 4; k++ )
+            for( seq_bp = 0; seq_bp < 4; seq_bp++ )
             {
                 /* estimate error probability based on observed sequence and
                    error data */
-                pa->array[i].penalties[j][k] = error_prb(
-                        code_bp(j),
-                        code_bp(k),
-                        rd->error_str[i],
-                        i,
-                        error_data
+                pa->array[pos].penalties[ref_bp][seq_bp] = error_prb(
+                        code_bp(ref_bp),
+                        code_bp(seq_bp),
+                        rd->error_str[pos],
+                        pos,
+                        error_model
                     );
-            }
-        }
-    }
-}
-
-void
-build_mismatch_penalty_array_from_rawread(
-        struct rawread* rd,
-        struct error_data_t* error_data,
-        struct penalty_array_t* pa
-    )
-{
-    int i, j, k;
-    /* for each position in the rawread */
-    for( i = 0; i < pa->len; i++ )
-    {
-        /* for each possible basepair (A,C,G,T) in the reference sequence */
-        for( j = 0; j < 4; j++ )
-        {
-            /* for each possible basepair (A,C,G,T) in the observed sequence */
-            for( k = 0; k < 4; k++ )
-            {
-                if( j == k ) // if bp's match
-                    pa->array[i].penalties[j][k] = 0;
-                else
-                    /*
-                       each mismatch is treated as -1 penalty score, so we
-                       can intutively control the number of mismatches allowed
-                       with existing parameters
-                    */
-                    pa->array[i].penalties[j][k] = -1;
             }
         }
     }
@@ -266,49 +287,6 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
     }
     quality[seq_len] = '\0';
     return;
-}
-
-float
-error_prb(
-        char ref,
-        char obs,
-        char error_score,
-        int pos,
-        struct error_data_t* error_data
-    )
-{
-    /*
-       compute error score from observed error data
-     */
-
-    double loc_component = ( error_data->position_mismatch_cnts[pos] /
-                             error_data->num_unique_reads );
-
-    double mismatch_component;
-    // avoid divide-by-0
-    if( error_data->qual_score_cnts[(unsigned char) error_score] == 0 )
-    {
-        mismatch_component = 0;
-    }
-    else {
-        mismatch_component =
-            error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
-            error_data->qual_score_cnts[(unsigned char) error_score];
-    }
-
-    float prb = ( loc_component + mismatch_component ) / 2 + LOG_FFACTOR;
-
-    assert( prb > 0 && prb <= 1 ); // make sure prb is, in fact, a probability
-
-    /* convert to log prb */
-    float log_prb;
-    /* if the bp's match, we return the inverse of the probability of error */
-    if( ref == obs )
-        log_prb = log10(1 - prb);
-    else
-        log_prb = log10(prb);
-
-    return log_prb;
 }
 
 float 

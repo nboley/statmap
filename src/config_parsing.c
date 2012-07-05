@@ -59,9 +59,7 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
     fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
 
     fprintf( arg_fp, "num_starting_locations:\t%i\n", args->num_starting_locations );
-
-    fprintf( arg_fp, "indexed_seq_len:\t%i\n", args->indexed_seq_len );
-
+    
     fprintf( arg_fp, "num_threads:\t%i\n", args->num_threads );
 
     fprintf( arg_fp, "search_type:\t%i\n", args->search_type );
@@ -148,10 +146,7 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 
     fscanf( arg_fp, "num_starting_locations:\t%i\n", 
             &((*args)->num_starting_locations) );
-
-    fscanf( arg_fp, "indexed_seq_len:\t%i\n", 
-            &((*args)->indexed_seq_len) );
-
+    
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
 

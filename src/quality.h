@@ -17,6 +17,17 @@
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
 
+struct error_model_t;
+
+float
+error_prb(
+    char ref,
+    char obs,
+    char error_score,
+    int pos,
+    struct error_model_t* error_model
+);
+
 /* 
    the probability of observing obs given that the ref basepair is unobservable. 
    this is just log10( 0.25 ) - the N gives us 0 information. 
@@ -48,27 +59,12 @@ init_penalty_array( int len, struct penalty_array_t* pa );
 void
 free_penalty_array( struct penalty_array_t* pa );
 
-/**** penalty array builders ****/
 void
-build_error_data_bootstrap_penalty_array_from_rawread(
+build_penalty_array(
         struct rawread* rd,
-        struct error_data_t* error_data,
+        struct error_model_t* error_model,
         struct penalty_array_t* pa
-    );
-
-void
-build_error_data_penalty_array_from_rawread(
-        struct rawread* rd,
-        struct error_data_t* error_data,
-        struct penalty_array_t* pa
-    );
-
-void
-build_mismatch_penalty_array_from_rawread(
-        struct rawread* rd,
-        struct error_data_t* error_data,
-        struct penalty_array_t* pa
-    );
+);
 
 void
 build_reverse_penalty_array(
@@ -96,15 +92,6 @@ struct error_data_t;
 /* Since log10(0) is undefined, we add a tiny fudge factor to
    the error probabilities (in case p=0) */
 #define LOG_FFACTOR 1e-6
-
-float
-error_prb(
-        char ref,
-        char obs,
-        char error_score,
-        int pos,
-        struct error_data_t* error_data
-    );
 
 /* calculate the penalty of a packed sequence with respect to another */
 float 

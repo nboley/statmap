@@ -23,8 +23,7 @@ fprintf_mapped_read_to_sam(
 void
 write_nonmapping_reads_to_fastq( 
     struct rawread_db_t* rdb,
-    struct mapped_reads_db* mappings_db,
-    enum SEARCH_TYPE search_type
+    struct mapped_reads_db* mappings_db
     );
 
 void

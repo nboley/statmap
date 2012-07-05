@@ -8,17 +8,70 @@
 #include "error_correction.h"
 
 void
+init_error_model( 
+    struct error_model_t** error_model,
+    enum error_model_type_t error_model_type
+)
+{
+    *error_model = malloc( sizeof(struct error_model_t) );
+    (*error_model)->error_model_type = error_model_type;
+    (*error_model)->data = NULL;
+    return;
+}
+
+void
+update_error_model_from_error_data( 
+    struct error_model_t* error_model,
+    struct error_data_t* data
+)
+{
+    if( error_model->error_model_type == MISMATCH )
+    {
+        assert( error_model->data == NULL );
+        return;
+    } else if ( error_model->error_model_type == FASTQ_MODEL ) {
+        // We havn't implemented this yet...
+        assert( false );
+        assert( error_model->data == NULL );
+        return;
+    } else if ( error_model->error_model_type == ESTIMATED ) {
+        free_error_data( (struct error_data_t*) (error_model->data) );
+        error_model->data = data;
+    } else {
+        fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
+                 error_model->error_model_type );
+        exit(1);
+    }
+    
+    return;
+};
+
+void free_error_model( struct error_model_t* error_model )
+{
+    if ( error_model->error_model_type == ESTIMATED ) {
+        free_error_data( (struct error_data_t*) (error_model->data) );
+        error_model->data = NULL;
+    } else {
+        /* if we didn't free the error model, it had better be NULL */
+        assert( error_model->data == NULL );
+    }
+    
+    free( error_model );
+    return;
+}
+
+
+void
 init_error_data( 
     struct error_data_t** data,
-    int max_read_length, /* set to 0 if unknown, will be updated by all fns */
     pthread_mutex_t* mutex
 )
 {
     *data = calloc( sizeof(struct error_data_t), 1 );
     
     (*data)->num_unique_reads = 0;
-    (*data)->max_read_length = max_read_length;
-    (*data)->position_mismatch_cnts = malloc( max_read_length*sizeof(double) );
+    (*data)->max_read_length = 0;
+    (*data)->position_mismatch_cnts = NULL;
     
     int j;
     for( j = 0; j < max_num_qual_scores; j++ )
@@ -45,6 +98,7 @@ free_error_data( struct error_data_t* data )
 
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
+    
     free( data );
 }
 
@@ -286,7 +340,7 @@ load_next_error_data_t_from_log_fp( struct error_data_t** ed,
     assert( rv == 1 );
 
     /* set up error_data_t */
-    init_error_data( ed, max_read_length, NULL );
+    init_error_data( ed, NULL );
     (*ed)->num_unique_reads = num_unique_reads;
 
     // load position_mismatch_cnts
