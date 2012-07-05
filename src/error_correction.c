@@ -62,10 +62,7 @@ void free_error_model( struct error_model_t* error_model )
 
 
 void
-init_error_data( 
-    struct error_data_t** data,
-    pthread_mutex_t* mutex
-)
+init_error_data( struct error_data_t** data )
 {
     *data = calloc( sizeof(struct error_data_t), 1 );
     
@@ -84,7 +81,11 @@ init_error_data(
      * set pointer to a mutex to control concurrent access to this struct
      * set to NULL if no need for concurrent access
      */
-    (*data)->mutex = mutex;
+    int rc;
+    pthread_mutexattr_t mta;
+    rc = pthread_mutexattr_init(&mta);
+    (*data)->mutex = malloc( sizeof(pthread_mutex_t) );
+    rc = pthread_mutex_init( (*data)->mutex, &mta );
     
     return;
 }
@@ -98,6 +99,9 @@ free_error_data( struct error_data_t* data )
 
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
+    
+    if( data->mutex != NULL )
+        free( data->mutex );
     
     free( data );
 }
@@ -340,7 +344,7 @@ load_next_error_data_t_from_log_fp( struct error_data_t** ed,
     assert( rv == 1 );
 
     /* set up error_data_t */
-    init_error_data( ed, NULL );
+    init_error_data( ed );
     (*ed)->num_unique_reads = num_unique_reads;
 
     // load position_mismatch_cnts

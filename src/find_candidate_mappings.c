@@ -784,7 +784,7 @@ find_candidate_mappings( void* params )
              * find_matches would have terminated early for this read */
             if( results->skip )
                 /* bootstrap mode terminated early - cleanup and continue */
-                goto cleanup;
+                goto cleanup_penalty_arrays;
 
             /* make an assay specific changes to the results. For instance, in CAGE,
                we need to add extra reads for the untemplated g's */
@@ -822,7 +822,7 @@ find_candidate_mappings( void* params )
             /* update the maximum read length */
             max_read_length = MAX( max_read_length, r->length );
 
-cleanup:
+cleanup_penalty_arrays:
             /* free the penalty arrays */
             free_penalty_array( &fwd_pa );
             free_penalty_array( &rev_pa );
@@ -837,7 +837,7 @@ cleanup:
     /******* update the error estimates *******/
     /* create a thread local copy of the error data to avoid excess locking */
     struct error_data_t* scratch_error_data;
-    init_error_data( &scratch_error_data, NULL );
+    init_error_data( &scratch_error_data );
 
     int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
@@ -852,11 +852,12 @@ cleanup:
     pthread_mutex_lock( error_data->mutex );
     add_error_data( error_data, scratch_error_data );
     pthread_mutex_unlock( error_data->mutex );
+    
     // free local copy of error data
     free_error_data( scratch_error_data );
     
     if( td->only_collect_error_data )
-        return NULL;
+        goto cleanup;
     
     /******* add the results to the database *******/
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
@@ -887,11 +888,19 @@ cleanup:
            we do this so it is easier to join with the rawreads later */
         add_candidate_mappings_to_db(
             mappings_db, mappings, readkeys[i], thread_id );
-        pthread_mutex_unlock( mappings_db_mutex );
+        pthread_mutex_unlock( mappings_db_mutex );        
+    }
+    
+cleanup:
+
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        if( NULL == candidate_mappings_cache[i])
+            continue;
         
         /* free the cached reads and mappings */
         free_rawread( rawreads_cache[i] );
-        free_candidate_mappings( mappings );
+        free_candidate_mappings( candidate_mappings_cache[i] );
     }
     
     return NULL;
@@ -1000,8 +1009,7 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->min_match_penalty = min_match_penalty;
     td_template->max_penalty_spread = max_penalty_spread;
 
-    pthread_mutex_t err_mutex = PTHREAD_MUTEX_INITIALIZER;
-    init_error_data( &(td_template->error_data), &err_mutex );
+    init_error_data( &(td_template->error_data) );
 
     td_template->error_model = error_model;
 

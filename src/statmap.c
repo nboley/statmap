@@ -975,7 +975,8 @@ map_generic_data(  struct args_t* args )
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_ondisk_index( genome->index );
-
+    genome->index = NULL;
+    
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
     
@@ -986,6 +987,8 @@ map_generic_data(  struct args_t* args )
     }
 
     close_mapped_reads_db( &mpd_rds_db );
+    
+    free_genome( genome );
     
     return;
 }

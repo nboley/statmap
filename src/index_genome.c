@@ -1602,7 +1602,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
 
     /* allocate space for the index */
     *index = malloc( sizeof( struct index_t ) );
-
+    
     /* set the index type */
     (*index)->index_type = TREE;
 

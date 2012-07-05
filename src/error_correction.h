@@ -50,10 +50,7 @@ void
 free_error_model( struct error_model_t* error_model );
 
 void
-init_error_data( 
-    struct error_data_t** data,
-    pthread_mutex_t* mutex
-);
+init_error_data( struct error_data_t** data );
 
 void 
 free_error_data( struct error_data_t* data );
