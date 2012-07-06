@@ -40,7 +40,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -1329,8 +1329,6 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
-    print "Starting test_mutated_read_finding()"
-    test_mutated_read_finding()
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
