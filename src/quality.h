@@ -17,6 +17,12 @@
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
 
+int 
+bp_code( const char letter );
+
+char
+code_bp( int code );
+
 struct error_model_t;
 
 float

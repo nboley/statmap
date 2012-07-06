@@ -874,6 +874,7 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
         (*rdb)->mmapped_reads_starts = NULL;
     }
     
+    pthread_spin_destroy( (*rdb)->access_lock );
     free( (*rdb)->access_lock );
     
     free( *rdb );
