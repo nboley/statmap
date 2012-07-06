@@ -40,7 +40,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -452,16 +452,13 @@ def build_expected_map_locations_from_repeated_genome( \
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
         search_type=None, min_penalty=-7.0, max_penalty_spread=2.1 ):
-    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s" % ( \
-        read_len, str(rev_comp), indexed_seq_len )
+    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
+        read_len, str(rev_comp), indexed_seq_len, search_type )
 
     # If no indexed_seq_len explicitly set, use read_len
     indexed_seq_len = indexed_seq_len or read_len
-
-    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
-
     rl = read_len
-
+    
     # if we are testing untemplated g's, increase the number of samples so that we get some
     # beginning overlap
     nsamples = 10000 if untemplated_gs_perc > 0 else 100
@@ -667,7 +664,7 @@ def test_paired_end_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
-    output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads )
+    output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads )
     
     rl = read_len
     GENOME_LEN = gen_len
@@ -756,7 +753,7 @@ def test_lots_of_repeat_sequence_finding( ):
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
         % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
-
+    
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -1021,7 +1018,8 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     reads_of.close()
 
     # map the data
-    output_directory = "smo_test_diploid_mapping_%i" % (read_len)
+    output_directory = "smo_test_diploid_mapping_%i_%i_%i" % (
+        read_len, nreads, len(genome) )
     read_fnames = [ "tmp.fastq" ]
     map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
             genome_fnames = output_filenames
@@ -1329,8 +1327,6 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
-    print "Starting test_mutated_read_finding()"
-    test_mutated_read_finding()
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
