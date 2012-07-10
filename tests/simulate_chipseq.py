@@ -21,7 +21,7 @@ import trace
 
 import tests as sc # for simulation code
 
-NUM_READS = 1000
+NUM_READS = 5000
 NUM_SAMPLES = 25
 BCD_REGION_FNAME = "./data/bcd_region.fasta"
 #BCD_REGION_FNAME = "./data/chr4.fasta"
