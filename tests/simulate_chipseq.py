@@ -443,12 +443,7 @@ def map_with_statmap( iterative=True, paired_end=True ):
     return
 
 def call_peaks( ):
-    ret_code = subprocess.call( "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH, shell=True )    
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        print "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH
-        sys.exit( -1 )
-    
+    run_external_cmd( "%s ./smo_chipseq_sim/" % sc.CALL_PEAKS_PATH )
 
 def map_with_bowtie( paired_end = True ):
     # build the index
@@ -597,14 +592,14 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
              lwd=c(0.5,0.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,3,3,2,2) )"" )
     """
 
-    # Save plot as png
     # If you want manual xlim and ylim, set after plotting is done
-    for index in xrange(len(genome)):
-        plt.subplot(len(genome), 1, index+1)
-        plt.xlim((0,5000))
-        plt.ylim((-0.65, 0.65))
-    plt.savefig( os.path.join(curr_dir, png_fname) )
+    #for index in xrange(len(genome)):
+    #    plt.subplot(len(genome), 1, index+1)
+    #    plt.xlim((0,5000))
+    #    plt.ylim((-0.65, 0.65))
 
+    # Save plot as png
+    plt.savefig( os.path.join(curr_dir, png_fname) )
 
 if __name__ == '__main__':
     paired_end=False
