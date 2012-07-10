@@ -8,14 +8,14 @@ import sys
 import os
 from subprocess import call
 
+from itertools import izip
+
 import matplotlib as mpl
 #mpl.use('Agg') # use if X is not installed/for headless plot generation
 import matplotlib.pyplot as plt
 
 # Information about quality scores (Phred scores) for reads from different
 # sequencers
-
-#QUALITY_SCORE_RANGE = range()
 
 FORMAT_TYPES = [
     { 'QUAL_SHIFT': 33, 'ARE_LOG_ODDS': False },
@@ -33,6 +33,9 @@ FILE_TYPES = {
     'TEST_SUITE_FORMAT':    FORMAT_TYPES[1],
     'MARKS_SOLEXA':         FORMAT_TYPES[3],
 }
+
+def usage():
+    print "USAGE: ./plot_error_data.py statmap_output_directory"; sys.exit(1)
 
 def determine_read_file_type_from_error_scores(error_scores):
     '''
@@ -110,25 +113,51 @@ class ErrorDataStruct():
     Stores error information from a single error_data struct
     '''
 
-    def __init__(self):
-        self.num_unique_reads       = 0
-        self.max_read_length        = 0
-        self.loc_error_rates        = []
-        self.qual_score_error_rates = []
+    def __init__(self, fp=None):
 
-    def __str__(self):
-        rep = []
-        rep.append("Num Unique Reads:\t%i" % self.num_unique_reads)
-        rep.append("Max Read Length:\t%i" % self.max_read_length)
-        rep.append("Loc Error Rates:")
-        for i, ler in enumerate(self.loc_error_rates):
-            rep.append("%i\t%i" % (i, ler))
-        rep.append("Qual Score Error Rates:")
-        for i, qser in enumerate(self.qual_score_error_rates):
-            rep.append("%i\t%i" % (i, qser))
+        # initialize instance vars
+        self.num_unique_reads           = 0
+        self.max_read_length            = 0
+        self.position_mismatch_cnts     = []
+        self.qual_score_cnts            = []
+        self.qual_score_mismatch_cnts   = []
 
-        return '\n'.join(rep)
-        
+        if fp:
+            self._load_from_fp(fp)
+
+    def _load_from_fp(self, fp):
+        """
+        Load error data struct given a fp that is on the first line of an
+        error data struct description
+        """
+        # make sure we are at the start of a new struct
+        line = fp.readline().strip() # remove newline
+        if line.startswith("num_unique_reads"):
+            self.num_unique_reads = int(line.split()[1])
+        else:
+            raise RuntimeError("Error Log fp misaligned")
+
+        # read the next line for the max_read_length
+        line = fp.readline().strip()
+        self.max_read_length = int(line.split()[1])
+
+        # read the position_mismatch_cnts
+        for i in range(self.max_read_length):
+            line = fp.readline().strip()
+            self.position_mismatch_cnts.append(
+                    float(line.split()[1])
+                )
+
+        # read the quality score counts
+        max_num_qual_scores = 256
+        for i in range(max_num_qual_scores):
+            line = fp.readline().strip()
+            self.qual_score_cnts.append(
+                    float(line.split()[2])
+                )
+            self.qual_score_mismatch_cnts.append(
+                    float(line.split()[1])
+                )
 
 class ErrorStatsLog():
     '''
@@ -137,35 +166,24 @@ class ErrorStatsLog():
     
     def __init__(self, fp):
         # parse a list of ErrorDataStructs from error_stats.log
-        self.structs = []
-        self._load_from_file( fp )
+        self.data = []
+        self._load_from_file(fp)
 
-    def _load_from_file( self, fp ):
+    def _load_from_file(self, fp):
         '''
         Read error_stats.log, store each set of error data as an ErrorDataStruct
         '''
-        #index = -1
-        struct = None
-        curr_err_type = None
-        for line in fp:
-            if line.startswith("Num Unique Reads:"):
-                struct = ErrorDataStruct() # make a new struct
-                self.structs.append( struct ) # append to list of structs
-                struct.num_unique_reads = int(line.split()[-1].strip()) # set num_unique_reads
-            elif line.startswith("Max Read Length:"):
-                struct.max_read_length = int(line.split()[-1].strip())
-            elif line.startswith("Loc Error Rates:"):
-                curr_err_type = "loc"
-            elif line.startswith("Qual Score Error Rates:"):
-                curr_err_type = "qual"
+        # loop over file, loading structs in one at a time
+        # after every struct, read the next line in to test for EOF
+        while True:
+            pos = fp.tell()
+            line = fp.readline() # returns "" on EOF
+            if line:
+                # return to original position
+                fp.seek(pos)
+                self.data.append( ErrorDataStruct(fp) )
             else:
-                if curr_err_type == "loc":
-                    struct.loc_error_rates.append( float(line.split()[-1].strip()) )
-                elif curr_err_type == "qual":
-                    struct.qual_score_error_rates.append( float(line.split()[-1].strip()) )
-
-    def __str__(self):
-        return '\n'.join( map(str, self.structs) ) 
+                break
 
 class MappedReads:
     '''
@@ -186,94 +204,29 @@ class MappedReads:
                 )
             )
 
-class ErrorPlot:
-    '''
-    Creates an interactive plot of the error_stats.log using matplotlib
-
-    The plot displays the data from error_stats.log in two tables:
-        1) the location error rates
-        2) the quality score error rates
-
-    You can use the arrow keys or mouse scroll wheel to move through the list
-    of error data structs.
-    '''
-
-    def __init__(self, eslog, mpdrds):
-        self.current = 0
-        self.eslog = eslog
-        self.mpdrds = mpdrds
-
-        # compute ylimits over ALL error data structs, so scale on plots is less confusing
-        # figure out ylimits for loc_error_rates and qual_score_error_rates
-        self.ymin_loc_error_rates = min(
-            (
-                min( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymax_loc_error_rates = max(
-            (
-                max( edstruct.loc_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymin_qual_score_error_rates = min(
-            (
-                min( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-        self.ymax_qual_score_error_rates = max(
-            (
-                max( edstruct.qual_score_error_rates ) for edstruct in self.eslog.structs
-            )
-        )
-
-        # set up GUI callbacks
-        fig = plt.figure()
-        self.key_cid = fig.canvas.mpl_connect('key_press_event', self.on_key)
-        self.scroll_cid = fig.canvas.mpl_connect('scroll_event', self.on_scroll)
-        self.redraw()
-
-    def redraw(self):
-        # NOTE: matplotlib subplot indices are 1-based
-        # NOTE: plot style options: http://matplotlib.sourceforge.net/api/pyplot_api.html#matplotlib.pyplot.plot
-        edstruct = self.eslog.structs[self.current]
-
-        plt.clf()
-        #plt.title("# Reads: %i" % edstruct.num_unique_reads)
-        print "On error data struct #%i" % self.current
-
+def plot_error_stats( esl, mpdrds ):
+    for ed in esl.data:
+        # Compute loc_error_rates
+        loc_error_rates = [
+                (pmc / ed.num_unique_reads)
+                for pmc in ed.position_mismatch_cnts
+            ]
         # Plot loc_error_rates
         plt.subplot(211)
-        plt.plot( edstruct.loc_error_rates ) # hold=False
+        plt.plot( loc_error_rates )
         plt.xlabel("Loc in read"); plt.ylabel("P(mismatch)")
-        plt.ylim( [self.ymin_loc_error_rates, self.ymax_loc_error_rates] )
 
+        # Compute qual_score error rates
+        qual_score_error_rates = [
+                (qsm / qsc ) if qsc != 0 else 0
+                for qsm, qsc in
+                izip( ed.qual_score_mismatch_cnts,
+                      ed.qual_score_cnts )
+            ]
         # Plot qual_score_error_rates
         plt.subplot(212)
-        plt.plot( edstruct.qual_score_error_rates )
+        plt.plot( qual_score_error_rates )
         plt.xlabel("Quality Score"); plt.ylabel("P(mismatch)")
-        plt.ylim( [self.ymin_qual_score_error_rates, self.ymax_qual_score_error_rates ] )
-
-    def on_key(self, event):
-        #print 'you pressed', event.key
-        if event.key == 'right' or event.key == 'up':
-            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
-        elif event.key == 'left' or event.key == 'down':
-            self.current = max( self.current - 1, 0 )
-        elif event.key == 'c':
-            plt.clf()
-        self.redraw()
-    
-    def on_scroll(self, event):
-        #print 'you scrolled', event.button, event.step
-        if event.button == 'left':
-            self.current = min( self.current + 1, len(self.eslog.structs) - 1 )
-        elif event.button == 'down':
-            self.current = max( self.current - 1, 0 )
-        self.redraw()
-
-
-def usage():
-    print "USAGE: ./plot_error_data.py statmap_output_directory"; sys.exit(1)
 
 def main():
     if len(sys.argv) != 2: usage()
@@ -294,19 +247,19 @@ def main():
     if "mapped_reads.sam" not in os.listdir("."):
         print "mapped_reads.sam not found, building it..."
         buildsam_cmd = "%s %s > %s" % (
-                "~/statmap/bin/mapped_reads_into_sam",
+                "~/Desktop/statmap/bin/mapped_reads_into_sam",
                 ".",
                 "mapped_reads.sam"
             )
         rv = call( buildsam_cmd, shell=True )
         if rv != 0:
-            raise "Could not build SAM file from mapped reads"
+            raise RuntimeError("Could not build SAM file from mapped reads")
 
     with open("mapped_reads.sam") as mapped_reads_fp:
         mpdrds = MappedReads( mapped_reads_fp )
 
     # plot data interactively
-    ep = ErrorPlot( esl, mpdrds )
+    plot_error_stats( esl, mpdrds )
     plt.show()
 
 if __name__ == "__main__": main()

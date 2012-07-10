@@ -12,13 +12,71 @@
  */
 
 #include "dna_sequence.h"
+#include "rawread.h"
 
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
 
+int 
+bp_code( const char letter );
 
-// const int solexa_qual_start = 64;
-// const int num_possible_quality_chars = 85;
+char
+code_bp( int code );
+
+struct error_model_t;
+
+float
+error_prb(
+    char ref,
+    char obs,
+    char error_score,
+    int pos,
+    struct error_model_t* error_model
+);
+
+/* 
+   the probability of observing obs given that the ref basepair is unobservable. 
+   this is just log10( 0.25 ) - the N gives us 0 information. 
+*/
+static const double N_penalty = -0.60206;
+
+/* Stores the penalty data for a single character at a specific position
+   in a read */
+struct penalty_t {
+    /* 4x4 array of penalties - ref bp x obs bp */
+    float penalties[4][4];
+};
+
+/*
+   3d array of penalties:
+   length of read * ref bp * obs bp
+ */
+struct penalty_array_t {
+    /* length of read */
+    int len;
+
+    /* array of penalty structs, for each position in the read */
+    struct penalty_t* array;
+};
+
+void
+init_penalty_array( int len, struct penalty_array_t* pa );
+
+void
+free_penalty_array( struct penalty_array_t* pa );
+
+void
+build_penalty_array(
+        struct rawread* rd,
+        struct error_model_t* error_model,
+        struct penalty_array_t* pa
+);
+
+void
+build_reverse_penalty_array(
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa
+    );
 
 /* convert a solexa quality score into a mutation probability */
 double mutation_probability( int );
@@ -32,76 +90,59 @@ unsigned char quality_score( float );
  */
 void convert_into_quality_string( float* mutation_probs, char* quality, int seq_len );
 
-/* FIXME - change the name */
-extern void determine_bp_mut_rates( float** );
-
 /* fwd declarations */
 struct rawread;
 struct error_data_t;
 
-/* populate float arrays with mutation probabilities */
-void
-build_lookup_table_from_rawread( struct rawread* rd,
-                                 struct error_data_t* error_data,
-                                 float* lookuptable_position,
-                                 float* inverse_lookuptable_position,
-                                 float* reverse_lookuptable_position,
-                                 float* reverse_inverse_lookuptable_position
-);
 
-void
-build_mismatch_lookup_table( float** lookuptable_position,
-                             float** inverse_lookuptable_position,
-                             float** lookuptable_bp,
-                             int seq_len
-);
-
-/* print the float arrays */
-void print_lookup_table( float*, float*, int seq_len );
-
-float
-recheck_penalty( char* reference, 
-                 char* observed, 
-                 const int seq_length,
-                 const float* n_lookuptable_position,
-                 const float* n_inverse_lookuptable_position,
-                 const float* n_lookuptable_bp );
-
+/* Since log10(0) is undefined, we add a tiny fudge factor to
+   the error probabilities (in case p=0) */
+#define LOG_FFACTOR 1e-6
 
 /* calculate the penalty of a packed sequence with respect to another */
 float 
-multiple_letter_penalty( const LETTER_TYPE* reference,
-                         const LETTER_TYPE* observed,
-                         const int start_position,
-                         const int seq_length,
-                         const int num_letters,
-                         const float min_penalty,
-                         const float* lookuptable_position,
-                         const float* inverse_lookuptable_position,
-                         const float* lookuptable_bp
-);
+multiple_letter_penalty(
+        const LETTER_TYPE* const reference,
+        const LETTER_TYPE* const observed,
 
-float 
-penalty_func( LETTER_TYPE reference, 
-              LETTER_TYPE observed, 
-              /* the position in the sequence - this should be
-                 zero indexed */
-              const int position, 
-              const int seq_len,
-              const float min_penalty,
-              const float* lookuptable_position,
-              const float* inverse_lookuptable_position,
-              const float* lookuptable_bp 
-);
+        const int start_position,
+        const int seq_length,
+        const int num_letters,
+        const float min_penalty,
 
+        struct penalty_array_t* pa
+    );
+
+/* Compute the penalty from char sequences */
 float
-compute_error_prb(
-        char bp,
-        char quality_char,
-        enum bool inverse,
-        int pos,
-        float seq_error,
-        struct error_data_t* error_data
+recheck_penalty(
+        char* reference,
+        char* observed,
+        const int seq_length,
+
+        struct penalty_array_t* pa
+    );
+
+/* Compute the penalty form LETTER_TYPE sequences */
+float
+compute_penalty(
+        /* 
+         * these aren't const because they are copies. I bit shift
+         * them while calculating the penalty.
+         */
+        LETTER_TYPE ref,
+        LETTER_TYPE obs,
+
+        /* the position in the sequence - this should be
+           zero indexed */
+        const int position, 
+        /* the length of a full sequence */
+        const int seq_length,
+        /* the minimum allowable penalty */
+        const float min_penalty,
+
+        /* the penalty array */
+        struct penalty_array_t* pa
     );
 
 #endif /* #define QUALITY */

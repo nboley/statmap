@@ -263,10 +263,11 @@ enum CHR_SOURCE
     MATERNAL  = 3
 };
 
-enum INDEX_SEARCH_MODE
+enum SEARCH_TYPE
 {
-    BOOTSTRAP,
-    SEARCH
+    PROVIDED_ERROR_MODEL  = 1,
+    ESTIMATE_ERROR_MODEL  = 2,
+    MISMATCHES            = 3
 };
 
 enum input_file_type_t {

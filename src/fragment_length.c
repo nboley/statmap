@@ -97,6 +97,40 @@ init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp )
 }
 
 
+int 
+get_frag_len( struct mapped_read_t* rd )
+{
+    /* If there are not mapped locations, ther is no frag len */
+    if( rd->num_mappings == 0 )
+        return -1;
+    
+    /* if the reads aren't paired, we can't infer the frag len */
+    if ((get_flag_from_mapped_read_location(rd->locations + 0)&IS_PAIRED) == 0)
+        return -1;
+    
+    /* initial;ize the fraglen to the fraglen of the first mapped location */
+    int frag_len = 1 + get_stop_from_mapped_read_location( rd->locations + 0 )
+        - get_start_from_mapped_read_location( rd->locations + 0 );
+    
+    MPD_RD_NUM_MAPPINGS_T i;
+    for( i = 1; i < rd->num_mappings; i++ )
+    {
+        /* reads should never be a mixture of paired and unpaired reads 
+         XXX IS THIS ACTUALLY TRUE? WE COULD JUST CONTINUE... */
+        assert( (get_flag_from_mapped_read_location(rd->locations + i)
+                 &IS_PAIRED) != 0 );
+        
+        int tmp_fl = 1 + get_stop_from_mapped_read_location( rd->locations + i )
+            - get_start_from_mapped_read_location( rd->locations + i );
+        
+        /* if all of the fraglens don't match, then skip this rd */
+        if( frag_len != tmp_fl )
+            return -1;
+    }
+
+    return frag_len;
+}
+
 void
 estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 {
@@ -122,30 +156,22 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {
-        /* If there is exactly one mapping, then we will use it */
-        if( 1 == rd->num_mappings )
+        int fl = get_frag_len( rd );
+        if( fl == -1 )
+            continue;
+
+        /* add this length to the fl dist */
+        if( fl > max_fl )
         {
-            /* skip unpaired reads */
-            if ( (get_flag_from_mapped_read_location(rd->locations + 0)
-                  &IS_PAIRED) == 0 )
-                continue;
-            
-            int fl = 1 + get_stop_from_mapped_read_location( rd->locations + 0 )
-                     - get_start_from_mapped_read_location( rd->locations + 0 );
-
-            /* add this length to the fl dist */
-            if( fl > max_fl )
-            {
-                /* allocate space for the new data */
-                temp_fls = realloc( temp_fls, sizeof(int)*(fl+1) );
-                /* zero out the new entries */
-                memset( temp_fls + max_fl + 1, 0, sizeof(int)*(fl-max_fl) );
-                max_fl = fl;
-            }
-
-            total_num_reads += 1;
-            temp_fls[ fl ] += 1;
+            /* allocate space for the new data */
+            temp_fls = realloc( temp_fls, sizeof(int)*(fl+1) );
+            /* zero out the new entries */
+            memset( temp_fls + max_fl + 1, 0, sizeof(int)*(fl-max_fl) );
+            max_fl = fl;
         }
+
+        total_num_reads += 1;
+        temp_fls[ fl ] += 1;
         
         free_mapped_read( rd );
     }

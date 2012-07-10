@@ -946,31 +946,31 @@ add_sequence_to_sequences_node(
 }
 
 
- float
-find_sequences_in_sequences_node(   const sequences_node* const seqs,
-                                    /* the curr penalty for seq */
-                                    float curr_penalty,
-                                    /* the maximum allowable penalty */
-                                    float min_match_penalty,
-                                    
-                                    /* the seq of interest */
-                                    const LETTER_TYPE* const seq,
-                                    /* the length of a full sequence */
-                                    const int seq_length,
-                                    /* the total num of letters in a seq */
-                                    const int num_letters,
-                                    /* the current level in the tree */
-                                    const int node_level,
-                                    /* the strand of the search seq */
-                                    const enum STRAND strnd,
-                    
-                                    mapped_locations* results,
+float
+find_sequences_in_sequences_node(
+        const sequences_node* const seqs,
+        /* the curr penalty for seq */
+        float curr_penalty,
+        /* the maximum allowable penalty */
+        float min_match_penalty,
 
-                                    const float* const lookuptable_position,
-                                    const float* const inverse_lookuptable_position,
-                                    const float* const lookuptable_bp
+        /* the seq of interest */
+        const LETTER_TYPE* const seq,
+        /* the length of a full sequence */
+        const int seq_length,
+        /* the total num of letters in a seq */
+        const int num_letters,
+        /* the current level in the tree */
+        const int node_level,
+        /* the strand of the search seq */
+        const enum STRAND strnd,
+
+        mapped_locations* results,
+
+        struct penalty_array_t* pa
     )
 {
+
     /* store the updated maximum penalty, for if we find matches */
     float max_penalty = -FLT_MAX;
 
@@ -1009,9 +1009,7 @@ find_sequences_in_sequences_node(   const sequences_node* const seqs,
             seq_length, 
             num_letters,
             min_match_penalty - curr_penalty,
-            lookuptable_position,
-            inverse_lookuptable_position,
-            lookuptable_bp
+            pa
         );
         
         /* // debugging code

@@ -8,12 +8,62 @@
 #include "error_correction.h"
 
 void
-init_error_data( 
-    struct error_data_t** data,
-    pthread_mutex_t* mutex
+init_error_model( 
+    struct error_model_t** error_model,
+    enum error_model_type_t error_model_type
 )
 {
-    *data = calloc(  sizeof(struct error_data_t), 1 );
+    *error_model = malloc( sizeof(struct error_model_t) );
+    (*error_model)->error_model_type = error_model_type;
+    (*error_model)->data = NULL;
+    return;
+}
+
+void
+update_error_model_from_error_data( 
+    struct error_model_t* error_model,
+    struct error_data_t* data
+)
+{
+    if( error_model->error_model_type == MISMATCH )
+    {
+        assert( error_model->data == NULL );
+        return;
+    } else if ( error_model->error_model_type == FASTQ_MODEL ) {
+        // We havn't implemented this yet...
+        assert( false );
+        assert( error_model->data == NULL );
+        return;
+    } else if ( error_model->error_model_type == ESTIMATED ) {
+        error_model->data = data;
+    } else {
+        fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
+                 error_model->error_model_type );
+        exit(1);
+    }
+    
+    return;
+};
+
+void free_error_model( struct error_model_t* error_model )
+{
+    if ( error_model->error_model_type == ESTIMATED ) {
+        free_error_data( (struct error_data_t*) (error_model->data) );
+        error_model->data = NULL;
+    } else {
+        /* if we didn't free the error model, it had better be NULL */
+        assert( error_model->data == NULL );
+    }
+    
+    free( error_model );
+    return;
+}
+
+
+void
+init_error_data( struct error_data_t** data )
+{
+    *data = calloc( sizeof(struct error_data_t), 1 );
     
     (*data)->num_unique_reads = 0;
     (*data)->max_read_length = 0;
@@ -30,7 +80,11 @@ init_error_data(
      * set pointer to a mutex to control concurrent access to this struct
      * set to NULL if no need for concurrent access
      */
-    (*data)->mutex = mutex;
+    int rc;
+    pthread_mutexattr_t mta;
+    rc = pthread_mutexattr_init(&mta);
+    (*data)->mutex = malloc( sizeof(pthread_mutex_t) );
+    rc = pthread_mutex_init( (*data)->mutex, &mta );
     
     return;
 }
@@ -38,11 +92,17 @@ init_error_data(
 void 
 free_error_data( struct error_data_t* data )
 {
+    /* don't free unallocated memory */
+    if( data == NULL )
+        return;
+
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
-    free( data );
     
-    return;
+    if( data->mutex != NULL )
+        free( data->mutex );
+    
+    free( data );
 }
 
 void
@@ -79,7 +139,6 @@ update_error_data(
 {
     int i;
     data->num_unique_reads += 1;
-
     /*
      * check length against max_read_length; if it is longer,
      * reallocate memory, initialize new memory to 0, and update max_read_length
@@ -222,6 +281,14 @@ void weighted_average_error_data(
         src->num_unique_reads * ( 1 - weight );
 }
 
+void log_error_data( struct error_data_t* ed )
+{
+    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
+    assert( error_stats_log != NULL );
+    fprintf_error_data( error_stats_log, ed );
+    fclose( error_stats_log );
+}
+
 void
 update_global_error_data(
     struct error_data_t* global,
@@ -230,12 +297,6 @@ update_global_error_data(
 {
     weighted_average_error_data( global, local, ERROR_WEIGHT );
 
-    /* write global error data, which will be used to map reads in the next set
-     * threads, to log file */
-    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
-    fprintf_error_data( error_stats_log, global );
-    fclose( error_stats_log );
-
     /* reset local error data */
     clear_error_data( local );
 }
@@ -243,27 +304,65 @@ update_global_error_data(
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data )
 {
-    fprintf( stream, "Num Unique Reads:\t%i\n", data->num_unique_reads );
-    fprintf( stream, "Max Read Length:\t%i\n", data->max_read_length );
+    fprintf( stream, "num_unique_reads:\t%i\n", data->num_unique_reads );
+    fprintf( stream, "max_read_length:\t%i\n", data->max_read_length );
 
-    fprintf( stream, "Loc Error Rates:\n" );
     int i;
     for( i = 0; i < data->max_read_length; i++ )
     {
-        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] / data->num_unique_reads );
+        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] );
     }
     
-    fprintf( stream, "Qual Score Error Rates:\n" );
     for( i = 0; i < max_num_qual_scores; i++ )
     {
-        float qs_error_rate;
-        if( data->qual_score_cnts[ i ] == 0 ) // avoid NaNs
-            qs_error_rate = 0;
-        else
-            qs_error_rate = data->qual_score_mismatch_cnts[ i ]/data->qual_score_cnts[ i ];
-
-        fprintf( stream, "%i\t%e\n", i, qs_error_rate );
+        fprintf( stream, "%i\t%e\t%e\n", i, 
+                 data->qual_score_mismatch_cnts[ i ],
+                 data->qual_score_cnts[i] );
     }
-    
-    return;
+}
+
+void
+load_next_error_data_t_from_log_fp( struct error_data_t** ed,
+                                    FILE* fp )
+{
+    /* clear old error data */
+    if( *ed != NULL )
+        free_error_data( *ed );
+
+    /* set ed to NULL if we're at EOF */
+    if( feof(fp) ) {
+        *ed = NULL;
+        return;
+    }
+
+    /* otherwise, the fp should be on the first line of an error_data_t entry */
+    int rv, num_unique_reads, max_read_length;
+    rv = fscanf( fp, "num_unique_reads:\t%i\n", &num_unique_reads );
+    assert( rv == 1 ); // make sure the fp was on the first line of a new entry
+    fscanf( fp, "max_read_length:\t%i\n", &max_read_length );
+    assert( rv == 1 );
+
+    /* set up error_data_t */
+    init_error_data( ed );
+    (*ed)->num_unique_reads = num_unique_reads;
+
+    // load position_mismatch_cnts
+    int i;
+    for( i = 0; i < max_read_length; i++ )
+    {
+        double pmc;
+        rv = fscanf( fp, "%*i %le", &pmc );
+        assert( rv == 1 );
+        (*ed)->position_mismatch_cnts[i] = pmc;
+    }
+
+    // load qual_score_cnts and qual_score_mismatch_cnts
+    for( i = 0; i < max_num_qual_scores; i++ )
+    {
+        double qsc, qsmc;
+        rv = fscanf( fp, "%*i %le %le", &qsmc, &qsc );
+        assert( rv == 2 );
+        (*ed)->qual_score_cnts[i] = qsc;
+        (*ed)->qual_score_mismatch_cnts[i] = qsmc;
+    }
 }

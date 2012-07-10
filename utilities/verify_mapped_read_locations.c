@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "utility_common.h"
+// unused
+//#include "utility_common.h"
 
 #include "../src/mapped_read.h"
 #include "../src/genome.h"

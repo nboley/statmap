@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 
+#include "quality.h"
 #include "genome.h"
 #include "rawread.h"
 #include "candidate_mapping.h"
@@ -16,22 +17,16 @@ search_index( struct index_t* index,
               mapped_locations** results,
 
               struct rawread* r,
-              float* bp_mut_rates,
 
-              float* lookuptable_position,
-              float* inverse_lookuptable_position,
-              float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position,
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
-              enum INDEX_SEARCH_MODE mode
+              enum bool only_find_unique_mappers
     );
-
 
 struct single_map_thread_data {
     int thread_id;
     struct genome_data* genome;
-    FILE* log_fp;
-    pthread_mutex_t* log_fp_mutex;
 
     struct rawread_db_t* rdb;
     
@@ -43,33 +38,37 @@ struct single_map_thread_data {
     pthread_mutex_t* mappings_db_mutex;
     float min_match_penalty;
     float max_penalty_spread;
-    int max_subseq_len;
+    
+    struct error_model_t* error_model;
+    struct error_data_t* error_data;
 
-    /* global_error_data contains the weighted average of error data so far
-     * and is used to calculate the lookup tables */
-    struct error_data_t* global_error_data;
-    /* scratch_error_data contains the error data from the current set of
-     * running threads, and is synchronized with global_error_data every
-     * READS_STAT_UPDATE_STEP_SIZE reads */
-    struct error_data_t* scratch_error_data;
-
-    enum INDEX_SEARCH_MODE mode;
+    enum bool only_collect_error_data;
 };
 
 
 void*
 find_candidate_mappings( void* params );
 
+void
+bootstrap_estimated_error_model( 
+    struct genome_data* genome,
+    
+    struct rawread_db_t* rdb,
+    candidate_mappings_db* mappings_db,
+    
+    struct error_model_t* error_model
+);
 
 void
-find_all_candidate_mappings( struct genome_data* genome,
-                             FILE* log_fp,
-                             struct rawread_db_t* rdb,
-
-                             candidate_mappings_db* mappings_db,
-                             float min_match_penalty,
-                             float max_penalty_spread,
-                             float max_seq_length
-
-    );
+find_all_candidate_mappings( 
+    struct genome_data* genome,
+                             
+    struct rawread_db_t* rdb,
+    candidate_mappings_db* mappings_db,
+                             
+    struct error_model_t* error_model,
+                             
+    float min_match_penalty,
+    float max_penalty_spread
+);
 

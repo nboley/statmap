@@ -36,6 +36,7 @@
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
 #include "util.h"
+#include "error_correction.h"
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
@@ -128,15 +129,48 @@ map_marginal( struct args_t* args,
     
     /***** END initialize the mappings dbs */
     
+    /* 
+       if the error data is not initalized, then we need to bootstrap it. We 
+       do this by mapping the reads using a mismatch procedure until we have 
+       enough to estiamte the errors
+    */
+    // bootstrap_error_data
+
+    struct error_model_t* error_model = NULL;
+    if( args->search_type == ESTIMATE_ERROR_MODEL )
+    {
+        init_error_model( &error_model, ESTIMATED );
+        bootstrap_estimated_error_model( 
+            genome,
+            rdb,
+            &candidate_mappings,
+            error_model
+        );
+        
+        /* rewind rawread db to beginning for mapping */
+        rewind_rawread_db( rdb );
+    } else if(args->search_type == PROVIDED_ERROR_MODEL) {
+        fprintf(stderr, "FATAL       :  PROVIDED_ERROR_MODEL is not implemented yet\n" );
+        exit( 1 );
+    } else if(args->search_type == MISMATCHES) {
+        init_error_model( &error_model, MISMATCH );
+    } else {
+        fprintf(stderr, "FATAL       :  Unrecognized index search type '%i'\n",
+            args->search_type);
+        exit( 1 );
+    }
+    
     find_all_candidate_mappings( 
         genome,
-        args->log_fp,
         rdb,
         &candidate_mappings,
+        error_model,
         args->min_match_penalty,
-        args->max_penalty_spread,
-        args->indexed_seq_len );
-        
+        args->max_penalty_spread
+    );
+    
+    free_error_model( error_model );
+    
     /* combine and output all of the partial mappings - this includes
        joining paired end reads. */
     fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
@@ -249,7 +283,8 @@ map_generic_data(  struct args_t* args )
     /* we may need the memory later */
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_ondisk_index( genome->index );
-
+    genome->index = NULL;
+    
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
     
@@ -260,6 +295,8 @@ map_generic_data(  struct args_t* args )
     }
 
     close_mapped_reads_db( &mpd_rds_db );
+    
+    free_genome( genome );
     
     return;
 }
@@ -421,10 +458,6 @@ cleanup:
     
     if( args.NC_rdb != NULL )
         close_rawread_db( args.NC_rdb );
-    
-    /* Close the log file */
-    if( args.log_fp != NULL )
-        fclose(args.log_fp);
     
     if( args.frag_len_fp != NULL ) {
         fclose( args.frag_len_fp );

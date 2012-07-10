@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import sys
 import os
 
@@ -40,7 +42,7 @@ def parse_args():
         default=25 )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--use-ip", "-ip",
-        help="(For Chipseq only) Use the immunoprecipitate mapped reads (default). ",
+help="(For Chipseq only) Use the immunoprecipitate mapped reads (default). ",
         action="store_true")
     group.add_argument("--use-nc", "-nc",
         help="(For Chipseq only) Use the negative control mapped reads. ",
@@ -57,15 +59,20 @@ def set_track_names( smo, args ):
     # if this is a Chip-Seq experiment (has a negative control)
     if smo.config.contents.assay_type == CHIP_SEQ:
         if args.use_ip:
-            update_trace_fname = "./samples/sample{0}.ip.bin.trace".format( args.sample_number )
+            update_trace_fname = \
+                "./samples/sample{0}.ip.bin.trace".format( args.sample_number )
             track_names = ip_track_names
         elif args.use_nc:
-            update_trace_fname = "./samples/sample{0}.nc.bin.trace".format( args.sample_number )
+            update_trace_fname = \
+                "./samples/sample{0}.nc.bin.trace".format( args.sample_number )
             track_names = nc_track_names
         else:
-            raise Exception("This experiment used a negative control - you need to specify which reads to use")
+            raise Exception(
+"This experiment used a negative control - you need to specify which reads to "
+"use")
     else:
-        update_trace_fname = "./samples/sample{0}.bin.trace".format( args.sample_number )
+        update_trace_fname = \
+            "./samples/sample{0}.bin.trace".format( args.sample_number )
         track_names = default_track_names
 
     return update_trace_fname, track_names
@@ -84,7 +91,7 @@ def main():
     # specify data structures to work with
     if args.use_nc:
         mpd_rdb = smo.NC_mpd_rdb
-        cond_prbs_db = smo.cond_prbs_db
+        cond_prbs_db = smo.NC_cond_prbs_db
     else:
         mpd_rdb = smo.mpd_rdb
         cond_prbs_db = smo.cond_prbs_db

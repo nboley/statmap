@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "statmap.h"
+#include "error_correction.h"
 #include "rawread.h"
 #include "quality.h"
 #include "dna_sequence.h"
@@ -77,6 +78,26 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
     fprintf(fastq_fp, "+%s\n", r->name);
     fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
 }
+/*
+ *   Move the filepointer until we see a @, indicating the start of the next 
+ *   read.
+ */
+void
+move_fastq_fp_to_next_read( FILE* fp )
+{
+    long current_pos = ftell( fp );
+    while( !feof(fp) ) {
+        char character = fgetc( fp );
+        if( character == '@' )
+        {
+            fseek( fp, current_pos, SEEK_SET );
+            return;
+        }
+        current_pos += 1;
+    }
+    
+    return;
+}
 
 /*
  * Populate a rawread object from a file pointer. 
@@ -88,6 +109,48 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
  * upon the failure mode, read below for more info.
  *
  */
+
+enum READ_END
+determine_read_end_from_readname( char* readname )
+{
+    /* find the final / */
+    char* fwd_slash_pntr = 
+        strrchr ( readname, '/' );
+    
+    enum READ_END end = UNKNOWN;
+    
+    /* if there is no slash, assume its not a paired end read */
+    if( fwd_slash_pntr == NULL )
+    {
+        return NORMAL;
+    } else {
+        /* Determine the read end from integer following the slash */
+        switch( atoi( fwd_slash_pntr + 1 ) )
+        {
+        case 1:
+            end = FIRST;
+            break;
+        case 2:
+            end = SECOND;
+            break;
+        default:
+            fprintf(stderr, 
+                    "Unrecognized read end '%i'\n", 
+                    atoi( fwd_slash_pntr + 1 ) );
+            exit( -1 );
+        }
+
+        /* set the slash to '\0', to eliminate it from the read name */
+        if( NULL != fwd_slash_pntr )
+            *fwd_slash_pntr = '\0';
+        
+        return end;
+    }
+    
+    /* we should never get here */
+    assert( false );
+}
+
 int
 populate_read_from_fastq_file( 
     FILE* input_file, struct rawread** r, enum READ_END end )
@@ -100,86 +163,76 @@ populate_read_from_fastq_file(
     char quality[200];
     
     /***** Get the read informnation from the fastq file *****/
-
-    /*** Determine the read name ***/
-    /* get the parsed name string */
-    return_code = fscanf( input_file, "@%s\n", readname );
-
-    if( return_code == EOF )
-    {
-        assert( feof( input_file ) );
-        *r = NULL;
-        return EOF;
-    }
-    
-    /* If the read end is known, eliminate the slash */
-    if( end == FIRST || end == SECOND )
-    {
-        /* find the final / */
-        char* fwd_slash_pntr = 
-            strrchr ( readname, '/' );
-
-       /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-    }
-    
-    /** If necessary, Determine the read end **/
-    if( end == UNKNOWN )
-    {
-        /* find the final / */
-        char* fwd_slash_pntr = 
-            strrchr ( readname, '/' );
-
-        /* if there is no slash, assume its not a paired end read */
-        if( fwd_slash_pntr == NULL )
+    while( true )
+    {    
+        if( feof( input_file ) )
         {
-            end = NORMAL;
-        } else {
-            /* Determine the read end from integer following the slash */
-            switch( atoi( fwd_slash_pntr + 1 ) )
-            {
-            case 1:
-                end = FIRST;
-                break;
-            case 2:
-                end = SECOND;
-                break;
-            default:
-                fprintf(stderr, 
-                        "Unrecognized read end '%i'\n", 
-                        atoi( fwd_slash_pntr + 1 ) );
-                exit( -1 );
-            }
-
-       /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-            
+            *r = NULL;
+            return EOF;
         }
+
+        /*** Determine the read name ***/
+        /* get the parsed name string */
+        char next_char = fgetc( input_file );
+        if( next_char != '@' )
+        {
+            fprintf(stderr, "ERROR:    Expected '@' and get '%c' at position '%li'. Skipping read.\n",
+                    next_char, ftell(input_file) );
+            move_fastq_fp_to_next_read( input_file );
+            continue;
+        }
+        /* get the rest of the line */
+        return_code = fscanf( input_file, "%s\n", readname );
+        
+        if( return_code == EOF )
+        {
+            assert( feof( input_file ) );
+            continue;
+        }
+        
+        /* If the read end is known, eliminate the slash */
+        if( end == FIRST || end == SECOND )
+        {
+            /* find the final / */
+            char* fwd_slash_pntr = strrchr ( readname, '/' );
+            /* set the slash to '\0', to eliminate it from the read name */
+            if( NULL != fwd_slash_pntr )
+                *fwd_slash_pntr = '\0';
+        } else if( end == NORMAL )   {
+            /* if the end is normal, we dont need to do antyhing */
+        } else {
+            assert( end == UNKNOWN );
+            end = determine_read_end_from_readname( readname );
+        }
+            
+        /*** get the actual read */
+        return_code = fscanf( input_file, "%s\n", read );
+
+        /*** get the next read name - we discard this */
+        /* 
+           get the next character. We're expecting a plus. If it's not, 
+           then move the filepointer to the next '@', and return error. 
+        */
+        char plus_char = getc( input_file );
+        if( plus_char != '+' )
+        {
+            fprintf(stderr, "ERROR:    Expected '+' and get '%c' for readname '%s'. Skipping read.\n",
+                    plus_char, readname);
+            move_fastq_fp_to_next_read( input_file );
+            continue;
+        }
+        while( '\n' != getc( input_file  ) );
+        
+        /*** get the quality score */
+        return_code = fscanf( input_file, "%s\n", quality );
+        
+        break;
     }
-    
-    /* calculate the length of the readname */
+
+    /* calculate the length of the read and the readname */
     int readname_len = strlen( readname );
-    
-    /*** get the actual read */
-    return_code = fscanf( input_file, "%s\n", read );
     int read_len = strlen( read );
-
-    /*** get the next read name - we discard this */
-    /* We can't use  
-       return_code = fscanf( input_file, "+%*s\n" );       
-       because, if the line is just +\n, it wont find a string and will
-       skip to the next line. Therefore, we use this messy while loop.
-       TODO - make the assert a real error.
-    */
-
-    assert( '+' == getc( input_file)  );
-    while( '\n' != getc( input_file  ) );
     
-    /*** get the quality score */
-    return_code = fscanf( input_file, "%s\n", quality );
-
     /***** Initialize and Populate the raw read *****/ 
     init_rawread( r, read_len, readname_len );
 
@@ -205,12 +258,17 @@ populate_read_from_fastq_file(
 }
 
 enum bool
-filter_rawread( struct rawread* r )
+filter_rawread( struct rawread* r,
+                struct error_model_t* error_model )
 {
+    /* Might pass a NULL read (r2 in the single read case) from find_candidate_mappings */
+    if( r == NULL )
+        return false; // Do not filter nonexistent read
+
     /***************************************************************
      * check to make sure this read is mappable
      * we consider a read 'mappable' if:
-     * 1) The penalties array is not too low
+     * 1) There are enough hq bps
      *
      */
 
@@ -218,16 +276,18 @@ filter_rawread( struct rawread* r )
        ( it's initialized to -1 ); */
     assert( min_num_hq_bps >= 0 );
 
-    /* 
-     * count the number of a's and t's. 
-     */
     int num_hq_bps = 0;
     int i;
     for( i = 0; i < r->length; i++ )
     {
-        double qual = 1 - mutation_probability( 
-            ( (unsigned char) (r->error_str)[i] )
-        );
+        /*
+           compute the inverse probability of error (quality)
+           NOTE when error_prb receieves identical bp's, it returns the
+           inverse automatically
+         */
+        double error = error_prb( r->char_seq[i], r->char_seq[i], 
+                                  r->error_str[i], i, error_model );
+        double qual = pow(10, error );
         
         /* count the number of hq basepairs */
         if( qual > 0.999 )
@@ -287,8 +347,7 @@ close_rawread_db( struct rawread_db_t* rdb )
     }
     
     pthread_spin_destroy( rdb->lock );
-    // this free used to cause a segfault - seems fine now
-    free( rdb->lock );
+    free( (void*) rdb->lock );
     
     free( rdb );
     return;
@@ -420,42 +479,6 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
         return false;
     }        
     
-}
-
-int 
-get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey )
-{
-    int rv = -10;
-    
-    rv = get_next_read_from_rawread_db( 
-        rdb, readkey, r1, r2, max_readkey );
-    
-    /* While this rawread is unmappable, continue */ 
-    /* 
-       This logic is complicated because it has to deal with both paired end
-       and non paired end reads. But, basically, it says that r1 cant be null
-       and r2 is null and r1 is mappable or r2 is not null ( ie this is paired
-       end ) and both r1 and r2 are mappable.
-    */
-    while( *r1 != NULL 
-           && (      ( *r2 == NULL && filter_rawread( *r1 ) == true )
-                  || ( filter_rawread( *r1 ) == true 
-                       && filter_rawread( *r2 ) == true )
-              )
-           )
-    {
-        free_rawread( *r1 );
-        if ( *r2 != NULL )
-            free_rawread( *r2 );
-        
-        rv = get_next_read_from_rawread_db( 
-            rdb, readkey, r1, r2, max_readkey );
-    }
-    
-    return rv;
 }
 
 int

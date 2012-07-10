@@ -1,3 +1,4 @@
+#include "config.h"
 
 struct mapped_read_t;
 struct genome_data;

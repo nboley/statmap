@@ -30,17 +30,15 @@ struct args_t {
 
     char* sam_output_fname;
 
-    char* log_fname;
-    FILE* log_fp;
-
     float min_match_penalty;
     float max_penalty_spread;
     int min_num_hq_bps;
 
     int num_starting_locations;
 
-    int indexed_seq_len;
     int num_threads;
+
+    enum SEARCH_TYPE search_type;
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
@@ -66,18 +64,16 @@ struct args_t {
         ("output_directory", c_char_p),
 
         ("sam_output_fname", c_char_p),
-
-        ("log_fname", c_char_p),
-        ("log_fp", c_void_p),
-
+        
         ("min_match_penalty", c_float),
         ("max_penalty_spread", c_float),
         ("min_num_hq_bps", c_int),
 
         ("num_starting_locations", c_int),
 
-        ("indexed_seq_len", c_int),
         ("num_threads", c_int),
+
+        ("search_type", c_uint),        # enum SEARCH_TYPE
         
         ("input_file_type", c_uint),    # enum input_file_type_t
         ("assay_type", c_uint),         # enum assay_type_t

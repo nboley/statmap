@@ -5,6 +5,17 @@
 
 #define max_num_qual_scores 256
 
+enum error_model_type_t {
+    MISMATCH    = 1,
+    FASTQ_MODEL = 2,
+    ESTIMATED   = 3
+};
+
+struct error_model_t {
+    enum error_model_type_t error_model_type;
+    void* data;
+};
+
 struct error_data_t {
     /* number of reads processed */
     int num_unique_reads;
@@ -24,10 +35,22 @@ struct error_data_t {
 };
 
 void
-init_error_data( 
-    struct error_data_t** data,
-    pthread_mutex_t* mutex
+init_error_model( 
+    struct error_model_t** error_model,
+    enum error_model_type_t error_model_type
+ );
+
+void
+update_error_model_from_error_data( 
+    struct error_model_t* error_model,
+    struct error_data_t* data
 );
+
+void
+free_error_model( struct error_model_t* error_model );
+
+void
+init_error_data( struct error_data_t** data );
 
 void 
 free_error_data( struct error_data_t* data );
@@ -63,3 +86,8 @@ clear_error_data( struct error_data_t* data );
 void
 fprintf_error_data( FILE* stream, struct error_data_t* data );
 
+void log_error_data( struct error_data_t* ed );
+
+void
+load_next_error_data_t_from_log_fp( struct error_data_t** ed,
+                                    FILE* fp );

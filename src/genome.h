@@ -26,14 +26,7 @@ struct index_t {
     struct pseudo_locations_t* ps_locs;
 
     /* diploid map data */
-    struct diploid_maps_t* diploid_maps;
-    
-#if 0
-    /* diploid map data */
-    int num_diploid_chrs;
-    /* array of dipoid_map_data_t */
-    struct diploid_map_data_t* map_data;
-#endif
+    struct diploid_maps_t* diploid_maps;    
 };
 
 struct static_node;

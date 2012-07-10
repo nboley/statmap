@@ -27,7 +27,7 @@ BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
 BUILD_INDEX_PATH = '../utilities/build_index.py'
 CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 
-#################################################################################################
+################################################################################
 ### verbosity level information 
 #
 # whether or not to print statmap output
@@ -103,8 +103,15 @@ def map_with_statmap( read_fnames, output_dir,
                       indexed_seq_len,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
+                      search_type=None,
                       assay=None,
                       genome_fnames=["*.fa",]):
+    if not P_STATMAP_OUTPUT:
+        stderr.seek( 0 )
+        stderr.truncate()
+        stdout.seek( 0 )
+        stdout.truncate()
+    
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
     read_fname_str = None
@@ -121,10 +128,9 @@ def map_with_statmap( read_fnames, output_dir,
                 ' '.join(genome_fnames)
             )
 
-    print >> stdout, re.sub( "\s+", " ", call)
+    print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print call
         raise ValueError, "TEST FAILED: build_index call returned error code '%s'" \
             % str( ret_code )
 
@@ -133,16 +139,17 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
+    if search_type != None:
+        call += " -y " + search_type
 
-    print >> stdout, re.sub( "\s+", " ", call)    
+    print >> stderr, "========", re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
-        print call
         raise ValueError, "TEST FAILED: statmap call returned error code '%s'" % str( ret_code )
     
     # build the sam file
     call = "%s %s > %s" % ( BUILD_SAM_PATH, output_dir, os.path.join(output_dir, "mapped_reads.sam") )
-    print >> stdout, re.sub( "\s+", " ", call)
+    print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
     if ret_code != 0:
         raise ValueError, "TEST FAILED: build_sam_from_mapped_reads call returned error code '%s'" \
@@ -414,13 +421,9 @@ def mutate_reads( reads, error_strs ):
             read_error_str = (read_error_str[0]*multiplier)[:read_len]
             mr = mutate_solexa_read( read, read_error_str )
             mutated_reads.append( mut_read_t(mr, read_error_str, read) )
-        try:
-            assert 1 == len( set( map( len, mutated_reads[-1]  ) ) ) 
-        except:
-            print mutated_reads[-1]
-            print multiplier, read_len, error_str_len, map( len, mutated_reads[-1]  )
-            import pdb
-            pdb.set_trace()
+    
+        assert 1 == len( set( map( len, mutated_reads[-1]  ) ) ) 
+    
     return mutated_reads
 
 def build_expected_map_locations_from_repeated_genome( \
@@ -447,17 +450,15 @@ def build_expected_map_locations_from_repeated_genome( \
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0 ):
-    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s" % ( \
-        read_len, str(rev_comp), indexed_seq_len )
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
+        search_type=None, min_penalty=-7.0, max_penalty_spread=2.1 ):
+    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
+        read_len, str(rev_comp), indexed_seq_len, search_type )
 
     # If no indexed_seq_len explicitly set, use read_len
     indexed_seq_len = indexed_seq_len or read_len
-
-    output_directory = "smo_test_sequence_finding_%i_rev_comp_%s" % ( read_len, str(rev_comp) )
-
     rl = read_len
-
+    
     # if we are testing untemplated g's, increase the number of samples so that we get some
     # beginning overlap
     nsamples = 10000 if untemplated_gs_perc > 0 else 100
@@ -487,7 +488,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
     assay = None if untemplated_gs_perc == 0.0 else 'a'
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=indexed_seq_len, assay=assay  )
+    map_with_statmap( read_fnames, output_directory,
+            indexed_seq_len=indexed_seq_len, assay=assay, 
+            search_type=search_type,
+            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread )
 
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -534,6 +538,12 @@ def test_fivep_sequence_finding( ):
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
+
+def test_mismatch_searching():
+    rls = [ 15, 25, 50, 75  ]
+    for rl in rls:
+        test_sequence_finding( rl, False, search_type='m', min_penalty=0, max_penalty_spread=0 )
+        print "PASS: Mismatch Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly using mismatches )" % rl
 
 def test_untemplated_g_finding( ):
     rls = [ 15, 25, 50, 75  ]
@@ -595,11 +605,6 @@ def test_paired_end_reads( read_len ):
     fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=200 )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
-
-    # rev complement the second read in the pair
-    #for i, read in enumerate(reads):
-    #    print read[0], read[1].translate( rev_comp_table )
-    #    reads[i] = ( read[0], read[1].translate( rev_comp_table ) )
     
     ###### Write out the test files, and run statmap ################################
     # write genome
@@ -630,7 +635,7 @@ def test_paired_end_reads( read_len ):
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != 2:
-            print reads_data
+            print >> stderr, reads_data
             raise ValueError, "Mapping returned too many results."
         
         loc = ( reads_data[0][2], int(reads_data[0][3]) )
@@ -659,7 +664,7 @@ def test_paired_end_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
-    output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads )
+    output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads )
     
     rl = read_len
     GENOME_LEN = gen_len
@@ -692,8 +697,11 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory, 
                       num_threads = n_threads, 
-                      indexed_seq_len = read_len-2  )
-
+                      indexed_seq_len = read_len-2,
+                      search_type='m' ) # map with mismatches, since we won't be
+                                        # able to bootstrap error scores from a
+                                        # perfectly repeated genome
+                                        # (no unique mappers)
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
@@ -745,7 +753,7 @@ def test_lots_of_repeat_sequence_finding( ):
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
         % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
-
+    
     rl = read_len
 
     ###### Prepare the data for the test ############################################
@@ -794,8 +802,15 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     unmappable_fp = open( "./%s/reads.unpaired.unmappable" % output_directory )
     num_unmappable_reads = sum( 1 for line in unmappable_fp )/4
     unmappable_fp.seek(0)
-    unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0  )
+    unmappable_reads_set = set( line.strip()[1:] for i, line in enumerate(unmappable_fp) if i%4 == 0 )
     unmappable_fp.close()
+
+    # find the nonmapping reads
+    nonmapping_fp = open( "./%s/reads.unpaired.nonmapping" % output_directory )
+    num_nonmapping_reads = sum(1 for line in nonmapping_fp)/4
+    nonmapping_fp.seek(0)
+    nonmapping_reads_set = set( line.strip()[1:] for i, line in enumerate(nonmapping_fp) if i%4 == 0 )
+    nonmapping_fp.close()
 
     all_read_ids = set(map(str, range(100)))
     all_read_ids = all_read_ids - mapped_read_ids
@@ -804,14 +819,19 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     
     all_read_ids.sort( )
 
-    if len(fragments) != total_num_reads + num_unmappable_reads:
+    if len(fragments) != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
         raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
             % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
     
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
-    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference( unmappable_reads_set.union( set(mapped_reads_dict.keys()) ) )
+    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference(
+            nonmapping_reads_set.union(
+                unmappable_reads_set.union(
+                    set(mapped_reads_dict.keys())
+        ) ))
+
     if len( unmapped_reads ) != 0:
         for key, entry in enumerate(mutated_reads):
             print key, entry
@@ -981,13 +1001,16 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads, frag_len=read_len )
+    fragments = sample_uniformily_from_genome( genome, nsamples=nreads,
+            frag_len=read_len )
+    # note: if we do rev_comp, statmap still correctly maps the read, but our
+    # comparison back to the original genome will fail (incorrectly). Since
+    # comparison back to the genome is an important test for diploid mapping
+    # (to make sure contigs actually make sense), we don't rev_comp.
     reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
+            genome, fragments, read_len=read_len,
+            rev_comp=False, paired_end=False
         )
-    # note: if we do rev_comp, statmap still correctly maps the read, but our comparison back to
-    # the original genome will fail (incorrectly). Since comparison back to the genome is an 
-    # important test for diploid mapping (to make sure contigs actually make sense), we don't rev_comp.
 
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
@@ -995,7 +1018,8 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     reads_of.close()
 
     # map the data
-    output_directory = "smo_test_diploid_mapping_%i" % (read_len)
+    output_directory = "smo_test_diploid_mapping_%i_%i_%i" % (
+        read_len, nreads, len(genome) )
     read_fnames = [ "tmp.fastq" ]
     map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
             genome_fnames = output_filenames
@@ -1014,16 +1038,19 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
                  )
                     for i in xrange(len(mapped_reads)) ]
 
-        # mapping reads to one diploid chr should return a maximum of 2 results for each read
+        # mapping reads to one diploid chr should return a maximum of 2 results
+        # for each read
         if len(mapped_reads) > 2:
             print "Truth: ", truth
-            print "A read sampled from a single diploid chromosome returned more than 2 mappings."
-            print "You are probably indexing some portion of the genome more than once."
+            print \
+"A read sampled from a single diploid chromosome returned more than 2 mappings."
+            print \
+"You are probably indexing some portion of the genome more than once."
             raise ValueError, \
-                "Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
+"Mapped_reads for read_id %i contains %i mappings; should have a maximum of 2" \
                 % ( int(mapped_reads[0][0]), len(mapped_reads) )
 
-        # compare mapped reads with original genome to make sure sequence matches
+        # compare mapped reads with original genome to make sure they match
         found_read = False
         for loc in locs:
 
@@ -1196,104 +1223,10 @@ def parse_error_data_log( log_fname ):
 
     return ed_structs
 
-def test_error_correction( read_len=20, nsamples=10000 ):
-    '''
-    Test error correction behavior based on output in error_stats.log
-    '''
-    output_directory = "smo_test_error_correction"
-
-    # these settings should match src/error_correction.h
-    ERROR_INTERVAL = 1000
-    ERROR_WEIGHT = 0.5
-    ERROR_STATS_LOG = "error_stats.log"
-
-    assert ERROR_INTERVAL < nsamples, "not much of a test then, is it?"
-
-    # build random genome
-    genome = build_random_genome( [10000,], ["1",] )
-
-    # write genome to disk
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( genome, genome_of, 1 )
-    genome_of.close()
-
-    # sample reads uniformly from genome
-    fragments = sample_uniformily_from_genome( genome, nsamples=nsamples, frag_len=read_len )
-    reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
-        )
-
-    # TEST: this shows that we are doing the weighted average of the local error rates
-    # based on ERROR_INTERVAL and ERROR_WEIGHT
-
-    # mutate reads predictably
-    # bp of every 1000th read is mutated, starting with the bp at index 0, then 1, ...
-    i = 0
-    for n in xrange(0, nsamples, ERROR_INTERVAL):
-        # don't accidentally substitue a different-cased copy of the same bp
-        curr_bps = ( reads[n][i], reads[n][i].swapcase() )
-        valid_bps = [ bp for bp in bps_set if bp not in curr_bps ]
-        reads[n] = reads[n][:i] + random.choice( valid_bps ) + reads[n][i+1:]
-        i += 1
-
-    # write the reads to file
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
-    reads_of.close()
-
-    # map
-    read_fnames = [ "tmp.fastq" ]
-    # we assume statmap is single threaded and processing the reads sequentially
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len, num_threads=1 )
-
-    # open error_stats.log
-    ed_structs = parse_error_data_log( "./%s/error_stats.log" % output_directory )
-
-    # loop over each struct in the order they were saved - so we get a snapshot of
-    # the global error data every ERROR_INTERVAL reads
-
-    # save location error rates from last seen struct
-    loc_error_rates = []
-    for i, struct in enumerate( ed_structs ):
-
-        # test of weighted average -
-        # loc error rate should be 1/2, 1/4, 1/8, ... starting at the 1st, 2nd, 3rd, indices
-        # since the only errors are at
-        # 1st bp in a read in the first 100 reads
-        # 2nd bp in a read in the next 100 reads
-        # etc.
-        # The errors should initially be 0.5 and halve each time (as subsequent syncs don't add
-        # additional errors in the same location)
-
-        for j in range( len(loc_error_rates) ):
-            # compare current struct with the last
-            if struct.loc_error_rates[j] != loc_error_rates[j]/2:
-                raise ValueError, "Contrived weighted average value is not what was expected: found %f, expected %f" \
-                    % ( struct.loc_error_rates[j], loc_error_rates[j]/2 )
-            else:
-                # update loc_error_rates
-                loc_error_rates[j] = struct.loc_error_rates[j]
-
-        # each subsequent struct should have an additonal loc error of ERROR_WEIGHT
-        # unless it's the final cleanup sync
-        if struct.loc_error_rates[i] != ERROR_WEIGHT:
-            print struct.loc_error_rates[i]
-            raise ValueError, "Initial loc error from mutated read was not ERROR_WEIGHT: found %f, expected %f" \
-                % ( struct.loc_error_rates[i], ERROR_WEIGHT )
-        else:
-            loc_error_rates.append( struct.loc_error_rates[i] )
-
-    print "PASS: Error correction weighted average calculation appears to be working"
-
-    if CLEANUP:
-        os.remove("./tmp.genome.fa")
-        os.remove("./tmp.fastq")
-        shutil.rmtree(output_directory)
-
 def test_diploid_genome_with_multiple_chrs():
     '''
-    Make sure the machinery for handling multiple diploid chrs is working by mapping
-    two separately generated diploid chrs
+    Make sure the machinery for handling multiple diploid chrs is working by
+    mapping two separately generated diploid chrs
     '''
     rls = [ 20, 50, 75 ]
     for rl in rls:
@@ -1302,16 +1235,23 @@ def test_diploid_genome_with_multiple_chrs():
         genome = dict( g1.items() + g2.items() )
         output_filenames = of1 + of2
         map_diploid_genome( genome, output_filenames, rl )
-        print "PASS: Diploid genome with multiple chrs %i BP Test. ( Statmap appears to be mapping diploid genomes with multiple chromosomes correctly )" % rl
+        print ( "PASS: Diploid genome with multiple chrs %i BP Test. "
+                "( Statmap appears to be mapping diploid genomes with multiple "
+                "chromosomes correctly )" % rl )
 
 def test_lots_of_diploid_repeat_sequence_finding():
     rls = [ 25, ]
     n_dups = 4000
     genome_len=100
     for rl in rls:
-        genome, output_filenames = build_diploid_genome( rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
-        map_duplicated_diploid_genome( genome, output_filenames, rl, genome_len=genome_len, n_dups=n_dups, nreads=100 )
-        print "PASS: Highly repetitive diploid genome (pslocs integration) %i BP Test. ( Statmap appears to be mapping highly repetitive diploid genomes correctly )" % rl
+        genome, output_filenames = build_diploid_genome(
+                rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
+        map_duplicated_diploid_genome( genome, output_filenames, rl,
+                genome_len=genome_len, n_dups=n_dups, nreads=100 )
+        print (
+"PASS: Highly repetitive diploid genome (pslocs integration)  %i BP Test. "
+"( Statmap appears to be mapping highly repetitive diploid genomes correctly )"
+            % rl )
 
 def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     '''
@@ -1386,12 +1326,11 @@ if False:
                       num_chr_repeats=1, \
                       min_penalty=-10, max_penalty_spread=2 )
 
-if __name__ == '__main__':
-
-    RUN_SLOW_TESTS = True
-
+def main( RUN_SLOW_TESTS ):
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
+    print "Starting test_mismatch_searching()"
+    test_mismatch_searching()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
     print "Starting test_paired_end_sequence_finding()"
@@ -1410,8 +1349,6 @@ if __name__ == '__main__':
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
-    #print "Start test_error_correction()"
-    #test_error_correction()
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
@@ -1424,7 +1361,7 @@ if __name__ == '__main__':
     if False:
         print "Starting test_untemplated_g_finding()"
         test_untemplated_g_finding()
-    
+
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 
@@ -1432,4 +1369,15 @@ if __name__ == '__main__':
     # index reads less than 12 basepairs ( and it shouldn't: 
     #     we should be building a hash table for such reads )
     # test_short_sequences()
+
+if __name__ == '__main__':
+    try:
+        main( RUN_SLOW_TESTS=True )
+    except Exception, inst:
+        if not P_STATMAP_OUTPUT:
+            stderr.seek(0)
+            print stderr.read()
+        
+        raise
+        
     

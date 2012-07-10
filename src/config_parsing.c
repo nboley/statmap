@@ -160,37 +160,6 @@ guess_input_file_type( struct args_t* args )
     return input_file_type;
 }
 
-int
-guess_optimal_indexed_seq_len( struct args_t* args)
-{
-    int seq_len = -1;
-
-    char* if_name = args->unpaired_reads_fnames;
-    if( if_name == NULL )
-        if_name = args->pair1_reads_fnames;
-    
-    FILE* fp = fopen( if_name, "r" );
-    if( fp == NULL ) {
-        fprintf(stderr, "FATAL       :  Unable to open reads file '%s'\n", if_name);
-        exit(-1);
-    }
-    
-    /* FIXME - stop assuming this is a fastq file */
-    /* TODO - read in multiple reads to corroborate read length */
-    /* read in the first read, and set the seq length from this read */
-    struct rawread* r;
-    populate_read_from_fastq_file( fp, &r, UNKNOWN );
-    seq_len = r->length;
-    fprintf( stderr, 
-             "NOTICE      :  Setting Read Length to '%i' BPS\n", 
-             seq_len );
-    
-    free_rawread( r );
-    fclose( fp );
-    
-    return seq_len;
-}
-
 /******** Parse command line arguments ********/
 
 const char* argp_program_version = 
@@ -250,11 +219,8 @@ static struct argp_option options[] =
      "Fragment length distribution file", 0},
     {"output-dir", 'o', "DIR", 0,
      "Directory to write Statmap output to", 0 },
-    {"indexed-seq-len", 'i', "LEN", 0,
-     "Indexed sequence length (defaults to length of first read)", 0 },
-    {"log", 'l', "FILE", 0,
-     "File to log debugging info to", 0 },
-    // -i, -l, -c ...
+    {"search-type", 's', "TYPE", 0,
+     "Type of marginal mapping to do", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -332,8 +298,21 @@ parse_opt( int key, char *arg, struct argp_state *state )
         case 't':
             args->num_threads = atoi(arg);
             break;
-        case 'i':
-            args->indexed_seq_len = atoi(arg);
+        case 's':
+            switch( arg[0] )
+            {
+                case 'e':
+                    args->search_type = ESTIMATE_ERROR_MODEL;
+                    break;
+                case 'm':
+                    args->search_type = MISMATCHES;
+                    break;
+                default:
+                    fprintf(stderr,
+                            "FATAL       :  Unrecognized search type '%s'\n",
+                            arg );
+                    exit(-1);
+            }
             break;
 
             /* utility options */
@@ -392,9 +371,6 @@ parse_arguments( int argc, char** argv )
 
     args.sam_output_fname = NULL;
 
-    args.log_fname = NULL;
-    args.log_fp = NULL;
-
     args.min_match_penalty = -1;
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
@@ -402,8 +378,8 @@ parse_arguments( int argc, char** argv )
     args.num_starting_locations = -1;
 
     args.num_threads = -1;
-    args.indexed_seq_len = -1;
 
+    args.search_type = UNKNOWN;
     args.input_file_type = UNKNOWN;
     args.assay_type = UNKNOWN;
 
@@ -565,21 +541,6 @@ parse_arguments( int argc, char** argv )
     }
 
     /*
-       If the sequence length is not set, then try and determine it automatically.
-    */    
-    if( args.indexed_seq_len == -1 )
-    {
-        args.indexed_seq_len = guess_optimal_indexed_seq_len( &args );
-
-        if( args.indexed_seq_len <= 11 ) 
-        {
-            fprintf( stderr, "FATAL       :  Can not index sequences less than 12 basepairs long.\n" );
-            exit( -1 );
-        }
-    }
-
-
-    /*
        Copy fragment length distribution
        If this a  ChIP-Seq assay, error if no fl dist provided 
     */
@@ -604,6 +565,13 @@ parse_arguments( int argc, char** argv )
         }
     }
 
+    if( args.search_type == UNKNOWN )
+    {
+        /* set default to using the observed error rates */
+        args.search_type = ESTIMATE_ERROR_MODEL;
+    }
+
+    /********* END CHECK REQUIRED ARGUMENTS ***********************************/
 
     /* change the working directory to the output directory */
     error = chdir( args.output_directory );
@@ -682,37 +650,30 @@ parse_arguments( int argc, char** argv )
     if( args.num_threads == -1 )
     {
         /* try to get the number of available threads from the os */
-        num_threads = get_nprocs();
+        args.num_threads = get_nprocs();
         /* if we cant determine the number of threads, set it to 1 */
-        if( num_threads <= 0 )
-            num_threads = 1;
+        if( args.num_threads <= 0 )
+            args.num_threads = 1;
         
         /* never set the number of threads to more than 8, by default */
-        if( num_threads > 8 )
-            num_threads = 8;
+        if( args.num_threads > 8 )
+            args.num_threads = 8;
         
         fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
-    } else {
-        num_threads = args.num_threads;
     }
-
-    /* initialize the log file */
-    if( args.log_fname != NULL )
-        args.log_fp = fopen( args.log_fname, "a");
 
     /* set the min num hq basepairs if it's unset */
     if( args.min_num_hq_bps == -1 )
     {
-        args.min_num_hq_bps = MAX( 12, (8 + args.indexed_seq_len/2) );
+        args.min_num_hq_bps = 12;
+        fprintf(stderr,
+                "NOTICE      :  Number of min hq bps is being set to %i \n",
+                args.min_num_hq_bps);
     }
-    min_num_hq_bps = args.min_num_hq_bps;
 
-    /* make sure that we dont filter *every* read */
-    if( min_num_hq_bps > args.indexed_seq_len )
-    {
-        fprintf( stderr, "WARNING     :  Required number of HQ bps set higher than the seq length. Setting it to seq length.\n" );
-        min_num_hq_bps = args.indexed_seq_len;
-    }
+    /* Set the global variables */
+    num_threads = args.num_threads;
+    min_num_hq_bps = args.min_num_hq_bps;
 
     /* 
      * Dont allow penalty spreads greater than the min match penalty - 
@@ -772,25 +733,17 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
             arg_fp, "output_directory", args->output_directory );
 
     fprintf_name_or_null( 
-            arg_fp, "sam_output_fname", args->sam_output_fname );
-
-
-    fprintf_name_or_null( 
-            arg_fp, "log_fname", args->log_fname );
-    // FILE* log_fp;
-
-    fprintf_name_or_null( 
-            arg_fp, "log_fname", args->log_fname );
-
+        arg_fp, "sam_output_fname", args->sam_output_fname );
+    
     fprintf( arg_fp, "min_match_penalty:\t%.4f\n", args->min_match_penalty );
     fprintf( arg_fp, "max_penalty_spread:\t%.4f\n", args->max_penalty_spread );
     fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
 
     fprintf( arg_fp, "num_starting_locations:\t%i\n", args->num_starting_locations );
-
-    fprintf( arg_fp, "indexed_seq_len:\t%i\n", args->indexed_seq_len );
-
+    
     fprintf( arg_fp, "num_threads:\t%i\n", args->num_threads );
+
+    fprintf( arg_fp, "search_type:\t%i\n", args->search_type );
 
     fprintf( arg_fp, "input_file_type:\t%i\n", args->input_file_type );
     fprintf( arg_fp, "assay_type:\t%i\n", args->assay_type );
@@ -863,16 +816,8 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
             arg_fp, "output_directory", &((*args)->output_directory) );
 
     fscanf_name_or_null( 
-            arg_fp, "sam_output_fname", &((*args)->sam_output_fname) );
-
-
-    fscanf_name_or_null( 
-            arg_fp, "log_fname", &((*args)->log_fname) );
-    // FILE* log_fp;
-
-    fscanf_name_or_null( 
-            arg_fp, "log_fname", &((*args)->log_fname) );
-
+        arg_fp, "sam_output_fname", &((*args)->sam_output_fname) );
+    
     fscanf( arg_fp, "min_match_penalty:\t%f\n", 
             &((*args)->min_match_penalty) );
     fscanf( arg_fp, "max_penalty_spread:\t%f\n", 
@@ -882,12 +827,12 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 
     fscanf( arg_fp, "num_starting_locations:\t%i\n", 
             &((*args)->num_starting_locations) );
-
-    fscanf( arg_fp, "indexed_seq_len:\t%i\n", 
-            &((*args)->indexed_seq_len) );
-
+    
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
+
+    fscanf( arg_fp, "search_type:\t%d\n",
+            &((*args)->search_type) );
 
     fscanf( arg_fp, "input_file_type:\t%d\n", 
             &( (*args)->input_file_type) );

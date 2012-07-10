@@ -3,6 +3,7 @@
 #ifndef READS_HEADER
 #define READS_HEADER
 
+#include <math.h>
 #include <pthread.h>
 
 #include "config.h"
@@ -31,6 +32,9 @@ struct rawread {
     // float* inverse_penalties; 
     // float* mutation_type_penalties;
 };
+
+/* fwd declaration for error_model_t */
+struct error_model_t;
 
 /* Initialize a raw read. The length's are needed to init the char strings */
 void 
@@ -61,7 +65,8 @@ populate_read_from_fastq_file( FILE* f, struct rawread** r, enum READ_END end );
 
 /* determine whether reads are mappable */
 enum bool
-filter_rawread( struct rawread* r );
+filter_rawread( struct rawread* r,
+                struct error_model_t* error_model );
 
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 
@@ -140,18 +145,14 @@ rewind_rawread_db( struct rawread_db_t* rdb );
 enum bool
 rawread_db_is_empty( struct rawread_db_t* rdb );
 
+void
+move_fp_to_next_read( FILE* fp );
+
 /* 
    if the next readkey would be greater than maqx readkey, then
    dont return anything. negative values indicate that this should
    be ignored 
 */
-
-int
-get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey );
-
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,

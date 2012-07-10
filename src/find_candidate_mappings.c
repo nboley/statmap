@@ -8,7 +8,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <limits.h>
-#include "math.h"
+#include <math.h>
+#include <float.h>
 
 #include "statmap.h"
 #include "find_candidate_mappings.h"
@@ -17,40 +18,67 @@
 #include "mapped_location.h"
 #include "error_correction.h"
 #include "diploid_map_data.h"
-#include "genome.h" // TODO: or incorporate diploid stuff into index_genome?
+#include "genome.h"
+#include "rawread.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
 #define MAX_NUM_UNTEMPLATED_GS 3
 
+float
+subseq_penalty(
+        struct rawread* r,
+        int offset,
+        int subseq_len,
+        struct penalty_array_t* penalty_array
+    )
+{
+    float penalty = 0;
+
+    /* loop over subsequence */
+    int pos;
+    for( pos = offset; pos < subseq_len; pos++ )
+    {
+        int bp = bp_code( r->char_seq[pos] );
+        /* take the match penalty for this bp */
+        penalty += penalty_array->array[pos].penalties[bp][bp];
+    }
+
+    return penalty;
+}
+
 int
 find_optimal_subseq_offset( 
     struct rawread* r,
     /* store the desired subsequences length */
-    int subseq_len
+    int subseq_len,
+    struct penalty_array_t* penalty_array
 ) {
+    /* Make sure the read is at least as long as the subsequence */
     if( subseq_len > r->length ) {
         fprintf( stderr, "============ %i \t\t %i \n", subseq_len, r->length );
     }
     assert( subseq_len <= r->length );
     
-    
-    /* XXX for now, we just use the first subseq_len characters,
-       so the offset is always 0 */
-    if( subseq_len == r->length )
-        return 0;
+    /*
+       Remember: error_prb returns the inverse log probability of
+       error: log10(1 - P(error)) for matches
+    */
+    int min_offset = 0;
+    float max_so_far = -FLT_MAX;
 
-    if( r->assay == CAGE )
+    int i;
+    /* for each possible subsequence */
+    for( i = 0; i < r->length - subseq_len; i++ )
     {
-        if( r->length - MAX_NUM_UNTEMPLATED_GS < subseq_len )
-        {
-            fprintf(stderr, "FATAL        : CAGE experiments need indexes that have probe lengths at least 3 basepairs short, to account for templated G's." );
-            return 0;
+        float ss_pen = subseq_penalty(r, i, subseq_len, penalty_array);
+        if( ss_pen > max_so_far ) {
+            max_so_far = ss_pen;
+            min_offset = i;
         }
-        return MAX_NUM_UNTEMPLATED_GS;
     }
-    
-    return 0;
+
+    return min_offset;
 };
 
 void
@@ -61,14 +89,11 @@ search_index( struct index_t* index,
               mapped_locations** results,
 
               struct rawread* r,
-              float* bp_mut_rates,
 
-              float* lookuptable_position,
-              float* inverse_lookuptable_position,
-              float* reverse_lookuptable_position,
-              float* reverse_inverse_lookuptable_position,
+              struct penalty_array_t* fwd_pa,
+              struct penalty_array_t* rev_pa,
 
-              enum INDEX_SEARCH_MODE mode 
+              enum bool only_find_unique_mappers
     )
 {
     /**** Prepare the read for the index search */
@@ -76,7 +101,8 @@ search_index( struct index_t* index,
        first, we need to find the subseq of the read that we want to 
        probe the index for. This is controlled by the index->seq_length.
     */
-    int subseq_offset = find_optimal_subseq_offset( r, index->seq_length );
+    int subseq_offset = find_optimal_subseq_offset(
+            r, index->seq_length, fwd_pa );
     int subseq_length = index->seq_length;
     
     /* Store a copy of the read */
@@ -124,17 +150,13 @@ search_index( struct index_t* index,
                             
                             /* the fwd stranded sequence */
                             fwd_seq, 
-                            lookuptable_position,
-                            inverse_lookuptable_position,
-                            
                             /* the bkwd stranded sequence */
                             bkwd_seq, 
-                            reverse_lookuptable_position,
-                            reverse_inverse_lookuptable_position,
-                            
-                            bp_mut_rates,
 
-                            mode
+                            fwd_pa,
+                            rev_pa,
+
+                            only_find_unique_mappers
         );
     
     /* Free the allocated memory */
@@ -193,15 +215,14 @@ make_assay_specific_corrections( struct rawread* r,
 }
 
 static inline void 
-recheck_location( struct genome_data* genome, 
-                  struct rawread* r, 
-                  candidate_mapping* loc,
-                  const float* const lookuptable_position,
-                  const float* const inverse_lookuptable_position,
-                  const float* const reverse_lookuptable_position,
-                  const float* const reverse_inverse_lookuptable_position,
-                  const float* const bp_mut_rates
-)
+recheck_location(
+        struct genome_data* genome, 
+        struct rawread* r, 
+        candidate_mapping* loc,
+
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa
+    )
 {
     if( PSEUDO_LOC_CHR_INDEX == loc->chr ) {
         return;
@@ -209,11 +230,7 @@ recheck_location( struct genome_data* genome,
     
     float marginal_log_prb = 0;
     
-    const float* correct_lookuptable_position = NULL;
-    const float* correct_inverse_lookuptable_position = NULL;
-    
     /* find a pointer to the sequence at this genomic location */
-    
     int mapped_length = r->length - loc->trimmed_len;
     
     char* genome_seq = find_seq_ptr( 
@@ -235,39 +252,26 @@ recheck_location( struct genome_data* genome,
     char* mut_genome_seq = NULL;
     mut_genome_seq = malloc(sizeof(char)*(r->length+1));
     assert( mut_genome_seq != NULL ); 
+
+    struct penalty_array_t* penalty_array;
                     
     if( BKWD == loc->rd_strnd )
     {
         rev_complement_read( genome_seq, mut_genome_seq, r->length );
-        correct_lookuptable_position = reverse_lookuptable_position;
-        correct_inverse_lookuptable_position = reverse_inverse_lookuptable_position;
+        penalty_array = rev_pa;
     } else {
         memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
         mut_genome_seq[r->length] = '\0';
-        correct_lookuptable_position = lookuptable_position + loc->trimmed_len;
-        correct_inverse_lookuptable_position = inverse_lookuptable_position + loc->trimmed_len;
+        penalty_array = fwd_pa;
     }
     
     float rechecked_penalty = recheck_penalty( 
-        mut_genome_seq, 
-        // char* observed,
-        r->char_seq + loc->trimmed_len,
-        // const int seq_length,
-        mapped_length,
-        correct_lookuptable_position,
-        correct_inverse_lookuptable_position,
-        bp_mut_rates
-    );
+            mut_genome_seq, 
+            r->char_seq + loc->trimmed_len,
+            mapped_length,
+            penalty_array 
+        );
 
-    /*
-     // * DEBUG
-    printf( "%.2f\t%.2f\t%i\n", loc->penalty, rechecked_penalty, (loc->rd_strnd == BKWD) );
-    printf( "%.*s\t%.*s\t%.*s\n", 
-            r->length, r->char_seq, 
-            r->length, genome_seq, 
-            r->length, mut_genome_seq );
-    */
-    
     loc->penalty = rechecked_penalty + marginal_log_prb;
     
     free( mut_genome_seq );
@@ -283,11 +287,9 @@ recheck_locations(
     float min_match_penalty,
     float max_penalty_spread,
     
-    const float* const lookuptable_position,
-    const float* const inverse_lookuptable_position,
-    const float* const reverse_lookuptable_position,
-    const float* const reverse_inverse_lookuptable_position,
-    const float* const bp_mut_rates
+    struct penalty_array_t* fwd_pa,
+    struct penalty_array_t* rev_pa 
+
 )
 {
     /* 
@@ -316,13 +318,7 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        recheck_location( genome, r, mappings->mappings + k,
-                          lookuptable_position,
-                          inverse_lookuptable_position,
-                          reverse_lookuptable_position,
-                          reverse_inverse_lookuptable_position,
-                          bp_mut_rates
-            );
+        recheck_location( genome, r, mappings->mappings + k, fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
         if( (mappings->mappings + k)->penalty > max_penalty ) {
@@ -546,37 +542,99 @@ build_candidate_mappings_from_mapped_locations(
     return;
 }
 
-static inline void
-update_error_data_from_candidate_mappings(
+/* 
+   Returns true if these candidate mappigns can be used to update the error 
+   data. Basically, we just test for uniqueness. 
+*/
+static inline enum bool
+can_be_used_to_update_error_data(
     struct genome_data* genome,
-    struct error_data_t* error_data,
     candidate_mappings* mappings,
     struct rawread* r
 )
 {
     /* skip empty mappings */
     if( NULL == mappings )
-        return;
+        return false;
         
     /*** we only want unique mappers for the error estiamte updates */        
-    if( mappings->length != 1 ) {
-        return;
+    // We allow lengths of 2 because we may have diploid locations
+    if( mappings->length < 1 || mappings->length > 2 ) {
+        return false;
     }
-        
-    /* we know that the length is one from right above */
-    assert( mappings->length == 1 );
-    if( mappings->mappings[0].recheck != VALID ) {
-        return;
+    
+    /* we know that the length is at least 1 from directly above */
+    assert( mappings->length >= 1 );
+    
+    candidate_mapping* loc = mappings->mappings + 0; 
+    int mapped_length = r->length - loc->trimmed_len;
+    
+    if( loc->recheck != VALID ) {
+        return false;
     }
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp, 
+        mapped_length
+    );
         
+    /* 
+       if there are two mappings, make sure that they have the same 
+       genome sequence. They actually may not be mapping to the same, 
+       corresponding diploid locations, but as long as there isn't a second
+       competing sequence, we really don't care because the mutation rates 
+       should still be fine.
+    */
+    if( mappings->length > 1 )
+    {
+        if( mappings->mappings[1].recheck != VALID ) {
+            return false;
+        }
+        
+        if( mappings->mappings[1].trimmed_len != loc->trimmed_len )
+            return false;
+        
+        /* this is guaranteed at the start of the function */
+        assert( mappings->length == 2 );
+        char* genome_seq_2 = find_seq_ptr( 
+            genome, 
+            mappings->mappings[1].chr, 
+            mappings->mappings[1].start_bp, 
+            r->length - mappings->mappings[1].trimmed_len
+        );
+        
+        /* if the sequences aren't identical, then return */
+        if( 0 != strncmp( genome_seq, genome_seq_2, mapped_length ) )
+            return false;
+    }
+    
+    return true;
+}
+
+static inline void
+update_error_data_from_candidate_mappings(
+    struct genome_data* genome,
+    candidate_mappings* mappings,
+    struct rawread* r,
+    struct error_data_t* error_data
+)
+{
+    if( !can_be_used_to_update_error_data( genome, mappings, r ) )
+        return;
+    
+    /* we need at least one valid mapping ( although this case should be handled
+       above by can_be_used_to_update_error_data */
+    if( mappings->length == 0 )
+        return;
+    
     // emphasize the array aspect with the + 0
     // but, since the length is exactly 1, we know that
     // we only need to deal with this read
-    candidate_mapping* loc = mappings->mappings + 0; 
-    assert( mappings->length == 1 && loc->recheck == VALID );
-        
+    candidate_mapping* loc = mappings->mappings + 0;         
     int mapped_length = r->length - loc->trimmed_len;
-        
+    
     char* genome_seq = find_seq_ptr( 
         genome, 
         loc->chr, 
@@ -586,10 +644,23 @@ update_error_data_from_candidate_mappings(
         
     char* error_str = r->error_str + loc->trimmed_len;
 
-    char* read_seq = r->char_seq + loc->trimmed_len;
-        
-    update_error_data( error_data, genome_seq, read_seq, error_str, mapped_length );
+    /* get the read sequence - rev complement if on reverse strand */
+    char* read_seq;
+    if( loc->rd_strnd == BKWD )
+    {
+        read_seq = calloc( r->length + 1, sizeof(char) );
+        rev_complement_read( r->char_seq+loc->trimmed_len, read_seq, r->length);
+    } else {
+        read_seq = r->char_seq + loc->trimmed_len;
+    }
 
+    update_error_data( 
+        error_data, genome_seq, read_seq, error_str, mapped_length );
+
+    /* free memory if we allocated it */
+    if( loc->rd_strnd == BKWD )
+        free( read_seq );
+    
     return;
 }
 
@@ -627,13 +698,16 @@ find_candidate_mappings( void* params )
        valid read, set <= -1 to disable */
     float max_penalty_spread = td->max_penalty_spread;
 
-    /* Use global_error_data to compute error prbs (unless we're bootstrapping) */
-    struct error_data_t* global_error_data = td->global_error_data;
     /* Store observed error data from the current thread's execution in scratch */
-    struct error_data_t* scratch_error_data = td->scratch_error_data;
-    /* Flag - are we bootstrapping error data, or mapping? */
-    enum INDEX_SEARCH_MODE mode = td->mode;
-
+    struct error_model_t* error_model = td->error_model;
+    
+    /* store statistics about mapping quality here  */
+    struct error_data_t* error_data = td->error_data;
+    
+    /* if we only want error data, then there is not reason to find antyhing 
+       except unqiue reads. */
+    enum bool only_find_unique_mappers = td->only_collect_error_data;
+    
     /* END parameter 'recreation' */
 
     assert( genome->index != NULL );
@@ -641,10 +715,6 @@ find_candidate_mappings( void* params )
     clock_t start;
     start = clock();
     
-    /* build the basepair mutation rate lookup table */
-    float* bp_mut_rates;
-    determine_bp_mut_rates( &bp_mut_rates );
-
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
 
@@ -675,10 +745,10 @@ find_candidate_mappings( void* params )
      * While there are still mappable reads in the read DB. All locking is done
      * in the get next read functions. 
      */
-    while( EOF != get_next_mappable_read_from_rawread_db( 
+    while( EOF != get_next_read_from_rawread_db(
                rdb, &readkey, &r1, &r2, td->max_readkey )  
          ) 
-    {                
+    {
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
@@ -688,6 +758,13 @@ find_candidate_mappings( void* params )
                     readkey, *mapped_cnt);
         }
         
+        if( filter_rawread( r1, error_model ) ||
+            filter_rawread( r2, error_model ) )
+        {
+            /* skip the unmappable read */
+            continue;
+        }
+        
         /* consider both read pairs */
         int j = 0;
         struct rawread* reads[2] = { r1, r2 };
@@ -695,21 +772,18 @@ find_candidate_mappings( void* params )
         {
             struct rawread* r = reads[j];
                         
-            /* Build the quality lookup tables */
-            float* lookuptable_position = malloc(sizeof(float)*r->length);
-            float* inverse_lookuptable_position = malloc(sizeof(float)*r->length);
-            float* reverse_lookuptable_position = malloc(sizeof(float)*r->length);
-            float* reverse_inverse_lookuptable_position = malloc(sizeof(float)*r->length);
-            build_lookup_table_from_rawread(
-                r,
-                // pass error data unless we're in bootstrap mode
-                (mode == BOOTSTRAP) ? NULL : global_error_data,
-                lookuptable_position, 
-                inverse_lookuptable_position,
-                reverse_lookuptable_position, 
-                reverse_inverse_lookuptable_position
-            );
+            /*
+               initialize read penalty array
+            */
+            struct penalty_array_t fwd_pa, rev_pa;
+            init_penalty_array( r->length, &fwd_pa );
+            init_penalty_array( r->length, &rev_pa );
 
+            /* fn ptr to penalty array builder - build different penalty
+               array depending on type of search */
+            build_penalty_array( r, error_model, &fwd_pa );
+            build_reverse_penalty_array( &fwd_pa, &rev_pa );
+            
             /**** go to the index for mapping locations */
             mapped_locations *results = NULL;
 
@@ -721,34 +795,31 @@ find_candidate_mappings( void* params )
                           &results,
 
                           r,
-                          bp_mut_rates,
 
-                          lookuptable_position,
-                          inverse_lookuptable_position,
-                          reverse_lookuptable_position,
-                          reverse_inverse_lookuptable_position,
+                          &fwd_pa,
+                          &rev_pa,
 
-                          mode
+                          only_find_unique_mappers
                 );
-
-            /* if bootstrapping, we only want to work with unique mappers.
-             * find_matches would have terminated early for this read */
-            if( mode == BOOTSTRAP && results->length == 0 )
-                /* bootstrap mode terminated early - cleanup and continue */
-                goto cleanup;
-
-            /* make an assay specific changes to the results. For instance, in CAGE,
-               we need to add extra reads for the untemplated g's */
-            make_assay_specific_corrections( r, results );
-            
-            /* make a reference to the current set of mappings. This should be
-               optimized out by the compiler */
-            candidate_mappings* mappings;
 
             /* cache current readkey and reads */
             readkeys[2*curr_read_index + j] = readkey;
             rawreads_cache[ 2*curr_read_index + j ] = r;
+            
+            /* if bootstrapping, we only want to work with unique mappers.
+             * find_matches would have terminated early for this read */
+            if( results->skip )
+                /* bootstrap mode terminated early - cleanup and continue */
+                goto cleanup_penalty_arrays;
 
+            /* make an assay specific changes to the results. For instance, in CAGE,
+               we need to add extra reads for the untemplated g's */
+            //make_assay_specific_corrections( r, results );
+            
+            /* make a reference to the current set of mappings. This should be
+               optimized out by the compiler */
+            candidate_mappings* mappings;
+            
             build_candidate_mappings_from_mapped_locations(
                 genome, r, results, 
                 &mappings,
@@ -766,11 +837,8 @@ find_candidate_mappings( void* params )
                 min_match_penalty,
                 max_penalty_spread,
                                
-                lookuptable_position,
-                inverse_lookuptable_position,
-                reverse_lookuptable_position,
-                reverse_inverse_lookuptable_position,
-                bp_mut_rates 
+                &fwd_pa,
+                &rev_pa
             );
 
             /* cache candidate mappings */
@@ -780,12 +848,10 @@ find_candidate_mappings( void* params )
             /* update the maximum read length */
             max_read_length = MAX( max_read_length, r->length );
 
-cleanup:
-            /* free the quality score lookup tables */
-            free( lookuptable_position );
-            free( inverse_lookuptable_position );
-            free( reverse_lookuptable_position );
-            free( reverse_inverse_lookuptable_position );
+cleanup_penalty_arrays:
+            /* free the penalty arrays */
+            free_penalty_array( &fwd_pa );
+            free_penalty_array( &rev_pa );
 
             /* free the mapped_locations */
             free_mapped_locations( results );
@@ -795,26 +861,29 @@ cleanup:
     }
 
     /******* update the error estimates *******/
-    struct error_data_t* error_data;
-    init_error_data( &error_data, NULL );
+    /* create a thread local copy of the error data to avoid excess locking */
+    struct error_data_t* scratch_error_data;
+    init_error_data( &scratch_error_data );
+
     int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
         update_error_data_from_candidate_mappings(
             genome,
-            error_data,
             candidate_mappings_cache[ i ],
-            rawreads_cache[ i ]
-        );
+            rawreads_cache[ i ],
+            scratch_error_data
+            );
     }
     // add error_data to scratch_error_data
-    pthread_mutex_lock( scratch_error_data->mutex );
-    add_error_data( scratch_error_data, error_data );
-    pthread_mutex_unlock( scratch_error_data->mutex );
+    pthread_mutex_lock( error_data->mutex );
+    add_error_data( error_data, scratch_error_data );
+    pthread_mutex_unlock( error_data->mutex );
+    
     // free local copy of error data
-    free_error_data( error_data );
-
-    /* cleanup the bp mutation rates */
-    free( bp_mut_rates );
+    free_error_data( scratch_error_data );
+    
+    if( td->only_collect_error_data )
+        goto cleanup;
     
     /******* add the results to the database *******/
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
@@ -825,37 +894,39 @@ cleanup:
 
         candidate_mappings* mappings = candidate_mappings_cache[i];
 
-        /* if we're running in search mode, add reads to the candidate mappings db and update mapped_cnts */
-        if( mode == SEARCH )
-        {
-            /* increment the number of reads that mapped, if any pass the rechecks */
-            int k;
-            for( k = 0; k < mappings->length; k++ ) {
-                if( (mappings->mappings + k)->recheck == VALID )
-                {
-                    pthread_mutex_lock( mapped_cnt_mutex );
-                    *mapped_cnt += 1;
-                    pthread_mutex_unlock( mapped_cnt_mutex );
-                    break;
-                }
+        /* increment the number of reads that mapped, if 
+           any pass the rechecks */
+        int k;
+        for( k = 0; k < mappings->length; k++ ) {
+            if( (mappings->mappings + k)->recheck == VALID )
+            {
+                pthread_mutex_lock( mapped_cnt_mutex );
+                *mapped_cnt += 1;
+                pthread_mutex_unlock( mapped_cnt_mutex );
+                break;
             }
-
-            /* add cms to the db */
-            pthread_mutex_lock( mappings_db_mutex );
-            assert( thread_id < num_threads );
-            /* note that we add to the DB even if there are 0 that map,
-               we do this so it is easier to join with the rawreads later */
-            add_candidate_mappings_to_db(
-                mappings_db, mappings, readkeys[i], thread_id );
-            pthread_mutex_unlock( mappings_db_mutex );
         }
 
-        /* if mode is BOOTSTRAP, then we still loop over the cache so we can free
-           the allocated memory - but we already have what we came for (error_data) */
+        /* add cms to the db */
+        pthread_mutex_lock( mappings_db_mutex );
+        assert( thread_id < num_threads );
+        /* note that we add to the DB even if there are 0 that map,
+           we do this so it is easier to join with the rawreads later */
+        add_candidate_mappings_to_db(
+            mappings_db, mappings, readkeys[i], thread_id );
+        pthread_mutex_unlock( mappings_db_mutex );        
+    }
+    
+cleanup:
 
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        if( NULL == candidate_mappings_cache[i])
+            continue;
+        
         /* free the cached reads and mappings */
         free_rawread( rawreads_cache[i] );
-        free_candidate_mappings( mappings );
+        free_candidate_mappings( candidate_mappings_cache[i] );
     }
     
     return NULL;
@@ -864,6 +935,12 @@ cleanup:
 void
 spawn_threads( struct single_map_thread_data* td_template )
 {
+    if( num_threads == 1 )
+    {
+        find_candidate_mappings( td_template );
+        return;
+    }
+    
     long t;
     int rc;
     void* status;
@@ -872,6 +949,7 @@ spawn_threads( struct single_map_thread_data* td_template )
     pthread_attr_t attrs[num_threads];
     
     struct single_map_thread_data tds[num_threads];
+    
     
     for( t = 0; t < num_threads; t++ )
     {  
@@ -916,115 +994,155 @@ spawn_threads( struct single_map_thread_data* td_template )
 /*
  * Find all locations that a read could map to, given thresholds,
  * reads, a genome and an index.
- *
  */
+
+void init_td_template( struct single_map_thread_data* td_template,
+                       struct genome_data* genome, 
+                       struct rawread_db_t* rdb,
+                       candidate_mappings_db* mappings_db,
+                       struct error_model_t* error_model,
+                       float min_match_penalty, float max_penalty_spread )
+{
+    /* initialize the necessary mutex's */
+    /*
+    pthread_mutex_t* mapped_cnt_mutex;
+    mapped_cnt_mutex = malloc( sizeof(pthread_mutex_t) );
+    (*mapped_cnt_mutex) = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_t* mappings_db_mutex;
+    mappings_db_mutex= malloc( sizeof(pthread_mutex_t) );
+    *mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
+    */
+    int rc;
+    pthread_mutexattr_t mta;
+    rc = pthread_mutexattr_init(&mta);
+    
+    td_template->genome = genome;
+    
+    td_template->mapped_cnt = malloc( sizeof(unsigned int) );
+    *(td_template->mapped_cnt) = 0;
+    
+    td_template->mapped_cnt_mutex = malloc( sizeof(pthread_mutex_t) );
+    rc = pthread_mutex_init( td_template->mapped_cnt_mutex, &mta );
+    td_template->max_readkey = 0;
+
+    td_template->rdb = rdb;
+    
+    td_template->mappings_db = mappings_db;
+    td_template->mappings_db_mutex = malloc( sizeof(pthread_mutex_t) );
+    rc = pthread_mutex_init( td_template->mappings_db_mutex, &mta );
+    
+    td_template->min_match_penalty = min_match_penalty;
+    td_template->max_penalty_spread = max_penalty_spread;
+
+    init_error_data( &(td_template->error_data) );
+
+    td_template->error_model = error_model;
+
+    td_template->max_readkey = READS_STAT_UPDATE_STEP_SIZE;
+    
+    td_template->thread_id = 0;
+    
+    /* Make sure we are finding all mappers for a normal index search */
+    td_template->only_collect_error_data = false;
+    
+    return;
+}
+
+void 
+free_td_template( struct single_map_thread_data* td_template )
+{
+    free( td_template->mapped_cnt );
+    free( td_template->mapped_cnt_mutex );
+    free( td_template->mappings_db_mutex );
+    return;
+}
+
+/* bootstrap an already initialized error model */
+void
+bootstrap_estimated_error_model( 
+    struct genome_data* genome,
+    
+    struct rawread_db_t* rdb,
+    candidate_mappings_db* mappings_db,
+    
+    struct error_model_t* error_model
+) 
+{
+    assert( error_model != NULL );
+    
+    struct error_model_t* bootstrap_error_model;
+    init_error_model( &bootstrap_error_model, MISMATCH );
+    
+    /* put the search arguments into a structure */
+    #define MAX_NUM_MM 5
+    #define MAX_MM_SPREAD 3
+    
+    /* put the search arguments into a structure */
+    struct single_map_thread_data td_template;
+    init_td_template( &td_template, genome, rdb, mappings_db, 
+                      bootstrap_error_model, MAX_NUM_MM, MAX_MM_SPREAD );
+    
+    /* 
+       only use unique mappers for the initial bootstrap. This is just a small
+       performance optimization, it prevents us from going too deeply into the 
+       index as soon as we know that a mapping isn't unique.
+    */
+    td_template.only_collect_error_data = true;
+    spawn_threads( &td_template );
+    
+    update_error_model_from_error_data( error_model, td_template.error_data );
+    
+    free_error_model( bootstrap_error_model );
+    
+    free_td_template( &td_template );
+    
+    return;
+}
 
 void
 find_all_candidate_mappings( struct genome_data* genome,
-                             FILE* log_fp,
+
                              struct rawread_db_t* rdb,
-
                              candidate_mappings_db* mappings_db,
+                             
+                             struct error_model_t* error_model,
+                             
                              float min_match_penalty,
-                             float max_penalty_spread,
-                             float max_seq_length
-
+                             float max_penalty_spread
     )
 {
     clock_t start = clock();
 
-    /* 
-     * init mutexes to guard access to the log_fp, the fastq 'db', and
-     * the mappings db. They will be stored in the same structure as the 
-     * passed data
-     */
-
-    /* initialize the necessary mutex's */
-    pthread_mutex_t log_fp_mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_t mapped_cnt_mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_t mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
-
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
-    td_template.genome = genome;
+    init_td_template( &td_template, genome, rdb, mappings_db, error_model,
+                      min_match_penalty, max_penalty_spread );
     
-    td_template.log_fp = log_fp;
-    td_template.log_fp_mutex = &log_fp_mutex;
-
-    unsigned int mapped_cnt = 0;
-    td_template.mapped_cnt = &mapped_cnt;
-    td_template.mapped_cnt_mutex = &mapped_cnt_mutex;
-    td_template.max_readkey = 0;
-
-    td_template.rdb = rdb;
-    
-    td_template.mappings_db = mappings_db;
-    td_template.mappings_db_mutex = &mappings_db_mutex;
-    
-    td_template.min_match_penalty = min_match_penalty;
-    td_template.max_penalty_spread = max_penalty_spread;
-    td_template.max_subseq_len = max_seq_length;
-
-    /*
-     * initialize global error_data and scratch error_data
-     * scratch error_data has a mutex so it can be safely updated by each thread
-     */
-    struct error_data_t* global_error_data;
-    init_error_data( &global_error_data, NULL );
-    td_template.global_error_data = global_error_data;
-
-    struct error_data_t* scratch_error_data;
-    pthread_mutex_t scratch_err_mutex = PTHREAD_MUTEX_INITIALIZER;
-    init_error_data( &scratch_error_data, &scratch_err_mutex );
-    td_template.scratch_error_data = scratch_error_data;
-
-    /*
-       bootstrap global error data
-     */
-    /* bootstrap error data from first READS_STAT_UPDATE_STEP_SIZE reads */
-    td_template.max_readkey = READS_STAT_UPDATE_STEP_SIZE;
-    td_template.mode = BOOTSTRAP;
-    spawn_threads( &td_template );
-
-    /* set global_error_data to bootstrap's averaged scratch_error_data, and reset scratch */
-    average_error_data( scratch_error_data );
-    add_error_data( global_error_data, scratch_error_data );
-    //global_error_data->num_unique_reads = 0;
-    clear_error_data( td_template.scratch_error_data );
-
-    /* 
-       map reads with the bootstrapped error data
-       reset td_template parameters to initial states
-     */
-    td_template.max_readkey = 0;
-    td_template.mode = SEARCH;
-    /* rewind rawread db to beginning and now we'll actually map */
-    rewind_rawread_db( rdb );
-
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
+        spawn_threads( &td_template );
+
         // update the maximum allowable readkey
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
 
-        spawn_threads( &td_template );
+        /* log the error data we're using for this round of mapping */
+        log_error_data( td_template.error_data );
 
-        /* after threads are done, average scratch data over the reads processed
-           by all threads, then weighted average into global_error_data */
-        average_error_data( scratch_error_data );
-        update_global_error_data( global_error_data, scratch_error_data );
-
+        /* update the error model from the new error data */
+        update_error_model_from_error_data( error_model, td_template.error_data );
     }
-
-    // free error data structs
-    free_error_data( scratch_error_data );
-    free_error_data( global_error_data );
-
-    /* Find all of the candidate mappings */    
+    
+    /* Print out performance information */
     clock_t stop = clock();
     fprintf(stderr, "PERFORMANCE :  Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
-            mapped_cnt, rdb->readkey, 
+            *(td_template.mapped_cnt), rdb->readkey, 
             ((float)(stop-start))/CLOCKS_PER_SEC,
-            (((float)mapped_cnt)*CLOCKS_PER_SEC*3600)/(stop-start)
+            (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
+
+    free_td_template( &td_template );
+
+    return;
 }
