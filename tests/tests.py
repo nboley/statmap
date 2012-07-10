@@ -140,7 +140,7 @@ def map_with_statmap( read_fnames, output_dir,
     if assay != None:
         call += ( " -n 1 -a " + assay )
     if search_type != None:
-        call += " -y " + search_type
+        call += " -s " + search_type
 
     print >> stderr, "========", re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )

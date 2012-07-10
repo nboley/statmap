@@ -114,6 +114,11 @@ The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this arg
 is set, then the data will be mapped iteratively. If not, then only the marginal mappings
 will be produced.
 
+-s : The type of marginal mapping search
+
+The two valid options are 'e' (observed error data) and 'm' (mismatches).
+These options determine the method Statmap uses to map reads to the reference.
+
 -n : the number of samples to take
 
 This is the number of samples to take from the mapping posterior. This defaults
@@ -151,12 +156,6 @@ infer the  fragment length distribution. However, for rna-seq, this is not
 necessarily correct - so be careful. 
 
 In addition, there is a script for generating this file in utilities.
-
-Arguments that you probably dont want to touch unless you know what you are doing:
-(note: **deprecated**)
-
--i : Indexed sequence length
--l : ( DEBUG ) debugging  log file
 
 Output
 ======
