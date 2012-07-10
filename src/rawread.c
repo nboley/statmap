@@ -78,6 +78,26 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
     fprintf(fastq_fp, "+%s\n", r->name);
     fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
 }
+/*
+ *   Move the filepointer until we see a @, indicating the start of the next 
+ *   read.
+ */
+void
+move_fastq_fp_to_next_read( FILE* fp )
+{
+    long current_pos = ftell( fp );
+    while( !feof(fp) ) {
+        char character = fgetc( fp );
+        if( character == '@' )
+        {
+            fseek( fp, current_pos, SEEK_SET );
+            return;
+        }
+        current_pos += 1;
+    }
+    
+    return;
+}
 
 /*
  * Populate a rawread object from a file pointer. 
@@ -89,6 +109,48 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
  * upon the failure mode, read below for more info.
  *
  */
+
+enum READ_END
+determine_read_end_from_readname( char* readname )
+{
+    /* find the final / */
+    char* fwd_slash_pntr = 
+        strrchr ( readname, '/' );
+    
+    enum READ_END end = UNKNOWN;
+    
+    /* if there is no slash, assume its not a paired end read */
+    if( fwd_slash_pntr == NULL )
+    {
+        return NORMAL;
+    } else {
+        /* Determine the read end from integer following the slash */
+        switch( atoi( fwd_slash_pntr + 1 ) )
+        {
+        case 1:
+            end = FIRST;
+            break;
+        case 2:
+            end = SECOND;
+            break;
+        default:
+            fprintf(stderr, 
+                    "Unrecognized read end '%i'\n", 
+                    atoi( fwd_slash_pntr + 1 ) );
+            exit( -1 );
+        }
+
+        /* set the slash to '\0', to eliminate it from the read name */
+        if( NULL != fwd_slash_pntr )
+            *fwd_slash_pntr = '\0';
+        
+        return end;
+    }
+    
+    /* we should never get here */
+    assert( false );
+}
+
 int
 populate_read_from_fastq_file( 
     FILE* input_file, struct rawread** r, enum READ_END end )
@@ -101,86 +163,76 @@ populate_read_from_fastq_file(
     char quality[200];
     
     /***** Get the read informnation from the fastq file *****/
-
-    /*** Determine the read name ***/
-    /* get the parsed name string */
-    return_code = fscanf( input_file, "@%s\n", readname );
-
-    if( return_code == EOF )
-    {
-        assert( feof( input_file ) );
-        *r = NULL;
-        return EOF;
-    }
-    
-    /* If the read end is known, eliminate the slash */
-    if( end == FIRST || end == SECOND )
-    {
-        /* find the final / */
-        char* fwd_slash_pntr = 
-            strrchr ( readname, '/' );
-
-       /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-    }
-    
-    /** If necessary, Determine the read end **/
-    if( end == UNKNOWN )
-    {
-        /* find the final / */
-        char* fwd_slash_pntr = 
-            strrchr ( readname, '/' );
-
-        /* if there is no slash, assume its not a paired end read */
-        if( fwd_slash_pntr == NULL )
+    while( true )
+    {    
+        if( feof( input_file ) )
         {
-            end = NORMAL;
-        } else {
-            /* Determine the read end from integer following the slash */
-            switch( atoi( fwd_slash_pntr + 1 ) )
-            {
-            case 1:
-                end = FIRST;
-                break;
-            case 2:
-                end = SECOND;
-                break;
-            default:
-                fprintf(stderr, 
-                        "Unrecognized read end '%i'\n", 
-                        atoi( fwd_slash_pntr + 1 ) );
-                exit( -1 );
-            }
-
-       /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-            
+            *r = NULL;
+            return EOF;
         }
+
+        /*** Determine the read name ***/
+        /* get the parsed name string */
+        char next_char = fgetc( input_file );
+        if( next_char != '@' )
+        {
+            fprintf(stderr, "ERROR:    Expected '@' and get '%c' at position '%li'. Skipping read.\n",
+                    next_char, ftell(input_file) );
+            move_fastq_fp_to_next_read( input_file );
+            continue;
+        }
+        /* get the rest of the line */
+        return_code = fscanf( input_file, "%s\n", readname );
+        
+        if( return_code == EOF )
+        {
+            assert( feof( input_file ) );
+            continue;
+        }
+        
+        /* If the read end is known, eliminate the slash */
+        if( end == FIRST || end == SECOND )
+        {
+            /* find the final / */
+            char* fwd_slash_pntr = strrchr ( readname, '/' );
+            /* set the slash to '\0', to eliminate it from the read name */
+            if( NULL != fwd_slash_pntr )
+                *fwd_slash_pntr = '\0';
+        } else if( end == NORMAL )   {
+            /* if the end is normal, we dont need to do antyhing */
+        } else {
+            assert( end == UNKNOWN );
+            end = determine_read_end_from_readname( readname );
+        }
+            
+        /*** get the actual read */
+        return_code = fscanf( input_file, "%s\n", read );
+
+        /*** get the next read name - we discard this */
+        /* 
+           get the next character. We're expecting a plus. If it's not, 
+           then move the filepointer to the next '@', and return error. 
+        */
+        char plus_char = getc( input_file );
+        if( plus_char != '+' )
+        {
+            fprintf(stderr, "ERROR:    Expected '+' and get '%c' for readname '%s'. Skipping read.\n",
+                    plus_char, readname);
+            move_fastq_fp_to_next_read( input_file );
+            continue;
+        }
+        while( '\n' != getc( input_file  ) );
+        
+        /*** get the quality score */
+        return_code = fscanf( input_file, "%s\n", quality );
+        
+        break;
     }
-    
-    /* calculate the length of the readname */
+
+    /* calculate the length of the read and the readname */
     int readname_len = strlen( readname );
-    
-    /*** get the actual read */
-    return_code = fscanf( input_file, "%s\n", read );
     int read_len = strlen( read );
-
-    /*** get the next read name - we discard this */
-    /* We can't use  
-       return_code = fscanf( input_file, "+%*s\n" );       
-       because, if the line is just +\n, it wont find a string and will
-       skip to the next line. Therefore, we use this messy while loop.
-       TODO - make the assert a real error.
-    */
-
-    assert( '+' == getc( input_file)  );
-    while( '\n' != getc( input_file  ) );
     
-    /*** get the quality score */
-    return_code = fscanf( input_file, "%s\n", quality );
-
     /***** Initialize and Populate the raw read *****/ 
     init_rawread( r, read_len, readname_len );
 

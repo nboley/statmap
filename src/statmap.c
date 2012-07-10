@@ -243,8 +243,8 @@ guess_input_file_type( struct args_t* args )
         break;
     default:
         fprintf( stderr,
-                 "ERROR       :  Unrecognized file format type %i\n",
-                 input_file_type );
+                 "ERROR       :  Unrecognized file format type %i ( min-%i max-%i )\n",
+                 input_file_type, min_qual, max_qual  );
         exit( -1 );
     }
 

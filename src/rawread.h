@@ -145,6 +145,9 @@ rewind_rawread_db( struct rawread_db_t* rdb );
 enum bool
 rawread_db_is_empty( struct rawread_db_t* rdb );
 
+void
+move_fp_to_next_read( FILE* fp );
+
 /* 
    if the next readkey would be greater than maqx readkey, then
    dont return anything. negative values indicate that this should
