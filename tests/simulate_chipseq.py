@@ -384,45 +384,62 @@ def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, 
     
     return rand_indexes
 
+def run_external_cmd( call ):
+    '''
+    Runs call as a subprocess, checking for errors
+    '''
+    # print to stdout (normalizing whitespace)
+    print "========", re.sub( "\s+", " ", call)
+    ret_code = subprocess.call( call, shell=True )
+    if ret_code != 0:
+        print "TEST FAILED - Previous call returned error code %i" \
+                % (ret_code )
+        sys.exit(-1)
+
+def build_aggregate_trace_call( agg_type, reads_type,
+        sample_no=1, output_dir="smo_chipseq_sim" ):
+
+    assert agg_type in ("min", "max", "sum"), "Aggregation type is invalid"
+    assert reads_type in ("ip", "nc"), "Reads type is invalid"
+
+    call = [ "../utilities/build_aggregate_trace.py", agg_type, output_dir,
+             "%s_trace.%s.bin.trace" % (agg_type, reads_type), str(sample_no) ]
+    call.append("--use-ip") if reads_type == "ip" else call.append("--use-nc")
+
+    return " ".join(call)
+
 def map_with_statmap( iterative=True, paired_end=True ):
     # build the index
-    call = "%s 20 tmp.genome.bin tmp.genome" % sc.BUILD_INDEX_PATH
-    print re.sub( "\s+", " ", call)
-    ret_code = subprocess.call( call, shell=True )    
-    if ret_code != 0:
-        print "TEST FAILED - build_index call returned error code ", ret_code
-        sys.exit( -1 )    
+    build_index_call = "%s 20 tmp.genome.bin tmp.genome" % sc.BUILD_INDEX_PATH
+    run_external_cmd( build_index_call )
     
+    # run statmap
     if paired_end:
-        call = "%s -g tmp.genome.bin -1 tmp.1.fastq -2 tmp.2.fastq \
+        statmap_call = "%s -g tmp.genome.bin -1 tmp.1.fastq -2 tmp.2.fastq \
                                      -3 tmp.nc.1.fastq -4 tmp.nc.2.fastq \
                                      -o smo_chipseq_sim -q 0 \
                                      -n %i -f ./data/fl_dist.txt \
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     else:
-        call = "%s -g tmp.genome.bin -r tmp.1.fastq -c tmp.nc.1.fastq \
+        statmap_call = "%s -g tmp.genome.bin -r tmp.1.fastq -c tmp.nc.1.fastq \
                                      -o smo_chipseq_sim -q 0 \
                                      -n %i -f ./data/fl_dist.txt \
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     
     if iterative:
-        call += " -a i"
+        statmap_call += " -a i"
         
-    # run statmap
-    print re.sub( "\s+", " ", call)    
-    ret_code = subprocess.call( call, shell=True )    
-    if ret_code != 0:
-        print "TEST FAILED - statmap call returned error code ", ret_code
-        sys.exit( -1 )
+    run_external_cmd( statmap_call )
     
+    ##
     # run the aggregation generation code
-    call = [ "../utilities/build_aggregates.py", "smo_chipseq_sim" ]
-    print >> sc.stdout, " ".join( call )
-    ret_code = subprocess.call( call  )
-    if ret_code != 0:
-        print "TEST FAILED - aggregation call returned error code ", ret_code
-        sys.exit( -1 )
-        
+    # generate min and max aggregates for ip and nc reads
+    ##
+    run_external_cmd( build_aggregate_trace_call("min", "ip") )
+    run_external_cmd( build_aggregate_trace_call("min", "nc") )
+    run_external_cmd( build_aggregate_trace_call("max", "ip") )
+    run_external_cmd( build_aggregate_trace_call("max", "nc") )
+
     return
 
 def call_peaks( ):

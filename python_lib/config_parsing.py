@@ -36,7 +36,6 @@ struct args_t {
 
     int num_starting_locations;
 
-    int indexed_seq_len;
     int num_threads;
 
     enum SEARCH_TYPE search_type;
@@ -72,7 +71,6 @@ struct args_t {
 
         ("num_starting_locations", c_int),
 
-        ("indexed_seq_len", c_int),
         ("num_threads", c_int),
 
         ("search_type", c_uint),        # enum SEARCH_TYPE
