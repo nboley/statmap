@@ -295,8 +295,7 @@ close_rawread_db( struct rawread_db_t* rdb )
     }
     
     pthread_spin_destroy( rdb->lock );
-    // this free used to cause a segfault - seems fine now, but creates a warning
-    free( rdb->lock );
+    free( (void*) rdb->lock );
     
     free( rdb );
     return;
@@ -429,44 +428,6 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     }        
     
 }
-
-#if 0
-int 
-get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey )
-{
-    int rv = -10;
-    
-    rv = get_next_read_from_rawread_db( 
-        rdb, readkey, r1, r2, max_readkey );
-    
-    /* While this rawread is unmappable, continue */ 
-    /* 
-       This logic is complicated because it has to deal with both paired end
-       and non paired end reads. But, basically, it says that r1 cant be null
-       and r2 is null and r1 is mappable or r2 is not null ( ie this is paired
-       end ) and both r1 and r2 are mappable.
-    */
-    while( *r1 != NULL 
-           && (      ( *r2 == NULL && filter_rawread( *r1 ) == true )
-                  || ( filter_rawread( *r1 ) == true 
-                       && filter_rawread( *r2 ) == true )
-              )
-           )
-    {
-        free_rawread( *r1 );
-        if ( *r2 != NULL )
-            free_rawread( *r2 );
-        
-        rv = get_next_read_from_rawread_db( 
-            rdb, readkey, r1, r2, max_readkey );
-    }
-    
-    return rv;
-}
-#endif
 
 int
 get_next_read_from_rawread_db( 

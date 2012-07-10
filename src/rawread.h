@@ -150,13 +150,6 @@ rawread_db_is_empty( struct rawread_db_t* rdb );
    dont return anything. negative values indicate that this should
    be ignored 
 */
-
-int
-get_next_mappable_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey );
-
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey,
