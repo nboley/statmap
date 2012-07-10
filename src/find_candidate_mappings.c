@@ -8,7 +8,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <limits.h>
-#include "math.h"
+#include <math.h>
+#include <float.h>
 
 #include "statmap.h"
 #include "find_candidate_mappings.h"
@@ -24,36 +25,60 @@ const float untemplated_g_marginal_log_prb = -1.30103;
 
 #define MAX_NUM_UNTEMPLATED_GS 3
 
+float
+subseq_penalty(
+        struct rawread* r,
+        int offset,
+        int subseq_len,
+        struct penalty_array_t* penalty_array
+    )
+{
+    float penalty = 0;
+
+    /* loop over subsequence */
+    int pos;
+    for( pos = offset; pos < subseq_len; pos++ )
+    {
+        int bp = bp_code( r->char_seq[pos] );
+        /* take the match penalty for this bp */
+        penalty += penalty_array->array[pos].penalties[bp][bp];
+    }
+
+    return penalty;
+}
+
 int
 find_optimal_subseq_offset( 
     struct rawread* r,
     /* store the desired subsequences length */
-    int subseq_len
+    int subseq_len,
+    struct penalty_array_t* penalty_array
 ) {
+    /* Make sure the read is at least as long as the subsequence */
     if( subseq_len > r->length ) {
         fprintf( stderr, "============ %i \t\t %i \n", subseq_len, r->length );
     }
     assert( subseq_len <= r->length );
     
-    
-    /* XXX for now, we just use the first subseq_len characters,
-       so the offset is always 0 */
-    if( subseq_len == r->length )
-        return 0;
+    /*
+       Remember: error_prb returns the inverse log probability of
+       error: log10(1 - P(error)) for matches
+    */
+    int min_offset = 0;
+    float max_so_far = -FLT_MAX;
 
-    if( r->assay == CAGE )
+    int i;
+    /* for each possible subsequence */
+    for( i = 0; i < r->length - subseq_len; i++ )
     {
-        if( r->length - MAX_NUM_UNTEMPLATED_GS < subseq_len )
-        {
-            fprintf(stderr, "FATAL        : CAGE experiments need indexes that "
-                            "have probe lengths at least 3 basepairs short, to "
-                            "account for untemplated G's." );
-            return 0;
+        float ss_pen = subseq_penalty(r, i, subseq_len, penalty_array);
+        if( ss_pen > max_so_far ) {
+            max_so_far = ss_pen;
+            min_offset = i;
         }
-        return MAX_NUM_UNTEMPLATED_GS;
     }
-    
-    return 0;
+
+    return min_offset;
 };
 
 void
@@ -76,7 +101,8 @@ search_index( struct index_t* index,
        first, we need to find the subseq of the read that we want to 
        probe the index for. This is controlled by the index->seq_length.
     */
-    int subseq_offset = find_optimal_subseq_offset( r, index->seq_length );
+    int subseq_offset = find_optimal_subseq_offset(
+            r, index->seq_length, fwd_pa );
     int subseq_length = index->seq_length;
     
     /* Store a copy of the read */
@@ -788,7 +814,7 @@ find_candidate_mappings( void* params )
 
             /* make an assay specific changes to the results. For instance, in CAGE,
                we need to add extra reads for the untemplated g's */
-            make_assay_specific_corrections( r, results );
+            //make_assay_specific_corrections( r, results );
             
             /* make a reference to the current set of mappings. This should be
                optimized out by the compiler */
