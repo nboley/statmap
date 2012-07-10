@@ -35,7 +35,6 @@ update_error_model_from_error_data(
         assert( error_model->data == NULL );
         return;
     } else if ( error_model->error_model_type == ESTIMATED ) {
-        free_error_data( (struct error_data_t*) (error_model->data) );
         error_model->data = data;
     } else {
         fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
