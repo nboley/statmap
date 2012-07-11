@@ -85,9 +85,14 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
 void
 move_fastq_fp_to_next_read( FILE* fp )
 {
+    /* The next read begins with "\n@" */
+    /* XXX - an error string could begin with @, which would also satisfy */
     long current_pos = ftell( fp );
     while( !feof(fp) ) {
         char character = fgetc( fp );
+        // XXX - assumes @ only appears at the beginning of a readname
+        // it can also be part of an error string, and there's no reason it
+        // couldn't be used again in a read name
         if( character == '@' )
         {
             fseek( fp, current_pos, SEEK_SET );
@@ -109,47 +114,6 @@ move_fastq_fp_to_next_read( FILE* fp )
  * upon the failure mode, read below for more info.
  *
  */
-
-enum READ_END
-determine_read_end_from_readname( char* readname )
-{
-    /* find the final / */
-    char* fwd_slash_pntr = 
-        strrchr ( readname, '/' );
-    
-    enum READ_END end = UNKNOWN;
-    
-    /* if there is no slash, assume its not a paired end read */
-    if( fwd_slash_pntr == NULL )
-    {
-        return NORMAL;
-    } else {
-        /* Determine the read end from integer following the slash */
-        switch( atoi( fwd_slash_pntr + 1 ) )
-        {
-        case 1:
-            end = FIRST;
-            break;
-        case 2:
-            end = SECOND;
-            break;
-        default:
-            fprintf(stderr, 
-                    "Unrecognized read end '%i'\n", 
-                    atoi( fwd_slash_pntr + 1 ) );
-            exit( -1 );
-        }
-
-        /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-        
-        return end;
-    }
-    
-    /* we should never get here */
-    assert( false );
-}
 
 int
 populate_read_from_fastq_file( 
@@ -176,7 +140,8 @@ populate_read_from_fastq_file(
         char next_char = fgetc( input_file );
         if( next_char != '@' )
         {
-            fprintf(stderr, "ERROR:    Expected '@' and get '%c' at position '%li'. Skipping read.\n",
+            fprintf(stderr, "ERROR       :  Expected '@' and get '%c' at "
+                            "position '%li'. Skipping read.\n",
                     next_char, ftell(input_file) );
             move_fastq_fp_to_next_read( input_file );
             continue;
@@ -190,6 +155,12 @@ populate_read_from_fastq_file(
             continue;
         }
         
+        /*
+         * Since we aren't relying on the /1 and /2 suffixes to determine
+         * read end anymore, end should always be known
+         */
+        assert( end != UNKNOWN );
+
         /* If the read end is known, eliminate the slash */
         if( end == FIRST || end == SECOND )
         {
@@ -201,8 +172,8 @@ populate_read_from_fastq_file(
         } else if( end == NORMAL )   {
             /* if the end is normal, we dont need to do antyhing */
         } else {
-            assert( end == UNKNOWN );
-            end = determine_read_end_from_readname( readname );
+            fprintf(stderr, "ERROR       :  Read end should be known\n");
+            assert(false);
         }
             
         /*** get the actual read */
