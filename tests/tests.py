@@ -1327,6 +1327,9 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
+    #print "Starting test_untemplated_g_finding()"
+    #test_untemplated_g_finding()
+    
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
@@ -1357,11 +1360,7 @@ def main( RUN_SLOW_TESTS ):
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
-
-    if False:
-        print "Starting test_untemplated_g_finding()"
-        test_untemplated_g_finding()
-
+    
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 

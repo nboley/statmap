@@ -1341,11 +1341,9 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
     case 'q':
         /* sequence nodes dont have any children */
         return get_num_used_bytes( node );
-        break;
     case 'l':
         /* locations nodes dont have any children */
         return size_of_locations_node( node );
-        break;
     case 's':
         for( i = 0; i < 1<<(2*LETTER_LEN); i++ )
         {
@@ -1355,7 +1353,6 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_snode();
-        break;
     case 'd':
         for( i = 0; i < get_dnode_num_children( node ); i++ )
         {
@@ -1365,7 +1362,6 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_dnode( node );
-        break;
     }
 
     fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
@@ -1386,17 +1382,13 @@ calc_node_size( NODE_TYPE type, void* node  )
     case 'q':
         /* sequence nodes dont have any children */
         return get_num_used_bytes( node );
-        break;
     case 'l':
         /* locations nodes dont have any children */
         return size_of_locations_node( node );
-        break;
     case 's':
         return size_of_snode();
-        break;
     case 'd':
         return size_of_dnode( node );
-        break;
     }
 
     fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);

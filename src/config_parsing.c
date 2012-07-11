@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <time.h>
 #include <sys/time.h> /* gettimeofday() */
@@ -146,10 +147,7 @@ guess_input_file_type( struct args_t* args )
         ARE_LOG_ODDS = false;
         break;
     default:
-        fprintf( stderr,
-                 "ERROR       :  Unrecognized file format type %i\n",
-                 input_file_type );
-        exit( -1 );
+        assert( false );
     }
 
     fprintf( stderr,

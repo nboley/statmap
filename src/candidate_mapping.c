@@ -249,10 +249,8 @@ init_candidate_mapping_from_template( struct rawread* rp,
     case 3:
         cand_map.rd_type = PAIRED_END_2;
         break;
-    default:
-        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", rp->end );
-        exit( -1 );
     }
+    assert( cand_map.rd_type != UNKNOWN );
 
     /* set which type of read this is */
     switch( rp->strand )
