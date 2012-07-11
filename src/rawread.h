@@ -18,8 +18,15 @@ typedef unsigned int readkey_t;
  *
  */
 
+struct rawread_subtemplate {
+    int pos_in_template;    // pos/neg indexed, like Python list indexing
+    int len;
+    char* char_seq;
+    char* error_seq;
+};
+
 struct rawread {
-    /* should equal to strlen( char_seq ) */
+    /* the underlying rawread */
     unsigned char length;
     char* name;
     char* char_seq;
@@ -27,10 +34,10 @@ struct rawread {
     enum READ_END end;
     enum STRAND strand;
     enum assay_type_t assay;
-    // LETTER_TYPE* packed_seq;
-    // float* penalties;
-    // float* inverse_penalties; 
-    // float* mutation_type_penalties;
+
+    /* list of subtemplates for the index search */
+    struct rawread_subtemplate* subtemplates;
+    int num_subtemplates;
 };
 
 /* fwd declaration for error_model_t */

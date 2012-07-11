@@ -40,6 +40,9 @@ init_rawread( struct rawread** r,
     (*r)->name = malloc( sizeof(char)*(readname_len+1) );
     (*r)->char_seq = malloc( sizeof(char)*seq_len );
     (*r)->error_str = malloc( sizeof(char)*seq_len );
+
+    (*r)->subtemplates = NULL;
+    (*r)->num_subtemplates = 0;
 }
 
 inline void 
@@ -53,6 +56,9 @@ free_rawread( struct rawread* r )
 
     if( r->error_str != NULL )
         free( r->error_str );
+
+    if( r->subtemplates != NULL )
+        free( r->subtemplates );
     
     free( r );
 }
