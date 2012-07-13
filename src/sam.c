@@ -9,6 +9,25 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 
+char*
+fprintf_sam_headers_from_genome(
+        FILE* sam_fp,
+        struct genome_data* genome
+    )
+{
+    /**
+     * Write @SQ tag for each contig in the genome
+     **/
+    int chr;
+    /* loop over contigs; chr=1 to skip pseudo chr */
+    for( chr = 1; chr < genome->num_chrs; chr++ )
+    {
+        fprintf(sam_fp, "@SQ\tSN:%s\tLN:%d\n",
+                genome->chr_names[chr], genome->chr_lens[chr]
+            );
+    }
+}
+
 void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
@@ -513,6 +532,9 @@ write_mapped_reads_to_sam(
     FILE* sam_ofp )
 {
     assert( expand_pseudo_locations == false );
+
+    /* first, write the SAM header out */
+    fprintf_sam_headers_from_genome( sam_ofp, genome );
 
     int error;
 

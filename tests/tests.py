@@ -151,7 +151,24 @@ def map_with_statmap( read_fnames, output_dir,
 
 ### SAM File parsing code
 
+def skip_sam_header( fp ):
+    """Skips header in fp of SAM file, returning fp pointing to first read"""
+    # skip header (all lines start with '@')
+    while True:
+        fpos = fp.tell()
+        next_line = fp.readline()
+        if next_line.startswith('@'):
+            continue
+        else:
+            # restore file pointer to start of first read
+            fp.seek(fpos)
+            break
+
 def iter_sam_reads( f ):
+
+    # skip header (all lines start with '@')
+    skip_sam_header( f )
+
     # get the next line in the sam file
     next_line = f.readline().strip().split("\t")
     readname = next_line[0].split("/")[0]
@@ -168,6 +185,20 @@ def iter_sam_reads( f ):
             # yield the split read lines
         yield data
     return
+
+def count_lines_in_sam( sam_fp ):
+    """
+    Counts number of lines, excluding the header (== number of mapped reads)
+    in a SAM file
+    """
+    skip_sam_header( sam_fp )
+
+    num_lines = sum( 1 for line in sam_fp )
+    # reset sam_fp to beginning
+    sam_fp.seek(0)
+
+    return num_lines
+    
 
 ### SOLEXA Specific mutation routines ###############
 
@@ -491,8 +522,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
 
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam( sam_fp )
 
     if len(fragments) > total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
@@ -621,8 +651,7 @@ def test_paired_end_reads( read_len ):
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     # we divide by two to account for the double write
-    total_num_reads = sum( 1 for line in sam_fp )/2
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp) / 2
 
     if len(fragments) != total_num_reads:
         raise ValueError, "Mapping returned too few reads (%i/%i)." % ( total_num_reads, len(fragments) )
@@ -697,10 +726,9 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp)
 
-    if len(fragments)*n_dups != total_num_reads:
+    if len(fragments)*n_dups > total_num_reads:
         raise ValueError, "Mapping returned too few reads."
     
     
@@ -786,7 +814,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    mapped_read_ids = set( ( line.split("\t")[0].strip() for line in sam_fp ) )
+    mapped_read_ids = set( ( line.split("\t")[0].strip() 
+                             for line in sam_fp if not line.startswith('@') ) )
     total_num_reads = len( mapped_read_ids ) 
     sam_fp.seek(0)
 
@@ -1090,8 +1119,7 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len, genome_le
 
     # in order to be able to count the number of reads, we had to use a completely unmutated
     # diploid genome
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam( sam_fp )
 
     # Since the paternal and maternal chrs of the reference genome are identical, each read
     # will be repeated n_dups times * 2, since there will be a paternal and maternal copy for
@@ -1346,8 +1374,7 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     # test the sam file
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     # we divide by two since there are two lines for each paired end read
-    total_num_reads = sum( 1 for line in sam_fp )/2
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp) / 2
 
     # each paired end read should map n_dups**2*2 times
     # when you duplicate the genome for paired end reads, number of matches grows exponentially
