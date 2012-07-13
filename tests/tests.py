@@ -1406,6 +1406,8 @@ if __name__ == '__main__':
     test_multi_fasta_mapping( )
     print "Starting test_build_index()"
     test_build_index( )
+    print "Starting test_untemplated_g_finding()"
+    test_untemplated_g_finding()
     print "Starting test_diploid_genome()"
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
@@ -1421,10 +1423,6 @@ if __name__ == '__main__':
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
 
-    if False:
-        print "Starting test_untemplated_g_finding()"
-        test_untemplated_g_finding()
-    
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 

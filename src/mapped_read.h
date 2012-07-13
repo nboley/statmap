@@ -134,6 +134,7 @@ ML_PRB_TYPE_from_float( float value  )
 #define MRL_START_POS_TYPE unsigned int
 #define MRL_STOP_POS_TYPE unsigned int
 #define MRL_FL_TYPE unsigned short
+#define MRL_TRIM_TYPE unsigned char
 
 /* Set if the read that contribute to this mapped location are paired */
 #define IS_PAIRED 1
@@ -167,6 +168,12 @@ struct mapped_read_location {
     
     ML_PRB_TYPE seq_error;
     // ML_PRB_TYPE cond_prob;
+
+    /* # bps trimmed from start of read */
+    /* HACK - fix the untemplated G's SAM bug */
+    MRL_TRIM_TYPE rd1_trim_offset;
+    MRL_TRIM_TYPE rd2_trim_offset;
+
 } __attribute__((__packed__));
 
 /* 
@@ -255,6 +262,24 @@ set_seq_error_in_mapped_read_location(
 }
 
 /** COND PROB **/
+
+/** TRIM OFFSET **/
+
+static inline void
+set_rd1_trim_offset_in_mapped_read_location(
+    struct mapped_read_location* loc, char offset )
+{
+    assert( offset >= 0 && offset < 256 );
+    loc->rd1_trim_offset = offset;
+}
+
+static inline void
+set_rd2_trim_offset_in_mapped_read_location(
+    struct mapped_read_location* loc, char offset )
+{
+    assert( offset >= 0 && offset < 256 );
+    loc->rd2_trim_offset = offset;
+}
 
 /*
 static inline float

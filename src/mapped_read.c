@@ -171,6 +171,8 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     assert( loc->seq_error > 0.0 && loc->seq_error < 1.0 );
     
     set_flag_in_mapped_read_location( loc, flag  );
+
+    set_rd1_trim_offset_in_mapped_read_location( loc, cm->trimmed_len );
     
     return 1;
 }
@@ -223,6 +225,9 @@ join_two_candidate_mappings(
         loc, pow( 10, first_read->penalty + second_read->penalty ) );
     
     set_flag_in_mapped_read_location( loc, flag );
+
+    set_rd1_trim_offset_in_mapped_read_location(loc, first_read->trimmed_len);
+    set_rd2_trim_offset_in_mapped_read_location(loc, second_read->trimmed_len);
     
     /* ignore reads with zero probability ( possible with FL dist ) */
     if( get_seq_error_from_mapped_read_location( loc ) > 2*ML_PRB_MIN ) {

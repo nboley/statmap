@@ -63,7 +63,9 @@ fprintf_nonpaired_mapped_read_as_sam(
     fprintf( sam_fp, "0\t0\t*\t" );
 
     /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", rd_len, seq );
+    /* HACK - add the trim offset to the seq char* to return the correct read
+     * sequence, accounting for assay specific corrections */
+    fprintf( sam_fp, "%.*s\t", rd_len, seq + loc->rd1_trim_offset );
     
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", rd_len, phred_qualities );
@@ -195,7 +197,9 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%i\t", r2_start - r1_start - r1_len + r1_len + r2_len );
 
     /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", r1_len, r1_seq );
+    /* HACK - add the trim offset to the seq char* to return the correct read
+     * sequence, accounting for assay specific corrections */
+    fprintf( sam_fp, "%.*s\t", r1_len, r1_seq + loc->rd1_trim_offset );
 
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", r1_len, r1_phred_qualities );
@@ -293,7 +297,9 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%i\t", r2_start - r1_start + r2_len - r1_len - r2_len );
 
     /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", r2_len, r2_seq );
+    /* HACK - add the trim offset to the seq char* to return the correct read
+     * sequence, accounting for assay specific corrections */
+    fprintf( sam_fp, "%.*s\t", r2_len, r2_seq + loc->rd2_trim_offset );
 
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", r2_len, r2_phred_qualities );
