@@ -164,6 +164,16 @@ def skip_sam_header( fp ):
             fp.seek(fpos)
             break
 
+def convert_from_one_indexed(reads):
+    """
+    Subtract 1 from the location in all reads from SAM
+    SAM is 1-indexed, so we convert to 0-indexed to make it cleaner to compare
+    to generated sequence
+    """
+    for read in reads:
+        read[3] = str( int(read[3]) - 1 )
+    return reads
+
 def iter_sam_reads( f ):
 
     # skip header (all lines start with '@')
@@ -183,7 +193,7 @@ def iter_sam_reads( f ):
             data.append( next_line )
             next_line = f.readline().strip().split("\t")
             # yield the split read lines
-        yield data
+        yield convert_from_one_indexed(data)
     return
 
 def count_lines_in_sam( sam_fp ):
@@ -198,7 +208,6 @@ def count_lines_in_sam( sam_fp ):
     sam_fp.seek(0)
 
     return num_lines
-    
 
 ### SOLEXA Specific mutation routines ###############
 

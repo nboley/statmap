@@ -41,8 +41,9 @@ fprintf_nonpaired_mapped_read_as_sam(
 {
     const MRL_FLAG_TYPE loc_flag = get_flag_from_mapped_read_location( loc  );
     const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    /* + 1 because Statmap's is 0-indexed, but SAM is 1-indexed */
+    const unsigned int start = get_start_from_mapped_read_location( loc  ) + 1;
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  ) + 1;
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
 
     assert( cond_prob <= 1.0 );
@@ -133,8 +134,9 @@ fprintf_paired_mapped_read_as_sam(
 {
     const unsigned char mrl_flag = get_flag_from_mapped_read_location( loc  );
     const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    /* + 1 because Statmap's is 0-indexed, but SAM is 1-indexed */
+    const unsigned int start = get_start_from_mapped_read_location( loc  ) + 1;
+    const unsigned int stop = get_stop_from_mapped_read_location( loc  ) + 1;
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
 
 
