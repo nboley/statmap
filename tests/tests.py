@@ -40,7 +40,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -750,9 +750,9 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
-        % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_prefix=None ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
     rl = read_len
 
@@ -762,7 +762,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
+    fragments = sample_uniformily_from_genome( r_genome, nsamples=nreads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
@@ -812,7 +812,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     nonmapping_reads_set = set( line.strip()[1:] for i, line in enumerate(nonmapping_fp) if i%4 == 0 )
     nonmapping_fp.close()
 
-    all_read_ids = set(map(str, range(100)))
+    all_read_ids = set(map(str, range(nreads)))
     all_read_ids = all_read_ids - mapped_read_ids
     all_read_ids = all_read_ids - unmappable_reads_set
     all_read_ids = list(all_read_ids)
@@ -826,7 +826,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
-    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference(
+    unmapped_reads = set( map( str, xrange( nreads ) ) ).difference(
             nonmapping_reads_set.union(
                 unmappable_reads_set.union(
                     set(mapped_reads_dict.keys())
@@ -886,6 +886,11 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
             os.remove("./tmp_genome_3.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
+
+def test_error_rate_estimation( ):
+    test_dirty_reads( 75, nreads=50000, n_threads=1, min_penalty=-30 ) 
+    print "PASS: Error Rate ( Statmap appears to be correctly estimating error rates )"
+
 
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
@@ -1329,6 +1334,9 @@ if False:
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
+    print "Starting test_error_rate_estimation()"
+    test_error_rate_estimation( )
+    return
     
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
@@ -1360,6 +1368,8 @@ def main( RUN_SLOW_TESTS ):
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
+        print "[SLOW] Starting test_error_rate_estimation()"
+        test_error_rate_estimation( )
     
     #print "Starting test_index_probe()"
     #test_short_index_probe()
