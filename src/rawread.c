@@ -151,16 +151,84 @@ determine_read_end_from_readname( char* readname )
     assert( false );
 }
 
+/* 
+   Reads the next line from fp, and striped trailing whitespace. 
+
+   If 'expected_first_char' != ''. them strip the first character and 
+   error if it's not expected.
+
+   returns 0 on success, 1 on error.
+*/
+int safe_get_next_line( FILE* input_file, 
+                        char* buffer, int buffer_size, 
+                        char expected_first_char,
+                        enum bool allow_empty_lines
+    )
+{
+    char* return_code;
+    
+    /* get the parsed name string */
+    if( '\0' != expected_first_char ) {
+        char next_char = fgetc( input_file );
+        if( next_char != expected_first_char )
+        {
+            if( feof( input_file ) )
+                return 1;
+            
+            fprintf(stderr, "ERROR:    Expected '%c' and get '%c' at position '%li'. Skipping read.\n",
+                    expected_first_char, next_char, ftell(input_file) );
+            move_fastq_fp_to_next_read( input_file );
+            return 1;
+        }
+    }
+
+    /* get the rest of the line */
+    return_code = fgets( buffer, buffer_size, input_file );
+    if( NULL == return_code )
+    {
+        if( feof(input_file) ) {
+            return 1;
+        } else {
+            perror( "FATAL:    Error reading from rawread file." );
+            exit( 1 );
+        }
+    }
+        
+    int buffer_len = strlen( buffer );
+    
+    if( buffer[buffer_len-1] != '\n' )
+    {
+        fprintf(stderr, "ERROR:    Unable to read full line. Skipping read.\n");
+        move_fastq_fp_to_next_read( input_file );
+        return 1;        
+    }
+    
+    while( buffer_len > 0 && !isgraph( buffer[buffer_len-1] ) )
+    {
+        buffer[buffer_len-1] = '\0';
+        buffer_len -= 1;
+    }
+
+    if( !allow_empty_lines && buffer_len == 0 ) {
+        fprintf(stderr, "ERROR:    Line had 0 chracters. Skipping read.\n");
+        move_fastq_fp_to_next_read( input_file );
+        return 1;        
+    }
+    
+    return 0;
+}
+
 int
 populate_read_from_fastq_file( 
     FILE* input_file, struct rawread** r, enum READ_END end )
 {
     /* Store the return of the scanf's */
-    int return_code;
+    int rv;
     
-    char readname[200];
-    char read[200];
-    char quality[200];
+    char readname[READ_BUFFER_SIZE];
+    char readname2[READ_BUFFER_SIZE];
+    char read[READ_BUFFER_SIZE];
+    char quality[READ_BUFFER_SIZE];
     
     /***** Get the read informnation from the fastq file *****/
     while( true )
@@ -172,23 +240,10 @@ populate_read_from_fastq_file(
         }
 
         /*** Determine the read name ***/
-        /* get the parsed name string */
-        char next_char = fgetc( input_file );
-        if( next_char != '@' )
-        {
-            fprintf(stderr, "ERROR:    Expected '@' and get '%c' at position '%li'. Skipping read.\n",
-                    next_char, ftell(input_file) );
-            move_fastq_fp_to_next_read( input_file );
+        rv = safe_get_next_line(
+            input_file, readname, READ_BUFFER_SIZE, '@', false);
+        if( 1 == rv )
             continue;
-        }
-        /* get the rest of the line */
-        return_code = fscanf( input_file, "%s\n", readname );
-        
-        if( return_code == EOF )
-        {
-            assert( feof( input_file ) );
-            continue;
-        }
         
         /* If the read end is known, eliminate the slash */
         if( end == FIRST || end == SECOND )
@@ -206,26 +261,24 @@ populate_read_from_fastq_file(
         }
             
         /*** get the actual read */
-        return_code = fscanf( input_file, "%s\n", read );
-
-        /*** get the next read name - we discard this */
-        /* 
-           get the next character. We're expecting a plus. If it's not, 
-           then move the filepointer to the next '@', and return error. 
-        */
-        char plus_char = getc( input_file );
-        if( plus_char != '+' )
-        {
-            fprintf(stderr, "ERROR:    Expected '+' and get '%c' for readname '%s'. Skipping read.\n",
-                    plus_char, readname);
-            move_fastq_fp_to_next_read( input_file );
+        rv = safe_get_next_line(input_file, read, READ_BUFFER_SIZE, '\0', false);
+        if( 1 == rv )
             continue;
-        }
-        while( '\n' != getc( input_file  ) );
+        
+        /*** get the next read name - we discard this */
+        rv = safe_get_next_line(
+            input_file, readname2, READ_BUFFER_SIZE, '+', true);
+        if( 1 == rv )
+            continue;
         
         /*** get the quality score */
-        return_code = fscanf( input_file, "%s\n", quality );
+        rv = safe_get_next_line(
+            input_file, quality, READ_BUFFER_SIZE, '\0', false);
+        if( 1 == rv )
+            continue;
         
+        /* if everything has been loaded correctly, then break out 
+           of the while loop, and store the info in the structure */
         break;
     }
 
@@ -246,7 +299,7 @@ populate_read_from_fastq_file(
     memcpy( (*r)->char_seq, read, sizeof(char)*(read_len) );
     
     /* Copy the error string */
-    memcpy( (*r)->error_str, quality, sizeof(char)*(read_len) );        
+    memcpy( (*r)->error_str, quality, sizeof(char)*(read_len) );    
 
     /* Set the read end */
     (*r)->end = end;
@@ -261,7 +314,8 @@ enum bool
 filter_rawread( struct rawread* r,
                 struct error_model_t* error_model )
 {
-    /* Might pass a NULL read (r2 in the single read case) from find_candidate_mappings */
+    /* Might pass a NULL read (r2 in the single read case) 
+       from find_candidate_mappings */
     if( r == NULL )
         return false; // Do not filter nonexistent read
 
@@ -531,8 +585,11 @@ get_next_read_from_rawread_db(
         if ( rv == EOF )
         {
             /* Make sure the mate is empty as well */
-            /* This happends inside the function */
+            rv = populate_read_from_fastq_file( 
+                rdb->paired_end_2_reads, r2, SECOND );
+            assert( EOF == rv );
             assert( rawread_db_is_empty( rdb ) );
+            
             *r1 = NULL;
             *r2 = NULL;
             pthread_spin_unlock( rdb->lock );
