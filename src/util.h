@@ -10,4 +10,7 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
 void
 safe_link_into_output_directory( char* fname, char* output_dir, char* output_fname );
 
+FILE* 
+open_check_error( char* fname, char* file_mode );
+
 #endif /* UTIL_H */

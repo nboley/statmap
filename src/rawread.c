@@ -14,19 +14,7 @@
 #include "rawread.h"
 #include "quality.h"
 #include "dna_sequence.h"
-
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        exit( -1 );
-    }
-    return tmp;
-}
+#include "util.h"
 
 inline void 
 init_rawread( struct rawread** r,

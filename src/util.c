@@ -86,3 +86,16 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
     return;
 }
 
+FILE* 
+open_check_error( char* fname, char* file_mode )
+{
+    FILE* tmp;
+    tmp = fopen( fname, file_mode );
+    if( tmp == NULL )
+    {
+        fprintf( stderr, "Error opening '%s\n'", fname );
+        exit( -1 );
+    }
+    return tmp;
+}
+

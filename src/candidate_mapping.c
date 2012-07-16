@@ -15,6 +15,7 @@
 #include "rawread.h"
 #include "genome.h"
 #include "diploid_map_data.h"
+#include "util.h"
 
 struct mapped_read_t;
 
@@ -391,20 +392,6 @@ int sort_candidate_mappings( candidate_mappings* mappings )
 
 
 /*** Generic Candidate Mappings DB Code *********************************************/
-
-static  
-FILE* open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s'", fname );
-        exit( -1 );
-    }
-    return tmp;
-}
-
 
 int
 cmp_joining_queue_datum( const void* a, const void* b )
