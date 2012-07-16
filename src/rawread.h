@@ -8,6 +8,8 @@
 
 #include "config.h"
 
+#define READ_BUFFER_SIZE 65536
+
 typedef unsigned int readkey_t;
 /* 
  * Define a struct to hold read data. 

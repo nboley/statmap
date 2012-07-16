@@ -66,6 +66,11 @@
 #define GENOME_INDEX_PSLOCS_FNAME "genome.bin.index.pslocs"
 #define GENOME_INDEX_DIPLOID_MAP_FNAME "genome.bin.index.dmap"
 
+/**** set global constantsa for maximum read length, etc.       ****/
+
+#define MAX_READ_LEN 255
+#define MAX_READNAME_LEN 255
+
 /**** determine how the letters are packed       ****/
 
 #define PSEUDO_LOC_MIN_SIZE 50
