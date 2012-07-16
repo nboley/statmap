@@ -203,7 +203,7 @@ int safe_get_next_line( FILE* input_file,
         return 1;        
     }
     
-    while( buffer_len > 1 && !isgraph( buffer[buffer_len-1] ) )
+    while( buffer_len > 0 && !isgraph( buffer[buffer_len-1] ) )
     {
         buffer[buffer_len-1] = '\0';
         buffer_len -= 1;
