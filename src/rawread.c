@@ -168,10 +168,13 @@ int safe_get_next_line( FILE* input_file,
     char* return_code;
     
     /* get the parsed name string */
-    if( '' != expected_first_char ) {
+    if( '\0' != expected_first_char ) {
         char next_char = fgetc( input_file );
         if( next_char != expected_first_char )
         {
+            if( feof( input_file ) )
+                return 1;
+            
             fprintf(stderr, "ERROR:    Expected '%c' and get '%c' at position '%li'. Skipping read.\n",
                     expected_first_char, next_char, ftell(input_file) );
             move_fastq_fp_to_next_read( input_file );
@@ -180,10 +183,10 @@ int safe_get_next_line( FILE* input_file,
     }
 
     /* get the rest of the line */
-    return_code = fgets( buffer, READ_BUFFER_SIZE, input_file );
+    return_code = fgets( buffer, buffer_size, input_file );
     if( NULL == return_code )
     {
-        if( feof ) {
+        if( feof(input_file) ) {
             return 1;
         } else {
             perror( "FATAL:    Error reading from rawread file." );
@@ -258,7 +261,7 @@ populate_read_from_fastq_file(
         }
             
         /*** get the actual read */
-        rv = safe_get_next_line(input_file, read, READ_BUFFER_SIZE, '', false);
+        rv = safe_get_next_line(input_file, read, READ_BUFFER_SIZE, '\0', false);
         if( 1 == rv )
             continue;
         
@@ -270,14 +273,10 @@ populate_read_from_fastq_file(
         
         /*** get the quality score */
         rv = safe_get_next_line(
-            input_file, quality, READ_BUFFER_SIZE, '', false);
+            input_file, quality, READ_BUFFER_SIZE, '\0', false);
         if( 1 == rv )
             continue;
-
-        return_code = fscanf( input_file, "%s\n", quality );
-        if( 1 == return_code )
-            continue;
-
+        
         /* if everything has been loaded correctly, then break out 
            of the while loop, and store the info in the structure */
         break;
@@ -586,8 +585,11 @@ get_next_read_from_rawread_db(
         if ( rv == EOF )
         {
             /* Make sure the mate is empty as well */
-            /* This happends inside the function */
+            rv = populate_read_from_fastq_file( 
+                rdb->paired_end_2_reads, r2, SECOND );
+            assert( EOF == rv );
             assert( rawread_db_is_empty( rdb ) );
+            
             *r1 = NULL;
             *r2 = NULL;
             pthread_spin_unlock( rdb->lock );
