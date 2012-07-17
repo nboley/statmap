@@ -15,63 +15,36 @@
 #include "quality.h"
 #include "dna_sequence.h"
 #include "util.h"
+#include "read.h"
 
-inline void 
+/***** Rawread initialization and utility functions *****/
+
+void 
 init_rawread( struct rawread** r,
-              int seq_len,
-              size_t readname_len  )
+              size_t read_len,
+              size_t readname_len )
 {
     *r = malloc( sizeof( struct rawread ) );
 
-    /* BUG TODO check for nulls */
-    (*r)->length = seq_len;
-    (*r)->name = malloc( sizeof(char)*(readname_len+1) );
-    (*r)->char_seq = malloc( sizeof(char)*seq_len );
-    (*r)->error_str = malloc( sizeof(char)*seq_len );
-
-    (*r)->subtemplates = NULL;
-    (*r)->num_subtemplates = 0;
+    (*r)->name = calloc( readname_len+1, sizeof(char) );
+    (*r)->length = read_len;
+    (*r)->seq = malloc( read_len, sizeof(char) );
+    (*r)->error_str = malloc( read_len, sizeof(char) );
 }
 
 inline void 
 free_rawread( struct rawread* r )
 {
-    if( r->name != NULL )
-        free( r->name );
+    /* free dynamically allocated strings */
+    free( r->name );
+    free( r->seq );
+    free( r->error_str );
 
-    if( r->char_seq != NULL )    
-        free( r->char_seq );
-
-    if( r->error_str != NULL )
-        free( r->error_str );
-
-    if( r->subtemplates != NULL )
-        free( r->subtemplates );
-    
     free( r );
 }
 
-void
-fprintf_rawread( FILE* fp, struct rawread* r )
-{
-    fprintf(fp, "%u\n", r->length);
-    fprintf(fp, "%s\n", r->name);
-    fprintf(fp, "%.*s\n", r->length, r->char_seq);
-    fprintf(fp, "%.*s\n", r->length, r->error_str);
-    fprintf(fp, "%u\n", r->end);
-    fprintf(fp, "%u\n", r->strand);
-    fprintf(fp, "\n\n");
-}
+/***** FASTQ file parsing *****/
 
-void
-fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
-{
-    
-    fprintf(fastq_fp, "@%s\n", r->name);
-    fprintf(fastq_fp, "%.*s\n", r->length, r->char_seq);    
-    fprintf(fastq_fp, "+%s\n", r->name);
-    fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
-}
 /*
  *   Move the filepointer until we see a @, indicating the start of the next 
  *   read.
@@ -97,17 +70,6 @@ move_fastq_fp_to_next_read( FILE* fp )
     
     return;
 }
-
-/*
- * Populate a rawread object from a file pointer. 
- *
- * Given a file pointer that is positioned at the begining of a read
- * this initializes and populates a read.
- *
- * Returns 0 on success, negative values on failure. The value depends
- * upon the failure mode, read below for more info.
- *
- */
 
 /* 
    Reads the next line from fp, and strips trailing whitespace. 
@@ -176,8 +138,18 @@ int safe_get_next_line( FILE* input_file,
     return 0;
 }
 
+/*
+ * Populate a rawread object from a file pointer. 
+ *
+ * Given a file pointer (or pointers) that is (are) positioned at the begining
+ * of a read, this initializes and populates the read.
+ *
+ * Returns 0 on success, negative values on failure. The value depends
+ * upon the failure mode, read below for more info.
+ *
+ */
 int
-populate_read_from_fastq_file( 
+populate_rawread_from_fastq_file(
     FILE* input_file, struct rawread** r, enum READ_END end )
 {
     /* Store the return of the scanf's */
@@ -260,7 +232,7 @@ populate_read_from_fastq_file(
     memcpy( (*r)->name, readname, sizeof(char)*(readname_len + 1) );
     
     /* Copy the read */
-    memcpy( (*r)->char_seq, read, sizeof(char)*(read_len) );
+    memcpy( (*r)->seq, read, sizeof(char)*(read_len) );
     
     /* Copy the error string */
     memcpy( (*r)->error_str, quality, sizeof(char)*(read_len) );    
@@ -268,54 +240,7 @@ populate_read_from_fastq_file(
     /* Set the read end */
     (*r)->end = end;
     
-    /* Set the strand ( FIXME ) when this is known */
-    (*r)->strand = UNKNOWN;
-
     return 0;
-}
-
-enum bool
-filter_rawread( struct rawread* r,
-                struct error_model_t* error_model )
-{
-    /* Might pass a NULL read (r2 in the single read case) 
-       from find_candidate_mappings */
-    if( r == NULL )
-        return false; // Do not filter nonexistent read
-
-    /***************************************************************
-     * check to make sure this read is mappable
-     * we consider a read 'mappable' if:
-     * 1) There are enough hq bps
-     *
-     */
-
-    /* Make sure the global option has been set 
-       ( it's initialized to -1 ); */
-    assert( min_num_hq_bps >= 0 );
-
-    int num_hq_bps = 0;
-    int i;
-    for( i = 0; i < r->length; i++ )
-    {
-        /*
-           compute the inverse probability of error (quality)
-           NOTE when error_prb receieves identical bp's, it returns the
-           inverse automatically
-         */
-        double error = error_prb( r->char_seq[i], r->char_seq[i], 
-                                  r->error_str[i], i, error_model );
-        double qual = pow(10, error );
-        
-        /* count the number of hq basepairs */
-        if( qual > 0.999 )
-            num_hq_bps += 1;
-    }
-
-    if ( num_hq_bps < min_num_hq_bps )
-        return true;
-        
-    return false;
 }
 
 /******* BEGIN raw read DB code ********************************************/
@@ -502,7 +427,7 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
 int
 get_next_read_from_rawread_db( 
     struct rawread_db_t* rdb, readkey_t* readkey, 
-    struct rawread** r1, struct rawread** r2,
+    struct rawread** r,
     long max_readkey )
 {
     pthread_spin_lock( rdb->lock );
@@ -511,8 +436,7 @@ get_next_read_from_rawread_db(
         && rdb->readkey >= (readkey_t) max_readkey )
     {
         pthread_spin_unlock( rdb->lock );
-        *r1 = NULL;
-        *r2 = NULL;
+        *r = NULL;
         return EOF;
     }
 
@@ -525,19 +449,16 @@ get_next_read_from_rawread_db(
     /* If the reads are single ended */
     if( rdb->single_end_reads != NULL )
     {
-        /* indicate that the reads are single ended */
-        *r2 = NULL;
-        
         rv = populate_read_from_fastq_file( 
-            rdb->single_end_reads, r1, NORMAL );
+            rdb->single_end_reads, r, NORMAL );
         if( rv == EOF )
         {
-            *r1 = NULL;
+            *r = NULL;
             pthread_spin_unlock( rdb->lock );
             return EOF;
         }        
 
-        (*r1)->assay = rdb->assay;
+        (*r)->assay = rdb->assay;
     } 
     /* If the reads are paired */
     else {
@@ -545,7 +466,7 @@ get_next_read_from_rawread_db(
         assert( rdb->paired_end_2_reads != NULL );
         
         rv = populate_read_from_fastq_file( 
-            rdb->paired_end_1_reads, r1, FIRST );
+            rdb->paired_end_1_reads, rdb->paired_end_2_reads r);
         if ( rv == EOF )
         {
             /* Make sure the mate is empty as well */
