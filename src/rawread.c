@@ -306,7 +306,8 @@ populate_read_from_fastq_file(
     
     /* Set the strand ( FIXME ) when this is known */
     (*r)->strand = UNKNOWN;
-
+    
+    assert( EOF != 0 );
     return 0;
 }
 
@@ -318,7 +319,11 @@ filter_rawread( struct rawread* r,
        from find_candidate_mappings */
     if( r == NULL )
         return false; // Do not filter nonexistent read
-
+    
+    /* never filter mismatches */
+    if( MISMATCH == error_model->error_model_type )
+        return false;
+    
     /***************************************************************
      * check to make sure this read is mappable
      * we consider a read 'mappable' if:

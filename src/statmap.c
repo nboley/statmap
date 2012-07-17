@@ -139,6 +139,7 @@ map_marginal( struct args_t* args,
     struct error_model_t* error_model = NULL;
     if( args->search_type == ESTIMATE_ERROR_MODEL )
     {
+        fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
         init_error_model( &error_model, ESTIMATED );
         bootstrap_estimated_error_model( 
             genome,
@@ -159,7 +160,8 @@ map_marginal( struct args_t* args,
             args->search_type);
         exit( 1 );
     }
-    
+
+    fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
     find_all_candidate_mappings( 
         genome,
         rdb,

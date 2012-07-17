@@ -93,9 +93,17 @@ error_prb_for_estimated_model(
         char obs,
         char error_score,
         int pos,
-        struct error_data_t* error_data
+        struct error_model_t* error_model
     )
 {
+    return 3*error_prb_for_mismatch( ref, obs );
+    
+    #if 0
+    struct error_data_record_t* error_data_record 
+        = error_data->records[ error_data->num_records-1 ]
+    
+   
+     
     /*
        compute error score from observed error data
      */
@@ -131,6 +139,9 @@ error_prb_for_estimated_model(
         log_prb = log10(prb);
 
     return log_prb;
+    
+    #endif
+
 }
 
 float
@@ -151,7 +162,7 @@ error_prb(
         return 0;
     case ESTIMATED:
         return error_prb_for_estimated_model( 
-            ref, obs, error_score, pos, error_model->data );
+            ref, obs, error_score, pos, error_model );
     default:
         assert( false );
     }

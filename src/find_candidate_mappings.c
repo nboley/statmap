@@ -614,11 +614,11 @@ can_be_used_to_update_error_data(
 }
 
 static inline void
-update_error_data_from_candidate_mappings(
+update_error_data_record_from_candidate_mappings(
     struct genome_data* genome,
     candidate_mappings* mappings,
     struct rawread* r,
-    struct error_data_t* error_data
+    struct error_data_record_t* error_data_record
 )
 {
     if( !can_be_used_to_update_error_data( genome, mappings, r ) )
@@ -653,9 +653,9 @@ update_error_data_from_candidate_mappings(
     } else {
         read_seq = r->char_seq + loc->trimmed_len;
     }
-
-    update_error_data( 
-        error_data, genome_seq, read_seq, error_str, mapped_length );
+    
+    update_error_data_record( 
+        error_data_record, genome_seq, read_seq, error_str, mapped_length );
 
     /* free memory if we allocated it */
     if( loc->rd_strnd == BKWD )
@@ -735,8 +735,6 @@ find_candidate_mappings( void* params )
     readkey_t readkeys[2*READS_STAT_UPDATE_STEP_SIZE];
     memset( readkeys, 0,
             sizeof( readkey_t )*2*READS_STAT_UPDATE_STEP_SIZE );
-
-    int max_read_length = 0;
     
     /* The current read of interest */
     readkey_t readkey;
@@ -763,7 +761,7 @@ find_candidate_mappings( void* params )
         {
             /* skip the unmappable read */
             continue;
-        }
+        }        
         
         /* consider both read pairs */
         int j = 0;
@@ -806,12 +804,6 @@ find_candidate_mappings( void* params )
             readkeys[2*curr_read_index + j] = readkey;
             rawreads_cache[ 2*curr_read_index + j ] = r;
             
-            /* if bootstrapping, we only want to work with unique mappers.
-             * find_matches would have terminated early for this read */
-            if( results->skip )
-                /* bootstrap mode terminated early - cleanup and continue */
-                goto cleanup_penalty_arrays;
-
             /* make an assay specific changes to the results. For instance, in CAGE,
                we need to add extra reads for the untemplated g's */
             //make_assay_specific_corrections( r, results );
@@ -844,11 +836,7 @@ find_candidate_mappings( void* params )
             /* cache candidate mappings */
             assert( 2*curr_read_index + j < 2*READS_STAT_UPDATE_STEP_SIZE );
             candidate_mappings_cache[ 2*curr_read_index + j ] = mappings;
-
-            /* update the maximum read length */
-            max_read_length = MAX( max_read_length, r->length );
-
-cleanup_penalty_arrays:
+            
             /* free the penalty arrays */
             free_penalty_array( &fwd_pa );
             free_penalty_array( &rev_pa );
@@ -860,39 +848,30 @@ cleanup_penalty_arrays:
         curr_read_index += 1;
     }
 
+    int i;
+
     /******* update the error estimates *******/
     /* create a thread local copy of the error data to avoid excess locking */
-    struct error_data_t* scratch_error_data;
-    init_error_data( &scratch_error_data );
+    
+    struct error_data_record_t* scratch_error_data_record;
+    init_error_data_record( &scratch_error_data_record, 
+                            error_data->max_read_length, 
+                            error_data->max_num_qual_scores );
 
-    int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
-        update_error_data_from_candidate_mappings(
-            genome,
-            candidate_mappings_cache[ i ],
-            rawreads_cache[ i ],
-            scratch_error_data
-            );
-    }
-    // add error_data to scratch_error_data
-    pthread_mutex_lock( error_data->mutex );
-    add_error_data( error_data, scratch_error_data );
-    pthread_mutex_unlock( error_data->mutex );
-    
-    // free local copy of error data
-    free_error_data( scratch_error_data );
-    
-    if( td->only_collect_error_data )
-        goto cleanup;
-    
-    /******* add the results to the database *******/
-    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
-    {
-        /* skip empty mapping lists */
-        if( NULL == candidate_mappings_cache[i] )
-            continue;
-
         candidate_mappings* mappings = candidate_mappings_cache[i];
+
+        if( NULL == rawreads_cache[i] )
+            continue;
+        if( NULL == mappings )
+            continue;
+        
+        update_error_data_record_from_candidate_mappings(
+            genome,
+            mappings,
+            rawreads_cache[ i ],
+            scratch_error_data_record
+        );
 
         /* increment the number of reads that mapped, if 
            any pass the rechecks */
@@ -907,6 +886,26 @@ cleanup_penalty_arrays:
             }
         }
 
+    }
+    
+    // add error_data to scratch_error_data
+    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
+    
+    // free local copy of error data
+    free_error_data_record( scratch_error_data_record );
+    
+    if( td->only_collect_error_data )
+        goto cleanup;
+    
+    /******* add the results to the database *******/
+    for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        /* skip empty mapping lists */
+        if( NULL == candidate_mappings_cache[i] )
+            continue;
+
+        candidate_mappings* mappings = candidate_mappings_cache[i];
+        
         /* add cms to the db */
         pthread_mutex_lock( mappings_db_mutex );
         assert( thread_id < num_threads );
@@ -928,7 +927,7 @@ cleanup:
         free_rawread( rawreads_cache[i] );
         free_candidate_mappings( candidate_mappings_cache[i] );
     }
-    
+        
     return NULL;
 }
 
@@ -1000,7 +999,10 @@ void init_td_template( struct single_map_thread_data* td_template,
                        struct genome_data* genome, 
                        struct rawread_db_t* rdb,
                        candidate_mappings_db* mappings_db,
+
                        struct error_model_t* error_model,
+                       struct error_data_t* error_data,
+                       
                        float min_match_penalty, float max_penalty_spread )
 {
     /* initialize the necessary mutex's */
@@ -1035,12 +1037,10 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->min_match_penalty = min_match_penalty;
     td_template->max_penalty_spread = max_penalty_spread;
 
-    init_error_data( &(td_template->error_data) );
-
+    td_template->error_data = error_data;
+    
     td_template->error_model = error_model;
 
-    td_template->max_readkey = READS_STAT_UPDATE_STEP_SIZE;
-    
     td_template->thread_id = 0;
     
     /* Make sure we are finding all mappers for a normal index search */
@@ -1070,18 +1070,31 @@ bootstrap_estimated_error_model(
 ) 
 {
     assert( error_model != NULL );
+
+    clock_t start = clock();
     
     struct error_model_t* bootstrap_error_model;
     init_error_model( &bootstrap_error_model, MISMATCH );
+
+    struct error_data_t* error_data;
+    init_error_data( &error_data );
     
     /* put the search arguments into a structure */
-    #define MAX_NUM_MM 5
-    #define MAX_MM_SPREAD 3
+    /* This is the fraction of bases that can have a mismatch */
+    #define MAX_NUM_MM_RATE 0.20
+    #define MAX_MM_SPREAD_RATE 0.10
+    
+    int max_num_mm = -(int)(MAX_NUM_MM_RATE*genome->index->seq_length) - 1;
+    int max_mm_spread = (int)(MAX_MM_SPREAD_RATE*genome->index->seq_length) + 1;
+    
+    printf( "NOTICE      :  Setting bootstrap mismatch rates to %i and %i\n",
+            max_num_mm, max_mm_spread );
     
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mappings_db, 
-                      bootstrap_error_model, MAX_NUM_MM, MAX_MM_SPREAD );
+                      bootstrap_error_model, error_data, 
+                      max_num_mm, max_mm_spread );
     
     /* 
        only use unique mappers for the initial bootstrap. This is just a small
@@ -1089,13 +1102,35 @@ bootstrap_estimated_error_model(
        index as soon as we know that a mapping isn't unique.
     */
     td_template.only_collect_error_data = true;
+
+    // Detyermine how many reads we should look through for the bootstrap
+    #define NUM_READS_TO_BOOTSTRAP READS_STAT_UPDATE_STEP_SIZE
+    td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
+
+    // Add a new row to store error data in
+    add_new_error_data_record( error_data, 0, td_template.max_readkey );
+
     spawn_threads( &td_template );
     
     update_error_model_from_error_data( error_model, td_template.error_data );
     
+    FILE* error_data_ofp = fopen( BOOTSTRAP_ERROR_STATS_LOG, "w" );
+    log_error_data( error_data_ofp, error_data );
+    fclose( error_data_ofp );
+    free_error_data( error_data );
+    
     free_error_model( bootstrap_error_model );
     
+    clock_t stop = clock();
+    fprintf(stderr, "PERFORMANCE :  Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )\n",
+            *(td_template.mapped_cnt), rdb->readkey, 
+            ((float)(stop-start))/CLOCKS_PER_SEC,
+            (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
+        );
+
     free_td_template( &td_template );
+    
+    rewind_rawread_db( rdb );
     
     return;
 }
@@ -1114,24 +1149,30 @@ find_all_candidate_mappings( struct genome_data* genome,
 {
     clock_t start = clock();
 
+    struct error_data_t* error_data;
+    init_error_data( &error_data );
+    
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mappings_db, error_model,
-                      min_match_penalty, max_penalty_spread );
+                      error_data, min_match_penalty, max_penalty_spread );
     
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        spawn_threads( &td_template );
+        // Add a new row to store error data in
+        add_new_error_data_record( 
+            td_template.error_data, 
+            td_template.max_readkey, 
+            td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
 
         // update the maximum allowable readkey
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
-
-        /* log the error data we're using for this round of mapping */
-        log_error_data( td_template.error_data );
-
+        
+        spawn_threads( &td_template );
+        
         /* update the error model from the new error data */
-        update_error_model_from_error_data( error_model, td_template.error_data );
+        update_error_model_from_error_data(error_model, td_template.error_data);
     }
     
     /* Print out performance information */
@@ -1142,6 +1183,11 @@ find_all_candidate_mappings( struct genome_data* genome,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
 
+    FILE* error_data_ofp = fopen( ERROR_STATS_LOG, "w" );
+    log_error_data( error_data_ofp, error_data );
+    fclose( error_data_ofp );
+    free_error_data( error_data );
+    
     free_td_template( &td_template );
 
     return;

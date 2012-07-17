@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -Wunreachable-code -Wunused
+CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -Wunreachable-code -Wunused
 objects := $(patsubst %.c,%.o,$(wildcard *.c))
 
 # Debugging

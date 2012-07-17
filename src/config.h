@@ -53,6 +53,13 @@
 #define JOINED_CALLED_PEAKS_FNAME "./called_peaks/peaks.wig"
 #define CALLED_PEAK_REGIONS_FNAME "./called_peaks/peaks.bed"
 
+/*******************************************************************************
+ *
+ * default filenames 
+ *
+ *
+ ***/
+
 #define MAPPED_READS_DB_FNAME "mapped_reads.db"
 #define MAPPED_NC_READS_DB_FNAME "mapped_NC_reads.db"
 
@@ -66,10 +73,15 @@
 #define GENOME_INDEX_PSLOCS_FNAME "genome.bin.index.pslocs"
 #define GENOME_INDEX_DIPLOID_MAP_FNAME "genome.bin.index.dmap"
 
+#define ERROR_STATS_LOG "error_stats.log"
+#define BOOTSTRAP_ERROR_STATS_LOG "bootstrap_error_stats.log"
+
+
 /**** set global constantsa for maximum read length, etc.       ****/
 
 #define MAX_READ_LEN 255
 #define MAX_READNAME_LEN 255
+#define MAX_QUAL_SCORE 255
 
 /**** determine how the letters are packed       ****/
 

@@ -1263,7 +1263,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                result - if so, set results to NULL and stop searching */
             // XXX - check correctness. Poor search branches? Recheck?
             if( results->length > 1 ) {
-                results->skip = true;
                 break;
             }
         }
@@ -1540,8 +1539,6 @@ free_ondisk_index( struct index_t* index ) {
     
     if( NULL != index->ps_locs ) {
         free_pseudo_locations( index->ps_locs );
-        //free( index->ps_locs->locs );
-        //free( index->ps_locs );
     }
 
     // DEBUG - wtf
@@ -1549,7 +1546,9 @@ free_ondisk_index( struct index_t* index ) {
     if( NULL != index->diploid_maps )
         free_diploid_maps_t( index->diploid_maps );
         */
-
+    
+    free( index );
+    
     return;
 }
 
