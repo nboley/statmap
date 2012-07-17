@@ -80,7 +80,7 @@ fprintf_nonpaired_mapped_read_as_sam(
     fprintf( sam_fp, "%uM\t", rd_len );
 
     /* print the mate information - empty since this is not paired */
-    fprintf( sam_fp, "0\t0\t*\t" );
+    fprintf( sam_fp, "*\t0\t0\t" );
 
     /* print the actual sequence */
     /* HACK - add the trim offset to the seq char* to return the correct read
@@ -107,8 +107,8 @@ fprintf_nonpaired_mapped_read_as_sam(
             given that it came from somewhere on the genome
     */
     fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN(254, (-10*log10(1-seq_error))));
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
+    fprintf( sam_fp, "XQ:f:%f\t", seq_error);
+    fprintf( sam_fp, "XP:f:%f\n", cond_prob);
 
     return;
 }
@@ -243,8 +243,8 @@ fprintf_paired_mapped_read_as_sam(
     */
     fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
              MIN( 254, (-10*log10(1-seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
+    fprintf( sam_fp, "XQ:f:%f\t", seq_error);
+    fprintf( sam_fp, "XP:f:%f\n", cond_prob);
    
     /*************************************************************/
     /*************************************************************/
@@ -343,8 +343,8 @@ fprintf_paired_mapped_read_as_sam(
     */
     fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
              MIN( 254, (-10*log10(seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
+    fprintf( sam_fp, "XQ:f:%f\t", seq_error);
+    fprintf( sam_fp, "XP:f:%f\n", cond_prob);
 
     return;
 }
