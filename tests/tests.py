@@ -21,6 +21,7 @@ import StringIO
 import tempfile
 
 import numpy
+import pysam
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../bin/mapped_reads_into_sam'
@@ -1398,6 +1399,93 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
+def sam_lines_match( line1, line2 ):
+    """
+    Compare two lines from a Statmap SAM file, controlling for case and
+    numeric representation
+    """
+    for i, (f1, f2) in enumerate(
+            izip( re.split( '\s', line1.strip() ),
+                  re.split( '\s', line2.strip() ) )):
+        # compare specific fields
+        if i == 9: # SEQ field
+            # control for case
+            if f1.upper() != f2.upper():
+                return False
+        elif i == 12 or i == 13: # XP or XQ fields
+            # control for numeric representation
+            if float(f1.split(':')[-1]) != float(f2.split(':')[-1]):
+                return False
+        else:
+            if f1 != f2:
+                return False
+
+    return True
+
+def test_sam_output():
+    output_directory = "smo_test_sam_output"
+
+    n_reads=1000
+    rl=20
+
+    genome = build_random_genome( [1000, 1000], ["1", "2"] )
+
+    fragments = sample_uniformily_from_genome( genome, nsamples=n_reads, frag_len=rl )
+    reads = build_reads_from_fragments( 
+        genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
+
+    ###### Write out the test files, and run statmap ################################
+
+    # write genome
+    genome_of = open("tmp.genome.fa", "w")
+    write_genome_to_fasta( genome, genome_of, 1 )
+    genome_of.close()
+    
+    # build and write the reads
+    reads_of = open("tmp.fastq", "w")
+    build_single_end_fastq_from_seqs( reads, reads_of )
+    reads_of.close()
+
+    read_fnames = ( "tmp.fastq", )
+    map_with_statmap( read_fnames, output_directory,
+            indexed_seq_len=rl )
+
+    # Load the SAM file with pysam
+    sam_fname = "./%s/mapped_reads.sam" % output_directory
+    sam_copy_fname = sam_fname + ".copy"
+    try:
+        samfile = pysam.Samfile( sam_fname, "r" )
+        samcopy = pysam.Samfile( sam_copy_fname, "wh", template=samfile )
+
+        # copy reads from samfile into samcopy
+        for read in samfile.fetch():
+            samcopy.write(read)
+
+        samfile.close()
+        samcopy.close()
+    except Exception, e:
+        print e
+        print "FAIL: Error parsing Statmap output SAM file with pysam"
+        sys.exit(1)
+
+    # compare the sam files
+    sam = open( sam_fname )
+    sam_copy = open( sam_copy_fname )
+
+    for i, (l1, l2) in enumerate( izip( sam, sam_copy ) ):
+        if not sam_lines_match( l1, l2 ):
+            print "FAIL: Statmap output SAM file and pysam parsed copy do not match"
+            print "Line %i in %s: %s" % (i, sam_fname, l1)
+            sys.exit(1)
+
+    sam.close()
+    sam_copy.close()
+
+    ###### Cleanup the created files ###############################################
+    if CLEANUP:
+        os.remove("./tmp.genome.fa")
+        os.remove("./tmp.fastq")
+        shutil.rmtree(output_directory)
 
 if False:
     num_repeats = 1
@@ -1434,6 +1522,8 @@ if __name__ == '__main__':
     test_paired_end_sequence_finding( )
     print "Starting test_repeat_sequence_finding()"
     test_repeat_sequence_finding()
+    print "Starting test_sam_output()"
+    test_sam_output()
     print "Starting test_mutated_read_finding()"
     test_mutated_read_finding()
     print "Starting test_multithreaded_mapping()"
