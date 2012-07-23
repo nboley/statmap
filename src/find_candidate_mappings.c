@@ -122,7 +122,7 @@ search_index( struct index_t* index,
     /** Deal with the read on the fwd strand */
     /* Store the translated sequences here */
     LETTER_TYPE *fwd_seq;
-    fwd_seq = translate_seq( sub_read, subseq_length, &fwd_seq );
+    fwd_seq = translate_seq( sub_read, subseq_length );
     /* If we couldnt translate it */
     if( fwd_seq == NULL )
     {
@@ -135,7 +135,7 @@ search_index( struct index_t* index,
     LETTER_TYPE *bkwd_seq;
     char* tmp_read = calloc(subseq_length + 1, sizeof(char));
     rev_complement_read( sub_read, tmp_read, subseq_length );
-    bkwd_seq = translate_seq( tmp_read, subseq_length, &bkwd_seq );
+    bkwd_seq = translate_seq( tmp_read, subseq_length );
     // BUG why did I have this here?
     //replace_ns_inplace( tmp_read, st->length );
     assert( bkwd_seq != NULL );

@@ -48,7 +48,7 @@ print_packed_sequence( LETTER_TYPE* seq, int );
 
 /* This allocates memory for the new sequence */
 inline LETTER_TYPE* 
-translate_seq(char*, int num_letters, LETTER_TYPE** );
+translate_seq(char* seq, int seq_len);
 
 inline int 
 cmp_letters( LETTER_TYPE, LETTER_TYPE );

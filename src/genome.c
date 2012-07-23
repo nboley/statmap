@@ -613,13 +613,6 @@ add_chrs_from_fasta_file(
 }
 
 /*
- * Forward declaration for translate_sequence. I wanted to avoid including
- * DNA sequence.h for this single declaration 
- */
-LETTER_TYPE* 
-translate_seq(char*, int num_letters, LETTER_TYPE** );
-
-/*
  * Iterate through each indexable sequence in the given chromosome
  * between bp's start and stop, adding it to the index.
  */
@@ -644,7 +637,7 @@ index_contig(
 
         /* Add the normal sequence */
         LETTER_TYPE *translation;
-        translate_seq( genome->chrs[loc.chr] + bp_index, seq_len, &translation );
+        translation = translate_seq(genome->chrs[loc.chr] + bp_index, seq_len);
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
