@@ -29,6 +29,22 @@ fprintf_sam_headers_from_genome(
 }
 
 void
+fprintf_cigar_string(
+        FILE* sam_fp,
+        MRL_TRIM_TYPE trim_offset,
+        int rd_len
+    )
+{
+    /* if there is a trim offset, soft clip the initial trim_offset bases */
+    if( trim_offset > 0 )
+    {
+        fprintf( sam_fp, "%uS%uM\t", trim_offset, rd_len - trim_offset );
+    } else {
+        fprintf( sam_fp, "%uM\t", rd_len );
+    }
+}
+
+void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
     struct mapped_read_location* loc,
@@ -77,15 +93,14 @@ fprintf_nonpaired_mapped_read_as_sam(
              (unsigned int) MIN( 254, (-10*log10( 1 - cond_prob)) ) );
     
     /* print the cigar string ( we dont handle indels ) */
-    fprintf( sam_fp, "%uM\t", rd_len );
+    /* soft clip to account for assay specific corrections */
+    fprintf_cigar_string( sam_fp, loc->rd1_trim_offset, rd_len );
 
     /* print the mate information - empty since this is not paired */
     fprintf( sam_fp, "*\t0\t0\t" );
 
     /* print the actual sequence */
-    /* HACK - add the trim offset to the seq char* to return the correct read
-     * sequence, accounting for assay specific corrections */
-    fprintf( sam_fp, "%.*s\t", rd_len, seq + loc->rd1_trim_offset );
+    fprintf( sam_fp, "%.*s\t", rd_len, seq );
     
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", rd_len, phred_qualities );
@@ -192,7 +207,8 @@ fprintf_paired_mapped_read_as_sam(
              MIN( 254, (-10*log10(1 - cond_prob))) );
     
     /* print the cigar string ( we dont handle indels ) */
-    fprintf( sam_fp, "%uM\t", r1_len );
+    /* soft clip to account for assay specific corrections */
+    fprintf_cigar_string( sam_fp, loc->rd1_trim_offset, r1_len );
 
     /* print the mate reference name */
     fprintf( sam_fp, "%s\t", r2_key );
@@ -218,9 +234,7 @@ fprintf_paired_mapped_read_as_sam(
     fprintf( sam_fp, "%i\t", r2_start - r1_start - r1_len + r1_len + r2_len );
 
     /* print the actual sequence */
-    /* HACK - add the trim offset to the seq char* to return the correct read
-     * sequence, accounting for assay specific corrections */
-    fprintf( sam_fp, "%.*s\t", r1_len, r1_seq + loc->rd1_trim_offset );
+    fprintf( sam_fp, "%.*s\t", r1_len, r1_seq );
 
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", r1_len, r1_phred_qualities );
@@ -293,6 +307,9 @@ fprintf_paired_mapped_read_as_sam(
     
     /* print the cigar string ( we dont handle indels ) */
     fprintf( sam_fp, "%uM\t", r2_len );
+    /* print the cigar string ( we dont handle indels ) */
+    /* soft clip to account for assay specific corrections */
+    fprintf_cigar_string( sam_fp, loc->rd2_trim_offset, r2_len );
 
     /* print the mate reference name */
     fprintf( sam_fp, "%s\t", r1_key );
