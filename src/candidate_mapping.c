@@ -251,21 +251,7 @@ init_candidate_mapping_from_template( struct rawread* rp,
         break;
     }
     assert( cand_map.rd_type != UNKNOWN );
-
-    /* set which type of read this is */
-    switch( rp->strand )
-    {
-    case 0:
-        cand_map.rd_strnd = FWD;
-        break;
-    case 1:
-        cand_map.rd_strnd = BKWD;
-        break;
-    default:
-        fprintf(stderr, "FATAL - unrecognized read strand '%i'\n", rp->strand );
-        exit( -1 );
-    }
-
+    
     return cand_map;
 }
 
