@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <ctype.h>
 #include <pthread.h>
-#include <assert.h>
 
 #include "config.h"
 #include "statmap.h"
@@ -28,8 +27,8 @@ init_rawread( struct rawread** r,
 
     (*r)->name = calloc( readname_len+1, sizeof(char) );
     (*r)->length = read_len;
-    (*r)->seq = malloc( read_len, sizeof(char) );
-    (*r)->error_str = malloc( read_len, sizeof(char) );
+    (*r)->char_seq = malloc( read_len*sizeof(char) );
+    (*r)->error_str = malloc( read_len*sizeof(char) );
 }
 
 inline void 
@@ -37,7 +36,7 @@ free_rawread( struct rawread* r )
 {
     /* free dynamically allocated strings */
     free( r->name );
-    free( r->seq );
+    free( r->char_seq );
     free( r->error_str );
 
     free( r );
@@ -150,7 +149,10 @@ int safe_get_next_line( FILE* input_file,
  */
 int
 populate_rawread_from_fastq_file(
-    FILE* input_file, struct rawread** r, enum READ_END end )
+        FILE* input_file,
+        struct rawread** r,
+        enum READ_END end
+    )
 {
     /* Store the return of the scanf's */
     int rv;
@@ -232,7 +234,7 @@ populate_rawread_from_fastq_file(
     memcpy( (*r)->name, readname, sizeof(char)*(readname_len + 1) );
     
     /* Copy the read */
-    memcpy( (*r)->seq, read, sizeof(char)*(read_len) );
+    memcpy( (*r)->char_seq, read, sizeof(char)*(read_len) );
     
     /* Copy the error string */
     memcpy( (*r)->error_str, quality, sizeof(char)*(read_len) );    
@@ -423,81 +425,5 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     }        
     
 }
-
-int
-get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey, 
-    struct rawread** r,
-    long max_readkey )
-{
-    pthread_spin_lock( rdb->lock );
-    
-    if( max_readkey >= 0
-        && rdb->readkey >= (readkey_t) max_readkey )
-    {
-        pthread_spin_unlock( rdb->lock );
-        *r = NULL;
-        return EOF;
-    }
-
-    /* 
-     * Store the return value - 
-     * 0 indicates success, negative failure , EOF no more reads.
-     */
-    int rv = -10;
-
-    /* If the reads are single ended */
-    if( rdb->single_end_reads != NULL )
-    {
-        rv = populate_read_from_fastq_file( 
-            rdb->single_end_reads, r, NORMAL );
-        if( rv == EOF )
-        {
-            *r = NULL;
-            pthread_spin_unlock( rdb->lock );
-            return EOF;
-        }        
-
-        (*r)->assay = rdb->assay;
-    } 
-    /* If the reads are paired */
-    else {
-        assert( rdb->paired_end_1_reads != NULL );
-        assert( rdb->paired_end_2_reads != NULL );
-        
-        rv = populate_read_from_fastq_file( 
-            rdb->paired_end_1_reads, rdb->paired_end_2_reads r);
-        if ( rv == EOF )
-        {
-            /* Make sure the mate is empty as well */
-            rv = populate_read_from_fastq_file( 
-                rdb->paired_end_2_reads, r2, SECOND );
-            assert( EOF == rv );
-            assert( rawread_db_is_empty( rdb ) );
-            
-            *r1 = NULL;
-            *r2 = NULL;
-            pthread_spin_unlock( rdb->lock );
-            return EOF;
-        }
-        
-        rv = populate_read_from_fastq_file( 
-            rdb->paired_end_2_reads, r2, SECOND );
-        
-        /* if returned an EOF, then it should have been returned for r1 */
-        assert( rv == 0 );
-        
-        (*r1)->assay = rdb->assay;
-        (*r2)->assay = rdb->assay;
-    }
-
-    /* increment the read counter */
-    *readkey = rdb->readkey;
-    rdb->readkey += 1;
-
-    pthread_spin_unlock( rdb->lock );
-    return 0;
-}
-
 
 /******* END raw read DB code ********************************************/

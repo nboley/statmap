@@ -10,9 +10,9 @@
 #include <sys/stat.h>
 
 #include "statmap.h"
+#include "read.h"
 #include "candidate_mapping.h"
 #include "mapped_read.h"
-#include "rawread.h"
 #include "genome.h"
 #include "diploid_map_data.h"
 #include "util.h"
@@ -208,8 +208,10 @@ init_candidate_mappings( candidate_mappings** mappings )
 }
 
 candidate_mapping
-init_candidate_mapping_from_template( struct rawread* rp, 
-                                      float max_penalty_spread)
+init_candidate_mapping_from_template(
+        struct subtemplate* st,
+        float max_penalty_spread
+    )
 {
     /****** initialize the mapped_location info that we know  ******/
     /* copy the candidate map location template */
@@ -217,7 +219,7 @@ init_candidate_mapping_from_template( struct rawread* rp,
     memset( &cand_map, 0, sizeof(cand_map) );
 
     /* Set the read length */
-    cand_map.rd_len = rp->length;
+    cand_map.rd_len = st->length;
 
     /** Set the length of the subsequence. 
      * This is the length of the sequence that we go to the index for. If it
@@ -229,8 +231,6 @@ init_candidate_mapping_from_template( struct rawread* rp,
     cand_map.subseq_offset = rp->subseq_offset;
     */
 
-
-    
     /* if read length <= seq_length, then a recheck is unnecessary */
     if( max_penalty_spread > -0.1 ) {
         cand_map.recheck = RECHECK_PENALTY;
@@ -239,7 +239,7 @@ init_candidate_mapping_from_template( struct rawread* rp,
     }
     
     /* set which type of read this is */
-    switch( rp->end )
+    switch( st->end )
     {
     case 1:
         cand_map.rd_type = SINGLE_END;
@@ -251,21 +251,7 @@ init_candidate_mapping_from_template( struct rawread* rp,
         cand_map.rd_type = PAIRED_END_2;
         break;
     default:
-        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", rp->end );
-        exit( -1 );
-    }
-
-    /* set which type of read this is */
-    switch( rp->strand )
-    {
-    case 0:
-        cand_map.rd_strnd = FWD;
-        break;
-    case 1:
-        cand_map.rd_strnd = BKWD;
-        break;
-    default:
-        fprintf(stderr, "FATAL - unrecognized read strand '%i'\n", rp->strand );
+        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", st->end );
         exit( -1 );
     }
 

@@ -4,6 +4,7 @@
 #define CANDIDATE_MAPPING
 
 #include "config.h"
+#include "read.h"
 
 /* FWD declaration for rawread */
 // #include "rawread.h"
@@ -111,10 +112,10 @@ void
 init_candidate_mappings( candidate_mappings** mappings );
 
 candidate_mapping
-init_candidate_mapping_from_template( struct rawread* rp, 
-                                      // int subseq_offset,
-                                      // int indexed_seq_len, 
-                                      float max_penalty_spread );
+init_candidate_mapping_from_template(
+        struct subtemplate* st,
+        float max_penalty_spread
+    );
 
 /* add a copy of a candidate mapping */
 void

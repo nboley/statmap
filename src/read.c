@@ -1,8 +1,21 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+#include <ctype.h>
+#include <pthread.h>
+
+#include "config.h"
+#include "statmap.h"
+#include "rawread.h"
+#include "error_correction.h"
+#include "quality.h"
 #include "read.h"
 
 void
-init_read( struct read** r,
-           char* readname,
+init_read(
+        struct read** r,
+        char* readname
     )
 {
     *r = malloc( sizeof(struct read) );
@@ -11,66 +24,77 @@ init_read( struct read** r,
     (*r)->name = calloc( strlen(readname) + 1, sizeof(char) );
     memcpy( (*r)->name, readname, strlen(readname) );
 
-    (*r)->subtemplates = NULL;
-    (*r)->num_subtemplates = 0;
+    (*r)->r1 = NULL;
+    (*r)->r2 = NULL;
 }
 
 void
-free_read_subtemplate( struct read_subtemplate* rst )
+init_subtemplate(
+        struct subtemplate** st,
+        char* char_seq,
+        char* error_str,
+        int length,
+        int pos_in_template,
+        enum READ_END end
+    )
 {
-    /* free the char*'s */
-    free( rst->char_seq );
-    free( rst->error_seq );
+    *st = malloc( sizeof(struct subtemplate) );
 
-    /* don't free the read_subtemplate itself, for now - is being
-     * allocated as part of a contiguous array */
+    // allocate memory for char_seq and error_str
+    (*st)->char_seq = malloc( length*sizeof(char) );
+    (*st)->error_str = malloc( length*sizeof(char) );
+
+    // copy strings
+    memcpy( (*st)->char_seq, char_seq, length );
+    memcpy( (*st)->error_str, error_str, length );
+
+    (*st)->length = length;
+    (*st)->pos_in_template = pos_in_template;
+    (*st)->end = end;
+}
+
+void
+free_subtemplate( struct subtemplate* st )
+{
+    // free the strings
+    free( st->char_seq );
+    free( st->error_str );
+
+    free( st );
 }
 
 void
 free_read( struct read* r )
 {
+    if( r == NULL ) return;
+
     free( r->name );
 
-    /* free all of the subtemplates */
-    if( r>subtemplates != NULL )
-    {
-        int i;
-        for( i = 0; i < r->num_subtemplates; i++ )
-            free_read_subtemplate( &(r->subtemplates[i]) );
-        free( r->subtemplates );
-    }
+    // free the subtemplates
+    if( r->r1 != NULL )
+        free_subtemplate( r->r1 );
+    if( r->r2 != NULL )
+        free_subtemplate( r->r2 );
 
     free( r );
 }
 
 void
-add_subtemplate_to_read( struct read* r,
-        char* char_seq, char* error_seq,
-        int len, int pos_in_template,
-        enum READ_END end
-    )
+fprintf_subtemplate( FILE* fp, struct subtemplate* st )
 {
-    r->num_subtemplates += 1;
-
-    r->subtemplates = realloc( r->subtemplates,
-            sizeof(struct read_subtemplate) * r->num_subtemplates );
-
-    /* XXX dynamically allocate char*, or set equal to passed values?
-     * I want to avoid needelessly copying these values*/
-    r->subtemplates[num_subtemplates - 1].char_seq = char_seq;
-    r->subtemplates[num_subtemplates - 1].error_seq = error_seq;
-    r->subtemplates[num_subtemplates - 1].len = len;
-    r->subtemplates[num_subtemplates - 1].pos_in_template = pos_in_template;
-    r->subtemplates[num_subtemplates - 1].end = end;
+    fprintf(fp, "Len: %d\tPos: %d\End: %u\n",
+                st->length, st->pos_in_template, st->end);
+    fprintf(fp, "%s\n", st->char_seq);
+    fprintf(fp, "%s\n", st->error_str);
 }
 
 void
-fprintf_read_subtemplate( FILE* fp, struct read_subtemplate* rst )
+fprintf_subtemplate_to_fastq( FILE* fp, char* name, struct subtemplate* st )
 {
-    fprintf(fp, "Len: %d\tPos: %d\End: %u\n",
-            rst->len, rst->pos_in_template, rst->end);
-    fprintf(fp, "%s\n", rst->char_seq);
-    fprintf(fp, "%s\n", rst->error_seq);
+    fprintf( fp, "@%s\n", name );
+    fprintf( fp, "%.*s\n", st->length, st->char_seq );
+    fprintf( fp, "+%s\n", name );
+    fprintf( fp, "%.*s\n", st->length, st->error_str );
 }
 
 void
@@ -78,23 +102,19 @@ fprintf_read( FILE* fp, struct read* r )
 {
     fprintf(fp, "==== %s\n\n", r->name);
 
-    /* print out subtemplates */
-    int i;
-    for( i = 0; i < r->num_subtemplates; i++ )
-        fprintf_rawread_subtemplate( &(r->subtemplates[i]) );
+    // print subtemplates
+    fprintf_subtemplate( fp, r->r1 );
+    fprintf_subtemplate( fp, r->r2 );
 
     fprintf(fp, "\n\n");
 }
 
 enum bool
-filter_read( struct read* r,
-             struct error_model_t* error_model )
+filter_read(
+        struct read* r,
+        struct error_model_t* error_model
+    )
 {
-    /* Might pass a NULL read (r2 in the single read case) 
-       from find_candidate_mappings */
-    if( r == NULL )
-        return false; // Do not filter nonexistent read
-
     /***************************************************************
      * check to make sure this read is mappable
      * we consider a read 'mappable' if:
@@ -107,24 +127,26 @@ filter_read( struct read* r,
     assert( min_num_hq_bps >= 0 );
 
     int num_hq_bps = 0;
-    int subt, i;
 
-    /* loop over each of the subtemplates in read */
-    for( subt = 0; subt < r->num_subtemplates; subt++ )
+    // loop over the subtemplates, counting hq basepairs
+    int i;
+    struct subtemplate* subtemplates[2] = { r->r1, r->r2 };
+    for( i = 0; i < 2 && subtemplates[i] != NULL; i++ )
     {
-        /* get a pointer to the subtemplate of interest */
-        struct read_subtemplate* rst = &(read->subtemplates[i]);
+        // get a pointer to the current subtemplate
+        struct subtemplate* st = subtemplates[i];
 
         /* loop over each bp in the subtemplate */
-        for( i = 0; i < rst->length; i++ )
+        int bp;
+        for( bp = 0; bp < st->length; bp++ )
         {
             /*
                compute the inverse probability of error (quality)
                NOTE when error_prb receieves identical bp's, it returns the
                inverse automatically
              */
-            double error = error_prb( rst->char_seq[i], rst->char_seq[i], 
-                                      rst->error_str[i], i, error_model );
+            double error = error_prb( st->char_seq[bp], st->char_seq[bp], 
+                                      st->error_str[bp], i, error_model );
             double qual = pow(10, error );
             
             /* count the number of hq basepairs */
@@ -143,47 +165,50 @@ void
 build_read_from_rawreads(
         struct read** r,
         struct rawread* r1,
-        struct rawread* r2,
+        struct rawread* r2
     )
 {
     assert( r1 != NULL );
 
-    /* Initialize the read with the name from the first read */
+    // Initialize the read with the name from the first read
     init_read( r, r1->name );
 
     /*** Add the rawreads as subtemplate(s) ***/
 
-    /* If we're working with single end raw read */
+    // If we're working with single end raw reads
     if( r2 == NULL )
     {
-        add_subtemplate_to_read(
+        init_subtemplate(
+                &((*r)->r1),
                 r1->char_seq, r1->error_str,
                 r1->length,
                 0,
-                r1->end 
+                r1->end
             );
     }
-    /* if we're working with paired end raw reads */
+    // if we're working with paired end raw reads
     else
     {
         assert( r1 != NULL );
         assert( r2 != NULL );
 
-        /* populate_rawread_from_fastq_file trims the / suffix, so paired
+        /* populate_rawread_from_fastq_file trims the "/" suffix, so paired
          * end reads should have the same read name */
-        assert( strcmp(r1->name, r2->name) );
+        assert( !strcmp(r1->name, r2->name) );
 
-        add_subtemplate_to_read(
+        init_subtemplate(
+                &((*r)->r1),
                 r1->char_seq, r1->error_str,
                 r1->length,
                 0,
                 r1->end
             );
 
-        add_subtemplate_to_read(
+        init_subtemplate(
+                &((*r)->r2),
                 r2->char_seq, r2->error_str,
                 r2->length,
-                0,
+                -1,
                 r2->end
             );
     }
@@ -191,9 +216,11 @@ build_read_from_rawreads(
 
 int
 get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct read** r,
-    long max_readkey )
+        struct rawread_db_t* rdb,
+        readkey_t* readkey,
+        struct read** r,
+        long max_readkey
+    )
 {
     pthread_spin_lock( rdb->lock );
     
@@ -233,17 +260,21 @@ get_next_read_from_rawread_db(
         assert( rdb->paired_end_1_reads != NULL );
         assert( rdb->paired_end_2_reads != NULL );
 
-        struct rawread* r1, r2;
-
         /* Load first paired end rawread */
+        struct rawread *r1, *r2;
         rv = populate_rawread_from_fastq_file(
             rdb->paired_end_1_reads, &r1, FIRST );
 
         if( rv == EOF )
         {
             /* make sure the mate is empty as well */
+            rv = populate_rawread_from_fastq_file(
+                rdb->paired_end_2_reads, &r2, SECOND );
+            assert( rv == EOF );
+
             assert( rawread_db_is_empty( rdb ) );
-            *r == NULL;
+
+            *r = NULL;
             pthread_spin_unlock( rdb->lock );
             return EOF;
         }
@@ -259,9 +290,10 @@ get_next_read_from_rawread_db(
     }
 
     /* Set the assay type on the read from the rawread db */
-    r->assay = rdb->assay;
+    (*r)->assay = rdb->assay;
 
     /* increment the read counter */
+    *readkey = rdb->readkey;
     rdb->readkey += 1;
 
     pthread_spin_unlock( rdb->lock );

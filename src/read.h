@@ -1,13 +1,14 @@
 /* Copyright (c) 2009-2010 Nathan Boley */
 
-#ifndef READS_HEADER
-#define READS_HEADER
+#ifndef READ_HEADER
+#define READ_HEADER
 
 #include "config.h"
+#include "rawread.h"
 
-struct read_subtemplate {
+struct subtemplate {
     char* char_seq;
-    char* error_seq;
+    char* error_str;
     int length;
     int pos_in_template;    // +/- indexed, like Python list indexing
     enum READ_END end;
@@ -17,31 +18,34 @@ struct read {
     char* name;
     enum assay_type_t assay;
 
-    struct read_subtemplate* subtemplates;
-    int num_subtemplates;
+    struct subtemplate* r1;
+    struct subtemplate* r2;
 };
 
 void
-init_read( struct read** r,
-           size_t readname_len );
+init_read(
+        struct read** r,
+        char* readname
+    );
 
 void
 free_read( struct read* r );
 
 void
-add_subtemplate_to_read( struct read* r,
-        char* char_seq, char* error_seq,
-        int len, int pos_in_template,
-        enum READ_END end
-    );
+free_subtemplate( struct subtemplate* st );
 
 void
 fprintf_read( FILE* fp, struct read* r );
 
+void
+fprintf_subtemplate_to_fastq( FILE* fp, char* name, struct subtemplate* st );
+
 /* determine whether reads are mappable */
 enum bool
-filter_read( struct read* r,
-             struct error_model_t* error_model );
+filter_read(
+        struct read* r,
+        struct error_model_t* error_model
+    );
 
 /* 
    if the next readkey would be greater than maqx readkey, then
@@ -50,8 +54,10 @@ filter_read( struct read* r,
 */
 int
 get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct read* r,
-    long max_readkey );
+        struct rawread_db_t* rdb,
+        readkey_t* readkey,
+        struct read** r,
+        long max_readkey
+    );
 
-#endif // READS_HEADER
+#endif // READ_HEADER

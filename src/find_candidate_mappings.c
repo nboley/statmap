@@ -20,6 +20,7 @@
 #include "diploid_map_data.h"
 #include "genome.h"
 #include "rawread.h"
+#include "read.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
@@ -27,7 +28,7 @@ const float untemplated_g_marginal_log_prb = -1.30103;
 
 float
 subseq_penalty(
-        struct rawread* r,
+        struct subtemplate* st,
         int offset,
         int subseq_len,
         struct penalty_array_t* penalty_array
@@ -39,7 +40,7 @@ subseq_penalty(
     int pos;
     for( pos = offset; pos < subseq_len; pos++ )
     {
-        int bp = bp_code( r->char_seq[pos] );
+        int bp = bp_code( st->char_seq[pos] );
         /* take the match penalty for this bp */
         penalty += penalty_array->array[pos].penalties[bp][bp];
     }
@@ -49,16 +50,16 @@ subseq_penalty(
 
 int
 find_optimal_subseq_offset( 
-    struct rawread* r,
+    struct subtemplate* st,
     /* store the desired subsequences length */
     int subseq_len,
     struct penalty_array_t* penalty_array
 ) {
     /* Make sure the read is at least as long as the subsequence */
-    if( subseq_len > r->length ) {
-        fprintf( stderr, "============ %i \t\t %i \n", subseq_len, r->length );
+    if( subseq_len > st->length ) {
+        fprintf( stderr, "============ %i \t\t %i \n", subseq_len, st->length );
     }
-    assert( subseq_len <= r->length );
+    assert( subseq_len <= st->length );
     
     /*
        Remember: error_prb returns the inverse log probability of
@@ -69,9 +70,9 @@ find_optimal_subseq_offset(
 
     int i;
     /* for each possible subsequence */
-    for( i = 0; i < r->length - subseq_len; i++ )
+    for( i = 0; i < st->length - subseq_len; i++ )
     {
-        float ss_pen = subseq_penalty(r, i, subseq_len, penalty_array);
+        float ss_pen = subseq_penalty(st, i, subseq_len, penalty_array);
         if( ss_pen > max_so_far ) {
             max_so_far = ss_pen;
             min_offset = i;
@@ -88,7 +89,7 @@ search_index( struct index_t* index,
               float max_penalty_spread,
               mapped_locations** results,
 
-              struct rawread* r,
+              struct subtemplate* st,
 
               struct penalty_array_t* fwd_pa,
               struct penalty_array_t* rev_pa,
@@ -102,7 +103,7 @@ search_index( struct index_t* index,
        probe the index for. This is controlled by the index->seq_length.
     */
     int subseq_offset = find_optimal_subseq_offset(
-            r, index->seq_length, fwd_pa );
+            st, index->seq_length, fwd_pa );
     int subseq_length = index->seq_length;
     
     /* Store a copy of the read */
@@ -110,7 +111,8 @@ search_index( struct index_t* index,
     char* sub_read = calloc(subseq_length + 1, sizeof(char));
     assert( sub_read != NULL );
     /* note that the NULL ending is pre-set from the calloc */
-    memcpy( sub_read, r->char_seq + subseq_offset, sizeof(char)*(subseq_length) );
+    memcpy( sub_read, st->char_seq + subseq_offset,
+            sizeof(char)*(subseq_length) );
 
     /* prepare the results container */
     init_mapped_locations( results );
@@ -124,7 +126,7 @@ search_index( struct index_t* index,
     /* If we couldnt translate it */
     if( fwd_seq == NULL )
     {
-        // fprintf(stderr, "Could Not Translate: %s\n", r->char_seq);
+        // fprintf(stderr, "Could Not Translate: %s\n", st->char_seq);
         return;
     }
     assert( fwd_seq != NULL );
@@ -135,7 +137,7 @@ search_index( struct index_t* index,
     rev_complement_read( sub_read, tmp_read, subseq_length );
     bkwd_seq = translate_seq( tmp_read, subseq_length, &bkwd_seq );
     // BUG why did I have this here?
-    //replace_ns_inplace( tmp_read, r->length );
+    //replace_ns_inplace( tmp_read, st->length );
     assert( bkwd_seq != NULL );
     
     /* map the full read */
@@ -170,11 +172,14 @@ search_index( struct index_t* index,
 };
 
 static inline void
-make_assay_specific_corrections( struct rawread* r, 
-                                 mapped_locations* results )
+make_assay_specific_corrections(
+        struct subtemplate* st, 
+        mapped_locations* results,
+        enum assay_type_t assay
+    )
 {
     /* for now, we only deal with cage here */
-    if( r->assay != CAGE )
+    if( assay != CAGE )
         return;
     
     unsigned int i;
@@ -187,7 +192,7 @@ make_assay_specific_corrections( struct rawread* r,
         int j;
         for( j = 0; 
              j < MAX_NUM_UNTEMPLATED_GS
-                 && ( r->char_seq[j] == 'G' || r->char_seq[j] == 'g' );
+                 && ( st->char_seq[j] == 'G' || st->char_seq[j] == 'g' );
              j++
             )
         {
@@ -217,7 +222,7 @@ make_assay_specific_corrections( struct rawread* r,
 static inline void 
 recheck_location(
         struct genome_data* genome, 
-        struct rawread* r, 
+        struct subtemplate* st,
         candidate_mapping* loc,
 
         struct penalty_array_t* fwd_pa,
@@ -231,7 +236,7 @@ recheck_location(
     float marginal_log_prb = 0;
     
     /* find a pointer to the sequence at this genomic location */
-    int mapped_length = r->length - loc->trimmed_len;
+    int mapped_length = st->length - loc->trimmed_len;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -250,24 +255,24 @@ recheck_location(
     }
                     
     char* mut_genome_seq = NULL;
-    mut_genome_seq = malloc(sizeof(char)*(r->length+1));
+    mut_genome_seq = malloc(sizeof(char)*(st->length+1));
     assert( mut_genome_seq != NULL ); 
 
     struct penalty_array_t* penalty_array;
                     
     if( BKWD == loc->rd_strnd )
     {
-        rev_complement_read( genome_seq, mut_genome_seq, r->length );
+        rev_complement_read( genome_seq, mut_genome_seq, st->length );
         penalty_array = rev_pa;
     } else {
-        memcpy( mut_genome_seq, genome_seq, sizeof(char)*r->length );
-        mut_genome_seq[r->length] = '\0';
+        memcpy( mut_genome_seq, genome_seq, sizeof(char)*st->length );
+        mut_genome_seq[st->length] = '\0';
         penalty_array = fwd_pa;
     }
     
     float rechecked_penalty = recheck_penalty( 
             mut_genome_seq, 
-            r->char_seq + loc->trimmed_len,
+            st->char_seq + loc->trimmed_len,
             mapped_length,
             penalty_array 
         );
@@ -281,7 +286,7 @@ static inline void
 recheck_locations(
     struct genome_data* genome, 
 
-    struct rawread* r, 
+    struct subtemplate* st,
     candidate_mappings* mappings,
     
     float min_match_penalty,
@@ -318,7 +323,7 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        recheck_location( genome, r, mappings->mappings + k, fwd_pa, rev_pa );
+        recheck_location( genome, st, mappings->mappings + k, fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
         if( (mappings->mappings + k)->penalty > max_penalty ) {
@@ -369,7 +374,7 @@ recheck_locations(
 
 static void
 add_candidate_mapping_from_haploid (
-        struct rawread*     r, 
+        struct subtemplate* st,
         mapped_location*    result,
         mapped_locations*   results,
         candidate_mapping   cm,
@@ -389,7 +394,7 @@ add_candidate_mapping_from_haploid (
     {
         read_location = modify_mapped_read_location_for_index_probe_offset(
             (result->location).loc, (result->location).chr, result->strnd, 
-            results->subseq_offset, results->subseq_len, r->length,
+            results->subseq_offset, results->subseq_len, st->length,
             genome
         );
     }
@@ -403,7 +408,7 @@ add_candidate_mapping_from_haploid (
 
 static void
 add_candidate_mapping_from_diploid (
-        struct rawread*     r, 
+        struct subtemplate* st,
         mapped_location*    result,
         mapped_locations*   results,
         candidate_mapping   cm,
@@ -413,7 +418,7 @@ add_candidate_mapping_from_diploid (
 {
     /* add the paternal candidate mapping. */
     add_candidate_mapping_from_haploid(
-        r, result, results, cm, mappings, genome
+        st, result, results, cm, mappings, genome
     );
 
     /*
@@ -454,7 +459,7 @@ add_candidate_mapping_from_diploid (
     {
         read_location = modify_mapped_read_location_for_index_probe_offset(
             maternal_start, maternal_chr_index, result->strnd, 
-            results->subseq_offset, results->subseq_len, r->length,
+            results->subseq_offset, results->subseq_len, st->length,
             genome
         );
     }
@@ -474,25 +479,25 @@ add_candidate_mapping_from_diploid (
    the data structure that index lookups return  )    */
 static inline void 
 build_candidate_mappings_from_mapped_locations(
-    struct genome_data* genome,
-    struct rawread* r, 
-    mapped_locations* results, 
-    candidate_mappings** mappings,
-    float max_penalty_spread
-)
+        struct genome_data* genome,
+        struct subtemplate* st,
+        mapped_locations* results, 
+        candidate_mappings** mappings,
+        float max_penalty_spread
+    )
 {
     int subseq_len = results->subseq_len;
     
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping template_candidate_mapping 
         = init_candidate_mapping_from_template( 
-            r, max_penalty_spread 
+            st, max_penalty_spread 
         );
     
     assert( template_candidate_mapping.rd_type != 0 );
 
     /* Make sure the "subseq" is acutally shorter than the read */
-    assert( subseq_len <= r->length );
+    assert( subseq_len <= st->length );
             
     /***** COPY information from the index lookup into the result set
      * build and populate an array of candidate_mapping's. 
@@ -529,13 +534,15 @@ build_candidate_mappings_from_mapped_locations(
         template_candidate_mapping.trimmed_len = result->trim_offset;
 
         /* Build, verify, and add candidate mappings depending on type of loc */
+        /* XXX might not need to pass the subtemplate to these fns; it is only
+         * used for st->length, and that is also stored on the cm template */
         if( result->location.is_paternal && result->location.is_maternal )
             add_candidate_mapping_from_diploid(
-                r, result, results, template_candidate_mapping, mappings, genome
+                st, result, results, template_candidate_mapping, mappings, genome
             );
         else
             add_candidate_mapping_from_haploid(
-                r, result, results, template_candidate_mapping, mappings, genome
+                st, result, results, template_candidate_mapping, mappings, genome
             );
     }
     
@@ -550,7 +557,7 @@ static inline enum bool
 can_be_used_to_update_error_data(
     struct genome_data* genome,
     candidate_mappings* mappings,
-    struct rawread* r
+    struct subtemplate* st
 )
 {
     /* skip empty mappings */
@@ -567,7 +574,7 @@ can_be_used_to_update_error_data(
     assert( mappings->length >= 1 );
     
     candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = r->length - loc->trimmed_len;
+    int mapped_length = st->length - loc->trimmed_len;
     
     if( loc->recheck != VALID ) {
         return false;
@@ -602,7 +609,7 @@ can_be_used_to_update_error_data(
             genome, 
             mappings->mappings[1].chr, 
             mappings->mappings[1].start_bp, 
-            r->length - mappings->mappings[1].trimmed_len
+            st->length - mappings->mappings[1].trimmed_len
         );
         
         /* if the sequences aren't identical, then return */
@@ -617,11 +624,11 @@ static inline void
 update_error_data_from_candidate_mappings(
     struct genome_data* genome,
     candidate_mappings* mappings,
-    struct rawread* r,
+    struct subtemplate* st,
     struct error_data_t* error_data
 )
 {
-    if( !can_be_used_to_update_error_data( genome, mappings, r ) )
+    if( !can_be_used_to_update_error_data( genome, mappings, st ) )
         return;
     
     /* we need at least one valid mapping ( although this case should be handled
@@ -633,7 +640,7 @@ update_error_data_from_candidate_mappings(
     // but, since the length is exactly 1, we know that
     // we only need to deal with this read
     candidate_mapping* loc = mappings->mappings + 0;         
-    int mapped_length = r->length - loc->trimmed_len;
+    int mapped_length = st->length - loc->trimmed_len;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -642,16 +649,17 @@ update_error_data_from_candidate_mappings(
         mapped_length
     );            
         
-    char* error_str = r->error_str + loc->trimmed_len;
+    char* error_str = st->error_str + loc->trimmed_len;
 
     /* get the read sequence - rev complement if on reverse strand */
     char* read_seq;
     if( loc->rd_strnd == BKWD )
     {
-        read_seq = calloc( r->length + 1, sizeof(char) );
-        rev_complement_read( r->char_seq+loc->trimmed_len, read_seq, r->length);
+        read_seq = calloc( st->length + 1, sizeof(char) );
+        rev_complement_read( st->char_seq+loc->trimmed_len,
+                read_seq, st->length);
     } else {
-        read_seq = r->char_seq + loc->trimmed_len;
+        read_seq = st->char_seq + loc->trimmed_len;
     }
 
     update_error_data( 
@@ -723,30 +731,30 @@ find_candidate_mappings( void* params )
        end of this mapping */
     /* We do this so that we can update the error estimates */
     int curr_read_index = 0;
-    /* we need 2* the step size to account for paired end reads */
-    candidate_mappings* candidate_mappings_cache[2*READS_STAT_UPDATE_STEP_SIZE];
-    memset( candidate_mappings_cache, 0,
-            sizeof( candidate_mappings* )*2*READS_STAT_UPDATE_STEP_SIZE );
 
-    struct rawread* rawreads_cache[2*READS_STAT_UPDATE_STEP_SIZE];
-    memset( rawreads_cache, 0,
-            sizeof( struct rawread* )*2*READS_STAT_UPDATE_STEP_SIZE );
+    struct subtemplate* subtemplates_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( subtemplates_cache, 0,
+            sizeof( struct subtemplate* )*2*READS_STAT_UPDATE_STEP_SIZE );
 
     readkey_t readkeys[2*READS_STAT_UPDATE_STEP_SIZE];
     memset( readkeys, 0,
             sizeof( readkey_t )*2*READS_STAT_UPDATE_STEP_SIZE );
 
+    candidate_mappings* candidate_mappings_cache[2*READS_STAT_UPDATE_STEP_SIZE];
+    memset( candidate_mappings_cache, 0,
+            sizeof( candidate_mappings* )*2*READS_STAT_UPDATE_STEP_SIZE );
+
     int max_read_length = 0;
     
     /* The current read of interest */
     readkey_t readkey;
-    struct rawread *r1, *r2;
+    struct read* r;
     /* 
      * While there are still mappable reads in the read DB. All locking is done
      * in the get next read functions. 
      */
     while( EOF != get_next_read_from_rawread_db(
-               rdb, &readkey, &r1, &r2, td->max_readkey )  
+               rdb, &readkey, &r, td->max_readkey )  
          ) 
     {
         /* We dont memory lock mapped_cnt because it's read only and we dont 
@@ -758,30 +766,30 @@ find_candidate_mappings( void* params )
                     readkey, *mapped_cnt);
         }
         
-        if( filter_rawread( r1, error_model ) ||
-            filter_rawread( r2, error_model ) )
+        // Make sure this read has "enough" HQ bps before trying to map it
+        if( filter_read( r, error_model ) )
         {
-            /* skip the unmappable read */
-            continue;
+            continue; // skip the unmappable read
         }
         
-        /* consider both read pairs */
-        int j = 0;
-        struct rawread* reads[2] = { r1, r2 };
-        for( j = 0; j < 2 && reads[j] != NULL; j++ )
+        // consider both subtemplates
+        struct subtemplate* subtemplates[2] = { r->r1, r->r2 };
+
+        int j;
+        for( j = 0; j < 2 && subtemplates[j] != NULL; j++ )
         {
-            struct rawread* r = reads[j];
+            struct subtemplate* st = subtemplates[j];
                         
             /*
                initialize read penalty array
             */
             struct penalty_array_t fwd_pa, rev_pa;
-            init_penalty_array( r->length, &fwd_pa );
-            init_penalty_array( r->length, &rev_pa );
+            init_penalty_array( &fwd_pa, st->length );
+            init_penalty_array( &rev_pa, st->length );
 
             /* fn ptr to penalty array builder - build different penalty
                array depending on type of search */
-            build_penalty_array( r, error_model, &fwd_pa );
+            build_penalty_array( st, error_model, &fwd_pa );
             build_reverse_penalty_array( &fwd_pa, &rev_pa );
             
             /**** go to the index for mapping locations */
@@ -794,7 +802,7 @@ find_candidate_mappings( void* params )
 
                           &results,
 
-                          r,
+                          st,
 
                           &fwd_pa,
                           &rev_pa,
@@ -804,24 +812,22 @@ find_candidate_mappings( void* params )
 
             /* cache current readkey and reads */
             readkeys[2*curr_read_index + j] = readkey;
-            rawreads_cache[ 2*curr_read_index + j ] = r;
+            subtemplates_cache[2*curr_read_index + j] = st;
             
-            /* if bootstrapping, we only want to work with unique mappers.
-             * find_matches would have terminated early for this read */
+            // bootstrap mode terminated early - cleanup and continue
             if( results->skip )
-                /* bootstrap mode terminated early - cleanup and continue */
                 goto cleanup_penalty_arrays;
 
             /* make an assay specific changes to the results. For instance, in CAGE,
                we need to add extra reads for the untemplated g's */
-            //make_assay_specific_corrections( r, results );
+            //make_assay_specific_corrections( st, results, r->assay );
             
             /* make a reference to the current set of mappings. This should be
                optimized out by the compiler */
             candidate_mappings* mappings;
             
             build_candidate_mappings_from_mapped_locations(
-                genome, r, results, 
+                genome, st, results, 
                 &mappings,
                 min_match_penalty
             );
@@ -832,7 +838,7 @@ find_candidate_mappings( void* params )
             recheck_locations( 
                 genome, 
                                
-                r, mappings,
+                st, mappings,
                                
                 min_match_penalty,
                 max_penalty_spread,
@@ -846,7 +852,7 @@ find_candidate_mappings( void* params )
             candidate_mappings_cache[ 2*curr_read_index + j ] = mappings;
 
             /* update the maximum read length */
-            max_read_length = MAX( max_read_length, r->length );
+            max_read_length = MAX( max_read_length, st->length );
 
 cleanup_penalty_arrays:
             /* free the penalty arrays */
@@ -868,10 +874,10 @@ cleanup_penalty_arrays:
     int i;
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
         update_error_data_from_candidate_mappings(
-            genome,
-            candidate_mappings_cache[ i ],
-            rawreads_cache[ i ],
-            scratch_error_data
+                genome,
+                candidate_mappings_cache[i],
+                subtemplates_cache[i],
+                scratch_error_data
             );
     }
     // add error_data to scratch_error_data
@@ -925,7 +931,7 @@ cleanup:
             continue;
         
         /* free the cached reads and mappings */
-        free_rawread( rawreads_cache[i] );
+        free_subtemplate( subtemplates_cache[i] );
         free_candidate_mappings( candidate_mappings_cache[i] );
     }
     

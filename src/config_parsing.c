@@ -49,7 +49,7 @@ guess_input_file_type( struct args_t* args )
     for( i = 0; i < 10000; i++ )
     {
         struct rawread* r;
-        populate_read_from_fastq_file( fp, &r, NORMAL );
+        populate_rawread_from_fastq_file( fp, &r, NORMAL );
         /* If we have reached and EOF, then break */
         if( r == NULL )
             break;

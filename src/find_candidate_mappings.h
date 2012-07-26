@@ -9,21 +9,6 @@
 #include "candidate_mapping.h"
 #include "mapped_location.h"
 
-void
-search_index( struct index_t* index, 
-              
-              float min_match_penalty,
-              float max_penalty_spread,
-              mapped_locations** results,
-
-              struct rawread* r,
-
-              struct penalty_array_t* fwd_pa,
-              struct penalty_array_t* rev_pa,
-
-              enum bool only_find_unique_mappers
-    );
-
 struct single_map_thread_data {
     int thread_id;
     struct genome_data* genome;

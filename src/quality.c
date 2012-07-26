@@ -161,13 +161,13 @@ error_prb(
 /**** Penalty array functions ****/
 
 void
-init_penalty_array( int len, struct penalty_array_t* pa )
+init_penalty_array( struct penalty_array_t* pa, int length )
 {
     /* Set dimensions of array */
-    pa->len = len;
+    pa->len = length;
 
     /* Allocate memory for array of len penalty_t structs */
-    pa->array = malloc( len * sizeof(struct penalty_t) );
+    pa->array = malloc( length * sizeof(struct penalty_t) );
 }
 
 void
@@ -202,7 +202,7 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 /**** penalty array builders ****/
 void
 build_penalty_array(
-        struct rawread* rd,
+        struct subtemplate* st,
         struct error_model_t* error_model,
         struct penalty_array_t* pa
     )
@@ -222,7 +222,7 @@ build_penalty_array(
                 pa->array[pos].penalties[ref_bp][seq_bp] = error_prb(
                         code_bp(ref_bp),
                         code_bp(seq_bp),
-                        rd->error_str[pos],
+                        st->error_str[pos],
                         pos,
                         error_model
                     );

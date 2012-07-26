@@ -48,9 +48,11 @@ free_rawread( struct rawread* r );
 /* Populate a read from the next read in a fastq file */
 
 int
-populate_read_from_fastq_file(
-    FILE* input_file, struct rawread** r, enum READ_END end );
-
+populate_rawread_from_fastq_file(
+        FILE* input_file,
+        struct rawread** r,
+        enum READ_END end
+    );
 
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 
@@ -132,14 +134,6 @@ rawread_db_is_empty( struct rawread_db_t* rdb );
 void
 move_fp_to_next_read( FILE* fp );
 
-int
-get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey, 
-    struct rawread** r,
-    long max_readkey );
-
 /**************** END Raw Read DB **********************/
 
 #endif // RAWREADS_HEADER
-
-

@@ -12,7 +12,7 @@
  */
 
 #include "dna_sequence.h"
-#include "rawread.h"
+#include "read.h"
 
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
@@ -60,14 +60,14 @@ struct penalty_array_t {
 };
 
 void
-init_penalty_array( int len, struct penalty_array_t* pa );
+init_penalty_array( struct penalty_array_t* pa, int length );
 
 void
 free_penalty_array( struct penalty_array_t* pa );
 
 void
 build_penalty_array(
-        struct rawread* rd,
+        struct subtemplate* st,
         struct error_model_t* error_model,
         struct penalty_array_t* pa
 );
@@ -91,7 +91,7 @@ unsigned char quality_score( float );
 void convert_into_quality_string( float* mutation_probs, char* quality, int seq_len );
 
 /* fwd declarations */
-struct rawread;
+struct read;
 struct error_data_t;
 
 
