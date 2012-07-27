@@ -10,6 +10,21 @@ build_matrices_from_record = function( record ) {
     list( mismatches, cnts );
 }
 
+build_regression_vectors_from_record = function( record ) {
+    max_readlen = as.integer(record[4]);
+    min_qual    = as.integer(record[5]);
+    max_qual    = as.integer(record[6]);
+    nobs        = (max_qual-min_qual)*max_readlen;
+    
+    mismatches = as.numeric(record[7:(nobs+6)]);
+    cnts = as.numeric(record[(nobs+7):length(record)]);    
+    xs = data.frame( qual=rep(min_qual:(max_qual-1), max_readlen), 
+                     pos=rep(1:max_readlen, times=max_qual-min_qual),
+                     row.names=NULL );
+    
+    list( xs, mismatches, cnts );
+}
+
 predict = function( i, j, pos_mo, qual_mo, lambda ) {
     lambda*pos_mo[i] + (1-lambda)*qual_mo[j];
 }
@@ -78,6 +93,16 @@ build_error_predictor = function( record ) {
     predict_error_rate;
 }
 
+if(0) {
+    # try to do the spline computations by hand
+    splineDesign(knots = 1:10, x = 4:7)
+    
+}
+
+data = read.table( "error_stats.log", header=TRUE )
 x = build_error_predictor( data[1,] )
 x(1,104);
+
+
+
 
