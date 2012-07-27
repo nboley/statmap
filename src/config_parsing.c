@@ -446,6 +446,14 @@ parse_arguments( int argc, char** argv )
         args.output_directory = calloc( strlen(buffer)+1, sizeof(char) );
         strncpy( args.output_directory, buffer, strlen(buffer) );
     }
+    /* copy the output directory argument into a new buffer so output_directory
+     * can be freed later */
+    else {
+        char* saved_ptr = args.output_directory; // this is a char* into argv
+        args.output_directory = calloc( strlen(args.output_directory)+1,
+                sizeof(char) );
+        strncpy( args.output_directory, saved_ptr, strlen(saved_ptr) );
+    }
 
     error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
     if( -1 == error )

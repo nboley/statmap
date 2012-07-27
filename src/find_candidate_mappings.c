@@ -732,6 +732,10 @@ find_candidate_mappings( void* params )
     /* We do this so that we can update the error estimates */
     int curr_read_index = 0;
 
+    struct read* reads_cache[READS_STAT_UPDATE_STEP_SIZE];
+    memset( reads_cache, 0,
+            sizeof( struct read* )*READS_STAT_UPDATE_STEP_SIZE );
+
     struct subtemplate* subtemplates_cache[2*READS_STAT_UPDATE_STEP_SIZE];
     memset( subtemplates_cache, 0,
             sizeof( struct subtemplate* )*2*READS_STAT_UPDATE_STEP_SIZE );
@@ -771,6 +775,9 @@ find_candidate_mappings( void* params )
         {
             continue; // skip the unmappable read
         }
+
+        // cache the read (so we can free it later)
+        reads_cache[curr_read_index] = r;
         
         // consider both subtemplates
         struct subtemplate* subtemplates[2] = { r->r1, r->r2 };
@@ -930,9 +937,14 @@ cleanup:
         if( NULL == candidate_mappings_cache[i])
             continue;
         
-        /* free the cached reads and mappings */
-        free_subtemplate( subtemplates_cache[i] );
+        /* free the cached mappings */
         free_candidate_mappings( candidate_mappings_cache[i] );
+    }
+
+    /* free the cached reads (also frees cached subtemplates */
+    for( i = 0; i < READS_STAT_UPDATE_STEP_SIZE; i++ )
+    {
+        free_read( reads_cache[i] );
     }
     
     return NULL;

@@ -1552,11 +1552,7 @@ free_ondisk_index( struct index_t* index ) {
         //free( index->ps_locs );
     }
 
-    // DEBUG - wtf
-    /*
-    if( NULL != index->diploid_maps )
-        free_diploid_maps_t( index->diploid_maps );
-        */
+    free( index );
 
     return;
 }

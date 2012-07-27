@@ -254,6 +254,9 @@ get_next_read_from_rawread_db(
         }
 
         build_read_from_rawreads( r, r1, NULL );
+
+        // free the rawread
+        free_rawread( r1 );
     }
     /* If the reads are paired */
     else {
@@ -287,6 +290,10 @@ get_next_read_from_rawread_db(
         assert( rv == 0 );
 
         build_read_from_rawreads( r, r1, r2 );
+
+        // free the rawreads
+        free_rawread( r1 );
+        free_rawread( r2 );
     }
 
     /* Set the assay type on the read from the rawread db */

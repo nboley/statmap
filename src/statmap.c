@@ -465,7 +465,7 @@ cleanup:
 
     free( args.genome_fname );
     free( args.genome_index_fname );
-    //free( args.output_directory );
+    free( args.output_directory );
 
     return 0;
 }

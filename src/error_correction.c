@@ -99,8 +99,8 @@ free_error_data( struct error_data_t* data )
     if( NULL != data->position_mismatch_cnts )
         free( data->position_mismatch_cnts );
     
-    if( data->mutex != NULL )
-        free( data->mutex );
+    pthread_mutex_destroy( data->mutex );
+    free( data->mutex );
     
     free( data );
 }
