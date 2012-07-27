@@ -99,3 +99,22 @@ open_check_error( char* fname, char* file_mode )
     return tmp;
 }
 
+/*
+   Wrapper for realloc that checks return value
+*/
+void*
+safe_realloc( void* ptr, size_t size )
+{
+    void* ra_ptr;
+    ra_ptr = realloc( ptr, size );
+
+    /* man 3 realloc, line 44 - may return NULL if size == 0 */
+    if( ra_ptr == NULL && size != 0 )
+    {
+        fprintf(stderr, "FATAL       :  Error realloc'ing %u bytes.\n", size);
+        exit( -1 );
+    }
+
+    return ra_ptr;
+}
+
