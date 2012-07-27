@@ -21,7 +21,7 @@ search_index( struct index_t* index,
               struct penalty_array_t* fwd_pa,
               struct penalty_array_t* rev_pa,
 
-              enum bool only_find_unique_mappers
+              enum bool only_find_unique_sequences
     );
 
 struct single_map_thread_data {

@@ -256,7 +256,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                  we pass this flag all the way down to optimize the error data
                  bootstrap by terminating early on multimappers
                */
-              enum bool only_find_unique_mappers
+              enum bool only_find_unique_sequences
     );
 
 extern void
@@ -275,7 +275,7 @@ find_matches_from_root(
         struct penalty_array_t* fwd_pa,
         struct penalty_array_t* rev_pa,
 
-        enum bool only_find_unique_mappers
+        enum bool only_find_unique_sequences
     );
 
 size_t
