@@ -56,11 +56,14 @@ init_subtemplate(
 void
 free_read_subtemplate( struct read_subtemplate* st )
 {
+    if( st == NULL ) return;
+
     // free the dynamically allocated strings
     free( st->char_seq );
     free( st->error_str );
 
-    free( st );
+    /* Don't free the read subtemplate itself - it is allocated as part of a
+     * contiguous array. */
 }
 
 void
@@ -76,6 +79,7 @@ free_read( struct read* r )
     {
         free_read_subtemplate( &(r->subtemplates[st_index]) );
     }
+    free( r->subtemplates );
 
     free( r );
 }
