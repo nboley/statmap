@@ -807,7 +807,7 @@ find_candidate_mappings_for_read(
             /* appends built candidate mappings to mappings */
             build_candidate_mappings_from_mapped_locations(
                     genome, rst, results,
-                    mappings,
+                    rst_mappings,
                     min_match_penalty
                 );
         }
