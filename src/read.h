@@ -6,7 +6,7 @@
 #include "config.h"
 #include "rawread.h"
 
-struct subtemplate {
+struct read_subtemplate {
     char* char_seq;
     char* error_str;
     int length;
@@ -18,8 +18,8 @@ struct read {
     char* name;
     enum assay_type_t assay;
 
-    struct subtemplate* r1;
-    struct subtemplate* r2;
+    struct read_subtemplate* subtemplates;
+    int num_subtemplates;
 };
 
 void
@@ -32,13 +32,13 @@ void
 free_read( struct read* r );
 
 void
-free_subtemplate( struct subtemplate* st );
+free_read_subtemplate( struct read_subtemplate* st );
 
 void
 fprintf_read( FILE* fp, struct read* r );
 
 void
-fprintf_subtemplate_to_fastq( FILE* fp, char* name, struct subtemplate* st );
+fprintf_read_subtemplate_to_fastq( FILE* fp, char* name, struct read_subtemplate* st );
 
 /* determine whether reads are mappable */
 enum bool
@@ -58,6 +58,51 @@ get_next_read_from_rawread_db(
         readkey_t* readkey,
         struct read** r,
         long max_readkey
+    );
+
+/*** Indexable subtemplates ***/
+/*
+ * Subsequences from read subtemplates to pass directly to the index
+ */
+struct indexable_subtemplate
+{
+    int seq_length;
+    int subseq_offset;
+
+    /* These point into the strings that were allocated for the read
+     * subtemplate */
+    char* char_seq;
+    char* error_str;
+
+    /* reference to originating read subtemplate */
+    struct read_subtemplate* origin;
+};
+
+struct indexable_subtemplates
+{
+    struct indexable_subtemplate* container;
+    int length;
+};
+
+void
+init_indexable_subtemplate(
+        struct indexable_subtemplate** ist
+    );
+
+void
+init_indexable_subtemplates(
+        struct indexable_subtemplates** ists
+    );
+
+void
+free_indexable_subtemplates(
+        struct indexable_subtemplates* ists
+    );
+
+void
+add_indexable_subtemplate_to_indexable_subtemplates(
+        struct indexable_subtemplate* ist,
+        struct indexable_subtemplates* ists
     );
 
 #endif // READ_HEADER

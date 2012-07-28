@@ -209,7 +209,7 @@ init_candidate_mappings( candidate_mappings** mappings )
 
 candidate_mapping
 init_candidate_mapping_from_template(
-        struct subtemplate* st,
+        struct read_subtemplate* rst,
         float max_penalty_spread
     )
 {
@@ -219,7 +219,7 @@ init_candidate_mapping_from_template(
     memset( &cand_map, 0, sizeof(cand_map) );
 
     /* Set the read length */
-    cand_map.rd_len = st->length;
+    cand_map.rd_len = rst->length;
 
     /** Set the length of the subsequence. 
      * This is the length of the sequence that we go to the index for. If it
@@ -239,7 +239,7 @@ init_candidate_mapping_from_template(
     }
     
     /* set which type of read this is */
-    switch( st->end )
+    switch( rst->end )
     {
     case 1:
         cand_map.rd_type = SINGLE_END;
@@ -251,7 +251,7 @@ init_candidate_mapping_from_template(
         cand_map.rd_type = PAIRED_END_2;
         break;
     default:
-        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", st->end );
+        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", rst->end );
         exit( -1 );
     }
 
@@ -855,3 +855,16 @@ cleanup:
     return;
 }
 
+/* Append the candidate mappings from src onto dest */
+void
+append_candidate_mappings(
+        candidate_mappings* dest,
+        candidate_mappings* src
+    )
+{
+    int i;
+    for( i = 0; i < src->length; i++ )
+    {
+        add_candidate_mapping( dest, &(src->mappings[i]) );
+    }
+}

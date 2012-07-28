@@ -197,4 +197,44 @@ print_mapped_locations( mapped_locations* results )
  **************************************************************************/
 
 
+/*** Mapped locations container ***/
+void
+init_mapped_locations_container(
+        mapped_locations_container** mlc
+    )
+{
+    *mlc = malloc( sizeof( mapped_locations_container ) );
 
+    (*mlc)->container = NULL;
+    (*mlc)->length = 0;
+}
+
+void
+free_mapped_locations_container(
+        mapped_locations_container* mlc
+    )
+{
+    if( mlc == NULL ) return;
+
+    // free the mapped locations stored in this container
+    int i;
+    for( i = 0; i < mlc->length; i++ )
+    {
+        free_mapped_locations( mlc->container[i] );
+    }
+
+    free( mlc );
+}
+
+void
+add_mapped_locations_to_mapped_locations_container(
+        mapped_locations* ml,
+        mapped_locations_container* mlc
+    )
+{
+    mlc->length += 1;
+    mlc->container = realloc( mlc->container,
+            sizeof( mapped_locations* ) * mlc->length );
+
+    mlc->container[ mlc->length-1 ] = ml;
+}

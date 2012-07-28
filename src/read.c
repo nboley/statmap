@@ -24,13 +24,13 @@ init_read(
     (*r)->name = calloc( strlen(readname) + 1, sizeof(char) );
     memcpy( (*r)->name, readname, strlen(readname) );
 
-    (*r)->r1 = NULL;
-    (*r)->r2 = NULL;
+    (*r)->subtemplates = NULL;
+    (*r)->num_subtemplates = 0;
 }
 
 void
 init_subtemplate(
-        struct subtemplate** st,
+        struct read_subtemplate** st,
         char* char_seq,
         char* error_str,
         int length,
@@ -38,7 +38,7 @@ init_subtemplate(
         enum READ_END end
     )
 {
-    *st = malloc( sizeof(struct subtemplate) );
+    *st = malloc( sizeof(struct read_subtemplate) );
 
     // allocate memory for char_seq and error_str
     (*st)->char_seq = malloc( length*sizeof(char) );
@@ -54,9 +54,9 @@ init_subtemplate(
 }
 
 void
-free_subtemplate( struct subtemplate* st )
+free_read_subtemplate( struct read_subtemplate* st )
 {
-    // free the strings
+    // free the dynamically allocated strings
     free( st->char_seq );
     free( st->error_str );
 
@@ -70,17 +70,49 @@ free_read( struct read* r )
 
     free( r->name );
 
-    // free the subtemplates
-    if( r->r1 != NULL )
-        free_subtemplate( r->r1 );
-    if( r->r2 != NULL )
-        free_subtemplate( r->r2 );
+    // free the read subtemplates
+    int st_index;
+    for( st_index = 0; st_index < r->num_subtemplates; st_index++ )
+    {
+        free_read_subtemplate( &(r->subtemplates[st_index]) );
+    }
 
     free( r );
 }
 
 void
-fprintf_subtemplate( FILE* fp, struct subtemplate* st )
+add_subtemplate_to_read(
+        struct read* r,
+        char* char_seq,
+        char* error_str,
+        int length,
+        int pos_in_template,
+        enum READ_END end
+    )
+{
+    // Reallocate subtemplates array
+    r->num_subtemplates += 1;
+    r->subtemplates = realloc( r->subtemplates,
+            sizeof(struct read_subtemplate) * r->num_subtemplates );
+
+    // reference to new subtemplate
+    struct read_subtemplate* rst = &(r->subtemplates[r->num_subtemplates-1]);
+
+    // Allocate memory for strings
+    rst->char_seq = malloc(sizeof(char)*length );
+    rst->error_str = malloc(sizeof(char)*length );
+
+    // Copy strings
+    memcpy( rst->char_seq, char_seq, length );
+    memcpy( rst->error_str, error_str, length );
+
+    rst->length = length;
+    rst->pos_in_template = pos_in_template;
+    rst->end = end;
+}
+
+void
+fprintf_read_subtemplate( FILE* fp, struct read_subtemplate* st )
 {
     fprintf(fp, "Len: %d\tPos: %d\End: %u\n",
                 st->length, st->pos_in_template, st->end);
@@ -89,7 +121,7 @@ fprintf_subtemplate( FILE* fp, struct subtemplate* st )
 }
 
 void
-fprintf_subtemplate_to_fastq( FILE* fp, char* name, struct subtemplate* st )
+fprintf_read_subtemplate_to_fastq( FILE* fp, char* name, struct read_subtemplate* st )
 {
     fprintf( fp, "@%s\n", name );
     fprintf( fp, "%.*s\n", st->length, st->char_seq );
@@ -102,9 +134,12 @@ fprintf_read( FILE* fp, struct read* r )
 {
     fprintf(fp, "==== %s\n\n", r->name);
 
-    // print subtemplates
-    fprintf_subtemplate( fp, r->r1 );
-    fprintf_subtemplate( fp, r->r2 );
+    // print read subtemplates
+    int st_index;
+    for( st_index = 0; st_index < r->num_subtemplates; st_index++ )
+    {
+        fprintf_read_subtemplate( fp, &(r->subtemplates[st_index]) );
+    }
 
     fprintf(fp, "\n\n");
 }
@@ -130,23 +165,22 @@ filter_read(
 
     // loop over the subtemplates, counting hq basepairs
     int i;
-    struct subtemplate* subtemplates[2] = { r->r1, r->r2 };
-    for( i = 0; i < 2 && subtemplates[i] != NULL; i++ )
+    for( i = 0; i < r->num_subtemplates; i++ )
     {
         // get a pointer to the current subtemplate
-        struct subtemplate* st = subtemplates[i];
+        struct read_subtemplate* rst = &(r->subtemplates[i]);
 
         /* loop over each bp in the subtemplate */
         int bp;
-        for( bp = 0; bp < st->length; bp++ )
+        for( bp = 0; bp < rst->length; bp++ )
         {
             /*
                compute the inverse probability of error (quality)
                NOTE when error_prb receieves identical bp's, it returns the
                inverse automatically
              */
-            double error = error_prb( st->char_seq[bp], st->char_seq[bp], 
-                                      st->error_str[bp], i, error_model );
+            double error = error_prb( rst->char_seq[bp], rst->char_seq[bp], 
+                                      rst->error_str[bp], i, error_model );
             double qual = pow(10, error );
             
             /* count the number of hq basepairs */
@@ -178,8 +212,8 @@ build_read_from_rawreads(
     // If we're working with single end raw reads
     if( r2 == NULL )
     {
-        init_subtemplate(
-                &((*r)->r1),
+        add_subtemplate_to_read(
+                *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
                 0,
@@ -196,16 +230,16 @@ build_read_from_rawreads(
          * end reads should have the same read name */
         assert( !strcmp(r1->name, r2->name) );
 
-        init_subtemplate(
-                &((*r)->r1),
+        add_subtemplate_to_read(
+                *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
                 0,
                 r1->end
             );
 
-        init_subtemplate(
-                &((*r)->r2),
+        add_subtemplate_to_read(
+                *r,
                 r2->char_seq, r2->error_str,
                 r2->length,
                 -1,
@@ -305,4 +339,80 @@ get_next_read_from_rawread_db(
 
     pthread_spin_unlock( rdb->lock );
     return 0;
+}
+
+/*** Indexable subtemplates ***/
+
+void
+init_indexable_subtemplate(
+        struct indexable_subtemplate** ist
+    )
+{
+    *ist = malloc( sizeof( struct indexable_subtemplate ) );
+
+    // TODO - consider setting some of the below values as part of this
+    // initialization function
+
+    (*ist)->seq_length = 0;
+    (*ist)->subseq_offset = 0;
+
+    (*ist)->char_seq = NULL;
+    (*ist)->error_str = NULL;
+
+    (*ist)->origin = NULL;
+}
+
+void
+free_indexable_subtemplate(
+        struct indexable_subtemplate* ist
+    )
+{
+    if( ist == NULL ) return;
+
+    // NOTE - we don't free char_seq or error_str because they are pointers
+    // into memory that was allocated as part of the parent read subtemplate
+    free( ist );
+}
+
+void
+init_indexable_subtemplates(
+        struct indexable_subtemplates** ists
+    )
+{
+    *ists = malloc( sizeof( struct indexable_subtemplates ) );
+
+    (*ists)->container = NULL;
+    (*ists)->length = 0;
+}
+
+void
+free_indexable_subtemplates(
+        struct indexable_subtemplates* ists
+    )
+{
+    if( ists == NULL ) return;
+
+    // free the indexable subtemplates
+    int i;
+    for( i = 0; i < ists->length; i++ )
+    {
+        free_indexable_subtemplate( &(ists->container[i]) );
+    }
+
+    free( ists );
+}
+
+// TODO - for now. May need to write a function build & add indexable
+// subtemplates.
+void
+add_indexable_subtemplate_to_indexable_subtemplates(
+        struct indexable_subtemplate* ist,
+        struct indexable_subtemplates* ists
+    )
+{
+    ists->length += 1;
+    ists->container = realloc( ists->container,
+            sizeof( struct indexable_subtemplate ) * ists->length );
+
+    ists->container[ists->length-1] = *ist;
 }

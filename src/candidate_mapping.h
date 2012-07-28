@@ -113,7 +113,7 @@ init_candidate_mappings( candidate_mappings** mappings );
 
 candidate_mapping
 init_candidate_mapping_from_template(
-        struct subtemplate* st,
+        struct read_subtemplate* rst,
         float max_penalty_spread
     );
 
@@ -138,7 +138,11 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
 int 
 sort_candidate_mappings( candidate_mappings* mappings );
 
-
+candidate_mapping
+convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
+        struct genome_data* genome,
+        candidate_mapping cm
+    );
 /*
  *  END Candidate Mapping
  *
@@ -259,10 +263,10 @@ join_all_candidate_mappings(
 // fwd declaration of diploid_map_data_t
 struct diploid_map_data_t;
 
-candidate_mapping
-convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
-        struct genome_data* genome,
-        candidate_mapping cm
+void
+append_candidate_mappings(
+        candidate_mappings* dest,
+        candidate_mappings* src
     );
 
 #endif // #ifdef CANDIDATE_MAPPING

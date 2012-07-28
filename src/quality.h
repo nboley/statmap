@@ -67,10 +67,10 @@ free_penalty_array( struct penalty_array_t* pa );
 
 void
 build_penalty_array(
-        struct subtemplate* st,
+        struct penalty_array_t* pa,
         struct error_model_t* error_model,
-        struct penalty_array_t* pa
-);
+        char* error_str
+    );
 
 void
 build_reverse_penalty_array(

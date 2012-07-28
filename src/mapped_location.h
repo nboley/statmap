@@ -45,6 +45,12 @@ typedef struct {
     enum bool skip;
 } mapped_locations;
 
+typedef struct {
+    /* container of pointers to mapped_locations */
+    mapped_locations** container;
+    int length;
+} mapped_locations_container;
+
 int
 cmp_mapped_locations_by_location( void* loc1, void* loc2 );
 
@@ -80,7 +86,22 @@ print_mapped_locations( mapped_locations* results );
  *
  **************************************************************************/
 
+/*** mapped_locations_container ***/
 
+void
+init_mapped_locations_container(
+        mapped_locations_container** mlc
+    );
 
+void
+free_mapped_locations_container(
+        mapped_locations_container* mlc
+    );
+
+void
+add_mapped_locations_to_mapped_locations_container(
+        mapped_locations* ml,
+        mapped_locations_container* mlc
+    );
 
 #endif /* define MAPPED_LOCATION */

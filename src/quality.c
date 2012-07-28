@@ -202,9 +202,9 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 /**** penalty array builders ****/
 void
 build_penalty_array(
-        struct subtemplate* st,
+        struct penalty_array_t* pa,
         struct error_model_t* error_model,
-        struct penalty_array_t* pa
+        char* error_str
     )
 {
     int pos, ref_bp, seq_bp;
@@ -222,7 +222,7 @@ build_penalty_array(
                 pa->array[pos].penalties[ref_bp][seq_bp] = error_prb(
                         code_bp(ref_bp),
                         code_bp(seq_bp),
-                        st->error_str[pos],
+                        error_str[pos],
                         pos,
                         error_model
                     );
