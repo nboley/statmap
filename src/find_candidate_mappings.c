@@ -705,7 +705,7 @@ search_index_for_indexable_subtemplates(
 {
     // search the index for each indexable subtemplate
     int ist_index;
-    for( ist_index = 0; ist_index < ists->length; ists++ )
+    for( ist_index = 0; ist_index < ists->length; ist_index++ )
     {
         // reference to current indexable subtemplate
         struct indexable_subtemplate* ist = &(ists->container[ist_index]);
