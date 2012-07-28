@@ -337,16 +337,31 @@ fprintf_mapped_read_to_sam(
 {
     assert( expand_pseudo_locations == false );
 
+    /* HACK - assumptions to get this to compile */
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+    if( r->num_subtemplates == 1 )
+    {
+        assert( r->subtemplates[0].end == NORMAL );
+    } else {
+        assert( r->subtemplates[0].end == FIRST );
+        assert( r->subtemplates[1].end == SECOND );
+    }
+
     size_t i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
         float cond_prob = get_cond_prb( cond_prbs_db, mpd_rd->read_id, i );
         
         /* if this is a paired end read */
-        if( r->r2 != NULL )
+        if( r->num_subtemplates == 2 )
         {
+            // reference to read subtemplates
+            struct read_subtemplate* r1 = &(r->subtemplates[0]);
+            struct read_subtemplate* r2 = &(r->subtemplates[1]);
+
             /* make sure the flag agrees */
-            assert( r->r1->end == FIRST  );
+            assert( r1->end == FIRST  );
+            assert( r2->end == SECOND );
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
@@ -356,16 +371,19 @@ fprintf_mapped_read_to_sam(
                 genome,
 
                 r->name,
-                r->r1->char_seq,
-                r->r1->error_str,
-                r->r1->length,
+                r1->char_seq,
+                r1->error_str,
+                r1->length,
 
                 r->name, // XXX - will this work? Gets rid of /0 and /1!
-                r->r2->char_seq,
-                r->r2->error_str,
-                r->r2->length
+                r2->char_seq,
+                r2->error_str,
+                r2->length
             );
         } else {
+            // reference to first read subtemplate
+            struct read_subtemplate* r1 = &(r->subtemplates[0]);
+
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd->locations + i,
@@ -374,8 +392,8 @@ fprintf_mapped_read_to_sam(
                 genome,
                 
                 r->name,
-                r->r1->char_seq,
-                r->r1->error_str
+                r1->char_seq,
+                r1->error_str
             );
         }
     }
@@ -387,21 +405,31 @@ fprintf_mapped_read_to_sam(
  */
 void
 write_nonmapping_read_to_fastq(
-        struct read* rd,
+        struct read* r,
         FILE* single_end_reads_fp,
         FILE* paired_end_1_reads_fp,
         FILE* paired_end_2_reads_fp
     )
 {
+    /* HACK - assumptions to get this to compile */
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+
     /* If this is a single end read */
-    if( rd->r2 == NULL )
+    if( r->num_subtemplates == 1 )
     {
-        fprintf_subtemplate_to_fastq( single_end_reads_fp, rd->name, rd->r1 );
+        // reference to read subtemplate
+        struct read_subtemplate* r1 = &(r->subtemplates[0]);
+
+        fprintf_read_subtemplate_to_fastq( single_end_reads_fp, r->name, r1 );
     }
     /* if this is a paired end read */
     else {
-        fprintf_subtemplate_to_fastq( paired_end_1_reads_fp, rd->name, rd->r1 );
-        fprintf_subtemplate_to_fastq( paired_end_2_reads_fp, rd->name, rd->r2 );
+        // references to read subtemplates
+        struct read_subtemplate* r1 = &(r->subtemplates[0]);
+        struct read_subtemplate* r2 = &(r->subtemplates[1]);
+
+        fprintf_read_subtemplate_to_fastq( paired_end_1_reads_fp, r->name, r1 );
+        fprintf_read_subtemplate_to_fastq( paired_end_2_reads_fp, r->name, r2 );
     }
 }
 
@@ -433,7 +461,7 @@ write_nonmapping_reads_to_fastq(
 
     while( rd != NULL )
     {
-        /* if this rawread doesn't have an associated mapped reads */
+        /* if this read doesn't have an associated mapped reads */
         if( mapped_rd == NULL
             || ( mapped_rd != NULL
                    &&
@@ -447,17 +475,17 @@ write_nonmapping_reads_to_fastq(
                     rdb->unmappable_paired_end_2_reads
                 );
         }
-        /* if the rawread has an associated mapped reads */
+        /* if the read has an associated mapped reads */
         else if( mapped_rd != NULL &&
                  readkey == mapped_rd->read_id &&
                  mapped_rd->num_mappings == 0 )
         {
             /*
-               If the rawread has an associate mapped read, but the mapped read
+               If the read has an associate mapped read, but the mapped read
                has no mapping, it was declared mappable but did not map.
 
                Nonmapping reads are added to the mapped reads db; see
-               find_candidate_mappings.c:889
+               find_candidate_mappings.c:1028
             */
             write_nonmapping_read_to_fastq( rd,
                     rdb->non_mapping_single_end_reads,

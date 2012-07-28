@@ -38,7 +38,11 @@ void
 fprintf_read( FILE* fp, struct read* r );
 
 void
-fprintf_read_subtemplate_to_fastq( FILE* fp, char* name, struct read_subtemplate* st );
+fprintf_read_subtemplate_to_fastq(
+        FILE* fp,
+        char* name,
+        struct read_subtemplate* st
+    );
 
 /* determine whether reads are mappable */
 enum bool
