@@ -99,6 +99,11 @@ init_indexable_subtemplates(
     );
 
 void
+free_indexable_subtemplate(
+        struct indexable_subtemplate* ist
+    );
+
+void
 free_indexable_subtemplates(
         struct indexable_subtemplates* ists
     );

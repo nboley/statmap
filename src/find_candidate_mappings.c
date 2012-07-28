@@ -686,7 +686,11 @@ build_indexable_subtemplates_from_read_subtemplate(
     ist->error_str = rst->error_str;
     ist->origin = rst;
 
+    // copy indexable subtemplate into set of indexable subtemplates
     add_indexable_subtemplate_to_indexable_subtemplates( ist, *ists );
+
+    // free temporary copy
+    free_indexable_subtemplate( ist );
 }
 
 void
@@ -975,6 +979,9 @@ find_candidate_mappings( void* params )
 
                 only_collect_error_data
             );
+
+        // Free the read
+        free_read( r );
 
         /* update the caches */
         candidate_mappings_cache[curr_read_index] = mappings;

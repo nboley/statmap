@@ -223,6 +223,8 @@ free_mapped_locations_container(
         free_mapped_locations( mlc->container[i] );
     }
 
+    free( mlc->container );
+
     free( mlc );
 }
 
