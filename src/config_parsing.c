@@ -221,6 +221,8 @@ static struct argp_option options[] =
      "Directory to write Statmap output to", 0 },
     {"search-type", 's', "TYPE", 0,
      "Type of marginal mapping to do", 0 },
+    {"is-full-fragment", 'F', NULL, OPTION_ARG_OPTIONAL,
+     "(not implemented yet)", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -308,11 +310,15 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     args->search_type = MISMATCHES;
                     break;
                 default:
-                    fprintf(stderr,
+                    argp_failure( state, 1, 0,
                             "FATAL       :  Unrecognized search type '%s'\n",
                             arg );
-                    exit(-1);
             }
+            break;
+        case 'F':
+            fprintf(stderr,
+                    "WARNING     :  -F ( --is-full-fragment ) is not "
+                    "implemented yet. Ignoring.\n" );
             break;
 
             /* utility options */
