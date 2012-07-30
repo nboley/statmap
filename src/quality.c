@@ -298,7 +298,7 @@ multiple_letter_penalty(
         const int num_letters,
         const float min_penalty,
 
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     )
 {
     int j;
@@ -379,7 +379,7 @@ compute_penalty(
         const float min_penalty,
 
         /* the penalty array */
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     )
 {
     int i;
@@ -397,7 +397,7 @@ compute_penalty(
            add penalty
            NOTE - penalty_t float array and LETTER_TYPE must use same encoding
         */
-        penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
+        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
 
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 

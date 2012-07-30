@@ -12,7 +12,6 @@
  */
 
 #include "dna_sequence.h"
-#include "read.h"
 
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
@@ -110,7 +109,7 @@ multiple_letter_penalty(
         const int num_letters,
         const float min_penalty,
 
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     );
 
 /* Compute the penalty from char sequences */
@@ -142,7 +141,7 @@ compute_penalty(
         const float min_penalty,
 
         /* the penalty array */
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     );
 
 #endif /* #define QUALITY */

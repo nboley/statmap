@@ -148,8 +148,8 @@ search_index(
             /* the bkwd stranded sequence */
             bkwd_seq, 
 
-            ist->fwd_penalty_array,
-            ist->rev_penalty_array,
+            ist->fwd_penalties,
+            ist->rev_penalties,
 
             only_collect_error_data
         );
@@ -684,9 +684,7 @@ build_indexable_subtemplates_from_read_subtemplate(
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist,
             subseq_offset,
-            subseq_length,
             rst->char_seq + subseq_offset,
-            rst->error_str + subseq_offset,
             fwd_penalty_array,
             rev_penalty_array
         );
@@ -694,8 +692,8 @@ build_indexable_subtemplates_from_read_subtemplate(
     // copy indexable subtemplate into set of indexable subtemplates
     add_indexable_subtemplate_to_indexable_subtemplates( ist, *ists );
 
-    // free temporary copy
-    free_indexable_subtemplate( ist, false );
+    // free working copy
+    free_indexable_subtemplate( ist );
 }
 
 void

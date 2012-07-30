@@ -994,8 +994,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               /* rev stranded data */
               LETTER_TYPE* rev_seq, 
 
-              struct penalty_array_t* fwd_pa,
-              struct penalty_array_t* rev_pa,
+              struct penalty_t* fwd_penalties,
+              struct penalty_t* rev_penalties,
 
               /*
                  we pass this flag all the way down to optimize the error data
@@ -1040,13 +1040,13 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         
         /* select sequence and penalty_array depending on fwd/bkwd strand */
         LETTER_TYPE* seq;
-        struct penalty_array_t* penalty_array;
+        struct penalty_t* penalties;
         if( strnd == FWD ) {
             seq = fwd_seq;
-            penalty_array = fwd_pa;
+            penalties = fwd_penalties;
         } else {
             seq = rev_seq;
-            penalty_array = rev_pa;
+            penalties = rev_penalties;
         }
 
         /* TODO */
@@ -1085,7 +1085,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    penalty_array 
+                    penalties
                 );
 
                 /* if this letter exceeds the max, continue */
@@ -1132,7 +1132,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    penalty_array
+                    penalties
                 );
 
                 /* 
@@ -1228,7 +1228,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 curr_penalty, min_match_penalty,
                 seq, seq_length, num_letters, node_level, strnd,
                 results,
-                penalty_array
+                penalties
             );
 
             // DEBUG
@@ -1276,24 +1276,25 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
 
 extern void
-find_matches_from_root( struct index_t* index,
-             
-                        float min_match_penalty,
-                        float max_penalty_spread,
-                        mapped_locations* results,
+find_matches_from_root(
+        struct index_t* index,
 
-                        /* the length of the two reads ( below ) */
-                        const int read_len,
+        float min_match_penalty,
+        float max_penalty_spread,
+        mapped_locations* results,
 
-                        /* the fwd stranded data */
-                        LETTER_TYPE* fwd_seq, 
-                        /* the bkwd stranded data */
-                        LETTER_TYPE* rev_seq, 
+        /* the length of the two reads ( below ) */
+        const int read_len,
 
-                        struct penalty_array_t* fwd_pa,
-                        struct penalty_array_t* rev_pa,
+        /* the fwd stranded data */
+        LETTER_TYPE* fwd_seq, 
+        /* the bkwd stranded data */
+        LETTER_TYPE* rev_seq, 
 
-                        enum bool only_find_unique_mappers
+        struct penalty_t* fwd_penalties,
+        struct penalty_t* rev_penalties,
+
+        enum bool only_find_unique_mappers
 )
 {
     assert( index->index_type == TREE );
@@ -1311,8 +1312,8 @@ find_matches_from_root( struct index_t* index,
                          fwd_seq,
                          rev_seq,
 
-                         fwd_pa,
-                         rev_pa,
+                         fwd_penalties,
+                         rev_penalties,
 
                          only_find_unique_mappers
     ); 

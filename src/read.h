@@ -5,6 +5,9 @@
 
 #include "config.h"
 #include "rawread.h"
+#include "quality.h"
+
+//struct penalty_array_t; // fwd declaration (?)
 
 #define POS_SINGLE_END 1
 #define POS_PAIRED_END_1 1
@@ -79,18 +82,15 @@ get_next_read_from_rawread_db(
  */
 struct indexable_subtemplate
 {
-    int subseq_length; // do I need this here?
-                       // will always be genome->index->seq_length
     int subseq_offset;
 
     /* These point into the strings that were allocated for the read
      * subtemplate */
-    // do I need these?
     char* char_seq;
-    char* error_str;
 
-    struct penalty_array_t* fwd_penalty_array;
-    struct penalty_array_t* rev_penalty_array;
+    /* pointers into penalty_array_t->array */
+    struct penalty_t* fwd_penalties;
+    struct penalty_t* rev_penalties;
 };
 
 struct indexable_subtemplates
@@ -104,9 +104,7 @@ init_indexable_subtemplate(
         struct indexable_subtemplate** ist,
 
         int subseq_offset,
-        int subseq_length,
         char* char_seq,
-        char* error_str,
 
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array
@@ -119,8 +117,7 @@ init_indexable_subtemplates(
 
 void
 free_indexable_subtemplate(
-        struct indexable_subtemplate* ist,
-        enum bool free_penalty_arrays
+        struct indexable_subtemplate* ist
     );
 
 void

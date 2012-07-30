@@ -232,6 +232,7 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
+
 void 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
@@ -249,8 +250,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               /* rev stranded data */
               LETTER_TYPE* rev_seq, 
 
-              struct penalty_array_t* fwd_pa,
-              struct penalty_array_t* rev_pa,
+              struct penalty_t* fwd_penalties,
+              struct penalty_t* rev_penalties,
 
               /*
                  we pass this flag all the way down to optimize the error data
@@ -261,22 +262,25 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
 extern void
 find_matches_from_root(
-        struct index_t* index, 
+        struct index_t* index,
 
         float min_match_penalty,
         float max_penalty_spread,
         mapped_locations* results,
 
+        /* the length of the two reads ( below ) */
         const int read_len,
 
+        /* the fwd stranded data */
         LETTER_TYPE* fwd_seq, 
+        /* the bkwd stranded data */
         LETTER_TYPE* rev_seq, 
 
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa,
+        struct penalty_t* fwd_penalties,
+        struct penalty_t* rev_penalties,
 
         enum bool only_find_unique_mappers
-    );
+);
 
 size_t
 size_of_snode( );

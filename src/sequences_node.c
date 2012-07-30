@@ -967,7 +967,8 @@ find_sequences_in_sequences_node(
 
         mapped_locations* results,
 
-        struct penalty_array_t* pa
+        /* the penalty array */
+        struct penalty_t* pa
     )
 {
 
