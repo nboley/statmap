@@ -6,9 +6,9 @@
 #include "config.h"
 #include "rawread.h"
 
-#define POS_NORMAL 1
-#define POS_FIRST  1
-#define POS_SECOND -1
+#define POS_SINGLE_END 1
+#define POS_PAIRED_END_1 1
+#define POS_PAIRED_END_2 -1
 
 struct pos_in_template {
     int pos;

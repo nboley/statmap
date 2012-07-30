@@ -353,8 +353,8 @@ fprintf_mapped_read_to_sam(
             struct read_subtemplate* r2 = &(r->subtemplates[1]);
 
             /* make sure the flag agrees */
-            assert( r1->pos_in_template.pos == POS_FIRST );
-            assert( r2->pos_in_template.pos == POS_SECOND );
+            assert( r1->pos_in_template.pos == POS_PAIRED_END_1 );
+            assert( r2->pos_in_template.pos == POS_PAIRED_END_2 );
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
@@ -376,7 +376,7 @@ fprintf_mapped_read_to_sam(
         } else {
             // reference to first read subtemplate
             struct read_subtemplate* r1 = &(r->subtemplates[0]);
-            assert( r1->pos_in_template.pos == POS_NORMAL );
+            assert( r1->pos_in_template.pos == POS_SINGLE_END );
 
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
@@ -415,7 +415,7 @@ write_nonmapping_read_to_fastq(
         struct read_subtemplate* r1 = &(r->subtemplates[0]);
 
         // check position in template
-        assert( r1->pos_in_template.pos == POS_NORMAL );
+        assert( r1->pos_in_template.pos == POS_SINGLE_END );
 
         fprintf_read_subtemplate_to_fastq( single_end_reads_fp, r->name, r1 );
     }
@@ -426,8 +426,8 @@ write_nonmapping_read_to_fastq(
         struct read_subtemplate* r2 = &(r->subtemplates[1]);
 
         // check position in template
-        assert( r1->pos_in_template.pos == POS_FIRST );
-        assert( r2->pos_in_template.pos == POS_SECOND );
+        assert( r1->pos_in_template.pos == POS_PAIRED_END_1 );
+        assert( r2->pos_in_template.pos == POS_PAIRED_END_2 );
 
         fprintf_read_subtemplate_to_fastq( paired_end_1_reads_fp, r->name, r1 );
         fprintf_read_subtemplate_to_fastq( paired_end_2_reads_fp, r->name, r2 );

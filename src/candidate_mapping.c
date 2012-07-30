@@ -245,7 +245,7 @@ init_candidate_mapping_from_template(
      * subtemplate is from a single or paired end read */
     if( rst->pos_in_template.number_of_reads_in_template == 1 )
     {
-        assert( rst->pos_in_template.pos == POS_NORMAL );
+        assert( rst->pos_in_template.pos == POS_SINGLE_END );
         cand_map.rd_type = SINGLE_END;
     }
     else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
@@ -253,13 +253,13 @@ init_candidate_mapping_from_template(
         /* The position in the template tells us which end of the paired end
          * read this subtemplate represents */
 
-        assert( rst->pos_in_template.pos == POS_FIRST ||
-                rst->pos_in_template.pos == POS_SECOND );
+        assert( rst->pos_in_template.pos == POS_PAIRED_END_1 ||
+                rst->pos_in_template.pos == POS_PAIRED_END_2 );
 
-        if( rst->pos_in_template.pos == POS_FIRST )
+        if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
         {
             cand_map.rd_type = PAIRED_END_1;
-        } else if ( rst->pos_in_template.pos == POS_SECOND )
+        } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
         {
             cand_map.rd_type = PAIRED_END_2;
         }
