@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010 Nathan Boley */
+/* Copyright (c) 2009-2012 Nathan Boley */
 
 #ifndef READ_HEADER
 #define READ_HEADER
