@@ -29,31 +29,6 @@ init_read(
 }
 
 void
-init_subtemplate(
-        struct read_subtemplate** st,
-        char* char_seq,
-        char* error_str,
-        int length,
-        int pos_in_template,
-        enum READ_END end
-    )
-{
-    *st = malloc( sizeof(struct read_subtemplate) );
-
-    // allocate memory for char_seq and error_str
-    (*st)->char_seq = malloc( length*sizeof(char) );
-    (*st)->error_str = malloc( length*sizeof(char) );
-
-    // copy strings
-    memcpy( (*st)->char_seq, char_seq, length );
-    memcpy( (*st)->error_str, error_str, length );
-
-    (*st)->length = length;
-    (*st)->pos_in_template = pos_in_template;
-    (*st)->end = end;
-}
-
-void
 free_read_subtemplate( struct read_subtemplate* st )
 {
     if( st == NULL ) return;
@@ -91,7 +66,7 @@ add_subtemplate_to_read(
         char* error_str,
         int length,
         int pos_in_template,
-        enum READ_END end
+        int num_reads_in_template
     )
 {
     // Reallocate subtemplates array
@@ -111,15 +86,18 @@ add_subtemplate_to_read(
     memcpy( rst->error_str, error_str, length );
 
     rst->length = length;
-    rst->pos_in_template = pos_in_template;
-    rst->end = end;
+
+    /* initialize pos_in_template struct */
+    rst->pos_in_template.pos = pos_in_template;
+    rst->pos_in_template.number_of_reads_in_template = num_reads_in_template;
+    rst->pos_in_template.is_full_fragment = false;
 }
 
 void
 fprintf_read_subtemplate( FILE* fp, struct read_subtemplate* st )
 {
-    fprintf(fp, "Len: %d\tPos: %d\End: %u\n",
-                st->length, st->pos_in_template, st->end);
+    fprintf(fp, "Len: %d\tPos: %d\n",
+                st->length, st->pos_in_template.pos );
     fprintf(fp, "%s\n", st->char_seq);
     fprintf(fp, "%s\n", st->error_str);
 }
@@ -212,16 +190,19 @@ build_read_from_rawreads(
     init_read( r, r1->name );
 
     /*** Add the rawreads as subtemplate(s) ***/
+    int num_reads_in_template;
 
     // If we're working with single end raw reads
     if( r2 == NULL )
     {
+        num_reads_in_template = 1;
+
         add_subtemplate_to_read(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                0,
-                r1->end
+                1,
+                num_reads_in_template
             );
     }
     // if we're working with paired end raw reads
@@ -229,6 +210,8 @@ build_read_from_rawreads(
     {
         assert( r1 != NULL );
         assert( r2 != NULL );
+
+        num_reads_in_template = 2;
 
         /* populate_rawread_from_fastq_file trims the "/" suffix, so paired
          * end reads should have the same read name */
@@ -238,8 +221,8 @@ build_read_from_rawreads(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                0,
-                r1->end
+                1,
+                num_reads_in_template
             );
 
         add_subtemplate_to_read(
@@ -247,7 +230,7 @@ build_read_from_rawreads(
                 r2->char_seq, r2->error_str,
                 r2->length,
                 -1,
-                r2->end
+                num_reads_in_template
             );
     }
 }

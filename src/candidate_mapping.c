@@ -239,20 +239,30 @@ init_candidate_mapping_from_template(
     }
     
     /* set which type of read this is */
-    switch( rst->end )
+    assert( rst->pos_in_template.number_of_reads_in_template == 1 ||
+            rst->pos_in_template.number_of_reads_in_template == 2 );
+    /* The number of reads in the tempate tells us whether this read
+     * subtemplate is from a single or paired end read */
+    if( rst->pos_in_template.number_of_reads_in_template == 1 )
     {
-    case 1:
+        assert( rst->pos_in_template.pos == POS_NORMAL );
         cand_map.rd_type = SINGLE_END;
-        break;
-    case 2:
-        cand_map.rd_type = PAIRED_END_1;
-        break;
-    case 3:
-        cand_map.rd_type = PAIRED_END_2;
-        break;
-    default:
-        fprintf(stderr, "FATAL - unrecognized read end '%i'\n", rst->end );
-        exit( -1 );
+    }
+    else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
+    {
+        /* The position in the template tells us which end of the paired end
+         * read this subtemplate represents */
+
+        assert( rst->pos_in_template.pos == POS_FIRST ||
+                rst->pos_in_template.pos == POS_SECOND );
+
+        if( rst->pos_in_template.pos == POS_FIRST )
+        {
+            cand_map.rd_type = PAIRED_END_1;
+        } else if ( rst->pos_in_template.pos == POS_SECOND )
+        {
+            cand_map.rd_type = PAIRED_END_2;
+        }
     }
 
     return cand_map;

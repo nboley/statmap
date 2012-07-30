@@ -339,13 +339,6 @@ fprintf_mapped_read_to_sam(
 
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
-    if( r->num_subtemplates == 1 )
-    {
-        assert( r->subtemplates[0].end == NORMAL );
-    } else {
-        assert( r->subtemplates[0].end == FIRST );
-        assert( r->subtemplates[1].end == SECOND );
-    }
 
     size_t i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
@@ -360,8 +353,8 @@ fprintf_mapped_read_to_sam(
             struct read_subtemplate* r2 = &(r->subtemplates[1]);
 
             /* make sure the flag agrees */
-            assert( r1->end == FIRST  );
-            assert( r2->end == SECOND );
+            assert( r1->pos_in_template.pos == POS_FIRST );
+            assert( r2->pos_in_template.pos == POS_SECOND );
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
@@ -383,6 +376,7 @@ fprintf_mapped_read_to_sam(
         } else {
             // reference to first read subtemplate
             struct read_subtemplate* r1 = &(r->subtemplates[0]);
+            assert( r1->pos_in_template.pos == POS_NORMAL );
 
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
@@ -420,6 +414,9 @@ write_nonmapping_read_to_fastq(
         // reference to read subtemplate
         struct read_subtemplate* r1 = &(r->subtemplates[0]);
 
+        // check position in template
+        assert( r1->pos_in_template.pos == POS_NORMAL );
+
         fprintf_read_subtemplate_to_fastq( single_end_reads_fp, r->name, r1 );
     }
     /* if this is a paired end read */
@@ -427,6 +424,10 @@ write_nonmapping_read_to_fastq(
         // references to read subtemplates
         struct read_subtemplate* r1 = &(r->subtemplates[0]);
         struct read_subtemplate* r2 = &(r->subtemplates[1]);
+
+        // check position in template
+        assert( r1->pos_in_template.pos == POS_FIRST );
+        assert( r2->pos_in_template.pos == POS_SECOND );
 
         fprintf_read_subtemplate_to_fastq( paired_end_1_reads_fp, r->name, r1 );
         fprintf_read_subtemplate_to_fastq( paired_end_2_reads_fp, r->name, r2 );

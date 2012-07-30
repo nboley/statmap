@@ -6,12 +6,21 @@
 #include "config.h"
 #include "rawread.h"
 
+#define POS_NORMAL 1
+#define POS_FIRST  1
+#define POS_SECOND -1
+
+struct pos_in_template {
+    int pos;
+    int number_of_reads_in_template;
+    enum bool is_full_fragment;
+};
+
 struct read_subtemplate {
     char* char_seq;
     char* error_str;
     int length;
-    int pos_in_template;    // +/- indexed, like Python list indexing
-    enum READ_END end;
+    struct pos_in_template pos_in_template;
 };
 
 struct read {
