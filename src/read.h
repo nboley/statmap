@@ -79,16 +79,18 @@ get_next_read_from_rawread_db(
  */
 struct indexable_subtemplate
 {
-    int seq_length;
+    int subseq_length; // do I need this here?
+                       // will always be genome->index->seq_length
     int subseq_offset;
 
     /* These point into the strings that were allocated for the read
      * subtemplate */
+    // do I need these?
     char* char_seq;
     char* error_str;
 
-    /* reference to originating read subtemplate */
-    struct read_subtemplate* origin;
+    struct penalty_array_t* fwd_penalty_array;
+    struct penalty_array_t* rev_penalty_array;
 };
 
 struct indexable_subtemplates
@@ -99,7 +101,15 @@ struct indexable_subtemplates
 
 void
 init_indexable_subtemplate(
-        struct indexable_subtemplate** ist
+        struct indexable_subtemplate** ist,
+
+        int subseq_offset,
+        int subseq_length,
+        char* char_seq,
+        char* error_str,
+
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array
     );
 
 void
@@ -109,7 +119,8 @@ init_indexable_subtemplates(
 
 void
 free_indexable_subtemplate(
-        struct indexable_subtemplate* ist
+        struct indexable_subtemplate* ist,
+        enum bool free_penalty_arrays
     );
 
 void

@@ -332,29 +332,51 @@ get_next_read_from_rawread_db(
 
 void
 init_indexable_subtemplate(
-        struct indexable_subtemplate** ist
+        struct indexable_subtemplate** ist,
+
+        int subseq_offset,
+        int subseq_length,
+        char* char_seq,
+        char* error_str,
+
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array
     )
 {
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
 
-    // TODO - consider setting some of the below values as part of this
-    // initialization function
+    (*ist)->subseq_offset = subseq_offset;
 
-    (*ist)->seq_length = 0;
-    (*ist)->subseq_offset = 0;
+    (*ist)->char_seq = char_seq;
+    (*ist)->error_str = error_str;
 
-    (*ist)->char_seq = NULL;
-    (*ist)->error_str = NULL;
-
-    (*ist)->origin = NULL;
+    /* Define sub penalty arrays for the indexable templates */
+    /* These are penalty arrays for this subsequence that use pointers into
+     * the read subtemplate's penalty arrays */
+    struct penalty_array_t* sub_pa_fwd = malloc(sizeof(struct penalty_array_t));
+    struct penalty_array_t* sub_pa_rev = malloc(sizeof(struct penalty_array_t));
+    sub_pa_fwd->len = subseq_length;
+    sub_pa_fwd->array = fwd_penalty_array->array + subseq_offset;
+    sub_pa_rev->len = subseq_length;
+    sub_pa_rev->array = rev_penalty_array->array + subseq_offset;
+    
+    (*ist)->fwd_penalty_array = sub_pa_fwd;
+    (*ist)->rev_penalty_array = sub_pa_rev;
 }
 
 void
 free_indexable_subtemplate(
-        struct indexable_subtemplate* ist
+        struct indexable_subtemplate* ist,
+        enum bool free_penalty_arrays
     )
 {
     if( ist == NULL ) return;
+
+    if( free_penalty_arrays )
+    {
+        free( ist->fwd_penalty_array );
+        free( ist->rev_penalty_array );
+    }
 
     // NOTE - we don't free char_seq or error_str because they are pointers
     // into memory that was allocated as part of the parent read subtemplate
@@ -383,7 +405,7 @@ free_indexable_subtemplates(
     int i;
     for( i = 0; i < ists->length; i++ )
     {
-        free_indexable_subtemplate( &(ists->container[i]) );
+        free_indexable_subtemplate( &(ists->container[i]), true );
     }
 
     free( ists );
