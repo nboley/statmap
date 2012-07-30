@@ -435,10 +435,11 @@ def map_with_statmap( iterative=True, paired_end=True ):
     # run the aggregation generation code
     # generate min and max aggregates for ip and nc reads
     ##
-    run_external_cmd( build_aggregate_trace_call("min", "ip") )
-    run_external_cmd( build_aggregate_trace_call("min", "nc") )
-    run_external_cmd( build_aggregate_trace_call("max", "ip") )
-    run_external_cmd( build_aggregate_trace_call("max", "nc") )
+    #run_external_cmd( build_aggregate_trace_call("min", "ip") )
+    #run_external_cmd( build_aggregate_trace_call("min", "nc") )
+    #run_external_cmd( build_aggregate_trace_call("max", "ip") )
+    #run_external_cmd( build_aggregate_trace_call("max", "nc") )
+    run_external_cmd( "../utilities/build_aggregates.py smo_chipseq_sim" )
 
     return
 
