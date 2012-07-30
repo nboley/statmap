@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010 Nathan Boley */
+/* Copyright (c) 2009-2012 Nathan Boley */
 
 #ifndef CANDIDATE_MAPPING
 #define CANDIDATE_MAPPING

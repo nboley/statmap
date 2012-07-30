@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Nathan Boley */
+/* Copyright (c) 2009-2012, Nathan Boley */
 
 #ifndef CONFIG_PARSING_H
 #define CONFIG_PARSING_H
