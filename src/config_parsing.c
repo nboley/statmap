@@ -284,7 +284,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     break;
                 default:
                     argp_failure( state, 1, 0, 
-                            "FATAL       :  Unrecognized assay type: '%s'\n",
+                            "FATAL       :  Unrecognized assay type: '%s'",
                             arg );
             }
             break;
@@ -311,14 +311,14 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     break;
                 default:
                     argp_failure( state, 1, 0,
-                            "FATAL       :  Unrecognized search type '%s'\n",
+                            "FATAL       :  Unrecognized search type '%s'",
                             arg );
             }
             break;
         case 'F':
-            fprintf(stderr,
-                    "WARNING     :  -F ( --is-full-fragment ) is not "
-                    "implemented yet. Ignoring.\n" );
+            argp_failure( state, 1, 0,
+                    "FATAL       :  -F ( --is-full-fragment ) is not "
+                    "implemented yet." );
             break;
 
             /* utility options */
