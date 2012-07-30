@@ -737,6 +737,32 @@ search_index_for_indexable_subtemplates(
 }
 
 void
+build_candidate_mappings_from_mapped_locations_container(
+        candidate_mappings* rst_mappings,
+        mapped_locations_container* ml_container,
+        struct read_subtemplate* rst,
+
+        struct genome_data* genome,
+
+        float min_match_penalty
+    )
+{
+    /* add candidate mappings for each mapped_locations in the
+     * mapped_locations_container */
+    int mlc_index;
+    for( mlc_index = 0; mlc_index < ml_container->length; mlc_index++ )
+    {
+        mapped_locations* results = ml_container->container[mlc_index];
+
+        build_candidate_mappings_from_mapped_locations(
+                genome, rst, results,
+                rst_mappings,
+                min_match_penalty
+            );
+    }
+}
+
+void
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         candidate_mappings* rst_mappings,
@@ -751,10 +777,6 @@ find_candidate_mappings_for_read_subtemplate(
         enum bool only_collect_error_data
     )
 {
-    // store all of the mapped_locations for this read subtemplate
-    mapped_locations_container* ml_container = NULL;
-    init_mapped_locations_container( &ml_container );
-
     /* build the penalty arrays for this read subtemplate */
     struct penalty_array_t fwd_penalty_array, rev_penalty_array;
     init_penalty_array( &fwd_penalty_array, rst->length );
@@ -777,6 +799,10 @@ find_candidate_mappings_for_read_subtemplate(
             &rev_penalty_array
         );
 
+    // store all of the mapped_locations for this read subtemplate
+    mapped_locations_container* ml_container = NULL;
+    init_mapped_locations_container( &ml_container );
+
     search_index_for_indexable_subtemplates(
             ists,
             ml_container,
@@ -791,23 +817,17 @@ find_candidate_mappings_for_read_subtemplate(
 
     free_indexable_subtemplates( ists );
 
-    /* build candidate mappings for all of the mapped lcoations for
-     * this read subtemplate */
+    /* build candidate mappings from each set of mapped locations in the mapped
+     * locations container */
+    build_candidate_mappings_from_mapped_locations_container(
+            rst_mappings,
+            ml_container,
+            rst,
 
-    /* add candidate mappings for each mapped_locations in the
-     * mapped_locations_container */
-    int mlc_index;
-    for( mlc_index = 0; mlc_index < ml_container->length; mlc_index++ )
-    {
-        mapped_locations* results = ml_container->container[mlc_index];
+            genome,
 
-        /* appends built candidate mappings to mappings */
-        build_candidate_mappings_from_mapped_locations(
-                genome, rst, results,
-                rst_mappings,
-                min_match_penalty
-            );
-    }
+            min_match_penalty
+        );
 
     /****** Do the recheck ******/
     recheck_locations(
