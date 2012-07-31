@@ -1023,7 +1023,7 @@ get_next_read_from_mapped_reads_db(
             exit( -1 );
         }
     }
-
+    
     return 0;
 }
 

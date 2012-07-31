@@ -21,6 +21,9 @@ import StringIO
 import tempfile
 
 import numpy
+sys.path.append( "../python_lib/" )
+from error_model import load_error_data
+
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
@@ -31,7 +34,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = False
+P_STATMAP_OUTPUT = True
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -888,8 +891,81 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
         shutil.rmtree(output_directory)
 
 def test_error_rate_estimation( ):
-    test_dirty_reads( 75, nreads=50000, n_threads=1, min_penalty=-30 ) 
-    print "PASS: Error Rate ( Statmap appears to be correctly estimating error rates )"
+    """Test to ensure that the error modelling code is working properly.
+    
+    We use the following error model:
+    
+    Error rate from position:
+        0.01 + (pos/read_len)*0.04
+        
+    Error rate from char string:
+        ?: +0.05
+        a: +0.03
+        d: +0.02
+        f: +0.01
+        h: +0.00
+    """
+    error_char_mappings = dict(zip('?adfh', [0.05, 0.03, 0.02, 0.01, 0.00] ))
+    
+    rl = read_len = 50
+    indexed_seq_len = 20
+    nsamples = 20000
+    output_directory = "smo_test_error_rate_estimation"
+    
+    
+    ###### Prepare the data for the test #######################################
+    # build a random genome
+    genome_of = open("tmp.genome.fa", "w")
+    r_genome = build_random_genome( [2000,2000], ["1","2"] )
+    write_genome_to_fasta( r_genome, genome_of, 1 )
+    genome_of.close()
+    
+    # sample uniformly from the genome. This gives us the sequences
+    # that we need to map. Note that we dont RC them, so every read should be in
+    # the 5' direction
+    fragments = sample_uniformily_from_genome( 
+        r_genome, nsamples=nsamples, frag_len=rl )
+    reads = build_reads_from_fragments( 
+        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
+    
+    # mutate the reads according to some simple eror model
+    def iter_mutated_reads( reads ):
+        for read in reads:
+            error_str = "".join( random.choice('?adfh') 
+                                 for i in xrange(len(read)) )
+            error_rates = [ 0.01 + 0.04*float(i)/len(read) 
+                            + error_char_mappings[char]
+                            for i, char in enumerate( error_str ) ]
+            mutated_read = []
+            for base, error_prb in izip(read, error_rates):
+                if random.random() < error_prb:
+                    mutated_read.append( random.choice('acgtACGT') )
+                else:
+                    mutated_read.append( base )
+            mutated_read = ''.join( mutated_read )
+            yield ( mutated_read, error_str, read )
+
+    mutated_reads = list( iter_mutated_reads( reads ) )
+
+    # build and write the reads    
+    reads_of = open("tmp.fastq", "w")
+    build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
+    reads_of.close()
+    
+    ###### Write out the test files, and run statmap ###########################
+    
+    ## Map the data
+    read_fnames = [ "tmp.fastq", ]
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len )
+    
+    ###### Make sure that the error data looks correct #########################
+    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
+    
+    ###### Cleanup the created files ###########################################
+    if CLEANUP:
+        os.remove("./tmp.genome.fa")
+        os.remove("./tmp.fastq")
+        shutil.rmtree(output_directory)
 
 
 def test_mutated_read_finding( ):
@@ -897,9 +973,6 @@ def test_mutated_read_finding( ):
     for rl in rls:
         test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
         print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
-        # FIXME - do the work to fix these tests
-        #test_dirty_reads( rl, n_threads=1, min_penalty=-1 ) 
-        #print "PASS: Dirty Read (-1 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
@@ -1334,9 +1407,9 @@ if False:
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
-    #print "Starting test_error_rate_estimation()"
-    #test_error_rate_estimation( )
-    #return
+    print "Starting test_error_rate_estimation()"
+    test_error_rate_estimation( )
+    return
     
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()

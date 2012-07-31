@@ -218,7 +218,8 @@ static struct argp_option options[] =
     {"output-dir", 'o', "DIR", 0,
      "Directory to write Statmap output to", 0 },
     {"search-type", 's', "TYPE", 0,
-     "Type of marginal mapping to do", 0 },
+     "Error model type: 'm' for mismatches, 'e' to estimate the error model ( see README for more details )", 
+     0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}

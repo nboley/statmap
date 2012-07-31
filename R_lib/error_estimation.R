@@ -1,3 +1,33 @@
+get_beta_bounds = function( match, cnt ) {
+    if( cnt == 0 ){
+        return( c(0,1.0) );
+    }
+    
+    lb = qbeta( 0.05, match+0.01, cnt-match );
+    ub = qbeta( 0.95, match+0.01, cnt-match );
+    
+    c( lb, ub );
+}
+
+plot.marginal = function( t, index ) {    
+    pos.mismatch.cnts = aggregate( t[[2]], by=list(t[[1]][,index]), FUN=sum );
+    poss = pos.mismatch.cnts[[1]];
+    pos.mismatch.cnts = pos.mismatch.cnts[[2]];
+    pos.cnts = aggregate( t[[3]], by=list(t[[1]][,index]), FUN=sum )[[2]];
+    bounds = mapply( get_beta_bounds, pos.mismatch.cnts, pos.cnts );
+
+    plot( poss, pos.mismatch.cnts/pos.cnts, type='l', lwd=2, ylim=c( min(bounds), max(bounds) ) );
+    lines( poss, t(bounds)[,1], type='l', lwd=0.5 );
+    lines( poss, t(bounds)[,2], type='l', lwd=0.5 );        
+}
+
+plot.marginals = function( t ) {    
+    par( mfrow=c(2,1) );
+    plot.marginal( t, 1 );
+    plot.marginal( t, 2 );
+}
+plot.marginals( t )
+
 build_matrices_from_record = function( record ) {
     max_readlen = as.integer(record[4])
     min_qual    = as.integer(record[5])
@@ -23,6 +53,15 @@ build_regression_vectors_from_record = function( record ) {
                      row.names=NULL );
     
     list( xs, mismatches, cnts );
+}
+
+build_nonzero_regression_vectors_from_record = function( record ) {
+    data = build_regression_vectors_from_record( record );
+    # find which types have zero observations
+    zero_obs_indices = which( data[[3]] != 0 );
+    list( data[[1]][zero_obs_indices,], 
+          data[[2]][zero_obs_indices], 
+          data[[3]][zero_obs_indices] );
 }
 
 predict = function( i, j, pos_mo, qual_mo, lambda ) {
@@ -100,9 +139,8 @@ if(0) {
 }
 
 data = read.table( "error_stats.log", header=TRUE )
-x = build_error_predictor( data[1,] )
-x(1,104);
-
+t = build_regression_vectors_from_record( data[1,] )
+plot.marginals( t )
 
 
 

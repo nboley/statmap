@@ -630,7 +630,7 @@ update_error_data_record_from_candidate_mappings(
         return;
     
     // emphasize the array aspect with the + 0
-    // but, since the length is exactly 1, we know that
+    // but, since aal of the sequence is identical,
     // we only need to deal with this read
     candidate_mapping* loc = mappings->mappings + 0;         
     int mapped_length = r->length - loc->trimmed_len;
