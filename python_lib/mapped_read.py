@@ -105,23 +105,25 @@ struct cond_prbs_db_t {
         ("max_rd_id", c_uint),
     ]
 
-def open_mapped_reads_db( fname ):
-    '''
-    Return a pointer to c_mapped_reads_db_t from fname
-    '''
+def open_mapped_reads_db_for_reading( fname ):
     c_mpd_rd_db_p = c_void_p()
-    statmap_o.open_mapped_reads_db( byref(c_mpd_rd_db_p), c_char_p(fname) )
+    statmap_o.open_mapped_reads_db_for_reading(
+            byref(c_mpd_rd_db_p), c_char_p(fname) )
     c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
     return c_mpd_rd_db_p
 
+def open_mapped_reads_db_for_writing( fname ):
+    c_mpd_rd_db_p = c_void_p()
+    statmap_o.open_mapped_reads_db_for_writing(
+            byref(c_mpd_rd_db_p), c_char_p(fname) )
+    c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
+    return c_mpd_rd_db_p
+
+def open_mapped_reads_db_for_writing( fname ):
+    c_mpd_rd
+
 def build_fl_dist_from_filename( mpd_rd_db_p, filename ):
     statmap_o.build_fl_dist_from_filename( mpd_rd_db_p, filename )
-
-def mmap_mapped_reads_db( mpd_rd_db_p ):
-    statmap_o.mmap_mapped_reads_db( mpd_rd_db_p )
-
-def index_mapped_reads_db( mpd_rd_db_p ):
-    statmap_o.index_mapped_reads_db( mpd_rd_db_p )
 
 def build_chipseq_bs_density( fl_dist_p ):
     statmap_o.build_chipseq_bs_density( fl_dist_p )

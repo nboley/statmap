@@ -112,18 +112,6 @@ map_marginal( struct args_t* args,
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
     
-    /***** initialize the mappings dbs */
-    
-    if( false == is_nc )
-    {
-        new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
-    } else {
-        new_mapped_reads_db( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
-    }
-
-    
-    /***** END initialize the mappings dbs */
-    
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
@@ -155,6 +143,14 @@ map_marginal( struct args_t* args,
         exit( 1 );
     }
     
+    /* initialize the mapped reads db */
+    if( false == is_nc )
+    {
+        open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    } else {
+        open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
+    
     find_all_candidate_mappings( 
         genome,
         rdb,
@@ -165,6 +161,17 @@ map_marginal( struct args_t* args,
     );
     
     free_error_model( error_model );
+
+    /* close the mapped reads db that was opened for writing, and reopen it for
+     * reading */
+    close_mapped_reads_db( mpd_rds_db );
+
+    if( false == is_nc )
+    {
+        open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    } else {
+        open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
     
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
@@ -219,13 +226,6 @@ iterative_mapping( struct args_t* args,
         exit(-1);
     }
  
-    /* Iterative mapping */
-    /* mmap and index the necessary data */
-    fprintf(stderr, "NOTICE      :  mmapping mapped reads DB.\n" );
-    mmap_mapped_reads_db( mpd_rds_db );
-    fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
-    index_mapped_reads_db( mpd_rds_db );
-    
     /* Do the iterative mapping */
     generic_update_mapping( mpd_rds_db,
                             genome, 
@@ -233,8 +233,6 @@ iterative_mapping( struct args_t* args,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
         
-    munmap_mapped_reads_db( mpd_rds_db );
-    
     return;
 }
 

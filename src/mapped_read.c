@@ -822,17 +822,27 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
 }
 
 void
-new_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
+open_mapped_reads_db_for_reading(
+        struct mapped_reads_db** rdb,
+        char* fname
+    )
 {
-    init_mapped_reads_db( rdb, fname, "w+" );
+    init_mapped_reads_db( rdb, fname, "r+" );
+    (*rdb)->write_locked = true;
+
+    /* mmap the mapped reads db and set it to be write locked */
+    mmap_mapped_reads_db( *rdb );
+    index_mapped_reads_db( *rdb );
 }
 
 void
-open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname )
+open_mapped_reads_db_for_writing(
+        struct mapped_reads_db** rdb,
+        char* fname
+    )
 {
-    init_mapped_reads_db( rdb, fname, "r+" );
+    init_mapped_reads_db( rdb, fname, "w+" );
 }
-
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
@@ -931,8 +941,18 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 enum bool
 mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
 {
-    if( feof( rdb->fp ) )
-        return true;
+    /* if the rdb was opened for reading (mmapped) */
+    if( rdb->mmapped_data != NULL )
+    {
+        if( rdb->current_read == rdb->num_mmapped_reads )
+            return true;
+    }
+    /* if the rdb was opened for writing (FILE*) */
+    else
+    {
+        if( feof( rdb->fp ) )
+            return true;
+    }
 
     return false;
 }
@@ -942,91 +962,42 @@ get_next_read_from_mapped_reads_db(
     struct mapped_reads_db* const rdb, 
     struct mapped_read_t** rd )
 {
-    size_t rv;
-
     init_mapped_read( rd );
     (*rd)->rdb = rdb;
 
-    /* if the read db has been mmapped */
-    if ( true == rdb->write_locked )
+    assert( rdb->write_locked == true );
+
+    /** Get the next read **/
+    pthread_spin_lock( rdb->access_lock );
+    /* if we have read every read */
+    if( rdb->current_read == rdb->num_mmapped_reads )
     {
-        /** Get the next read **/
-        pthread_spin_lock( rdb->access_lock );
-        /* if we have read every read */
-        if( rdb->current_read == rdb->num_mmapped_reads )
-        {
-            pthread_spin_unlock( rdb->access_lock );
-            free_mapped_read( *rd );
-            *rd = NULL;
-            return EOF;
-        }
-        
-        unsigned int current_read_id = rdb->current_read;
-        rdb->current_read += 1;
         pthread_spin_unlock( rdb->access_lock );
-
-        assert( current_read_id < rdb->num_mmapped_reads );
-        
-        /* get a pointer to the current read */
-        char* read_start = rdb->mmapped_reads_starts[current_read_id];
-        
-        /* read a mapping into the struct */
-        (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
-
-        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
-        (*rd)->num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
-
-        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
-
-        (*rd)->locations = (struct mapped_read_location*) read_start;
-        (*rd)->free_locations = false;
-        
-    } else {
-        pthread_spin_lock( rdb->access_lock );
-        
-        /* Read in the read id */
-        rv = fread( 
-            &((*rd)->read_id), sizeof((*rd)->read_id), 1, rdb->fp );
-        if( 1 != rv )
-        {
-            pthread_spin_unlock( rdb->access_lock );
-            assert( feof( rdb->fp ) );
-            free_mapped_read( *rd );
-            *rd = NULL;
-            return EOF;
-        }
-        
-        /* Read in the number of mappings */
-        rv = fread(
-            &((*rd)->num_mappings), sizeof((*rd)->num_mappings), 1, rdb->fp );
-        if( 1 != rv )
-        {
-            pthread_spin_unlock( rdb->access_lock );
-            fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
-            assert( false );
-            exit( -1 );
-        }
-        
-        /* read in the locations */
-        (*rd)->locations = malloc( 
-            (*rd)->num_mappings*sizeof(struct mapped_read_location) );
-        (*rd)->free_locations = true;
-
-        rv = fread( (*rd)->locations, 
-                    sizeof(struct mapped_read_location), 
-                    (*rd)->num_mappings, 
-                    rdb->fp );
-
-        pthread_spin_unlock( rdb->access_lock );
-   
-        if( (*rd)->num_mappings != rv )
-        {
-            fprintf( stderr, "FATAL       :  Unexpected end of file\n" );
-            assert( false );
-            exit( -1 );
-        }
+        free_mapped_read( *rd );
+        *rd = NULL;
+        return EOF;
     }
+    
+    unsigned int current_read_id = rdb->current_read;
+    rdb->current_read += 1;
+    pthread_spin_unlock( rdb->access_lock );
 
+    assert( current_read_id < rdb->num_mmapped_reads );
+    
+    /* get a pointer to the current read */
+    char* read_start = rdb->mmapped_reads_starts[current_read_id];
+    
+    /* read a mapping into the struct */
+    (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
+
+    read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
+    (*rd)->num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
+
+    read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
+
+    (*rd)->locations = (struct mapped_read_location*) read_start;
+    (*rd)->free_locations = false;
+        
     return 0;
 }
 

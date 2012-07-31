@@ -254,24 +254,6 @@ set_seq_error_in_mapped_read_location(
     assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
 }
 
-/** COND PROB **/
-
-/*
-static inline float
-get_cond_prob_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ 
-    return  ML_PRB_TYPE_to_float( loc->cond_prob ); 
-}
-
-static inline void
-set_cond_prob_in_mapped_read_location( 
-    struct mapped_read_location* loc, float value )
-{ 
-    assert( value == -1 || ( value >= -0.000001 && value <= 1.00001 ) );
-    loc->cond_prob = ML_PRB_TYPE_from_float( value ); 
-}
-*/
-
 /*
  * A full mapped read.
  *
@@ -371,10 +353,10 @@ typedef struct {
 } mapped_reads_db_cursor;
 
 void
-new_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+open_mapped_reads_db_for_reading( struct mapped_reads_db** rdb, char* fname );
 
 void
-open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+open_mapped_reads_db_for_writing( struct mapped_reads_db** rdb, char* fname );
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
