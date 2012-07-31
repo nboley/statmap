@@ -456,6 +456,7 @@ write_nonmapping_reads_to_fastq(
         mappings_db, 
         &mapped_rd
     );
+    assert( error == 0 );
     
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd, -1 );
@@ -567,6 +568,7 @@ write_mapped_reads_to_sam(
         mappings_db, 
         &mapped_rd
     );
+    assert( error == 0 );
 
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd, -1 );

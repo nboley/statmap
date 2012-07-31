@@ -979,9 +979,6 @@ find_candidate_mappings( void* params )
 
     assert( genome->index != NULL );
 
-    clock_t start;
-    start = clock();
-    
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
 
@@ -1163,6 +1160,7 @@ void init_td_template( struct single_map_thread_data* td_template,
     int rc;
     pthread_mutexattr_t mta;
     rc = pthread_mutexattr_init(&mta);
+    assert( rc == 0 );
     
     td_template->genome = genome;
     
@@ -1172,6 +1170,8 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->mapped_cnt_lock = malloc( sizeof(pthread_spinlock_t) );
     rc = pthread_spin_init( td_template->mapped_cnt_lock,
                             PTHREAD_PROCESS_PRIVATE );
+    assert( rc == 0 );
+
     td_template->max_readkey = 0;
 
     td_template->rdb = rdb;

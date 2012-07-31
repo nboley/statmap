@@ -1497,6 +1497,13 @@ update_chipseq_mapping_wnc(
         update_chipseq_trace_expectation_from_location,
         update_chipseq_mapped_read_prbs
     );
+
+    if( 0 != error )
+    {
+        perror("Unrecognized error code from update_mapping");
+        assert(false);
+        exit( -1 );
+    }
     
     gettimeofday( &stop, NULL );
     long seconds  = stop.tv_sec  - start.tv_sec;
@@ -1508,8 +1515,7 @@ update_chipseq_mapping_wnc(
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );
     
-    struct update_mapped_read_rv_t rv;
-    rv = update_mapped_reads_from_trace(
+    update_mapped_reads_from_trace(
             nc_rdb, nc_cond_prbs_db,
             *ip_trace, update_chipseq_mapped_read_prbs
         );

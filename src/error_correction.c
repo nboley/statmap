@@ -85,6 +85,8 @@ init_error_data( struct error_data_t** data )
     rc = pthread_mutexattr_init(&mta);
     (*data)->mutex = malloc( sizeof(pthread_mutex_t) );
     rc = pthread_mutex_init( (*data)->mutex, &mta );
+
+    assert( rc == 0 );
     
     return;
 }

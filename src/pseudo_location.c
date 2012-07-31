@@ -180,8 +180,6 @@ load_pseudo_locations_from_mmapped_data(
 
     init_pseudo_locations( ps_locs );
 
-    size_t size = 0;
-    size = *( (size_t*) data );
     data += sizeof(size_t);
     
     (*ps_locs)->num = *( (int*) data );
