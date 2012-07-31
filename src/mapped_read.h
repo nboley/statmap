@@ -321,12 +321,9 @@ write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  );
 struct mapped_reads_db {
     FILE* fp;
 
-    /* Set this to locked when we mmap it - 
-       then forbid any new writes to the 
-       file 
-    */
-    enum bool write_locked;
-    
+    char mode; // 'r' or 'w'
+    int num_mapped_reads;
+
     pthread_spinlock_t* access_lock;
 
     /* mmap data */

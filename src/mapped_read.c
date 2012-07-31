@@ -799,9 +799,12 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
         exit(-1);
     }
 
-    /* whether or not the DB is mmapped */
-    (*rdb)->write_locked = false;
-    
+    /* number of mapped reads in the DB */
+    (*rdb)->num_mapped_reads = 0;
+
+    /* Set by caller (reading or writing) */
+    (*rdb)->mode = 0;
+
     (*rdb)->access_lock = malloc( sizeof(pthread_spinlock_t) );
     pthread_spin_init( (*rdb)->access_lock, PTHREAD_PROCESS_PRIVATE ); 
 
@@ -817,6 +820,8 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
     (*rdb)->fl_dist = NULL;
 
     (*rdb)->num_succ_iterations = NULL;
+
+    (*rdb)->current_read = 0;
     
     return;
 }
@@ -828,11 +833,15 @@ open_mapped_reads_db_for_reading(
     )
 {
     init_mapped_reads_db( rdb, fname, "r+" );
-    (*rdb)->write_locked = true;
 
-    /* mmap the mapped reads db and set it to be write locked */
     mmap_mapped_reads_db( *rdb );
+
+    // read num_mapped_reads from start of file
+    (*rdb)->num_mapped_reads = *((int*) (*rdb)->mmapped_data);
+
     index_mapped_reads_db( *rdb );
+
+    (*rdb)->mode = 'r';
 }
 
 void
@@ -842,6 +851,13 @@ open_mapped_reads_db_for_writing(
     )
 {
     init_mapped_reads_db( rdb, fname, "w+" );
+
+    /* write placeholder for size of mapped reads db */
+    int placeholder = 0;
+    fwrite( &placeholder, sizeof(int), 1, (*rdb)->fp );
+    /* updated on closing the mapped reads db (for writing) */
+
+    (*rdb)->mode = 'w';
 }
 
 void
@@ -865,14 +881,9 @@ build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
 }
 
 void
-close_mapped_reads_db( struct mapped_reads_db** rdb )
-
+close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db** rdb )
 {
-    if( NULL == *rdb )
-        return;
-    
     munmap_mapped_reads_db( *rdb );
-    fclose( (*rdb)->fp );
 
     if( (*rdb)->fl_dist != NULL ) {
         free_fl_dist( &((*rdb)->fl_dist) );
@@ -882,6 +893,36 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     if( (*rdb)->mmapped_reads_starts != NULL ) {
         free( (*rdb)->mmapped_reads_starts );
         (*rdb)->mmapped_reads_starts = NULL;
+    }
+
+    return;
+}
+
+void
+close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db** rdb )
+{
+    /* if the db is open for writing, update the number of mapped reads */
+    fseek( (*rdb)->fp, 0, SEEK_SET );
+    fwrite( &((*rdb)->num_mapped_reads), sizeof(int), 1, (*rdb)->fp );
+
+    fclose( (*rdb)->fp );
+    
+    return;
+}
+
+void
+close_mapped_reads_db( struct mapped_reads_db** rdb )
+{
+    if( NULL == *rdb )
+        return;
+
+    if( (*rdb)->mode == 'r' )
+    {
+        close_reading_specific_portions_of_mapped_reads_db( rdb );
+    } else if( (*rdb)->mode == 'w' ) {
+        close_writing_specific_portions_of_mapped_reads_db( rdb );
+    } else {
+        assert( false );
     }
 
     pthread_spin_destroy( (*rdb)->access_lock );    
@@ -898,9 +939,9 @@ add_read_to_mapped_reads_db(
     struct mapped_reads_db* rdb,
     struct mapped_read_t* rd)
 {
-    if ( true == rdb->write_locked )
+    if ( rdb->mode == 'r' )
     {
-        fprintf( stderr, "ERROR       :  Mapped Reads DBis locked - cannot add read.\n");
+        fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");
         /* TODO - be able to recover from this */
         exit( -1 );
     }
@@ -915,9 +956,11 @@ add_read_to_mapped_reads_db(
 
     if( error < 0 )
     {
-        fprintf( stderr, "FATAL       :  Error writing to packed mapped read db.\n");
+        fprintf(stderr, "FATAL       :  Error writing to packed mapped reads db.\n");
         exit( -1 );
     }
+
+    rdb->num_mapped_reads += 1;
     
     return;
 }
@@ -928,13 +971,6 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
     /* if rdb is mmapped */
     rdb->current_read = 0;
     
-    /* if it is not mmapped */
-    assert( rdb->fp != NULL );
-    /* make sure the fp is open */
-    assert( ftell( rdb->fp ) >= 0 );
-    fflush( rdb->fp );
-    fseek( rdb->fp, 0L , SEEK_SET );
-
     return;
 }
 
@@ -942,17 +978,11 @@ enum bool
 mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
 {
     /* if the rdb was opened for reading (mmapped) */
-    if( rdb->mmapped_data != NULL )
-    {
-        if( rdb->current_read == rdb->num_mmapped_reads )
-            return true;
-    }
-    /* if the rdb was opened for writing (FILE*) */
-    else
-    {
-        if( feof( rdb->fp ) )
-            return true;
-    }
+    assert( rdb->mode == 'r' );
+    assert( rdb->mmapped_data != NULL );
+
+    if( rdb->current_read == rdb->num_mmapped_reads )
+        return true;
 
     return false;
 }
@@ -965,7 +995,12 @@ get_next_read_from_mapped_reads_db(
     init_mapped_read( rd );
     (*rd)->rdb = rdb;
 
-    assert( rdb->write_locked == true );
+    /* Make sure the db is open for reading */
+    if( rdb->mode != 'r' )
+    {
+        fprintf(stderr, "FATAL       :  Cannot get read from mapped reads db unless it is open for reading.\n" );
+        exit( -1 );
+    }
 
     /** Get the next read **/
     pthread_spin_lock( rdb->access_lock );
@@ -1072,9 +1107,6 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     /* get the file descriptor for the file we wish to mmap */
     int fdin = fileno( rdb->fp );
     
-    /* Lock the db to prevent writes */
-    rdb->write_locked = true;
-    
     /* make sure the entire file has been written to disk */
     fflush( rdb->fp );
 
@@ -1156,7 +1188,6 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
 
     rdb->mmapped_data = NULL;
 
-    rdb->write_locked = false;
     rdb->mmapped_data_size = 0;
 
     free( rdb->mmapped_reads_starts );
@@ -1177,8 +1208,8 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     unsigned long num_allcd_reads = REALLOC_BLOCK_SIZE;
     rdb->mmapped_reads_starts = malloc(sizeof(char*)*REALLOC_BLOCK_SIZE);
 
-    /* Copy the reads data pointer */
-    char* read_start = rdb->mmapped_data;
+    /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
+    char* read_start = rdb->mmapped_data + sizeof(int);
 
     /* Loop through all of the reads */
     while( ((size_t)read_start - (size_t)rdb->mmapped_data) 

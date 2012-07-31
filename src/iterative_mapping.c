@@ -644,8 +644,8 @@ update_mapping(
                                            const struct mapped_read_t* const r  )
     )
 {
-    /* make sure the mapped reads are mmapped */
-    assert( rdb->write_locked );
+    /* make sure the mapped reads are open for reading */
+    assert( rdb->mode == 'r' );
 
     double prev_log_lhd = 0;
     
