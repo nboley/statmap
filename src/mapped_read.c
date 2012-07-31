@@ -899,7 +899,10 @@ add_read_to_mapped_reads_db(
 
     rd->rdb = rdb;
     
+    pthread_spin_lock( rdb->access_lock );
     error = write_mapped_read_to_file( rd, rdb->fp );
+    pthread_spin_unlock( rdb->access_lock );
+
     if( error < 0 )
     {
         fprintf( stderr, "FATAL       :  Error writing to packed mapped read db.\n");

@@ -114,15 +114,10 @@ map_marginal( struct args_t* args,
     
     /***** initialize the mappings dbs */
     
-    candidate_mappings_db candidate_mappings;
     if( false == is_nc )
     {
-        init_candidate_mappings_db( &candidate_mappings, 
-                                    CANDIDATE_MAPPINGS_DB_FNAME );
         new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
     } else {
-        init_candidate_mappings_db( &candidate_mappings, 
-                                    CANDIDATE_MAPPINGS_NC_DB_FNAME );
         new_mapped_reads_db( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
     }
 
@@ -143,7 +138,7 @@ map_marginal( struct args_t* args,
         bootstrap_estimated_error_model( 
             genome,
             rdb,
-            &candidate_mappings,
+            *mpd_rds_db,
             error_model
         );
         
@@ -163,25 +158,13 @@ map_marginal( struct args_t* args,
     find_all_candidate_mappings( 
         genome,
         rdb,
-        &candidate_mappings,
+        *mpd_rds_db,
         error_model,
         args->min_match_penalty,
         args->max_penalty_spread
     );
     
     free_error_model( error_model );
-    
-    /* combine and output all of the partial mappings - this includes
-       joining paired end reads. */
-    fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
-    gettimeofday( &start, NULL );
-    join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db, genome );
-    gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-    /*  close candidate mappings db */
-    close_candidate_mappings_db( &candidate_mappings );
     
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );

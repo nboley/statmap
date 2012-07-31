@@ -21,6 +21,7 @@
 #include "genome.h"
 #include "rawread.h"
 #include "read.h"
+#include "mapped_read.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
@@ -906,6 +907,30 @@ find_candidate_mappings_for_read(
     }
 }
 
+void
+add_mapped_reads_from_candidate_mappings(
+        candidate_mappings* mappings,
+        readkey_t readkey,
+        struct genome_data* genome,
+        struct mapped_reads_db* mpd_rds_db
+    )
+{
+    struct mapped_read_t* mpd_rd;
+
+    build_mapped_read_from_candidate_mappings(
+            genome,
+            mappings,
+            &mpd_rd,
+            readkey
+        );
+
+    /* if we were actual able to build a mapped read with > 0 prb */
+    if( NULL != mpd_rd ) {
+        add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
+        free_mapped_read( mpd_rd );
+    }
+}
+
 /* TODO - revisit the read length vs seq length distinction */
 /* 
  * I use a struct for the parameters so that I can initialzie threads
@@ -922,17 +947,17 @@ find_candidate_mappings( void* params )
 
     struct single_map_thread_data* td = params;
 
-    int thread_id = td->thread_id;
+    //int thread_id = td->thread_id;
 
     struct genome_data* genome = td->genome;
     
     unsigned int* mapped_cnt = td->mapped_cnt;
-    pthread_mutex_t* mapped_cnt_mutex = td->mapped_cnt_mutex;
+    pthread_spinlock_t* mapped_cnt_lock = td->mapped_cnt_lock;
 
     struct rawread_db_t* rdb = td->rdb;
     
-    pthread_mutex_t* mappings_db_mutex = td->mappings_db_mutex;
-    candidate_mappings_db* mappings_db = td->mappings_db;
+    struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
+
     /* The minimum absolute penalty
        that a valid read can have */
     float min_match_penalty = td->min_match_penalty;
@@ -959,19 +984,6 @@ find_candidate_mappings( void* params )
     
     /* how often we print out the mapping status */
     #define MAPPING_STATUS_GRANULARITY 100000
-
-    /******** cache the candidate mapping results ********/
-    /* cache the candidate mappings so that we can add them ( or not ) together at the
-       end of this mapping */
-    /* We do this so that we can update the error estimates */
-
-    readkey_t readkeys[READS_STAT_UPDATE_STEP_SIZE];
-    memset( readkeys, 0,
-            sizeof( readkey_t )*READS_STAT_UPDATE_STEP_SIZE );
-
-    candidate_mappings* candidate_mappings_cache[READS_STAT_UPDATE_STEP_SIZE];
-    memset( candidate_mappings_cache, 0,
-            sizeof( candidate_mappings* )*READS_STAT_UPDATE_STEP_SIZE );
 
     /* create a thread local copy of the error data to avoid excess locking */
     struct error_data_t* thread_error_data;
@@ -1025,14 +1037,46 @@ find_candidate_mappings( void* params )
         // Free the read
         free_read( r );
 
-        /* update the caches */
-        candidate_mappings_cache[curr_read_index] = mappings;
-        readkeys[curr_read_index] = readkey;
+        // build mapped reads from the set of candidate mappings for this read
+        if( !only_collect_error_data )
+        {
+            // count the number of valid candidate mappings in order to update
+            // the mapped read count
+            int num_valid_mappings = 0;
+            int i;
+            for( i = 0; i < mappings->length; i++ )
+            {
+                if( (mappings->mappings + i)->recheck == VALID )
+                    num_valid_mappings += 1;
+            }
+
+            /* update the mapped_cnt */
+            if( num_valid_mappings > 0 )
+            {
+                pthread_spin_lock( mapped_cnt_lock );
+                *mapped_cnt += num_valid_mappings;
+                pthread_spin_unlock( mapped_cnt_lock );
+            }
+
+            /* build mapped reads from the returned candidate mappings and add
+             * to the mapped reads db */
+
+            // TODO - lock on the mpd_rds_db
+            add_mapped_reads_from_candidate_mappings(
+                    mappings,
+                    readkey,
+                    genome,
+                    mpd_rds_db
+                );
+        }
 
         curr_read_index += 1;
+
+        /* cleanup memory */
+        free_candidate_mappings( mappings );
     }
 
-    /********* update the error estimates *********/
+    /********* update the global error data *********/
 
     // add thread_error_data to (global) error_data
     pthread_mutex_lock( error_data->mutex );
@@ -1042,56 +1086,6 @@ find_candidate_mappings( void* params )
     // free local copy of error data
     free_error_data( thread_error_data );
     
-    /* if we only want to collect error data (bootstrapping
-     * ESTIMATE_ERROR_MODEL), then don't add candidate mappings to the db */
-    if( td->only_collect_error_data )
-        goto cleanup;
-    
-    /******* add the results to the database *******/
-
-    int i;
-    for( i = 0; i < READS_STAT_UPDATE_STEP_SIZE; i++ )
-    {
-        /* skip empty mapping lists */
-        if( NULL == candidate_mappings_cache[i] )
-            continue;
-
-        candidate_mappings* mappings = candidate_mappings_cache[i];
-
-        /* increment the number of reads that mapped, if 
-           any pass the rechecks */
-        int k;
-        for( k = 0; k < mappings->length; k++ ) {
-            if( (mappings->mappings + k)->recheck == VALID )
-            {
-                pthread_mutex_lock( mapped_cnt_mutex );
-                *mapped_cnt += 1;
-                pthread_mutex_unlock( mapped_cnt_mutex );
-                break;
-            }
-        }
-
-        /* add cms to the db */
-        pthread_mutex_lock( mappings_db_mutex );
-        assert( thread_id < num_threads );
-        /* note that we add to the DB even if there are 0 that map,
-           we do this so it is easier to join with the rawreads later */
-        add_candidate_mappings_to_db(
-            mappings_db, mappings, readkeys[i], thread_id );
-        pthread_mutex_unlock( mappings_db_mutex );        
-    }
-    
-cleanup:
-
-    for( i = 0; i < READS_STAT_UPDATE_STEP_SIZE; i++ )
-    {
-        if( NULL == candidate_mappings_cache[i])
-            continue;
-        
-        /* free the cached mappings */
-        free_candidate_mappings( candidate_mappings_cache[i] );
-    }
-
     return NULL;
 }
 
@@ -1162,20 +1156,10 @@ spawn_threads( struct single_map_thread_data* td_template )
 void init_td_template( struct single_map_thread_data* td_template,
                        struct genome_data* genome, 
                        struct rawread_db_t* rdb,
-                       candidate_mappings_db* mappings_db,
+                       struct mapped_reads_db* mpd_rds_db,
                        struct error_model_t* error_model,
                        float min_match_penalty, float max_penalty_spread )
 {
-    /* initialize the necessary mutex's */
-    /*
-    pthread_mutex_t* mapped_cnt_mutex;
-    mapped_cnt_mutex = malloc( sizeof(pthread_mutex_t) );
-    (*mapped_cnt_mutex) = PTHREAD_MUTEX_INITIALIZER;
-
-    pthread_mutex_t* mappings_db_mutex;
-    mappings_db_mutex= malloc( sizeof(pthread_mutex_t) );
-    *mappings_db_mutex = PTHREAD_MUTEX_INITIALIZER;
-    */
     int rc;
     pthread_mutexattr_t mta;
     rc = pthread_mutexattr_init(&mta);
@@ -1185,15 +1169,14 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->mapped_cnt = malloc( sizeof(unsigned int) );
     *(td_template->mapped_cnt) = 0;
     
-    td_template->mapped_cnt_mutex = malloc( sizeof(pthread_mutex_t) );
-    rc = pthread_mutex_init( td_template->mapped_cnt_mutex, &mta );
+    td_template->mapped_cnt_lock = malloc( sizeof(pthread_spinlock_t) );
+    rc = pthread_spin_init( td_template->mapped_cnt_lock,
+                            PTHREAD_PROCESS_PRIVATE );
     td_template->max_readkey = 0;
 
     td_template->rdb = rdb;
     
-    td_template->mappings_db = mappings_db;
-    td_template->mappings_db_mutex = malloc( sizeof(pthread_mutex_t) );
-    rc = pthread_mutex_init( td_template->mappings_db_mutex, &mta );
+    td_template->mpd_rds_db = mpd_rds_db;
     
     td_template->min_match_penalty = min_match_penalty;
     td_template->max_penalty_spread = max_penalty_spread;
@@ -1216,9 +1199,9 @@ void
 free_td_template( struct single_map_thread_data* td_template )
 {
     free( td_template->mapped_cnt );
-    free( td_template->mapped_cnt_mutex );
-    free( td_template->mappings_db_mutex );
-    return;
+
+    pthread_spin_destroy( td_template->mapped_cnt_lock );
+    free( (void*) td_template->mapped_cnt_lock );
 }
 
 /* bootstrap an already initialized error model */
@@ -1227,7 +1210,7 @@ bootstrap_estimated_error_model(
     struct genome_data* genome,
     
     struct rawread_db_t* rdb,
-    candidate_mappings_db* mappings_db,
+    struct mapped_reads_db* mpd_rds_db, // TODO set to NULL for bootstrap?
     
     struct error_model_t* error_model
 ) 
@@ -1243,7 +1226,7 @@ bootstrap_estimated_error_model(
     
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
-    init_td_template( &td_template, genome, rdb, mappings_db, 
+    init_td_template( &td_template, genome, rdb, mpd_rds_db, 
                       bootstrap_error_model, MAX_NUM_MM, MAX_MM_SPREAD );
     
     /* 
@@ -1264,22 +1247,23 @@ bootstrap_estimated_error_model(
 }
 
 void
-find_all_candidate_mappings( struct genome_data* genome,
+find_all_candidate_mappings(
+        struct genome_data* genome,
 
-                             struct rawread_db_t* rdb,
-                             candidate_mappings_db* mappings_db,
-                             
-                             struct error_model_t* error_model,
-                             
-                             float min_match_penalty,
-                             float max_penalty_spread
+        struct rawread_db_t* rdb,
+        struct mapped_reads_db* mpd_rds_db,
+
+        struct error_model_t* error_model,
+
+        float min_match_penalty,
+        float max_penalty_spread
     )
 {
     clock_t start = clock();
 
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
-    init_td_template( &td_template, genome, rdb, mappings_db, error_model,
+    init_td_template( &td_template, genome, rdb, mpd_rds_db, error_model,
                       min_match_penalty, max_penalty_spread );
     
     /* initialize the threads */
