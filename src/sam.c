@@ -555,12 +555,12 @@ write_mapped_reads_to_sam(
     int error;
 
     readkey_t readkey;
-    
+
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
     rewind_rawread_db( rdb );
     rewind_mapped_reads_db( mappings_db );
-    
+
     struct read* rd;
     struct mapped_read_t* mapped_rd;
 
@@ -586,6 +586,11 @@ write_mapped_reads_to_sam(
     while( rd != NULL
            && mapped_rd != NULL ) 
     {    
+        if( readkey != mapped_rd->read_id )
+        {
+            fprintf( stderr, "readkey: %d\n", readkey );
+            fprintf( stderr, "mapped_rd->read_id: %d\n", mapped_rd->read_id );
+        }
         assert( readkey == mapped_rd->read_id );
         
         if( readkey > 0 && readkey%1000000 == 0 )

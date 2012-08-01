@@ -120,7 +120,7 @@ class StatmapOutput:
 
             if load_nc:
                 # load negative control reads
-                self.NC_mpd_rdb = open_mapped_reads_db(
+                self.NC_mpd_rdb = open_mapped_reads_db_for_reading(
                         MAPPED_NC_READS_DB_FNAME )
 
                 # load the fragment length distribution estimate

@@ -318,21 +318,29 @@ write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  );
  *
  */
 
+struct mapped_reads_db_index_t {
+    MPD_RD_ID_T read_id;
+    char* ptr;
+};
+
+#define MPD_RD_DB_COUNT unsigned long
+
 struct mapped_reads_db {
     FILE* fp;
 
     char mode; // 'r' or 'w'
-    int num_mapped_reads;
+    MPD_RD_DB_COUNT num_mapped_reads;
 
-    pthread_spinlock_t* access_lock;
+    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
     char* mmapped_data;
     size_t mmapped_data_size; 
     
-    char** mmapped_reads_starts;
-    unsigned long num_mmapped_reads;
+    /* mmap index */
+    struct mapped_reads_db_index_t* index;
+    MPD_RD_DB_COUNT num_indexed_reads;
 
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
@@ -340,7 +348,7 @@ struct mapped_reads_db {
     
     struct fragment_length_dist_t* fl_dist;
 
-    unsigned long current_read;
+    MPD_RD_DB_COUNT current_read;
 };
 
 typedef struct {
@@ -380,7 +388,8 @@ mapped_reads_db_is_empty( struct mapped_reads_db* rdb );
 int
 get_next_read_from_mapped_reads_db( 
     struct mapped_reads_db* rdb, 
-    struct mapped_read_t** rd );
+    struct mapped_read_t** rd
+);
 
 void
 reset_all_read_cond_probs( 
@@ -414,7 +423,10 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb );
 void
 index_mapped_reads_db( struct mapped_reads_db* rdb );
 
-
+void
+print_mapped_reads_db_index(
+        struct mapped_reads_db* rdb
+    );
 /*
  *  END Mapped Reads DB
  *

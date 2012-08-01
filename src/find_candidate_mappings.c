@@ -1058,7 +1058,6 @@ find_candidate_mappings( void* params )
             /* build mapped reads from the returned candidate mappings and add
              * to the mapped reads db */
 
-            // TODO - lock on the mpd_rds_db
             add_mapped_reads_from_candidate_mappings(
                     mappings,
                     readkey,

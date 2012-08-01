@@ -136,7 +136,7 @@ bootstrap_traces_from_mapped_reads(
     /* First, zero the trace to be summed into */
     zero_traces( traces );
     
-    if( RAND_MAX < reads_db->num_mmapped_reads )
+    if( RAND_MAX < reads_db->num_indexed_reads )
     {
         fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
         return;
@@ -146,11 +146,11 @@ bootstrap_traces_from_mapped_reads(
     
     /* Update the trace from reads chosen randomly, with replacement */
     unsigned int i;
-    for( i = 0; i < reads_db->num_mmapped_reads; i++ )
+    for( i = 0; i < reads_db->num_indexed_reads; i++ )
     {
-        unsigned int read_index = rand()%(reads_db->num_mmapped_reads);
-        assert( read_index < reads_db->num_mmapped_reads );
-        char* read_start = reads_db->mmapped_reads_starts[ read_index ];
+        unsigned int read_index = rand()%(reads_db->num_indexed_reads);
+        assert( read_index < reads_db->num_indexed_reads );
+        char* read_start = reads_db->index[ read_index ].ptr;
                 
         /* read a mapping into the struct */
         struct mapped_read_t r;
@@ -215,7 +215,7 @@ bootstrap_traces_from_mapped_reads(
     if( num_error_reads > 0 )
     {
         fprintf( stderr, "ERROR      :  %i reads ( out of %lu ) had errors in which the cum dist didnt add up to 1. \n", 
-                 num_error_reads, reads_db->num_mmapped_reads );
+                 num_error_reads, reads_db->num_indexed_reads );
     }
     
     return;

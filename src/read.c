@@ -243,12 +243,12 @@ get_next_read_from_rawread_db(
         long max_readkey
     )
 {
-    pthread_spin_lock( rdb->lock );
+    lock_rawread_db( rdb );
     
     if( max_readkey >= 0
         && rdb->readkey >= (readkey_t) max_readkey )
     {
-        pthread_spin_unlock( rdb->lock );
+        unlock_rawread_db( rdb );
         *r = NULL;
         return EOF;
     }
@@ -270,7 +270,7 @@ get_next_read_from_rawread_db(
         if( rv == EOF )
         {
             *r = NULL;
-            pthread_spin_unlock( rdb->lock );
+            unlock_rawread_db( rdb );
             return EOF;
         }
 
@@ -299,7 +299,7 @@ get_next_read_from_rawread_db(
             assert( rawread_db_is_empty( rdb ) );
 
             *r = NULL;
-            pthread_spin_unlock( rdb->lock );
+            unlock_rawread_db( rdb );
             return EOF;
         }
 
@@ -324,7 +324,7 @@ get_next_read_from_rawread_db(
     *readkey = rdb->readkey;
     rdb->readkey += 1;
 
-    pthread_spin_unlock( rdb->lock );
+    unlock_rawread_db( rdb );
     return 0;
 }
 

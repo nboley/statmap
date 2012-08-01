@@ -41,21 +41,19 @@ class c_mapped_reads_db_t(Structure):
 struct mapped_reads_db {
     FILE* fp;
 
-    /* Set this to locked when we mmap it - 
-       then forbid any new writes to the 
-       file 
-    */
-    enum bool write_locked;
-    
-    pthread_spinlock_t access_lock;
+    char mode; // 'r' or 'w'
+    unsigned long num_mapped_reads;
+
+    pthread_spinlock_t* access_lock;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
     char* mmapped_data;
     size_t mmapped_data_size; 
     
-    char** mmapped_reads_starts;
-    unsigned long num_mmapped_reads;
+    /* mmap index */
+    struct mapped_reads_db_index_t* index;
+    unsigned long num_indexed_reads;
 
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
@@ -64,27 +62,27 @@ struct mapped_reads_db {
     struct fragment_length_dist_t* fl_dist;
 
     unsigned long current_read;
-};
+}
     """
     _fields_ = [
         ("fp", c_void_p), # unused
 
-        ("write_locked", c_uint), # enum bool
+        ("mode", c_char),
+        ("num_mapped_reads", c_ulong),
 
         ("access_lock", c_void_p), # unused (will this work?)
 
         ("mmapped_data", c_char_p),
         ("mmapped_data_size", c_size_t),
 
-        ("mmapped_reads_starts", POINTER(c_char_p)),
-        ("num_mmapped_reads", c_ulong),
+        ("index", c_void_p),
+        ("num_indexed_reads", c_ulong),
 
         ("num_succ_iterations", c_char_p),
 
         ("fl_dist", POINTER(c_fragment_length_dst_t)),
 
         ("current_read", c_ulong),
-
     ]
 
 class c_cond_prbs_db_t(Structure):

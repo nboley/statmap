@@ -805,16 +805,19 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
     /* Set by caller (reading or writing) */
     (*rdb)->mode = 0;
 
-    (*rdb)->access_lock = malloc( sizeof(pthread_spinlock_t) );
-    pthread_spin_init( (*rdb)->access_lock, PTHREAD_PROCESS_PRIVATE ); 
+    /* mutex */
+    pthread_mutexattr_t mta;
+    pthread_mutexattr_init(&mta);
+    (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->mutex, &mta );
 
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
     (*rdb)->mmapped_data_size = 0;
 
     /* index */
-    (*rdb)->mmapped_reads_starts = NULL;
-    (*rdb)->num_mmapped_reads = 0;
+    (*rdb)->index = NULL;
+    (*rdb)->num_indexed_reads = 0;
  
     /* fl dist */
     (*rdb)->fl_dist = NULL;
@@ -837,7 +840,7 @@ open_mapped_reads_db_for_reading(
     mmap_mapped_reads_db( *rdb );
 
     // read num_mapped_reads from start of file
-    (*rdb)->num_mapped_reads = *((int*) (*rdb)->mmapped_data);
+    (*rdb)->num_mapped_reads = *((MPD_RD_DB_COUNT*) (*rdb)->mmapped_data);
 
     index_mapped_reads_db( *rdb );
 
@@ -853,8 +856,8 @@ open_mapped_reads_db_for_writing(
     init_mapped_reads_db( rdb, fname, "w+" );
 
     /* write placeholder for size of mapped reads db */
-    int placeholder = 0;
-    fwrite( &placeholder, sizeof(int), 1, (*rdb)->fp );
+    MPD_RD_DB_COUNT placeholder = 0;
+    fwrite( &placeholder, sizeof(MPD_RD_DB_COUNT), 1, (*rdb)->fp );
     /* updated on closing the mapped reads db (for writing) */
 
     (*rdb)->mode = 'w';
@@ -881,31 +884,31 @@ build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
 }
 
 void
-close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db** rdb )
+close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb )
 {
-    munmap_mapped_reads_db( *rdb );
+    munmap_mapped_reads_db( rdb );
 
-    if( (*rdb)->fl_dist != NULL ) {
-        free_fl_dist( &((*rdb)->fl_dist) );
-        (*rdb)->fl_dist = NULL;
+    if( rdb->fl_dist != NULL ) {
+        free_fl_dist( &(rdb->fl_dist) );
+        rdb->fl_dist = NULL;
     }
 
-    if( (*rdb)->mmapped_reads_starts != NULL ) {
-        free( (*rdb)->mmapped_reads_starts );
-        (*rdb)->mmapped_reads_starts = NULL;
+    if( rdb->index != NULL ) {
+        free( rdb->index );
+        rdb->index = NULL;
     }
 
     return;
 }
 
 void
-close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db** rdb )
+close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     /* if the db is open for writing, update the number of mapped reads */
-    fseek( (*rdb)->fp, 0, SEEK_SET );
-    fwrite( &((*rdb)->num_mapped_reads), sizeof(int), 1, (*rdb)->fp );
+    fseek( rdb->fp, 0, SEEK_SET );
+    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_DB_COUNT), 1, rdb->fp );
 
-    fclose( (*rdb)->fp );
+    fclose( rdb->fp );
     
     return;
 }
@@ -918,16 +921,16 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
 
     if( (*rdb)->mode == 'r' )
     {
-        close_reading_specific_portions_of_mapped_reads_db( rdb );
+        close_reading_specific_portions_of_mapped_reads_db( *rdb );
     } else if( (*rdb)->mode == 'w' ) {
-        close_writing_specific_portions_of_mapped_reads_db( rdb );
+        close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
         assert( false );
     }
 
-    pthread_spin_destroy( (*rdb)->access_lock );    
-    free( (void*) (*rdb)->access_lock );
-    
+    pthread_mutex_destroy( (*rdb)->mutex );
+    free( (*rdb)->mutex );
+
     free( *rdb );
     *rdb = NULL;
     
@@ -950,17 +953,16 @@ add_read_to_mapped_reads_db(
 
     rd->rdb = rdb;
     
-    pthread_spin_lock( rdb->access_lock );
+    pthread_mutex_lock( rdb->mutex );
     error = write_mapped_read_to_file( rd, rdb->fp );
-    pthread_spin_unlock( rdb->access_lock );
+    rdb->num_mapped_reads += 1;
+    pthread_mutex_unlock( rdb->mutex );
 
     if( error < 0 )
     {
         fprintf(stderr, "FATAL       :  Error writing to packed mapped reads db.\n");
         exit( -1 );
     }
-
-    rdb->num_mapped_reads += 1;
     
     return;
 }
@@ -981,7 +983,7 @@ mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
     assert( rdb->mode == 'r' );
     assert( rdb->mmapped_data != NULL );
 
-    if( rdb->current_read == rdb->num_mmapped_reads )
+    if( rdb->current_read == rdb->num_indexed_reads )
         return true;
 
     return false;
@@ -989,8 +991,9 @@ mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
 
 int
 get_next_read_from_mapped_reads_db( 
-    struct mapped_reads_db* const rdb, 
-    struct mapped_read_t** rd )
+    struct mapped_reads_db* rdb, 
+    struct mapped_read_t** rd
+)
 {
     init_mapped_read( rd );
     (*rd)->rdb = rdb;
@@ -1003,11 +1006,11 @@ get_next_read_from_mapped_reads_db(
     }
 
     /** Get the next read **/
-    pthread_spin_lock( rdb->access_lock );
+    pthread_mutex_lock( rdb->mutex );
     /* if we have read every read */
-    if( rdb->current_read == rdb->num_mmapped_reads )
+    if( rdb->current_read == rdb->num_indexed_reads )
     {
-        pthread_spin_unlock( rdb->access_lock );
+        pthread_mutex_unlock( rdb->mutex );
         free_mapped_read( *rd );
         *rd = NULL;
         return EOF;
@@ -1015,12 +1018,12 @@ get_next_read_from_mapped_reads_db(
     
     unsigned int current_read_id = rdb->current_read;
     rdb->current_read += 1;
-    pthread_spin_unlock( rdb->access_lock );
+    pthread_mutex_unlock( rdb->mutex );
 
-    assert( current_read_id < rdb->num_mmapped_reads );
+    assert( current_read_id < rdb->num_indexed_reads );
     
     /* get a pointer to the current read */
-    char* read_start = rdb->mmapped_reads_starts[current_read_id];
+    char* read_start = rdb->index[current_read_id].ptr;
     
     /* read a mapping into the struct */
     (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
@@ -1190,11 +1193,21 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
 
     rdb->mmapped_data_size = 0;
 
-    free( rdb->mmapped_reads_starts );
-    rdb->mmapped_reads_starts = NULL;
-    rdb->num_mmapped_reads = 0;
+    free( rdb->index );
+    rdb->index = NULL;
+    rdb->num_indexed_reads = 0;
     
     return;
+}
+
+int
+cmp_mapped_reads_db_index_t(
+        const struct mapped_reads_db_index_t* i1,
+        const struct mapped_reads_db_index_t* i2
+    )
+{
+    /* sort by read id */
+    return i1->read_id - i2->read_id;
 }
 
 void
@@ -1202,33 +1215,38 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     const int REALLOC_BLOCK_SIZE = 1000000;
 
-    /* allocate space for the reads start */
-    rdb->num_mmapped_reads = 0;
+    /* count mmapped reads to check they match the saved mapped reads count */
+    rdb->num_indexed_reads = 0;
 
+    /* initialize dynamic array of mapped_reads_db_index_t */
     unsigned long num_allcd_reads = REALLOC_BLOCK_SIZE;
-    rdb->mmapped_reads_starts = malloc(sizeof(char*)*REALLOC_BLOCK_SIZE);
+    rdb->index = malloc(sizeof(struct mapped_reads_db_index_t)*num_allcd_reads);
 
     /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
-    char* read_start = rdb->mmapped_data + sizeof(int);
+    char* read_start = rdb->mmapped_data + sizeof(MPD_RD_DB_COUNT);
 
     /* Loop through all of the reads */
-    while( ((size_t)read_start - (size_t)rdb->mmapped_data) 
+    while( ( (size_t)read_start - (size_t)rdb->mmapped_data ) 
            < rdb->mmapped_data_size )
     {
         /* check to ensure the array is big enough */
-        if( rdb->num_mmapped_reads + 1 == num_allcd_reads )
+        if( rdb->num_indexed_reads + 1 == num_allcd_reads )
         {
             num_allcd_reads += REALLOC_BLOCK_SIZE;
-            rdb->mmapped_reads_starts = realloc( 
-                rdb->mmapped_reads_starts, num_allcd_reads*sizeof(char*) );
+            rdb->index = realloc(rdb->index,
+                    num_allcd_reads*sizeof(struct mapped_reads_db_index_t) );
         }
-        assert( rdb->num_mmapped_reads < num_allcd_reads );
+        assert( rdb->num_indexed_reads < num_allcd_reads );
 
-        /* add the new read start */
-        (rdb->mmapped_reads_starts)[rdb->num_mmapped_reads] = read_start;
-        (rdb->num_mmapped_reads)++;
+        /* add the new index element */
+        MPD_RD_ID_T read_id = *((MPD_RD_ID_T*) read_start);
+        rdb->index[rdb->num_indexed_reads].read_id = read_id;
+        rdb->index[rdb->num_indexed_reads].ptr = read_start;
 
-        /* read a mapping into the struct */
+        (rdb->num_indexed_reads) += 1;
+
+        /* skip over the mapped read in the mmapped memory */
+
         /* skip the read ID */
         read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
         MPD_RD_NUM_MAPPINGS_T num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
@@ -1238,10 +1256,33 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     }
 
     /* reclaim any wasted memory */
-    rdb->mmapped_reads_starts = realloc( rdb->mmapped_reads_starts, 
-                                         rdb->num_mmapped_reads*sizeof(char*) );
+    rdb->index = realloc( rdb->index,
+            rdb->num_indexed_reads*sizeof(struct mapped_reads_db_index_t) );
+
+    /* sort the index by read id - this restores synchronization with the
+     * reads database */
+    qsort( rdb->index,
+           rdb->num_indexed_reads,
+           sizeof(struct mapped_reads_db_index_t),
+           (int(*)(const void*, const void*))cmp_mapped_reads_db_index_t
+    );
+
+    assert( rdb->num_indexed_reads == rdb->num_mapped_reads );
     
     return;
+}
+
+void
+print_mapped_reads_db_index(
+        struct mapped_reads_db* rdb
+    )
+{
+    unsigned long i;
+    for( i = 0; i < rdb->num_indexed_reads; i++ )
+    {
+        fprintf(stderr, "read_id: %u, ptr: %p\n",
+                rdb->index[i].read_id, rdb->index[i].ptr );
+    }
 }
 
 /*

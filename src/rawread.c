@@ -254,8 +254,10 @@ init_rawread_db( struct rawread_db_t** rdb )
 
     (*rdb)->readkey = 0;
 
-    (*rdb)->lock = malloc( sizeof(pthread_spinlock_t) );
-    pthread_spin_init( (*rdb)->lock, PTHREAD_PROCESS_PRIVATE );
+    pthread_mutexattr_t mta;
+    pthread_mutexattr_init(&mta);
+    (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->mutex, &mta );
 
     (*rdb)->single_end_reads = NULL;
     (*rdb)->paired_end_1_reads = NULL;
@@ -291,13 +293,31 @@ close_rawread_db( struct rawread_db_t* rdb )
         fclose( rdb->non_mapping_paired_end_2_reads );
     }
     
-    pthread_spin_destroy( rdb->lock );
-    free( (void*) rdb->lock );
+    pthread_mutex_destroy( rdb->mutex );
+    free( rdb->mutex );
     
     free( rdb );
     return;
 }
 
+void
+lock_rawread_db(
+        struct rawread_db_t* rdb
+    )
+{
+    //fprintf(stderr, "BEFORE lock on rk %d, PID : %u\n", rdb->readkey, pthread_self());
+    pthread_mutex_lock( rdb->mutex );
+    //fprintf(stderr, "Locked on readkey %d, PID : %u\n", rdb->readkey, pthread_self() );
+}
+
+void
+unlock_rawread_db(
+        struct rawread_db_t* rdb
+    )
+{
+    //fprintf(stderr, "Unlocked on readkey %d, PID : %u\n", rdb->readkey, pthread_self() );
+    pthread_mutex_unlock( rdb->mutex );
+}
 
 void
 add_single_end_reads_to_rawread_db( 

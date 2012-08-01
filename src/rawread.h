@@ -87,8 +87,9 @@ struct rawread_db_t {
        reset this to 0. 
     */
     readkey_t readkey;
-    /* We lock this mutex whenever we grab a read */
-    pthread_spinlock_t* lock; 
+    /* We lock this whenever we grab a read */
+    //pthread_spinlock_t* lock; 
+    pthread_mutex_t* mutex;
 
     FILE* single_end_reads;
     FILE* paired_end_1_reads;
@@ -111,6 +112,16 @@ init_rawread_db( struct rawread_db_t** rdb );
 
 void 
 close_rawread_db( struct rawread_db_t* rdb );
+
+void
+lock_rawread_db(
+        struct rawread_db_t* rdb
+    );
+
+void
+unlock_rawread_db(
+        struct rawread_db_t* rdb
+    );
 
 void
 add_single_end_reads_to_rawread_db( 

@@ -172,7 +172,7 @@ map_marginal( struct args_t* args,
     } else {
         open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
     }
-    
+
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );

@@ -790,7 +790,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
                       min_penalty = min_penalty, max_penalty_spread=10,
-                      indexed_seq_len = read_len - 2  ) # read_len = read_len - 2
+                      indexed_seq_len = read_len - 2,
+                      num_threads = n_threads ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
