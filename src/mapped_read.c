@@ -840,7 +840,7 @@ open_mapped_reads_db_for_reading(
     mmap_mapped_reads_db( *rdb );
 
     // read num_mapped_reads from start of file
-    (*rdb)->num_mapped_reads = *((MPD_RD_DB_COUNT*) (*rdb)->mmapped_data);
+    (*rdb)->num_mapped_reads = *((MPD_RD_ID_T*) (*rdb)->mmapped_data);
 
     index_mapped_reads_db( *rdb );
 
@@ -856,8 +856,8 @@ open_mapped_reads_db_for_writing(
     init_mapped_reads_db( rdb, fname, "w+" );
 
     /* write placeholder for size of mapped reads db */
-    MPD_RD_DB_COUNT placeholder = 0;
-    fwrite( &placeholder, sizeof(MPD_RD_DB_COUNT), 1, (*rdb)->fp );
+    MPD_RD_ID_T placeholder = 0;
+    fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->fp );
     /* updated on closing the mapped reads db (for writing) */
 
     (*rdb)->mode = 'w';
@@ -906,7 +906,7 @@ close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
 {
     /* if the db is open for writing, update the number of mapped reads */
     fseek( rdb->fp, 0, SEEK_SET );
-    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_DB_COUNT), 1, rdb->fp );
+    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->fp );
 
     fclose( rdb->fp );
     
@@ -1223,7 +1223,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     rdb->index = malloc(sizeof(struct mapped_reads_db_index_t)*num_allcd_reads);
 
     /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
-    char* read_start = rdb->mmapped_data + sizeof(MPD_RD_DB_COUNT);
+    char* read_start = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
 
     /* Loop through all of the reads */
     while( ( (size_t)read_start - (size_t)rdb->mmapped_data ) 

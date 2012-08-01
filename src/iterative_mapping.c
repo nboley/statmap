@@ -214,7 +214,7 @@ bootstrap_traces_from_mapped_reads(
     
     if( num_error_reads > 0 )
     {
-        fprintf( stderr, "ERROR      :  %i reads ( out of %lu ) had errors in which the cum dist didnt add up to 1. \n", 
+        fprintf( stderr, "ERROR      :  %i reads ( out of %u ) had errors in which the cum dist didnt add up to 1. \n", 
                  num_error_reads, reads_db->num_indexed_reads );
     }
     

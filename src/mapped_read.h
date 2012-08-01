@@ -323,13 +323,11 @@ struct mapped_reads_db_index_t {
     char* ptr;
 };
 
-#define MPD_RD_DB_COUNT unsigned long
-
 struct mapped_reads_db {
     FILE* fp;
 
     char mode; // 'r' or 'w'
-    MPD_RD_DB_COUNT num_mapped_reads;
+    MPD_RD_ID_T num_mapped_reads;
 
     pthread_mutex_t* mutex;
 
@@ -340,7 +338,7 @@ struct mapped_reads_db {
     
     /* mmap index */
     struct mapped_reads_db_index_t* index;
-    MPD_RD_DB_COUNT num_indexed_reads;
+    MPD_RD_ID_T num_indexed_reads;
 
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
@@ -348,7 +346,7 @@ struct mapped_reads_db {
     
     struct fragment_length_dist_t* fl_dist;
 
-    MPD_RD_DB_COUNT current_read;
+    MPD_RD_ID_T current_read;
 };
 
 typedef struct {
