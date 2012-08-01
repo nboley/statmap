@@ -13,8 +13,7 @@
 #include "candidate_mapping.h"
 #include "rawread.h"
 
-typedef unsigned int MPD_RD_NUM_MAPPINGS_T;
-typedef unsigned int MPD_RD_ID_T;
+typedef int MPD_RD_ID_T;
 
 struct fragment_length_dist_t;
 struct genome_data;
@@ -156,17 +155,13 @@ struct mapped_read_location {
     MRL_CHR_TYPE chr;
 
     struct {
-        // MADE_SIGNED_REVERT
-        // unsigned start_pos :LOCATION_BITS;
         signed start_pos :LOCATION_BITS;
         
         /* THIS IS EXCLUSIVE, ie NOT including stop */
         signed frag_len :FRAGMENT_LENGTH_BITS;
-        // MRL_STOP_POS_TYPE stop_pos;
     } position;
     
     ML_PRB_TYPE seq_error;
-    // ML_PRB_TYPE cond_prob;
 } __attribute__((__packed__));
 
 /* 
@@ -261,7 +256,7 @@ set_seq_error_in_mapped_read_location(
 
 struct mapped_read_t {
     MPD_RD_ID_T read_id;
-    MPD_RD_NUM_MAPPINGS_T num_mappings;
+    MPD_RD_ID_T num_mappings;
     /* the database that this read is in - useful because the 
        DB often conatains meta data ( ie, frag len dist ) */
     struct mapped_reads_db* rdb;
@@ -299,7 +294,7 @@ build_mapped_read_from_candidate_mappings(
     struct genome_data* genome,
     candidate_mappings* mappings, 
     struct mapped_read_t** mpd_rd,
-    long read_id );
+    MPD_RD_ID_T read_id );
 
 
 int 
@@ -338,8 +333,7 @@ struct mapped_reads_db {
     
     /* mmap index */
     struct mapped_reads_db_index_t* index;
-    MPD_RD_ID_T num_indexed_reads;
-
+    
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
     char* num_succ_iterations;
@@ -378,9 +372,6 @@ add_read_to_mapped_reads_db(
 
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb );
-
-enum bool
-mapped_reads_db_is_empty( struct mapped_reads_db* rdb );
 
 /* returns EOF, and sets rd to NULL if we reach the end of the file */
 int

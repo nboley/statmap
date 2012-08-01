@@ -95,7 +95,7 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t
     
     /* prevent divide by zero */
     double prb_sum = ML_PRB_MIN;
-    long i;
+    MPD_RD_ID_T i;
     for( i = 0; i < rd->num_mappings; i++ )
     {
         struct mapped_read_location* loc = rd->locations + i;
@@ -122,7 +122,7 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t
 int 
 write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
 {
-    long num = 0;
+    size_t num = 0;
 
     num = fwrite( &(read->read_id), sizeof( read->read_id ), 1, of );
     if( num != 1 )
@@ -136,7 +136,7 @@ write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
                   sizeof( struct mapped_read_location ), 
                   read->num_mappings, 
                   of );
-    if( num != read->num_mappings )
+    if( (int)num != read->num_mappings )
         return -num;
     
     return 0;
@@ -722,7 +722,7 @@ build_mapped_read_from_candidate_mappings(
     struct genome_data* genome,
     candidate_mappings* mappings, 
     struct mapped_read_t** mpd_rd,
-    long read_id )
+    MPD_RD_ID_T read_id )
 {
     /* 
      * Building mapped reads has several components:
@@ -788,7 +788,8 @@ build_mapped_read_from_candidate_mappings(
 
 
 static void
-init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mode )
+init_mapped_reads_db( 
+    struct mapped_reads_db** rdb, char* fname, const char* mode )
 {
     *rdb = malloc(sizeof(struct mapped_reads_db));
     (*rdb)->fp = fopen( fname, mode );
@@ -798,34 +799,40 @@ init_mapped_reads_db( struct mapped_reads_db** rdb, char* fname, const char* mod
         assert( false );
         exit(-1);
     }
-
+    
     /* number of mapped reads in the DB */
     (*rdb)->num_mapped_reads = 0;
-
-    /* Set by caller (reading or writing) */
+    
+    /* Initialize the mode to 0, this will be set by
+       the mode specific init function */
     (*rdb)->mode = 0;
 
-    /* mutex */
+    /* use a mutex to eliminate the spurious helgrind warnings that we got
+       when using a spinlock */
     pthread_mutexattr_t mta;
     pthread_mutexattr_init(&mta);
     (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
     pthread_mutex_init( (*rdb)->mutex, &mta );
-
+    
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
     (*rdb)->mmapped_data_size = 0;
 
     /* index */
     (*rdb)->index = NULL;
-    (*rdb)->num_indexed_reads = 0;
  
     /* fl dist */
     (*rdb)->fl_dist = NULL;
 
+    /* store the number of times that we have iterated through the read
+       db in the iterative mapping code. This is very hacky, and probably 
+       shouldnt be here... TODO - remove this */
     (*rdb)->num_succ_iterations = NULL;
 
+    /* the current read location ( either the number of reads written in 'w' 
+       mode, or the read we're on in 'r' mode */
     (*rdb)->current_read = 0;
-    
+
     return;
 }
 
@@ -855,11 +862,11 @@ open_mapped_reads_db_for_writing(
 {
     init_mapped_reads_db( rdb, fname, "w+" );
 
-    /* write placeholder for size of mapped reads db */
+    /* write placeholder for size of mapped reads db, this 
+       will be updated when we close the mapped read db*/
     MPD_RD_ID_T placeholder = 0;
     fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->fp );
-    /* updated on closing the mapped reads db (for writing) */
-
+    
     (*rdb)->mode = 'w';
 }
 
@@ -876,7 +883,7 @@ build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
     FILE* fl_fp = fopen( filename, "r" );
     if( fl_fp == NULL )
     {
-        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename );
+        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename);
         exit(-1);
     }
     init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
@@ -884,7 +891,7 @@ build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
 }
 
 void
-close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb )
+close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb)
 {
     munmap_mapped_reads_db( rdb );
 
@@ -904,10 +911,11 @@ close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
 void
 close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb )
 {
-    /* if the db is open for writing, update the number of mapped reads */
+    /* update the number of reads that we have written since the 
+       file was opened. */
     fseek( rdb->fp, 0, SEEK_SET );
     fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->fp );
-
+    
     fclose( rdb->fp );
     
     return;
@@ -925,12 +933,14 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
+        perror( "Unrecognized mode for open mapped read db." );
         assert( false );
+        exit( -1 );
     }
-
+    
     pthread_mutex_destroy( (*rdb)->mutex );
     free( (*rdb)->mutex );
-
+    
     free( *rdb );
     *rdb = NULL;
     
@@ -945,7 +955,7 @@ add_read_to_mapped_reads_db(
     if ( rdb->mode == 'r' )
     {
         fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");
-        /* TODO - be able to recover from this */
+        assert( false );
         exit( -1 );
     }
 
@@ -961,6 +971,7 @@ add_read_to_mapped_reads_db(
     if( error < 0 )
     {
         fprintf(stderr, "FATAL       :  Error writing to packed mapped reads db.\n");
+        assert( false );
         exit( -1 );
     }
     
@@ -970,23 +981,17 @@ add_read_to_mapped_reads_db(
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
-    /* if rdb is mmapped */
+    if( rdb->mode != 'r' )
+    {
+        fprintf(stderr, "FATAL       :  Can only rewind mapped reads db that is open for reading ( mode 'r' ).\n");
+        assert( false );
+        exit( -1 );
+    }
+
+    /* since the rdb is mmapped, we just need to reset the current read id */
     rdb->current_read = 0;
     
     return;
-}
-
-enum bool
-mapped_reads_db_is_empty( struct mapped_reads_db* rdb )
-{
-    /* if the rdb was opened for reading (mmapped) */
-    assert( rdb->mode == 'r' );
-    assert( rdb->mmapped_data != NULL );
-
-    if( rdb->current_read == rdb->num_indexed_reads )
-        return true;
-
-    return false;
 }
 
 int
@@ -1002,13 +1007,14 @@ get_next_read_from_mapped_reads_db(
     if( rdb->mode != 'r' )
     {
         fprintf(stderr, "FATAL       :  Cannot get read from mapped reads db unless it is open for reading.\n" );
+        assert( false );
         exit( -1 );
     }
 
     /** Get the next read **/
     pthread_mutex_lock( rdb->mutex );
     /* if we have read every read */
-    if( rdb->current_read == rdb->num_indexed_reads )
+    if( rdb->current_read == rdb->num_mapped_reads )
     {
         pthread_mutex_unlock( rdb->mutex );
         free_mapped_read( *rd );
@@ -1016,11 +1022,12 @@ get_next_read_from_mapped_reads_db(
         return EOF;
     }
     
-    unsigned int current_read_id = rdb->current_read;
+    MPD_RD_ID_T current_read_id = rdb->current_read;
     rdb->current_read += 1;
     pthread_mutex_unlock( rdb->mutex );
 
-    assert( current_read_id < rdb->num_indexed_reads );
+    assert( current_read_id < rdb->num_mapped_reads );
+    assert( sizeof(char) == 1 );
     
     /* get a pointer to the current read */
     char* read_start = rdb->index[current_read_id].ptr;
@@ -1028,10 +1035,10 @@ get_next_read_from_mapped_reads_db(
     /* read a mapping into the struct */
     (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
 
-    read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
-    (*rd)->num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
+    read_start += sizeof(MPD_RD_ID_T);
+    (*rd)->num_mappings = *((MPD_RD_ID_T*) read_start);
 
-    read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
+    read_start += sizeof(MPD_RD_ID_T);
 
     (*rd)->locations = (struct mapped_read_location*) read_start;
     (*rd)->free_locations = false;
@@ -1053,7 +1060,7 @@ reset_all_read_cond_probs(
         reset_read_cond_probs( cond_prbs_db, r );
         free_mapped_read( r );
     }
-
+    
     free_mapped_read( r );
 }
 
@@ -1074,15 +1081,16 @@ update_traces_from_read_densities(
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
             /* Update the trace from this mapping */
-        unsigned int j;
+        MPD_RD_ID_T j;
         double cond_prob_sum = 0;
         for( j = 0; j < r->num_mappings; j++ )
         {
-            int chr_index = get_chr_from_mapped_read_location( r->locations + j );
-            unsigned int start = 
-                get_start_from_mapped_read_location( r->locations + j );
-            unsigned int stop = 
-                get_stop_from_mapped_read_location( r->locations + j );
+            MRL_CHR_TYPE chr_index 
+                = get_chr_from_mapped_read_location( r->locations + j );
+            MRL_START_POS_TYPE start
+                = get_start_from_mapped_read_location( r->locations + j );
+            MRL_START_POS_TYPE stop
+                = get_stop_from_mapped_read_location( r->locations + j );
             float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
             cond_prob_sum += cond_prob;
             
@@ -1164,10 +1172,6 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     }
     #endif
     
-    /* update the read pointers */
-    
-    
-    
     return;
 }
 
@@ -1195,7 +1199,6 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
 
     free( rdb->index );
     rdb->index = NULL;
-    rdb->num_indexed_reads = 0;
     
     return;
 }
@@ -1214,71 +1217,81 @@ void
 index_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     const int REALLOC_BLOCK_SIZE = 1000000;
-
-    /* count mmapped reads to check they match the saved mapped reads count */
-    rdb->num_indexed_reads = 0;
-
+    
     /* initialize dynamic array of mapped_reads_db_index_t */
-    unsigned long num_allcd_reads = REALLOC_BLOCK_SIZE;
+    MPD_RD_ID_T num_allcd_reads = REALLOC_BLOCK_SIZE;
     rdb->index = malloc(sizeof(struct mapped_reads_db_index_t)*num_allcd_reads);
 
     /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
+    /* we use a char just to have a byte indexed memory block, meaning that we
+       can use pointer ariuthmetic with sizeof */
     char* read_start = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
+    
+    /* count mmapped reads to check they match the saved mapped reads count */
+    MPD_RD_ID_T num_indexed_reads = 0;
 
     /* Loop through all of the reads */
     while( ( (size_t)read_start - (size_t)rdb->mmapped_data ) 
            < rdb->mmapped_data_size )
     {
-        /* check to ensure the array is big enough */
-        if( rdb->num_indexed_reads + 1 == num_allcd_reads )
+        /* if the array is full */
+        if( rdb->num_mapped_reads + 1 == num_allcd_reads )
         {
             num_allcd_reads += REALLOC_BLOCK_SIZE;
             rdb->index = realloc(rdb->index,
                     num_allcd_reads*sizeof(struct mapped_reads_db_index_t) );
         }
-        assert( rdb->num_indexed_reads < num_allcd_reads );
-
+        assert( num_indexed_reads < num_allcd_reads );
+        
         /* add the new index element */
         MPD_RD_ID_T read_id = *((MPD_RD_ID_T*) read_start);
-        rdb->index[rdb->num_indexed_reads].read_id = read_id;
-        rdb->index[rdb->num_indexed_reads].ptr = read_start;
+        rdb->index[num_indexed_reads].read_id = read_id;
+        rdb->index[num_indexed_reads].ptr = read_start;
 
-        (rdb->num_indexed_reads) += 1;
+        num_indexed_reads += 1;
 
         /* skip over the mapped read in the mmapped memory */
 
         /* skip the read ID */
-        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
-        MPD_RD_NUM_MAPPINGS_T num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
-        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
+        assert( 1 == sizeof(char) );
+        read_start += sizeof(MPD_RD_ID_T);
+        MPD_RD_ID_T num_mappings = *((MPD_RD_ID_T*) read_start);
+        read_start += sizeof(MPD_RD_ID_T);
         /* skip the array of mapped locations */
-        read_start += (num_mappings)*(sizeof(struct mapped_read_location)/sizeof(char));
+        read_start += num_mappings*sizeof(struct mapped_read_location);
     }
 
     /* reclaim any wasted memory */
     rdb->index = realloc( rdb->index,
-            rdb->num_indexed_reads*sizeof(struct mapped_reads_db_index_t) );
+            num_indexed_reads*sizeof(struct mapped_reads_db_index_t) );
 
     /* sort the index by read id - this restores synchronization with the
      * reads database */
     qsort( rdb->index,
-           rdb->num_indexed_reads,
+           num_indexed_reads,
            sizeof(struct mapped_reads_db_index_t),
            (int(*)(const void*, const void*))cmp_mapped_reads_db_index_t
     );
 
-    assert( rdb->num_indexed_reads == rdb->num_mapped_reads );
+    /* make sure that we have indexed every read */
+    if( num_indexed_reads != rdb->num_mapped_reads )
+    {
+        fprintf( stderr, 
+                 "FATAL           :  The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.", 
+                 num_indexed_reads, rdb->num_mapped_reads );
+    }
     
     return;
 }
 
+/* for debugging */
 void
 print_mapped_reads_db_index(
         struct mapped_reads_db* rdb
     )
 {
-    unsigned long i;
-    for( i = 0; i < rdb->num_indexed_reads; i++ )
+    MPD_RD_ID_T i;
+    for( i = 0; i < rdb->num_mapped_reads; i++ )
     {
         fprintf(stderr, "read_id: %u, ptr: %p\n",
                 rdb->index[i].read_id, rdb->index[i].ptr );

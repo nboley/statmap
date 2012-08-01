@@ -112,7 +112,7 @@ get_frag_len( struct mapped_read_t* rd )
     int frag_len = 1 + get_stop_from_mapped_read_location( rd->locations + 0 )
         - get_start_from_mapped_read_location( rd->locations + 0 );
     
-    MPD_RD_NUM_MAPPINGS_T i;
+    MPD_RD_ID_T i;
     for( i = 1; i < rd->num_mappings; i++ )
     {
         /* reads should never be a mixture of paired and unpaired reads 
@@ -176,7 +176,8 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
         free_mapped_read( rd );
     }
     
-    assert( mapped_reads_db_is_empty( rdb ) );
+    /* check that we have looked at every read */
+    assert( rdb->current_read == rdb->num_mapped_reads );
 
     if( total_num_reads < MIN_NUM_READS )
     {

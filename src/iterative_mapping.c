@@ -136,7 +136,7 @@ bootstrap_traces_from_mapped_reads(
     /* First, zero the trace to be summed into */
     zero_traces( traces );
     
-    if( RAND_MAX < reads_db->num_indexed_reads )
+    if( RAND_MAX < reads_db->num_mapped_reads )
     {
         fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
         return;
@@ -145,11 +145,11 @@ bootstrap_traces_from_mapped_reads(
     int num_error_reads = 0;
     
     /* Update the trace from reads chosen randomly, with replacement */
-    unsigned int i;
-    for( i = 0; i < reads_db->num_indexed_reads; i++ )
+    MPD_RD_ID_T i;
+    for( i = 0; i < reads_db->num_mapped_reads; i++ )
     {
-        unsigned int read_index = rand()%(reads_db->num_indexed_reads);
-        assert( read_index < reads_db->num_indexed_reads );
+        MPD_RD_ID_T read_index = rand()%(reads_db->num_mapped_reads);
+        assert( read_index < reads_db->num_mapped_reads );
         char* read_start = reads_db->index[ read_index ].ptr;
                 
         /* read a mapping into the struct */
@@ -157,9 +157,9 @@ bootstrap_traces_from_mapped_reads(
         r.read_id = *((MPD_RD_ID_T*) read_start);
 
         read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
-        r.num_mappings = *((MPD_RD_NUM_MAPPINGS_T*) read_start);
+        r.num_mappings = *((MPD_RD_ID_T*) read_start);
 
-        read_start += sizeof(MPD_RD_NUM_MAPPINGS_T)/sizeof(char);
+        read_start += sizeof(MPD_RD_ID_T)/sizeof(char);
         r.locations = (struct mapped_read_location*) read_start;
         
         r.free_locations = false;
@@ -173,7 +173,7 @@ bootstrap_traces_from_mapped_reads(
         if( r.num_mappings > 0 )
         {
             /* Choose a random location, proportional to the normalized probabilities */
-            unsigned int j = 0;
+            MPD_RD_ID_T j = 0;
             /* if there is exactly 1 mapping, then the randomness is pointless */
             if( r.num_mappings > 1 )
             {
@@ -215,7 +215,7 @@ bootstrap_traces_from_mapped_reads(
     if( num_error_reads > 0 )
     {
         fprintf( stderr, "ERROR      :  %i reads ( out of %u ) had errors in which the cum dist didnt add up to 1. \n", 
-                 num_error_reads, reads_db->num_indexed_reads );
+                 num_error_reads, reads_db->num_mapped_reads );
     }
     
     return;
@@ -266,7 +266,7 @@ update_traces_from_mapped_reads_worker( void* params )
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {        
         /* Update the trace from this mapping */        
-        unsigned int j;
+        MPD_RD_ID_T j;
         for( j = 0; j < r->num_mappings; j++ ) {
             float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
             // update_stranded_read_start_density_from_location( traces, r->locations + j );
@@ -317,7 +317,7 @@ update_traces_from_mapped_reads(
             */
             
             /* Update the trace from this mapping */        
-            unsigned int j;
+            MPD_RD_ID_T j;
             for( j = 0; j < r->num_mappings; j++ ) {
                 float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
                 // update_stranded_read_start_density_from_location( traces, r->locations + j );
@@ -405,7 +405,7 @@ struct update_mapped_reads_param {
      * can't fully fit into memory.
      */
     pthread_spinlock_t* curr_read_index_spinlock;
-    unsigned int* curr_read_index;
+    MPD_RD_ID_T* curr_read_index;
     
     struct mapped_reads_db* reads_db;
     struct cond_prbs_db_t* cond_prbs_db;
@@ -759,7 +759,7 @@ build_random_starting_trace(
         if( r->num_mappings > 0 )
         {
             /* Choose a random loc, proportional to the normalized probabilities */
-            unsigned int j = 0;
+            int j = 0;
             /* if there is exactly 1 mapping, then the randomness is pointless */
             if( r->num_mappings > 1 )
             {
@@ -1113,7 +1113,7 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
     double prb_sum = ML_PRB_MIN;
     double error_prb_sum = ML_PRB_MIN;
 
-    unsigned int i;
+    int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
         /* calculate the mean density */
@@ -1324,7 +1324,7 @@ update_CAGE_mapped_read_prbs(
     
     /* Update the reads from the trace */
     double density_sum = 0;
-    unsigned int i;
+    int i;
     for( i = 0; i < r->num_mappings; i++ )
     {
         /* calculate the mean density */

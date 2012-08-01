@@ -36,15 +36,17 @@ struct fragment_length_dist_t {
         ("rev_chipseq_bs_density_start", POINTER(c_float)),
     ]
 
+MPD_RD_ID_T = c_int
+
 class c_mapped_reads_db_t(Structure):
     """
 struct mapped_reads_db {
     FILE* fp;
 
     char mode; // 'r' or 'w'
-    unsigned long num_mapped_reads;
+    MPD_RD_ID_T num_mapped_reads;
 
-    pthread_spinlock_t* access_lock;
+    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
@@ -53,7 +55,7 @@ struct mapped_reads_db {
     
     /* mmap index */
     struct mapped_reads_db_index_t* index;
-    unsigned long num_indexed_reads;
+    // MPD_RD_ID_T num_indexed_reads;
 
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
@@ -61,14 +63,14 @@ struct mapped_reads_db {
     
     struct fragment_length_dist_t* fl_dist;
 
-    unsigned long current_read;
-}
+    MPD_RD_ID_T current_read;
+};
     """
     _fields_ = [
         ("fp", c_void_p), # unused
 
         ("mode", c_char),
-        ("num_mapped_reads", c_ulong),
+        ("num_mapped_reads", MPD_RD_ID_T),
 
         ("access_lock", c_void_p), # unused (will this work?)
 
@@ -76,13 +78,12 @@ struct mapped_reads_db {
         ("mmapped_data_size", c_size_t),
 
         ("index", c_void_p),
-        ("num_indexed_reads", c_ulong),
-
+        
         ("num_succ_iterations", c_char_p),
 
         ("fl_dist", POINTER(c_fragment_length_dst_t)),
 
-        ("current_read", c_ulong),
+        ("current_read", MPD_RD_ID_T),
     ]
 
 class c_cond_prbs_db_t(Structure):

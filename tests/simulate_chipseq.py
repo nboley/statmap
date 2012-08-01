@@ -448,6 +448,12 @@ def call_peaks( ):
 def map_with_bowtie( paired_end = True ):
     # build the index
     # pie out to null to ignore output
+    try:
+        os.mkdir( 'bowtie_index' )
+    # if the directory already exists, pass
+    except OSError:
+        pass
+
     cmd = "bowtie-build -f tmp.genome bowtie_index/tmp.ebwt > /dev/null"
     subprocess.call( cmd, shell=True )
     # map the reads with bowtie

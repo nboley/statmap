@@ -65,7 +65,7 @@ int main( int argc, char** argv )
     while( NULL != mapped_rd )
     {
         // printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
-        unsigned int i;
+        MPD_RD_ID_T i;
         enum bool discovered_error = false;
         for( i = 0; i < mapped_rd->num_mappings; i++ )
         {

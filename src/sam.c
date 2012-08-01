@@ -340,7 +340,7 @@ fprintf_mapped_read_to_sam(
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
-    size_t i = 0;
+    MPD_RD_ID_T i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
         float cond_prob = get_cond_prb( cond_prbs_db, mpd_rd->read_id, i );
