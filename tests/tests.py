@@ -60,6 +60,8 @@ from_str = ''.join(bps[:-2])
 to_str = ''.join( bp_complement[bp] for bp in from_str )
 rev_comp_table = string.maketrans( from_str, to_str  )
 
+def reverse_complement(seq):
+    return seq.translate( rev_comp_table )[::-1]
 
 #### Data Types ########
 
@@ -537,29 +539,44 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     if len(fragments) > total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
     
-    
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
             raise ValueError, "Mapping returned too many results."
         
-        locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
+        locs = [ ( read_data[2], int(read_data[3]), read_data[9], int(read_data[1]) )
+                 for read_data in reads_data ]
         
-        # make sure the chr and start locations are identical
-        # first, check that all chromosomes are the same *and*
-        # that the correct loc exists
-        if any( loc != truth[0] for loc in locs[0] ) \
-           or truth[1] not in locs[1]:
-            # we need to special case an untemplated g that happens to correspond to a genomic g. 
-            # in such cases, we really can't tell what is correct.
+        # loc := (chr, start, sequence, flag)
+        # truth := (chr, start, stop)
+
+        for i, loc in enumerate(locs):
+            # make sure the chr and start locations match
+            if loc[0] != truth[0]:
+                raise ValueError, "Mapped to the wrong chromosome - expected %s, got %s" \
+                        % (loc[0], truth[0])
+
             if untemplated_gs_perc == 0.0:
-               print reads_data
-               print truth
-               print reads_data[0][9][0]
-               print r_genome[truth[0]][truth[1]-1]
-               raise ValueError, \
-                    "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
+
+                # TODO proper tests for untemplated G reads
+
+                if loc[1] != truth[1]:
+                    raise ValueError, "Mapped to the wrong location - expected %i, got %i" \
+                            % (loc[1], truth[1])
+
+                # check sequence against the original genome
+                original = r_genome[truth[0]][truth[1]:truth[2]].upper()
+                # if the reverse complement flag is set, rev_comp sequence from SAM
+                if( loc[3] == 16 ):
+                    mapped = reverse_complement( loc[2].upper() )
+                else:
+                    mapped = loc[2].upper()
+
+                if original != mapped:
+                    print "Original:", original
+                    print "Mapped: ", mapped
+                    raise ValueError, "Mapped sequence does not match the genome"
+
     sam_fp.close()
     
     ###### Cleanup the created files ###############################################
