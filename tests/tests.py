@@ -43,7 +43,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 

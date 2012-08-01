@@ -159,14 +159,14 @@ find_length_and_qual_score_limits( struct error_data_t* data,
     *min_qual_score = INT_MAX;
     *max_qual_score = 0;
     *max_read_length = 0;
-
+    
     int i, j, k;
     for( i=0; i < data->num_records; i++ )
     {
         struct error_data_record_t* record = data->records[i];
-        for( j = 0; j < record->max_num_qual_scores; j++ )
+        for( j = 0; j <= record->max_num_qual_scores; j++ )
         {
-            for( k = 0; k < record->max_read_length; k++ )
+            for( k = 0; k <= record->max_read_length; k++ )
             {
                 if( record->base_type_cnts[j][k] > 0 )
                 {
@@ -177,7 +177,7 @@ find_length_and_qual_score_limits( struct error_data_t* data,
             }
         }
     }
-
+    
     return;
 }
 
@@ -194,20 +194,20 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
     
     int i, j;
     for( i = MAX(0, min_qual_score); 
-         i < MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_num_qual_scores); 
          i++ )
     {
-        for( j = 0; j < MIN( max_read_len, data->max_read_length ); j++ )
+        for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
         {
             fprintf( ofp, "\tE%i-%i", i, j );
         }
     }
 
     for( i = MAX(0, min_qual_score); 
-         i < MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_num_qual_scores); 
          i++ )
     {
-        for( j = 0; j < MIN( max_read_len, data->max_read_length ); j++ )
+        for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
         {
             fprintf( ofp, "\tC%i-%i", i, j );
         }
@@ -236,7 +236,13 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
  *
  ******************************************************************************/
 
-
+/*
+ *
+ * Max read length and max qual score are both allowed, so the arrays
+ * are allocated to size max_qual_score+1 and max_read_len+1 ( although,
+ * the 0 size read length is never used. 
+ *
+ */
 void
 init_error_data_record( struct error_data_record_t** data, 
                         int max_read_len, int max_qual_score )
@@ -250,17 +256,21 @@ init_error_data_record( struct error_data_record_t** data,
     (*data)->min_readkey = -1;
     (*data)->max_readkey = -1;
     
-    (*data)->base_type_cnts = malloc( max_qual_score*sizeof(int*) );
-
-    (*data)->base_type_mismatch_cnts = malloc( max_qual_score*sizeof(int*) );
+    (*data)->base_type_cnts = malloc( (1+max_qual_score)*sizeof(int*) );
+    (*data)->base_type_mismatch_cnts = malloc( (1+max_qual_score)*sizeof(int*));
 
     int i;
-    for( i = 0; i < max_qual_score; i++) 
+    for( i = 0; i <= max_qual_score; i++) 
     {
-        (*data)->base_type_cnts[i] = malloc( max_read_len*sizeof(int) );
-        memset( (*data)->base_type_cnts[i], 0, max_read_len*sizeof(int) );
-        (*data)->base_type_mismatch_cnts[i] = malloc(max_read_len*sizeof(int));
-        memset((*data)->base_type_mismatch_cnts[i], 0, max_read_len*sizeof(int));
+        (*data)->base_type_cnts[i] 
+            = malloc( (1 + max_read_len)*sizeof(int) );
+        memset( (*data)->base_type_cnts[i], 0, 
+                (1 + max_read_len)*sizeof(int)          );
+        
+        (*data)->base_type_mismatch_cnts[i] 
+            = malloc((1 + max_read_len)*sizeof(int));
+        memset( (*data)->base_type_mismatch_cnts[i], 0, 
+                (1 + max_read_len)*sizeof(int)          );
     }
     
     return;
@@ -274,7 +284,7 @@ free_error_data_record( struct error_data_record_t* data )
         return;
     
     int i;
-    for( i = 0; i < data->max_num_qual_scores; i++ )
+    for( i = 0; i < data->max_num_qual_scores+1; i++ )
     {
         free( data->base_type_cnts[i] );
         free( data->base_type_mismatch_cnts[i] );
@@ -302,10 +312,12 @@ update_error_data_record(
     {
         if( toupper(read[i]) != toupper(genome_seq[i])  )
         {
-            data->base_type_mismatch_cnts[(unsigned char) error_str[i]][i] += 1;
+            // Add 1 because read positions are 1 based
+            unsigned char error_char = (unsigned char) error_str[i];
+            data->base_type_mismatch_cnts[error_char][i+1] += 1;
         }
         
-        data->base_type_cnts[(unsigned char) error_str[i]][i] += 1;
+        data->base_type_cnts[(unsigned char) error_str[i]][i+1] += 1;
     }
     
     return;
@@ -323,9 +335,9 @@ sum_error_data_records(
     assert( dest->max_num_qual_scores == src->max_num_qual_scores );
     
     // add position_mismatch_cnts
-    for( i = 0; i < dest->max_num_qual_scores; i++ ) 
+    for( i = 0; i <= dest->max_num_qual_scores; i++ ) 
     {
-        for( j = 0; j < dest->max_read_length; j++ ) 
+        for( j = 1; j <= dest->max_read_length; j++ ) 
         {
             dest->base_type_cnts[i][j] += src->base_type_cnts[i][j];
             dest->base_type_mismatch_cnts[i][j]
@@ -349,26 +361,27 @@ fprintf_error_data_record(
     fprintf( stream, "\t%i", data->min_readkey );
     fprintf( stream, "\t\t%i", data->max_readkey );
     
-    fprintf( stream, "\t\t%i", MIN(max_read_length, data->max_read_length) );
-    fprintf( stream, "\t\t%i", MAX(0, min_qual_score) );
-    fprintf( stream, "\t\t%i\t", MIN(max_qual_score,data->max_num_qual_scores));
+    fprintf( stream, "\t\t%i", MIN( max_read_length, data->max_read_length) );
+    fprintf( stream, "\t\t%i", MAX( 0, min_qual_score) );
+    fprintf( stream, "\t\t%i\t", 
+             MIN( max_qual_score, data->max_num_qual_scores) );
     
     int i, j;
     for( i = MAX(0, min_qual_score); 
-         i < MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_num_qual_scores); 
          i++ )
     {
-        for( j = 0; j < MIN( max_read_length, data->max_read_length ); j++ )
+        for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
         {
             fprintf( stream, "\t%i", data->base_type_mismatch_cnts[i][j] );
         }
     }
 
     for( i = MAX(0, min_qual_score); 
-         i < MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_num_qual_scores); 
          i++ )
     {
-        for( j = 0; j < MIN( max_read_length, data->max_read_length ); j++ )
+        for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
         {
             fprintf( stream, "\t%i", data->base_type_cnts[i][j] );
         }

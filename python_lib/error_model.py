@@ -1,5 +1,7 @@
 import sys
 import numpy
+from numpy import array
+import pylab
 
 class ErrorDataRecord( object ):
     """Store an error data record.
@@ -25,16 +27,37 @@ class ErrorDataRecord( object ):
         return
     
     def marginal_cnts( self ):
-        rv = {}
+        rv = { 'pos': {}, 'qual': {} }
         
-        rv['pos_mm_cnts'] = self.mm_cnts.sum( axis = 1  )
-        rv['pos_cnts'] = self.cnts.sum( axis = 1  )
+        rv['pos']['mm_cnts'] = self.mm_cnts.sum( axis = 1  )
+        rv['pos']['cnts'] = self.cnts.sum( axis = 1  )
         
-        rv['qual_mm_cnts'] = self.mm_cnts.sum( axis = 0  )
-        rv['qual_cnts'] = self.cnts.sum( axis = 0  )
+        rv['qual']['mm_cnts'] = self.mm_cnts.sum( axis = 0  )
+        rv['qual']['cnts'] = self.cnts.sum( axis = 0  )
         
         return rv
     
+    def build_flat_arrays( self ):
+        def flatten_array( values ):
+            res = []
+            for pos in xrange( 1, self.max_readlen+1 ):
+                for qual_score in xrange(
+                        self.min_qualscore, self.max_qualscore+1 ):
+                    value = values[pos-1, qual_score-self.min_qualscore]
+                    res.append( (pos, qual_score, value) )
+            return zip( *res )
+        
+        return map( flatten_array, (self.mm_cnts, self.cnts) )
+        
+        
+    def plot_marginals( self ):
+        marginals = self.marginal_cnts()['pos']
+        pylab.plot( range(1,self.max_readlen+1), 
+                    marginals['mm_cnts']/marginals['cnts'] )
+        pylab.show()
+        return
+
+
 def build_error_data_record_from_log_string( log_str, header = None ):
     data = map( int, log_str.split() )
     meta_data = data[:6]
@@ -54,8 +77,6 @@ def build_error_data_record_from_log_string( log_str, header = None ):
                              record.max_qualscore+1 ):
         for read_pos in xrange( 1, record.max_readlen+1 ):
             # get the cnts from the flat array
-            if header != None:
-                print i, read_pos, qualscore, header[i+6], header[i+len(cnts)+6]
             mm_cnt = mismatches[i]
             cnt = cnts[i]
             i += 1
@@ -83,8 +104,36 @@ def load_error_data( fname ):
 
     return records
 
+from numpy import matrix
+
 def main():
     records = load_error_data( sys.argv[1] )
+    for record in records:
+        mm_cnts, cnts = record.build_flat_arrays()
+        freqs = array(mm_cnts[2])/(array(cnts[2])+0.01)
+        from scipy.interpolate import LSQBivariateSpline
+        res = LSQBivariateSpline( cnts[0], cnts[1], freqs, range(1,50,5), range(63, 104,5) )
+        z = matrix( res.ev(cnts[1], cnts[2]), nrows=50 )
+        print z
+        break
+        #
+        freqs = (record.mm_cnts/(record.cnts+1)).T
+        x = array(range( 1, record.max_readlen + 1 ))
+        y = array(range( record.min_qualscore, record.max_qualscore + 1 ))
+        print type(x)
+        print type(y)
+        print type(freqs)
+        pylab.contour( x, y, freqs )
+        pylab.show()
+        #record.plot_marginals()
+        break
+        """
+        for key, val in record.marginal_cnts().iteritems():
+            print key
+            print val
+        print
+        print
+        """
 
 if __name__ == '__main__':
     main()
