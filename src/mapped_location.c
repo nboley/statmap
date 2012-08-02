@@ -173,6 +173,21 @@ add_mapped_location( mapped_locations* results,
     return;
 }
 
+/* Wrapper to copy an existing mapped_location using add_mapped_location */
+void
+copy_mapped_location(
+        mapped_location* loc,
+        mapped_locations* locs
+    )
+{
+    add_mapped_location( locs,
+            loc->location,
+            loc->strnd,
+            loc->trim_offset,
+            loc->penalty
+        );
+}
+
 void
 print_mapped_locations( mapped_locations* results )
 {

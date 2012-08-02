@@ -479,7 +479,6 @@ add_candidate_mapping_from_diploid (
     add_candidate_mapping( mappings, &cm );
 }
 
-
 static inline void
 build_candidate_mappings_from_mapped_location(
         struct genome_data* genome,
@@ -528,36 +527,6 @@ build_candidate_mappings_from_mapped_location(
         add_candidate_mapping_from_haploid(
             rst, result, results, template_candidate_mapping, mappings, genome
         );
-}
-
-/* build candidate mappings from mapped locations ( 
-   the data structure that index lookups return  )    */
-static inline void 
-build_candidate_mappings_from_mapped_locations(
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        mapped_locations* results, 
-        candidate_mappings* mappings,
-        float max_penalty_spread
-    )
-{
-    /* Loop over mapped locations returned by index lookup */
-    int i;
-    for( i = 0; i < results->length; i++ )
-    {        
-        mapped_location* result = &( results->locations[i] );
-
-        build_candidate_mappings_from_mapped_location(
-                genome,
-                rst,
-                result,
-                results,
-                mappings,
-                max_penalty_spread
-            );
-    }
-    
-    return;
 }
 
 /* 
@@ -837,47 +806,138 @@ sort_mapped_locations_in_container(
     int i;
     for( i = 0; i < mls_container->length; i++ )
     {
-        // reference to current mapped_locations
         mapped_locations* current = mls_container->container[i];
         sort_mapped_locations_by_location( current );
     }
 }
 
-mapped_location
-build_offset_mapped_location(
-        mapped_location* location,
-        int subseq_offset
+int
+bsearch_mapped_locations_for_start(
+        mapped_locations* locs,
+        int start
     )
 {
-    mapped_location tmp = *location;
-    tmp.location.loc -= subseq_offset;
-    return tmp;
+    /* Binary search to find the matching start location */
+    int low = 0;
+    int high = locs->length;
+
+    while( low < high )
+    {
+        int mid = low + ((high-low) / 2);
+
+        int current_start =
+            locs->locations[mid].location.loc - locs->subseq_offset;
+
+        if( current_start < start ) {
+            low = mid + 1;
+        } else if( current_start > start ) {
+            high = mid - 1;
+        } else {
+            return mid;
+        }
+    }
+
+    return -1;
 }
 
 void
-build_offset_mapped_locations(
-        mapped_locations* original_locs,
-        mapped_locations* offset_locs
+find_matching_mapped_locations(
+        mapped_locations_container* matches,
+
+        mapped_locations* potential_matches,
+
+        mapped_locations* base_locs,
+        mapped_location* base_loc
     )
 {
-    int i;
-    for( i = 0; i < original_locs->length; i++ )
-    {
-        // reference to current mapped location from original mapped_locations
-        mapped_location* original_loc = original_locs->locations + i;
+    /* build a mapped_locations for the matching mapped locations */
+    mapped_locations* matching_subset = NULL;
+    init_mapped_locations( &matching_subset );
 
-        GENOME_LOC_TYPE tmp_glt = original_loc->location;
-        tmp_glt.loc -= original_locs->subseq_offset;
+    /* copy the metadata for the matching set from the original set */
+    matching_subset->subseq_len = potential_matches->subseq_len;
+    matching_subset->subseq_offset = potential_matches->subseq_len;
 
-        // add copy to the offset_locs with the offset subtracted
-        add_mapped_location(
-                offset_locs,
-                tmp_glt,
-                original_loc->strnd,
-                original_loc->trim_offset,
-                original_loc->penalty
+    /* TODO for now, we just do a binary search to find a single mapped
+     * location that has the same start as the base_loc. */
+
+    /* search for mapped_location's in potential_matches that match original,
+     * adding them to the matching_subset */
+    int match_index =
+        bsearch_mapped_locations_for_start(
+                potential_matches,
+                base_loc->location.loc - base_locs->subseq_offset
             );
+
+    /* If we found a match, add it to the matching_subset */
+    if( match_index >= 0 )
+    {
+        mapped_location* match = &( potential_matches->locations[match_index] );
+        copy_mapped_location( match, matching_subset );
     }
+
+    add_mapped_locations_to_mapped_locations_container(
+            matching_subset,
+            matches
+        );
+}
+
+void
+build_candidate_mappings_from_matched_mapped_locations(
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+        mapped_locations_container* matches,
+        candidate_mappings* rst_mappings,
+        float min_match_penalty
+    )
+{
+    /* for now, build a candidate mapping from the first mapped_location in
+     * the first mapped_locations in the mapped_locations_container */
+    assert( matches->length > 0 );
+    mapped_locations* locs = matches->container[0];
+
+    assert( locs->length > 0 );
+    mapped_location* loc = &( locs->locations[0] );
+
+    build_candidate_mappings_from_mapped_location(
+            genome,
+            rst,
+
+            loc,
+            locs,
+
+            rst_mappings,
+            min_match_penalty
+        );
+}
+
+void
+init_matched_mapped_locations_container(
+        mapped_locations_container** mls_container,
+        mapped_location* base_loc,
+        mapped_locations* base_locs
+    )
+{
+    init_mapped_locations_container( mls_container );
+
+    /* for the matched mapped locations container, we always want to add the
+     * base_loc that is a candidate for matches. By default, it is a member of
+     * any set of matched mapped_locations we build. */
+
+    /* add the base loc to the matches container */
+    mapped_locations* base_loc_mls = NULL;
+    init_mapped_locations( &base_loc_mls );
+
+    /* copy the metadata for the matching set from the original set */
+    base_loc_mls->subseq_len = base_locs->subseq_len;
+    base_loc_mls->subseq_offset = base_locs->subseq_offset;
+
+    copy_mapped_location( base_loc, base_loc_mls );
+
+    add_mapped_locations_to_mapped_locations_container(
+            base_loc_mls,
+            *mls_container
+        );
 }
 
 void
@@ -895,22 +955,23 @@ build_candidate_mappings_from_mapped_locations_container(
      * mapped_locations_container by their locations */
     sort_mapped_locations_in_container( mls_container );
 
-    /* choose a set of locations to use as base locations */
+    /* pick a mapped_locations to use as the basis to search for matching sets
+     * of mapped_location's */
     mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
 
     /* consider each location in base_locs as a candidate for building
-     * candidate mappings */
+     * candidate mappings from matched mapped_locations */
     int i, j;
     for( i = 0; i < base_locs->length; i++ )
     {
-        mapped_location* base_loc = &( base_locs->locations[i] );
+        mapped_location* base_loc = base_locs->locations + i;
 
-        /* build a temporary mapped_location that has the subsequence offset
-         * subtracted from its start position */
-        mapped_location offset_base_loc = build_offset_mapped_location(
-                base_loc, base_locs->subseq_offset );
-
-        int match_count = 1; // 1 for the base location
+        mapped_locations_container* matches = NULL;
+        init_matched_mapped_locations_container(
+                &matches,
+                base_loc,
+                base_locs
+            );
 
         /* search the other mapped_locations for matching mapped_locations */
         for( j = 0; j < mls_container->length; j++ )
@@ -919,40 +980,28 @@ build_candidate_mappings_from_mapped_locations_container(
             if( current_locs == base_locs )
                 continue;
 
-            /* build a temporary set of mapped_locations from current_locs
-             * where each mapped_location has the subsequence offset subtracted
-             * from its start position */
-            mapped_locations* offset_current_locs = NULL;
-            init_mapped_locations( &offset_current_locs );
-            build_offset_mapped_locations( current_locs, offset_current_locs );
+            find_matching_mapped_locations(
+                    matches,
+                    current_locs,
 
-            /* bsearch the offset mapped_locations */
-            mapped_location* matched_loc = bsearch(
-                    &offset_base_loc,
-                    offset_current_locs->locations,
-                    offset_current_locs->length,
-                    sizeof( mapped_location ),
-                    (int(*)(const void*, const void*))cmp_mapped_locations_by_location
+                    base_locs,
+                    base_loc
                 );
-
-            if( matched_loc != NULL ) {
-                match_count += 1;
-            }
-
-            free_mapped_locations( offset_current_locs );
         }
 
-        if( match_count == mls_container->length )
+        /* if we found matches in all of the mapped locations, it is valid. */
+        if( matches->length == mls_container->length )
         {
-            /* if the current base location has a match with all of the other
-             * mapped locations, build candidate mappings from the base loc */
-            build_candidate_mappings_from_mapped_location(
-                    genome, rst,
-                    base_loc, base_locs,
+            build_candidate_mappings_from_matched_mapped_locations(
+                    genome,
+                    rst,
+                    matches,
                     rst_mappings,
                     min_match_penalty
                 );
         }
+
+        free_mapped_locations_container( matches );
     }
 }
 
@@ -1413,7 +1462,7 @@ bootstrap_estimated_error_model(
     init_error_model( &bootstrap_error_model, MISMATCH );
     
     /* put the search arguments into a structure */
-    #define MAX_NUM_MM 5
+    #define MAX_NUM_MM 5 // XXX should this be negative?
     #define MAX_MM_SPREAD 3
     
     /* put the search arguments into a structure */
