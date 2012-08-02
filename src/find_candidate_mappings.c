@@ -480,6 +480,56 @@ add_candidate_mapping_from_diploid (
 }
 
 
+static inline void
+build_candidate_mappings_from_mapped_location(
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+
+        mapped_location* result, 
+        mapped_locations* results,
+
+        candidate_mappings* mappings,
+        float max_penalty_spread
+    )
+{
+    int subseq_len = results->subseq_len;
+
+    /****** Prepare the template candidate_mapping objects ***********/
+    candidate_mapping template_candidate_mapping 
+        = init_candidate_mapping_from_template( 
+            rst, max_penalty_spread 
+        );
+
+    /* Make sure the "subseq" is acutally shorter than the read */
+    assert( subseq_len <= rst->length );
+
+    /* set the strand */
+    if( result->strnd == FWD )
+    {
+        template_candidate_mapping.rd_strnd = FWD;
+    } else {
+        assert( result->strnd == BKWD );
+        template_candidate_mapping.rd_strnd = BKWD;
+    }
+
+    /* set metadata */
+    template_candidate_mapping.penalty = result->penalty;
+    template_candidate_mapping.subseq_offset = results->subseq_offset;
+    template_candidate_mapping.trimmed_len = result->trim_offset;
+
+    /* Build, verify, and add candidate mappings depending on type of loc */
+    /* TODO might not need to pass the subtemplate to these fns; it is only
+     * used for rst->length, and that is also stored on the cm template */
+    if( result->location.is_paternal && result->location.is_maternal )
+        add_candidate_mapping_from_diploid(
+            rst, result, results, template_candidate_mapping, mappings, genome
+        );
+    else
+        add_candidate_mapping_from_haploid(
+            rst, result, results, template_candidate_mapping, mappings, genome
+        );
+}
+
 /* build candidate mappings from mapped locations ( 
    the data structure that index lookups return  )    */
 static inline void 
@@ -491,58 +541,19 @@ build_candidate_mappings_from_mapped_locations(
         float max_penalty_spread
     )
 {
-    int subseq_len = results->subseq_len;
-    
-    /****** Prepare the template candidate_mapping objects ***********/
-    candidate_mapping template_candidate_mapping 
-        = init_candidate_mapping_from_template( 
-            rst, max_penalty_spread 
-        );
-    
-    assert( template_candidate_mapping.rd_type != 0 );
-
-    /* Make sure the "subseq" is acutally shorter than the read */
-    assert( subseq_len <= rst->length );
-            
     /* Loop over mapped locations returned by index lookup */
     int i;
     for( i = 0; i < results->length; i++ )
     {        
-        /* 
-         * I'm scribbling on the base relation, but it doesnt 
-         * matter because the add will copy it and then I will
-         * overwrite what I scribbled on anyways. 
-         */
-        /* hopefully this will be optimized out */
-        mapped_location* result;
-        result = results->locations + i;
+        mapped_location* result = &( results->locations[i] );
 
-        /*** Set read-dependent info (same for diploid and haploid) ***/
-
-        /* set the strand */
-        if( result->strnd == FWD )
-        {
-            template_candidate_mapping.rd_strnd = FWD;
-        } else {
-            assert( result->strnd == BKWD );
-            template_candidate_mapping.rd_strnd = BKWD;
-        }
-
-        /* set metadata */
-        template_candidate_mapping.penalty = result->penalty;
-        template_candidate_mapping.subseq_offset = results->subseq_offset;
-        template_candidate_mapping.trimmed_len = result->trim_offset;
-
-        /* Build, verify, and add candidate mappings depending on type of loc */
-        /* TODO might not need to pass the subtemplate to these fns; it is only
-         * used for rst->length, and that is also stored on the cm template */
-        if( result->location.is_paternal && result->location.is_maternal )
-            add_candidate_mapping_from_diploid(
-                rst, result, results, template_candidate_mapping, mappings, genome
-            );
-        else
-            add_candidate_mapping_from_haploid(
-                rst, result, results, template_candidate_mapping, mappings, genome
+        build_candidate_mappings_from_mapped_location(
+                genome,
+                rst,
+                result,
+                results,
+                mappings,
+                max_penalty_spread
             );
     }
     
@@ -794,10 +805,34 @@ search_index_for_indexable_subtemplates(
     }
 }
 
+mapped_locations*
+choose_base_mapped_locations(
+        mapped_locations_container* mls_container
+    )
+{
+    /* TODO for now, take the shortest set of mapped locations */
+    int min_so_far = INT_MAX;
+    int min_index = 0;
+
+    int i;
+    for( i = 0; i < mls_container->length; i++ )
+    {
+        mapped_locations* current = mls_container->container[i];
+
+        if( current->length < min_so_far )
+        {
+            min_so_far = current->length;
+            min_index = i;
+        }
+    }
+
+    return mls_container->container[min_index];
+}
+
 void
 build_candidate_mappings_from_mapped_locations_container(
         candidate_mappings* rst_mappings,
-        mapped_locations_container* ml_container,
+        mapped_locations_container* mls_container,
         struct read_subtemplate* rst,
 
         struct genome_data* genome,
@@ -805,18 +840,52 @@ build_candidate_mappings_from_mapped_locations_container(
         float min_match_penalty
     )
 {
-    /* add candidate mappings for each mapped_locations in the
-     * mapped_locations_container */
-    int mlc_index;
-    for( mlc_index = 0; mlc_index < ml_container->length; mlc_index++ )
-    {
-        mapped_locations* results = ml_container->container[mlc_index];
+    mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
 
-        build_candidate_mappings_from_mapped_locations(
-                genome, rst, results,
-                rst_mappings,
-                min_match_penalty
-            );
+    /* loop over each mapped location in the base mapped locations */
+    int i, j, k;
+    for( i = 0; i < base_locs->length; i++ )
+    {
+        mapped_location* base_loc = &( base_locs->locations[i] );
+
+        int match_count = 1; // 1 for the base location
+        int base_start = base_loc->location.loc - base_locs->subseq_offset;
+
+        /* loop over the other mapped_locations */
+        for( j = 0; j < mls_container->length; j++ )
+        {
+            mapped_locations* current_locs = mls_container->container[j];
+            if( current_locs == base_locs )
+                continue;
+
+            /* compare each mapped location to the base mapped location */
+            for( k = 0; k < current_locs->length; k++ )
+            {
+                mapped_location* current_loc = &( current_locs->locations[k] );
+
+                int current_loc_start =
+                    current_loc->location.loc - current_locs->subseq_offset;
+
+                /* check the starts */
+                if( base_start == current_loc_start )
+                {
+                    /* corresponding mapped locations */
+                    match_count += 1;
+                }
+            }
+        }
+
+        if( match_count == mls_container->length )
+        {
+            /* if the current base location has a match with all of the other
+             * mapped locations, build candidate mappings from the base loc */
+            build_candidate_mappings_from_mapped_location(
+                    genome, rst,
+                    base_loc, base_locs,
+                    rst_mappings,
+                    min_match_penalty
+                );
+        }
     }
 }
 

@@ -1337,8 +1337,6 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
-    print "Start test_multiple_indexable_subtemplates()"
-    test_multiple_indexable_subtemplates()
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"
@@ -1361,6 +1359,9 @@ def main( RUN_SLOW_TESTS ):
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
+
+    print "Start test_multiple_indexable_subtemplates()"
+    test_multiple_indexable_subtemplates()
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"
