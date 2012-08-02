@@ -830,6 +830,57 @@ choose_base_mapped_locations(
 }
 
 void
+sort_mapped_locations_in_container(
+        mapped_locations_container* mls_container
+    )
+{
+    int i;
+    for( i = 0; i < mls_container->length; i++ )
+    {
+        // reference to current mapped_locations
+        mapped_locations* current = mls_container->container[i];
+        sort_mapped_locations_by_location( current );
+    }
+}
+
+mapped_location
+build_offset_mapped_location(
+        mapped_location* location,
+        int subseq_offset
+    )
+{
+    mapped_location tmp = *location;
+    tmp.location.loc -= subseq_offset;
+    return tmp;
+}
+
+void
+build_offset_mapped_locations(
+        mapped_locations* original_locs,
+        mapped_locations* offset_locs
+    )
+{
+    int i;
+    for( i = 0; i < original_locs->length; i++ )
+    {
+        // reference to current mapped location from original mapped_locations
+        mapped_location* original_loc = original_locs->locations + i;
+
+        GENOME_LOC_TYPE tmp_glt = original_loc->location;
+        tmp_glt.loc -= original_locs->subseq_offset;
+
+        // add copy to the offset_locs with the offset subtracted
+        add_mapped_location(
+                offset_locs,
+                tmp_glt,
+                original_loc->strnd,
+                original_loc->trim_offset,
+                original_loc->penalty
+            );
+    }
+}
+
+void
 build_candidate_mappings_from_mapped_locations_container(
         candidate_mappings* rst_mappings,
         mapped_locations_container* mls_container,
@@ -840,39 +891,55 @@ build_candidate_mappings_from_mapped_locations_container(
         float min_match_penalty
     )
 {
+    /* start by sorting each of the mapped_locations in the
+     * mapped_locations_container by their locations */
+    sort_mapped_locations_in_container( mls_container );
+
+    /* choose a set of locations to use as base locations */
     mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
 
-    /* loop over each mapped location in the base mapped locations */
-    int i, j, k;
+    /* consider each location in base_locs as a candidate for building
+     * candidate mappings */
+    int i, j;
     for( i = 0; i < base_locs->length; i++ )
     {
         mapped_location* base_loc = &( base_locs->locations[i] );
 
-        int match_count = 1; // 1 for the base location
-        int base_start = base_loc->location.loc - base_locs->subseq_offset;
+        /* build a temporary mapped_location that has the subsequence offset
+         * subtracted from its start position */
+        mapped_location offset_base_loc = build_offset_mapped_location(
+                base_loc, base_locs->subseq_offset );
 
-        /* loop over the other mapped_locations */
+        int match_count = 1; // 1 for the base location
+
+        /* search the other mapped_locations for matching mapped_locations */
         for( j = 0; j < mls_container->length; j++ )
         {
             mapped_locations* current_locs = mls_container->container[j];
             if( current_locs == base_locs )
                 continue;
 
-            /* compare each mapped location to the base mapped location */
-            for( k = 0; k < current_locs->length; k++ )
-            {
-                mapped_location* current_loc = &( current_locs->locations[k] );
+            /* build a temporary set of mapped_locations from current_locs
+             * where each mapped_location has the subsequence offset subtracted
+             * from its start position */
+            mapped_locations* offset_current_locs = NULL;
+            init_mapped_locations( &offset_current_locs );
+            build_offset_mapped_locations( current_locs, offset_current_locs );
 
-                int current_loc_start =
-                    current_loc->location.loc - current_locs->subseq_offset;
+            /* bsearch the offset mapped_locations */
+            mapped_location* matched_loc = bsearch(
+                    &offset_base_loc,
+                    offset_current_locs->locations,
+                    offset_current_locs->length,
+                    sizeof( mapped_location ),
+                    (int(*)(const void*, const void*))cmp_mapped_locations_by_location
+                );
 
-                /* check the starts */
-                if( base_start == current_loc_start )
-                {
-                    /* corresponding mapped locations */
-                    match_count += 1;
-                }
+            if( matched_loc != NULL ) {
+                match_count += 1;
             }
+
+            free_mapped_locations( offset_current_locs );
         }
 
         if( match_count == mls_container->length )
