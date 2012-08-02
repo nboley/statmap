@@ -140,6 +140,7 @@ if(0) {
 
 data = read.table( "error_stats.log", header=TRUE )
 t = build_regression_vectors_from_record( data[1,] )
+
 plot.marginals( t )
 
 

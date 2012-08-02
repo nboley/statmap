@@ -1,6 +1,6 @@
 import sys
 import numpy
-from numpy import array
+from numpy import array, ndarray
 import pylab
 
 class ErrorDataRecord( object ):
@@ -37,19 +37,25 @@ class ErrorDataRecord( object ):
         
         return rv
     
-    def build_flat_arrays( self ):
-        def flatten_array( values ):
-            res = []
-            for pos in xrange( 1, self.max_readlen+1 ):
-                for qual_score in xrange(
-                        self.min_qualscore, self.max_qualscore+1 ):
-                    value = values[pos-1, qual_score-self.min_qualscore]
-                    res.append( (pos, qual_score, value) )
-            return zip( *res )
+    def build_flat_arrays( self, skip_zeros=False ):
+        res = []
+        for pos in xrange( 1, self.max_readlen+1 ):
+            for qual_score in xrange(
+                    self.min_qualscore, self.max_qualscore+1 ):
+                
+                cnt = self.cnts[pos-1, qual_score-self.min_qualscore]
+                if skip_zeros and cnt == 0:
+                    continue
+                
+                mm_cnt = self.mm_cnts[pos-1, qual_score-self.min_qualscore]
+
+                res.append( (pos, qual_score, mm_cnt, cnt) )
         
-        return map( flatten_array, (self.mm_cnts, self.cnts) )
+        return [ numpy.array(x, dtype=float) for x in zip( *res ) ]
         
-        
+    def get_knots_with_obs( self ):
+        return zip(*self.cnts.nonzero())
+    
     def plot_marginals( self ):
         marginals = self.marginal_cnts()['pos']
         pylab.plot( range(1,self.max_readlen+1), 
@@ -104,22 +110,40 @@ def load_error_data( fname ):
 
     return records
 
-from numpy import matrix
 
 def main():
     records = load_error_data( sys.argv[1] )
     for record in records:
-        mm_cnts, cnts = record.build_flat_arrays()
-        freqs = array(mm_cnts[2])/(array(cnts[2])+0.01)
-        from scipy.interpolate import LSQBivariateSpline
-        res = LSQBivariateSpline( cnts[0], cnts[1], freqs, range(1,50,5), range(63, 104,5) )
-        z = matrix( res.ev(cnts[1], cnts[2]), nrows=50 )
+        poss, quals, mm_cnts, cnts = record.build_flat_arrays(skip_zeros=True)
+        freqs = (mm_cnts+0.01)/cnts
+        logit_freqs = numpy.log(freqs) - numpy.log(1-freqs)
+        
+        ### Build the spline basis
+        from scipy.interpolate import LSQBivariateSpline, SmoothBivariateSpline
+        weights = 1/numpy.sqrt(freqs*(1-freqs))
+        basis = SmoothBivariateSpline(poss, quals, logit_freqs )
+        fit_vals = basis.ev(poss, quals)
+        fit_freqs = 1/( 1.0 + numpy.exp( -fit_vals ) )
+
+        #pylab.plot( logit_freqs, fit_vals )
+        #pylab.show( )
+        print logit_freqs
+        print fit_vals
+        break
+    
+        x = array(range( 1, record.max_readlen + 1 ))
+        y = array(range( record.min_qualscore, record.max_qualscore + 1 ))
+        #z = ndarray( record.cnts_array_dim, buffer=freqs )
+
+        #pylab.contour( y, x, z )
+        #pylab.show()
+        
+        print ndarray( record.cnts_array_dim, buffer=freqs )
+        print
         print z
         break
         #
         freqs = (record.mm_cnts/(record.cnts+1)).T
-        x = array(range( 1, record.max_readlen + 1 ))
-        y = array(range( record.min_qualscore, record.max_qualscore + 1 ))
         print type(x)
         print type(y)
         print type(freqs)
