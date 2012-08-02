@@ -380,13 +380,7 @@ free_indexable_subtemplates(
 {
     if( ists == NULL ) return;
 
-    // free the indexable subtemplates
-    int i;
-    for( i = 0; i < ists->length; i++ )
-    {
-        free_indexable_subtemplate( &(ists->container[i]) );
-    }
-
+    free( ists->container ); // contiguous array
     free( ists );
 }
 

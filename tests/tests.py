@@ -505,7 +505,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
-            raise ValueError, "Mapping returned too many results."
+            raise ValueError, "Mapping returned too many results (read has %i mappings, expected 1)." \
+                    % len(reads_data)
         
         locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
         
@@ -1303,6 +1304,14 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
+def test_multiple_indexable_subtemplates():
+    rls = [ 50, 75 ]
+    for rl in rls:
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 )
+        print "PASS: Multiple indexable subtemplates %i BP test." % rl
+        # - 5 so the find_optimal_subseq_offset code should choose different offsets
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
+        print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
 
 if False:
     num_repeats = 1
@@ -1328,6 +1337,8 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
+    print "Start test_multiple_indexable_subtemplates()"
+    test_multiple_indexable_subtemplates()
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_mismatch_searching()"

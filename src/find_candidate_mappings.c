@@ -52,15 +52,24 @@ subseq_penalty(
 int
 find_optimal_subseq_offset( 
     struct read_subtemplate* rst,
-    /* store the desired subsequences length */
+    struct penalty_array_t* penalty_array,
+
     int subseq_len,
-    struct penalty_array_t* penalty_array
+
+    /* define region of underlying read to search for optimal subsequences */
+    int region_start,
+    int region_length
 ) {
     /* Make sure the read is at least as long as the subsequence */
     if( subseq_len > rst->length ) {
         fprintf( stderr, "============ %i \t\t %i \n", subseq_len, rst->length );
     }
     assert( subseq_len <= rst->length );
+
+    /* Make sure the search region makes sense */
+    assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
+    assert( region_length <= rst->length );
+    assert( (region_start + region_length - subseq_len) >= 0 );
     
     /*
        Remember: error_prb returns the inverse log probability of
@@ -70,8 +79,10 @@ find_optimal_subseq_offset(
     float max_so_far = -FLT_MAX;
 
     int i;
-    /* for each possible subsequence */
-    for( i = 0; i < rst->length - subseq_len; i++ )
+    /* each possible start bp in the subsequence */
+    for( i = region_start;
+         i < (region_start + region_length - subseq_len);
+         i++ )
     {
         float ss_pen = subseq_penalty(rst, i, subseq_len, penalty_array);
         if( ss_pen > max_so_far ) {
@@ -662,24 +673,28 @@ update_error_data_from_candidate_mappings(
 }
 
 void
-build_indexable_subtemplates_from_read_subtemplate(
-        struct indexable_subtemplates** ists,
+build_indexable_subtemplate(
         struct read_subtemplate* rst,
-        struct index_t* index,
-
+        struct indexable_subtemplates* ists,
         struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        struct penalty_array_t* rev_penalty_array,
+
+        int subseq_length,
+
+        // area of the read subtemplate to take an indexable subtemplate from
+        int range_start,
+        int range_length
     )
 {
-    // TODO - for now, we will just build a single indexable subtemplate from
-    // each read subtemplate.
-    
     /* Find the optimal subsequence offset for this read subtemplate */
-    int subseq_length = index->seq_length;
     int subseq_offset = find_optimal_subseq_offset(
             rst,
+            fwd_penalty_array, // TODO - different offset for rev comp?
+
             subseq_length,
-            fwd_penalty_array // TODO - different offset for rev comp?
+
+            range_start,
+            range_length
         );
 
     struct indexable_subtemplate* ist = NULL;
@@ -691,10 +706,52 @@ build_indexable_subtemplates_from_read_subtemplate(
         );
 
     // copy indexable subtemplate into set of indexable subtemplates
-    add_indexable_subtemplate_to_indexable_subtemplates( ist, *ists );
+    add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
 
     // free working copy
     free_indexable_subtemplate( ist );
+}
+
+void
+build_indexable_subtemplates_from_read_subtemplate(
+        struct indexable_subtemplates* ists,
+        struct read_subtemplate* rst,
+        struct index_t* index,
+
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array
+    )
+{
+    // TODO for now, we build 2 indexable subtemplates if the index sequence
+    // length is <= the read subtemplate length / 2. Otherwise build a single
+    // indexable subtemplate
+
+    int subseq_length = index->seq_length;
+
+    if( subseq_length <= rst->length / 2 )
+    {
+        /* we can build 2 non-overlapping indexable subtemplates */
+        build_indexable_subtemplate(
+                rst, ists,
+                fwd_penalty_array, rev_penalty_array,
+                subseq_length, 0, rst->length / 2
+            );
+
+        build_indexable_subtemplate(
+                rst, ists,
+                fwd_penalty_array, rev_penalty_array,
+                subseq_length, rst->length / 2, rst->length
+            );
+    }
+    else
+    {
+        /* build a single indexable subtemplate */
+        build_indexable_subtemplate(
+                rst, ists,
+                fwd_penalty_array, rev_penalty_array,
+                subseq_length, 0, rst->length
+            );
+    }
 }
 
 void
@@ -792,7 +849,7 @@ find_candidate_mappings_for_read_subtemplate(
     struct indexable_subtemplates* ists = NULL;
     init_indexable_subtemplates( &ists );
     build_indexable_subtemplates_from_read_subtemplate(
-            &ists,
+            ists,
             rst,
             genome->index,
 
