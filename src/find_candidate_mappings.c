@@ -799,20 +799,48 @@ find_matching_mapped_locations(
     /* TODO for now, we just do a binary search to find a single mapped
      * location that has the same start as the base_loc. */
 
+    // TODO build key
+    // ok, so base_loc has a real start at 
+    // base_loc->location.loc - base_locs->subseq_offset
+    // the locations in potential_matches have real starts at
+    // loc->location.loc - locs->subseq_offset
+    // i - i_off = j - j_off
+    // i - i_off + j_off = j
+
+    /*
+     * construct a key (mapped_location) to search for
+     * this is subtle - our criteria for matching are
+     * 1) chromosome
+     * 2) strand
+     * 3) location
+     *
+     * and the locations in base_locs and potential_matches both have distinct
+     * subseq_offsets.
+     *
+     * If i and j are the mapped_locations we're comparing, we
+     * want i - i_offset = j - j_offset for a match. We build a key mapped
+     * location with the loc = i - i_offset + j_offset = j in order to compare
+     * directory into potential_matches.
+     */
+
+    mapped_location key = *base_loc;
+    key.location.loc =
+          base_loc->location.loc 
+        - base_locs->subseq_offset
+        + potential_matches->subseq_offset;
+
     /* search for mapped_location's in potential_matches that match original,
      * adding them to the matching_subset */
-    int match_index =
-        bsearch_mapped_locations_for_start(
-                potential_matches,
-                base_loc->location.loc - base_locs->subseq_offset
-            );
+    mapped_location* match = bsearch(
+            &key,
+            potential_matches->locations,
+            potential_matches->length,
+            sizeof(mapped_location),
+            (int(*)(const void*, const void*))cmp_mapped_locations_by_location
+        );
 
-    /* If we found a match, add it to the matching_subset */
-    if( match_index >= 0 )
-    {
-        mapped_location* match = &( potential_matches->locations[match_index] );
+    if( match != NULL )
         copy_mapped_location( match, matching_subset );
-    }
 }
 
 void

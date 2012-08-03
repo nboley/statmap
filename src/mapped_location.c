@@ -33,6 +33,22 @@ cmp_mapped_locations_by_location( void* loc1, void* loc2 )
     }
 
     /* since the chromosomes must be identical... */
+
+    /* we cmp on the strand next. There are only two options, FWD or BKWD, and
+     * we arbitrarily choose FWD < BKWD */
+    if( ((mapped_location*) loc1)->strnd == FWD &&
+        ((mapped_location*) loc2)->strnd == BKWD )
+    {
+        return -1;
+    }
+
+    if( ((mapped_location*) loc1)->strnd == BKWD &&
+        ((mapped_location*) loc2)->strnd == FWD )
+    {
+        return 1;
+    }
+
+    /* since the strand must be identical... */
     if( ((mapped_location*) loc1)->location.loc
         > ((mapped_location*) loc2)->location.loc )
     {
