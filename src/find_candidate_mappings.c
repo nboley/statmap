@@ -628,7 +628,7 @@ build_indexable_subtemplate(
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist,
             subseq_offset,
-            rst->char_seq + subseq_offset,
+            rst->char_seq,
             fwd_penalty_array,
             rev_penalty_array
         );

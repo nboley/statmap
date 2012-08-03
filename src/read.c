@@ -344,7 +344,7 @@ init_indexable_subtemplate(
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
 
     (*ist)->subseq_offset = subseq_offset;
-    (*ist)->char_seq = char_seq;
+    (*ist)->char_seq = char_seq + subseq_offset;
 
     (*ist)->fwd_penalties = fwd_penalty_array->array + subseq_offset;
     (*ist)->rev_penalties = rev_penalty_array->array + subseq_offset;
