@@ -790,22 +790,12 @@ bsearch_mapped_locations_for_start(
 
 void
 find_matching_mapped_locations(
-        mapped_locations_container* matches,
-
+        mapped_locations* matching_subset,
         mapped_locations* potential_matches,
-
         mapped_locations* base_locs,
         mapped_location* base_loc
     )
 {
-    /* build a mapped_locations for the matching mapped locations */
-    mapped_locations* matching_subset = NULL;
-    init_mapped_locations( &matching_subset );
-
-    /* copy the metadata for the matching set from the original set */
-    matching_subset->subseq_len = potential_matches->subseq_len;
-    matching_subset->subseq_offset = potential_matches->subseq_len;
-
     /* TODO for now, we just do a binary search to find a single mapped
      * location that has the same start as the base_loc. */
 
@@ -823,11 +813,6 @@ find_matching_mapped_locations(
         mapped_location* match = &( potential_matches->locations[match_index] );
         copy_mapped_location( match, matching_subset );
     }
-
-    add_mapped_locations_to_mapped_locations_container(
-            matching_subset,
-            matches
-        );
 }
 
 void
@@ -840,7 +825,7 @@ build_candidate_mappings_from_matched_mapped_locations(
     )
 {
     /* for now, build a candidate mapping from the first mapped_location in
-     * the first mapped_locations in the mapped_locations_container */
+     * the first mapped_locations in the matches */
     assert( matches->length > 0 );
     mapped_locations* locs = matches->container[0];
 
@@ -859,33 +844,19 @@ build_candidate_mappings_from_matched_mapped_locations(
         );
 }
 
-void
-init_matched_mapped_locations_container(
-        mapped_locations_container** mls_container,
-        mapped_location* base_loc,
-        mapped_locations* base_locs
+mapped_locations*
+mapped_locations_from_template(
+        mapped_locations* template
     )
 {
-    init_mapped_locations_container( mls_container );
+    mapped_locations* locs = NULL;
+    init_mapped_locations( &locs );
 
-    /* for the matched mapped locations container, we always want to add the
-     * base_loc that is a candidate for matches. By default, it is a member of
-     * any set of matched mapped_locations we build. */
+    /* copy the metadata from the template */
+    locs->subseq_len = template->subseq_len;
+    locs->subseq_offset = template->subseq_offset;
 
-    /* add the base loc to the matches container */
-    mapped_locations* base_loc_mls = NULL;
-    init_mapped_locations( &base_loc_mls );
-
-    /* copy the metadata for the matching set from the original set */
-    base_loc_mls->subseq_len = base_locs->subseq_len;
-    base_loc_mls->subseq_offset = base_locs->subseq_offset;
-
-    copy_mapped_location( base_loc, base_loc_mls );
-
-    add_mapped_locations_to_mapped_locations_container(
-            base_loc_mls,
-            *mls_container
-        );
+    return locs;
 }
 
 void
@@ -899,45 +870,63 @@ build_candidate_mappings_from_mapped_locations_container(
         float min_match_penalty
     )
 {
-    /* start by sorting each of the mapped_locations in the
-     * mapped_locations_container by their locations */
+    /* sort each of the mapped_locations in the container
+     * in order to binary search later */
     sort_mapped_locations_in_container( mls_container );
 
-    /* pick a mapped_locations to use as the basis to search for matching sets
-     * of mapped_location's */
+    /* pick a mapped_locations to use as the basis for matching */
     mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
 
-    /* consider each location in base_locs as a candidate for building
-     * candidate mappings from matched mapped_locations */
+    /* consider each location in base_locs as a candidate for building a set of
+     * matching mapped locations */
     int i, j;
     for( i = 0; i < base_locs->length; i++ )
     {
         mapped_location* base_loc = base_locs->locations + i;
 
+        /* make a container for the matching mapped_locations */
         mapped_locations_container* matches = NULL;
-        init_matched_mapped_locations_container(
-                &matches,
-                base_loc,
-                base_locs
-            );
+        init_mapped_locations_container( &matches );
 
-        /* search the other mapped_locations for matching mapped_locations */
+        /* initialize the set of matches with the base location */
+        mapped_locations* matches_base =
+            mapped_locations_from_template( base_locs );
+        copy_mapped_location( base_loc, matches_base );
+        add_mapped_locations_to_mapped_locations_container(
+                matches_base, matches );
+
+        /* search the other mapped_locations for matches */
         for( j = 0; j < mls_container->length; j++ )
         {
             mapped_locations* current_locs = mls_container->container[j];
             if( current_locs == base_locs )
                 continue;
 
-            find_matching_mapped_locations(
-                    matches,
-                    current_locs,
+            // store the matching subset of mapped locations from current_locs
+            mapped_locations* matching_subset = 
+                mapped_locations_from_template( current_locs );
 
+            find_matching_mapped_locations(
+                    matching_subset,
+                    current_locs,
                     base_locs,
                     base_loc
                 );
+
+            /* if we found matches, add the subset to the set of matches.
+             * Otherwise, optimize by terminating early */
+            if( matching_subset->length > 0 )
+            {
+                add_mapped_locations_to_mapped_locations_container(
+                        matching_subset, matches
+                    );
+            } else {
+                free_mapped_locations( matching_subset );
+                break;
+            }
         }
 
-        /* if we found matches in all of the mapped locations, it is valid. */
+        /* if we found matches in all of the mapped locations, it is valid */
         if( matches->length == mls_container->length )
         {
             build_candidate_mappings_from_matched_mapped_locations(
