@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Nathan Boley */
+  /* Copyright (c) 2009-2012, Nathan Boley */
 
 #include <stdlib.h>
 #include <assert.h>
@@ -17,68 +17,27 @@
  */
 
 int
-cmp_mapped_locations_by_location( void* loc1, void* loc2 )
+cmp_mapped_locations_by_location( const mapped_location* loc1, 
+                                  const mapped_location* loc2 )
 {
-    /* first test the chromosome identifier */
-    if( ((mapped_location*) loc1)->location.chr
-        > ((mapped_location*) loc2)->location.chr )
-    {
-        return 1;
-    }
-  
-    if( ((mapped_location*) loc1)->location.chr 
-        < ((mapped_location*) loc2)->location.chr )
-    {
-        return -1;
-    }
-
-    /* since the chromosomes must be identical... */
-
-    /* we cmp on the strand next. There are only two options, FWD or BKWD, and
-     * we arbitrarily choose FWD < BKWD */
-    if( ((mapped_location*) loc1)->strnd == FWD &&
-        ((mapped_location*) loc2)->strnd == BKWD )
-    {
-        return -1;
-    }
-
-    if( ((mapped_location*) loc1)->strnd == BKWD &&
-        ((mapped_location*) loc2)->strnd == FWD )
-    {
-        return 1;
-    }
-
-    /* since the strand must be identical... */
-    if( ((mapped_location*) loc1)->location.loc
-        > ((mapped_location*) loc2)->location.loc )
-    {
-        return 1;
-    }
-  
-    if( ((mapped_location*) loc1)->location.loc 
-        < ((mapped_location*) loc2)->location.loc )
-    {
-        return -1;
-    }
-
+    if( loc1->strnd != loc2->strnd )
+        return loc1->strnd - loc2->strnd;
     
-    return 0;
+    if( loc1->location.chr != loc2->location.chr )
+        return loc1->location.chr - loc2->location.chr;
+    
+    return loc1->location.loc != loc2->location.loc;
 }
 
 int
-cmp_mapped_locations_by_penalty( void* loc1, void* loc2 )
+cmp_mapped_locations_by_penalty( const mapped_location* loc1, 
+                                 const mapped_location* loc2 )
 {
-    if( ((mapped_location*) loc1)->penalty
-        > ((mapped_location*) loc2)->penalty )
-    {
+    if( loc1->penalty > loc2->penalty )
         return -1;
-    } 
- 
-    if( ((mapped_location*) loc1)->penalty 
-        < ((mapped_location*) loc2)->penalty )
-    {
+
+    if( loc1->penalty < loc2->penalty )
         return 1;
-    }
     
     return 0;
 

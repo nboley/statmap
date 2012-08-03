@@ -45,10 +45,12 @@ typedef struct {
 } mapped_locations;
 
 int
-cmp_mapped_locations_by_location( void* loc1, void* loc2 );
+cmp_mapped_locations_by_location( const mapped_location* loc1, 
+                                  const mapped_location* loc2 );
 
 int
-cmp_mapped_locations_by_penalty( void* loc1, void* loc2 );
+cmp_mapped_locations_by_penalty( const mapped_location* loc1, 
+                                 const mapped_location* loc2 );
 
 void 
 sort_mapped_locations_by_location( mapped_locations* results );
