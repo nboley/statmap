@@ -6,6 +6,19 @@ error estimates code
 fragment length estimation code
 write network breaking code
 
+-37) Reconsider mapped_reads
+-36) Move psloc handling to candidate mapping building.
+     a) add compiler flag (config.h) to use/not use pslocs
+     b) Search pslocs if we encounter them in a mapped_location while finding
+        matching mapped_location's.
+     c) Remove pslocs handling code from joining candidate mappings. Will
+        greatly simplify the joining code, especially in the paired end case.
+-35) (idea) Store subseq_len and subseq_offset in the indexable_subtemplates,
+     and store pointers to the originating indexable_subtemplate on the
+     mapped_location's.
+-34) (idea) Incorporate the min_match_penalty and max_penalty_spread parameters
+     into the error model, instead of passing them as parameters all over the
+     place in find_candidate_mappings. *Wait for error_model merge*
 -33) Eliminated the thrad path in the update trace code - it appears
      to be slow. There is probably some optimization to be done, but 
      for now we just set the threads to always be one.
