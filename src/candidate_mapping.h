@@ -62,8 +62,6 @@ typedef struct __attribute__((packed))__{
     enum READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
-    /* the length of the read that was trimmed */
-    char trimmed_len;
     
     /*** Info related to the mapped read ***/
     /* 

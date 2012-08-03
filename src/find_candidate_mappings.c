@@ -176,54 +176,6 @@ search_index(
     return;
 };
 
-static inline void
-make_assay_specific_corrections(
-        struct read_subtemplate* rst, 
-        mapped_locations* results,
-        enum assay_type_t assay
-    )
-{
-    /* for now, we only deal with cage here */
-    if( assay != CAGE )
-        return;
-    
-    unsigned int i;
-    unsigned int original_results_length = results->length;
-    for( i = 0; i < original_results_length; i++ )
-    {
-        mapped_location loc = results->locations[i];
-        
-        /* deal with untemplated G's */
-        int j;
-        for( j = 0; 
-             j < MAX_NUM_UNTEMPLATED_GS
-                 && ( rst->char_seq[j] == 'G' || rst->char_seq[j] == 'g' );
-             j++
-            )
-        {
-            GENOME_LOC_TYPE tmp_loc = loc.location;
-            
-            /* A location always needs to be greater than 0 */
-            /* note that we use j+1 because j == 0 corresponds
-               to having an untemplated g at index 1 */
-            if( tmp_loc.loc < (j+1) ) {
-                continue;
-            }
-            /* ELSE */
-            /* shift the genomic location */
-            tmp_loc.loc += (j+1);
-            
-            /* add this new location */
-            add_mapped_location( 
-                results, tmp_loc, loc.strnd, j+1, 
-                loc.penalty + (j+1)*untemplated_g_marginal_log_prb
-            );
-        }        
-    }
-    
-    return;
-}
-
 static inline void 
 recheck_location(
         struct genome_data* genome, 
@@ -241,7 +193,7 @@ recheck_location(
     float marginal_log_prb = 0;
     
     /* find a pointer to the sequence at this genomic location */
-    int mapped_length = rst->length - loc->trimmed_len;
+    int mapped_length = rst->length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -277,7 +229,7 @@ recheck_location(
     
     float rechecked_penalty = recheck_penalty( 
             mut_genome_seq, 
-            rst->char_seq + loc->trimmed_len,
+            rst->char_seq,
             mapped_length,
             penalty_array 
         );
@@ -514,7 +466,6 @@ build_candidate_mappings_from_mapped_location(
     /* set metadata */
     template_candidate_mapping.penalty = result->penalty;
     template_candidate_mapping.subseq_offset = results->subseq_offset;
-    template_candidate_mapping.trimmed_len = result->trim_offset;
 
     /* Build, verify, and add candidate mappings depending on type of loc */
     /* TODO might not need to pass the subtemplate to these fns; it is only
@@ -554,7 +505,7 @@ can_be_used_to_update_error_data(
     assert( mappings->length >= 1 );
     
     candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = rst->length - loc->trimmed_len;
+    int mapped_length = rst->length;
     
     if( loc->recheck != VALID ) {
         return false;
@@ -580,16 +531,13 @@ can_be_used_to_update_error_data(
             return false;
         }
         
-        if( mappings->mappings[1].trimmed_len != loc->trimmed_len )
-            return false;
-        
         /* this is guaranteed at the start of the function */
         assert( mappings->length == 2 );
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
             mappings->mappings[1].chr, 
             mappings->mappings[1].start_bp, 
-            rst->length - mappings->mappings[1].trimmed_len
+            rst->length
         );
         
         /* if the sequences aren't identical, then return */
@@ -620,7 +568,7 @@ update_error_data_from_candidate_mappings(
     // but, since the length is exactly 1, we know that
     // we only need to deal with this read
     candidate_mapping* loc = mappings->mappings + 0;         
-    int mapped_length = rst->length - loc->trimmed_len;
+    int mapped_length = rst->length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -629,17 +577,17 @@ update_error_data_from_candidate_mappings(
         mapped_length
     );            
         
-    char* error_str = rst->error_str + loc->trimmed_len;
+    char* error_str = rst->error_str;
 
     /* get the read sequence - rev complement if on reverse strand */
     char* read_seq;
     if( loc->rd_strnd == BKWD )
     {
         read_seq = calloc( rst->length + 1, sizeof(char) );
-        rev_complement_read( rst->char_seq+loc->trimmed_len,
+        rev_complement_read( rst->char_seq,
                 read_seq, rst->length);
     } else {
-        read_seq = rst->char_seq + loc->trimmed_len;
+        read_seq = rst->char_seq;
     }
 
     update_error_data( 

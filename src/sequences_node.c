@@ -73,7 +73,6 @@ get_locations_from_locations_node( const locations_node* const node,
             results, 
             locs[i],
             strnd,
-            0,
             penalty
         );
     }
@@ -1051,7 +1050,6 @@ find_sequences_in_sequences_node(
                     results, 
                     loc.loc,
                     strnd,
-                    0,
                     cum_penalty
                 );
 
@@ -1104,7 +1102,7 @@ find_sequences_in_sequences_node(
                     
                     GENOME_LOC_TYPE tmp_loc = locs[j];
                     add_mapped_location(
-                        results, tmp_loc, strnd, 0, cum_penalty
+                        results, tmp_loc, strnd, cum_penalty
                     );
                 }
             }

@@ -126,7 +126,6 @@ void
 add_mapped_location( mapped_locations* results, 
                      GENOME_LOC_TYPE location, 
                      enum STRAND strnd,
-                     int trim_offset,
                      float penalty )
 {
     // use 0.1 to avoid rounding error false asserts 
@@ -161,9 +160,6 @@ add_mapped_location( mapped_locations* results,
     /* set the read strand */
     loc->strnd = strnd;
 
-    /* set the trim offset */
-    loc->trim_offset = trim_offset;
-
     /* set the penalty */
     loc->penalty = penalty;
     
@@ -183,7 +179,6 @@ copy_mapped_location(
     add_mapped_location( locs,
             loc->location,
             loc->strnd,
-            loc->trim_offset,
             loc->penalty
         );
 }
