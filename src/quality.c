@@ -96,52 +96,15 @@ error_prb_for_estimated_model(
         struct error_model_t* error_model
     )
 {
-    return 3*error_prb_for_mismatch( ref, obs );
-    
-    #if 0
-    struct error_data_record_t* error_data_record 
-        = error_data->records[ error_data->num_records-1 ]
-    
-   
-     
-    /*
-       compute error score from observed error data
-     */
-    double loc_component = 0;
-    double mismatch_component = 0;
-    if( pos < error_data->max_read_length && error_data->num_unique_reads > 0 )
-    {
-        loc_component = ( error_data->position_mismatch_cnts[pos] /
-                                 error_data->num_unique_reads );
-    }
-    
-    // avoid divide-by-0
-    if( error_data->qual_score_cnts[(unsigned char) error_score] == 0 )
-    {
-        mismatch_component = 0;
-    }
-    else {
-        mismatch_component =
-            error_data->qual_score_mismatch_cnts[(unsigned char) error_score] /
-            error_data->qual_score_cnts[(unsigned char) error_score];
-    }
+    struct freqs_array* freqs = error_model->data;
+    double prb = freqs->freqs[(unsigned char)error_score][pos];
 
-    float prb = ( loc_component + mismatch_component ) / 2 + LOG_FFACTOR;
-
-    assert( prb > 0 && prb <= 1 ); // make sure prb is, in fact, a probability
-
-    /* convert to log prb */
-    float log_prb;
-    /* if the bp's match, we return the inverse of the probability of error */
     if( ref == obs )
-        log_prb = log10(1 - prb);
+        return log10(1 - prb);
     else
-        log_prb = log10(prb);
-
-    return log_prb;
+        return log10(prb);
     
-    #endif
-
+    assert( false );
 }
 
 float

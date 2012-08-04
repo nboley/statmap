@@ -1,12 +1,14 @@
 CC=clang
-CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -Wunreachable-code -Wunused
+CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
+	-Wunreachable-code -Wunused \
+	-I/usr/share/R/include
+RLIB=/usr/lib/R/lib/libR.so
 src_objects := $(patsubst %.c,%.o,$(wildcard src/*.c))
 
 #### Global targets
-all: statmap statmap.so r_error_model # verify_mapped_read_locations
+all: statmap.so statmap # verify_mapped_read_locations
 
 clean: 
-	-rm R_lib/error_model
 	-rm $(src_objects)
 	-rm src/statmap
 	-rm src/statmap.so
@@ -21,23 +23,19 @@ tags:
 	cd python_lib; ctags *.py;
 	ctags --file-scope=no -R;
 
-### the 'R_lib' subdirectory
-r_error_model: R_lib/error_model.c
-	export R_HOME=/usr/lib/R
-	gcc -std=gnu99 -I/usr/share/R/include -O0 -g -pipe -o R_lib/error_model R_lib/error_model.c -L/usr/lib/R/lib -lR
-
 ### the 'src' subdirectory
 statmap: $(src_objects)
 	$(CC) -o src/statmap \
-	$(src_objects) \
+	$(src_objects) $(RLIB) \
 	$(CFLAGS) \
-	-lm -lpthread
+	-lm -lpthread -L/usr/lib/R/lib -lR 
 	cp src/statmap ./bin/
 
 statmap.so : $(src_objects)
 	$(CC) $(CFLAGS) \
 	-fpic -shared -Wl,-soname,libstatmap.so.1 -o src/libstatmap.so \
-	$(wildcard src/*.c)
+	-L/usr/lib/R/lib -lR \
+	$(wildcard src/*.c) $(RLIB)
 
 ### the 'utilities' subdirectory
 verify_mapped_read_locations : utilities/verify_mapped_read_locations.c

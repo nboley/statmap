@@ -8,6 +8,210 @@
 #include "config.h"
 #include "error_correction.h"
 
+/*
+ *  Code to estiamte error frequencies. Calls R.
+ *
+ */
+SEXP
+init_double_vector( int data_len, double* input_data )
+{
+    assert( data_len >= 0 );
+    SEXP* output_data = malloc(sizeof(SEXP));
+
+    PROTECT(*output_data = allocVector(REALSXP, data_len));
+    double* r_data_obj = REAL( *output_data );
+    
+    int i;
+    for( i = 0; i < data_len; i++ )
+    {
+        r_data_obj[i] = input_data[i];
+    }
+    
+    return *output_data;
+}
+
+SEXP
+init_int_vector( int data_len, int* input_data )
+{
+    assert( data_len >= 0 );
+    
+    SEXP* output_data = malloc(sizeof(SEXP));
+
+    PROTECT(*output_data = allocVector(INTSXP, data_len));
+    int* r_data_obj = INTEGER( *output_data );
+    
+    int i;
+    for( i = 0; i < data_len; i++ )
+    {
+        r_data_obj[i] = input_data[i];
+    }
+    
+    return *output_data;
+}
+
+void
+build_vectors_from_error_data( 
+    struct error_data_t* data,
+    int record_index,
+    SEXP* r_poss, SEXP* r_qual_scores,
+    SEXP* r_mm_cnts, SEXP* r_cnts
+)
+{
+    double* poss;
+    double* qual_scores;
+    int* mm_cnts;
+    int* cnts;
+    
+    /* found out how much space to allocate */
+    int min_qual_score;
+    int max_qual_score;
+    int max_read_length;
+    find_length_and_qual_score_limits( 
+        data, &min_qual_score, &max_qual_score, &max_read_length );
+    
+    struct error_data_record_t* record = data->records[record_index];
+    
+    int num_qual_scores = MAX(0, (max_qual_score-min_qual_score+1));
+    int num_read_pos = MAX( 0, (max_read_length+1) );
+    int flat_vector_len = num_qual_scores*num_read_pos;
+    
+    poss = calloc( flat_vector_len, sizeof(double) );
+    qual_scores = calloc( flat_vector_len, sizeof(double) );
+    mm_cnts = calloc( flat_vector_len, sizeof(int) );
+    cnts = calloc( flat_vector_len, sizeof(int) );
+
+    int pos, qual_score, flat_vec_pos;
+    flat_vec_pos = 0;
+    for( pos = 1; pos <= max_read_length; pos++ )
+    {
+        for( qual_score = min_qual_score; 
+             qual_score <= max_qual_score; 
+             qual_score++ )
+        {
+            poss[ flat_vec_pos ] = pos;
+            qual_scores[ flat_vec_pos ] = qual_score;
+            mm_cnts[ flat_vec_pos ] = 
+                record->base_type_mismatch_cnts[qual_score][pos];
+            cnts[ flat_vec_pos ] =
+                record->base_type_cnts[qual_score][pos];
+            
+            flat_vec_pos += 1;
+        }
+    }
+    
+    *r_poss = init_double_vector( flat_vector_len, poss );
+    *r_qual_scores = init_double_vector( flat_vector_len, qual_scores );
+    *r_mm_cnts = init_int_vector( flat_vector_len, mm_cnts );
+    *r_cnts = init_int_vector( flat_vector_len, cnts );
+    
+    free(poss);
+    free(qual_scores);
+    free(mm_cnts);
+    free(cnts);
+    
+    return;
+}
+
+void
+init_freqs_array_from_error_data( struct freqs_array** est_freqs, 
+                                  struct error_data_t* error_data )
+{
+    // TODO - move this into a function
+    *est_freqs = malloc( sizeof(struct freqs_array) );
+    (*est_freqs)->max_qual_score = error_data->max_num_qual_scores;
+    (*est_freqs)->max_position = error_data->max_read_length;
+    (*est_freqs)->freqs = calloc( error_data->max_num_qual_scores+1, sizeof(double*) );
+    
+    int i;
+    for( i = 0; i <= error_data->max_num_qual_scores; i++ )
+    {
+        (*est_freqs)->freqs[i] = calloc( error_data->max_read_length+1, sizeof(double) );
+    }
+    
+    return;
+}
+
+void
+free_freqs_array( struct freqs_array* est_freqs )
+{
+    int i;
+    for( i = 0; i <= est_freqs->max_qual_score; i++ )
+    {
+        free( est_freqs->freqs[i] );
+    }
+    
+    free( est_freqs->freqs );
+    free( est_freqs );
+    
+    return;
+}
+
+void
+update_freqs_array( struct freqs_array* est_freqs, 
+                   struct error_data_t* error_data, 
+                   double* flat_freqs  )
+{
+    int min_qual_score;
+    int max_qual_score;
+    int max_read_length;
+    find_length_and_qual_score_limits( 
+        error_data, &min_qual_score, &max_qual_score, &max_read_length );
+    
+    /* update the array with the estiamted freqs */
+    int pos, qual_score, flat_vec_pos;
+    flat_vec_pos = 0;
+    for( pos = 1; pos <= max_read_length; pos++ )
+    {
+        for( qual_score = min_qual_score; 
+             qual_score <= max_qual_score; 
+             qual_score++ )
+        {
+            est_freqs->freqs[qual_score][pos] = flat_freqs[flat_vec_pos];
+            flat_vec_pos += 1;
+        }
+    }
+    
+    return;
+}
+
+void
+predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* predicted_freqs )
+{
+    fprintf( stderr, "NOTICE      :  Building Error Model.\n" );    
+    
+    SEXP mm_cnts, cnts, poss, qual_scores;
+
+    fprintf( stderr, "NOTICE      :  Building Vectors for Error Model.\n" );    
+    build_vectors_from_error_data( 
+        data, record_index,
+        &poss, &qual_scores,
+        &mm_cnts, &cnts
+    );
+    
+    fprintf( stderr, "NOTICE      :  Calling 'predict_freqs'.\n" );    
+    SEXP call;
+    call = lang5( install("predict_freqs"), mm_cnts, cnts, poss, qual_scores );
+    SEXP res = eval( call, R_GlobalEnv );
+    double *flat_freqs = REAL( res );
+
+    fprintf( stderr, "NOTICE      :  Building the estimated freqs array.\n" );
+    update_freqs_array( predicted_freqs, data, flat_freqs );
+    
+    goto cleanup;
+    
+cleanup:
+    
+    return;
+}
+
+
+/*
+ *
+ *  END code to estimate error frequencies 
+ *
+ */
+
+
 void
 init_error_model( 
     struct error_model_t** error_model,
@@ -17,6 +221,21 @@ init_error_model(
     *error_model = malloc( sizeof(struct error_model_t) );
     (*error_model)->error_model_type = error_model_type;
     (*error_model)->data = NULL;
+    return;
+}
+
+void
+update_estimated_error_model_from_error_data( 
+    struct error_model_t* error_model,
+    struct error_data_t* data
+)
+{    
+    struct freqs_array* pred_freqs;
+    init_freqs_array_from_error_data( &pred_freqs, data );
+    
+    predict_freqs( data, data->num_records-1, pred_freqs );
+    error_model->data = pred_freqs;
+    
     return;
 }
 
@@ -36,7 +255,7 @@ update_error_model_from_error_data(
         assert( error_model->data == NULL );
         return;
     } else if ( error_model->error_model_type == ESTIMATED ) {
-        error_model->data = data;
+        update_estimated_error_model_from_error_data( error_model, data );
     } else {
         fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
                  error_model->error_model_type );

@@ -34,7 +34,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = True
+P_STATMAP_OUTPUT = False
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -1407,9 +1407,9 @@ if False:
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
-    print "Starting test_error_rate_estimation()"
-    test_error_rate_estimation( )
-    return
+    #print "Starting test_error_rate_estimation()"
+    #test_error_rate_estimation( )
+    #return
     
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()

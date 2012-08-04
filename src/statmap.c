@@ -37,6 +37,7 @@
 #include "diploid_map_data.h"
 #include "util.h"
 #include "error_correction.h"
+#include "r_lib.h"
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
@@ -446,6 +447,10 @@ main( int argc, char** argv )
     write_config_file_to_stream( arg_fp, &args );
     fclose( arg_fp  );
     
+    /* intialize an R instance */
+    fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
+    init_R();
+    
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args );
@@ -467,7 +472,10 @@ cleanup:
 
     free( args.genome_fname );
     free( args.genome_index_fname );
-    //free( args.output_directory );
+    
+    /* finish the R interpreter */
+    end_R();
+    fprintf( stderr, "NOTICE      :  Shutting down R interpreter.\n" );
 
     return 0;
 }

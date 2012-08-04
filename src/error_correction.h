@@ -1,5 +1,35 @@
+#ifndef ERROR_CORRECTION_H
+#define ERROR_CORRECTION_H
+
+#include <R.h>
+#include <Rinternals.h>
+#include <Rdefines.h>
+#include <Rembedded.h>
+#include <Rmath.h>
+
 #include <pthread.h>
 #include <limits.h>
+#include <assert.h>
+
+struct freqs_array {
+    int max_qual_score;
+    int max_position;
+    double** freqs;
+};
+
+struct error_data_t;
+
+void
+predict_freqs( 
+    struct error_data_t* data, 
+    int record_index, 
+    struct freqs_array* predicted_freqs 
+);
+
+/*
+ * Error model functions
+ *
+ */
 
 enum error_model_type_t {
     MISMATCH    = 1,
@@ -46,8 +76,12 @@ struct error_data_record_t {
     int min_readkey;
     int max_readkey;
     
-    /* 2D array of counts per base. The first dimension
-       stores the arrays */
+    /* 
+       2D array of counts per base. The first dimension
+       stores the qual scores, the second positions. So
+       base_type_cnts[qual_score][pos] returns the cnts 
+       for qual_score, pos 
+    */
     int** base_type_cnts;
     int** base_type_mismatch_cnts;
 };
@@ -126,3 +160,5 @@ void
 fprintf_error_data_record( 
     FILE* stream, struct error_data_record_t* data,
     int min_qual_score, int max_qual_score, int max_read_length );
+
+#endif
