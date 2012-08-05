@@ -21,35 +21,23 @@ realloc_CE( void* ptr, size_t size )
 }
 
 int
-cmp_genome_location( void* loc1, void* loc2 )
+cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
+                     const GENOME_LOC_TYPE* loc2 )
 {
     /* first test the chromosome identifier */
-    if( ((GENOME_LOC_TYPE*) loc1)->chr
-        > ((GENOME_LOC_TYPE*) loc2)->chr )
-    {
+    if( loc1->chr > loc2->chr )
         return 1;
-    }
   
-    if( ((GENOME_LOC_TYPE*) loc1)->chr 
-        < ((GENOME_LOC_TYPE*) loc2)->chr )
-    {
+    if( loc1->chr < loc2->chr )
         return -1;
-    }
 
     /* since the chromosomes must be identical... */
-    if( ((GENOME_LOC_TYPE*) loc1)->loc
-        > ((GENOME_LOC_TYPE*) loc2)->loc )
-    {
+    if( loc1->loc > loc2->loc )
         return 1;
-    }
   
-    if( ((GENOME_LOC_TYPE*) loc1)->loc 
-        < ((GENOME_LOC_TYPE*) loc2)->loc )
-    {
+    if( loc1->loc < loc2->loc )
         return -1;
-    }
 
-    
     return 0;
 }
 

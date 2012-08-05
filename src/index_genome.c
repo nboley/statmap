@@ -1513,11 +1513,10 @@ add_ODI_stack_item( struct ODI_stack* stack,
 }
 
 int
-cmp_ODI_stack_item( const void* a, const void* b )
+cmp_ODI_stack_item( const ODI_stack_item* a,
+                    const ODI_stack_item* b )
 {
-    int rv = 0;
-    rv = ((ODI_stack_item*)b)->level - ((ODI_stack_item*)a)->level;
-    return rv;
+    return b->level - a->level;
 } 
 
 void
@@ -1527,7 +1526,7 @@ sort_ODI_stack( struct ODI_stack* stack )
         stack->stack,
         stack->size, 
         sizeof(ODI_stack_item), 
-        cmp_ODI_stack_item
+        (int(*)( const void*, const void* ))cmp_ODI_stack_item
     );
     
     return;
