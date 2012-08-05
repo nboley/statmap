@@ -107,12 +107,9 @@ search_index(
     )
 {
     int subseq_length = index->seq_length;
-    int subseq_offset = ist->subseq_offset;
     
     /* prepare the results container */
-    init_mapped_locations( results );
-    (*results)->subseq_len = subseq_length;
-    (*results)->subseq_offset = subseq_offset;
+    init_mapped_locations( results, ist );
     
     /* Build bitpacked copies of the fwd and rev strand versions of this
      * indexable subtemplate */
@@ -350,8 +347,12 @@ add_candidate_mapping_from_haploid (
     if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
     {
         read_location = modify_mapped_read_location_for_index_probe_offset(
-            (result->location).loc, (result->location).chr, result->strnd, 
-            results->subseq_offset, results->subseq_len, rst->length,
+            (result->location).loc,
+            (result->location).chr,
+            result->strnd, 
+            results->probe->subseq_offset,
+            results->probe->subseq_length,
+            rst->length,
             genome
         );
     }
@@ -415,8 +416,12 @@ add_candidate_mapping_from_diploid (
     if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
     {
         read_location = modify_mapped_read_location_for_index_probe_offset(
-            maternal_start, maternal_chr_index, result->strnd, 
-            results->subseq_offset, results->subseq_len, rst->length,
+            maternal_start,
+            maternal_chr_index,
+            result->strnd, 
+            results->probe->subseq_offset,
+            results->probe->subseq_length,
+            rst->length,
             genome
         );
     }
@@ -443,7 +448,7 @@ build_candidate_mappings_from_mapped_location(
         float max_penalty_spread
     )
 {
-    int subseq_len = results->subseq_len;
+    int subseq_len = results->probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping template_candidate_mapping 
@@ -465,7 +470,7 @@ build_candidate_mappings_from_mapped_location(
 
     /* set metadata */
     template_candidate_mapping.penalty = result->penalty;
-    template_candidate_mapping.subseq_offset = results->subseq_offset;
+    template_candidate_mapping.subseq_offset = results->probe->subseq_offset;
 
     /* Build, verify, and add candidate mappings depending on type of loc */
     /* TODO might not need to pass the subtemplate to these fns; it is only
@@ -604,29 +609,30 @@ void
 build_indexable_subtemplate(
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
+        struct index_t* index,
+
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array,
-
-        int subseq_length,
 
         // area of the read subtemplate to take an indexable subtemplate from
         int range_start,
         int range_length
     )
 {
+    int subseq_length = index->seq_length;
+
     /* Find the optimal subsequence offset for this read subtemplate */
     int subseq_offset = find_optimal_subseq_offset(
             rst,
             fwd_penalty_array, // TODO - different offset for rev comp?
-
             subseq_length,
-
             range_start,
             range_length
         );
 
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist,
+            subseq_length,
             subseq_offset,
             rst->char_seq,
             fwd_penalty_array,
@@ -650,34 +656,35 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct penalty_array_t* rev_penalty_array
     )
 {
-    // TODO for now, we build 2 indexable subtemplates if the index sequence
-    // length is <= the read subtemplate length / 2. Otherwise build a single
-    // indexable subtemplate
-
+    /*
+       TODO for now, we build 2 indexable subtemplates if the index sequence
+       length is <= the read subtemplate length / 2. Otherwise build a single
+       indexable subtemplate
+     */
     int subseq_length = index->seq_length;
 
     if( subseq_length <= rst->length / 2 )
     {
         /* we can build 2 non-overlapping indexable subtemplates */
         build_indexable_subtemplate(
-                rst, ists,
+                rst, ists, index,
                 fwd_penalty_array, rev_penalty_array,
-                subseq_length, 0, rst->length / 2
+                0, rst->length / 2
             );
 
         build_indexable_subtemplate(
-                rst, ists,
+                rst, ists, index,
                 fwd_penalty_array, rev_penalty_array,
-                subseq_length, rst->length / 2, rst->length
+                rst->length / 2, rst->length
             );
     }
     else
     {
         /* build a single indexable subtemplate */
         build_indexable_subtemplate(
-                rst, ists,
+                rst, ists, index,
                 fwd_penalty_array, rev_penalty_array,
-                subseq_length, 0, rst->length
+                0, rst->length
             );
     }
 }
@@ -759,35 +766,6 @@ sort_mapped_locations_in_container(
     }
 }
 
-int
-bsearch_mapped_locations_for_start(
-        mapped_locations* locs,
-        int start
-    )
-{
-    /* Binary search to find the matching start location */
-    int low = 0;
-    int high = locs->length;
-
-    while( low < high )
-    {
-        int mid = low + ((high-low) / 2);
-
-        int current_start =
-            locs->locations[mid].location.loc - locs->subseq_offset;
-
-        if( current_start < start ) {
-            low = mid + 1;
-        } else if( current_start > start ) {
-            high = mid - 1;
-        } else {
-            return mid;
-        }
-    }
-
-    return -1;
-}
-
 void
 find_matching_mapped_locations(
         mapped_locations* matching_subset,
@@ -799,19 +777,11 @@ find_matching_mapped_locations(
     /* TODO for now, we just do a binary search to find a single mapped
      * location that has the same start as the base_loc. */
 
-    // TODO build key
-    // ok, so base_loc has a real start at 
-    // base_loc->location.loc - base_locs->subseq_offset
-    // the locations in potential_matches have real starts at
-    // loc->location.loc - locs->subseq_offset
-    // i - i_off = j - j_off
-    // i - i_off + j_off = j
-
     /*
      * construct a key (mapped_location) to search for
      * this is subtle - our criteria for matching are
-     * 1) chromosome
-     * 2) strand
+     * 1) strand
+     * 2) chromosome
      * 3) location
      *
      * and the locations in base_locs and potential_matches both have distinct
@@ -826,8 +796,8 @@ find_matching_mapped_locations(
     mapped_location key = *base_loc;
     key.location.loc =
           base_loc->location.loc 
-        - base_locs->subseq_offset
-        + potential_matches->subseq_offset;
+        - base_locs->probe->subseq_offset
+        + potential_matches->probe->subseq_offset;
 
     /* search for mapped_location's in potential_matches that match original,
      * adding them to the matching_subset */
@@ -878,11 +848,7 @@ mapped_locations_from_template(
     )
 {
     mapped_locations* locs = NULL;
-    init_mapped_locations( &locs );
-
-    /* copy the metadata from the template */
-    locs->subseq_len = template->subseq_len;
-    locs->subseq_offset = template->subseq_offset;
+    init_mapped_locations( &locs, template->probe );
 
     return locs;
 }
@@ -1023,8 +989,6 @@ find_candidate_mappings_for_read_subtemplate(
             only_collect_error_data
         );
 
-    free_indexable_subtemplates( ists );
-
     /* build candidate mappings from each set of mapped locations in the mapped
      * locations container */
     build_candidate_mappings_from_mapped_locations_container(
@@ -1036,6 +1000,12 @@ find_candidate_mappings_for_read_subtemplate(
 
             min_match_penalty
         );
+
+    /* Note - mapped_locations_container contains references to memory
+     * allocated in the indexable_subtemplates, so they must always be freed
+     * simultaneously */
+    free_indexable_subtemplates( ists );
+    free_mapped_locations_container( ml_container );
 
     /****** Do the recheck ******/
     recheck_locations(
@@ -1061,8 +1031,6 @@ find_candidate_mappings_for_read_subtemplate(
     /* cleanup memory */
     free_penalty_array( &fwd_penalty_array );
     free_penalty_array( &rev_penalty_array );
-
-    free_mapped_locations_container( ml_container );
 }
 
 void

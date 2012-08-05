@@ -82,6 +82,7 @@ get_next_read_from_rawread_db(
  */
 struct indexable_subtemplate
 {
+    int subseq_length;
     int subseq_offset;
 
     /* These point into the strings that were allocated for the read
@@ -103,6 +104,7 @@ void
 init_indexable_subtemplate(
         struct indexable_subtemplate** ist,
 
+        int subseq_length,
         int subseq_offset,
         char* char_seq,
 

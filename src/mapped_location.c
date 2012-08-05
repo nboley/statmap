@@ -68,7 +68,10 @@ sort_mapped_locations_by_penalty( mapped_locations* results )
 
 
 void
-init_mapped_locations( mapped_locations** results )
+init_mapped_locations(
+        mapped_locations** results,
+        struct indexable_subtemplate* probe
+    )
 {
     *results = malloc( sizeof(mapped_locations) );
     (*results)->locations = 
@@ -76,10 +79,9 @@ init_mapped_locations( mapped_locations** results )
     
     (*results)->length = 0;
     (*results)->allocated_length = RESULTS_GROWTH_FACTOR;
-    
-    (*results)->subseq_len = -1;
-    (*results)->subseq_offset = -1;
 
+    (*results)->probe = probe;
+    
     (*results)->skip = false;
     
     return;

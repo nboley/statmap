@@ -334,6 +334,7 @@ void
 init_indexable_subtemplate(
         struct indexable_subtemplate** ist,
 
+        int subseq_length,
         int subseq_offset,
         char* char_seq,
 
@@ -343,6 +344,7 @@ init_indexable_subtemplate(
 {
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
 
+    (*ist)->subseq_length = subseq_length;
     (*ist)->subseq_offset = subseq_offset;
     (*ist)->char_seq = char_seq + subseq_offset;
 

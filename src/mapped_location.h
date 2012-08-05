@@ -38,8 +38,7 @@ typedef struct {
     int length;
     int allocated_length;
 
-    int subseq_len;
-    int subseq_offset;
+    struct indexable_subtemplate* probe;
 
     enum bool skip;
 } mapped_locations;
@@ -61,7 +60,10 @@ sort_mapped_locations_by_penalty( mapped_locations* results );
 /* Deal with mapped locations arrays */
 
 void
-init_mapped_locations( mapped_locations** results );
+init_mapped_locations(
+        mapped_locations** results,
+        struct indexable_subtemplate* origin
+    );
 
 void
 free_mapped_locations( mapped_locations* results );

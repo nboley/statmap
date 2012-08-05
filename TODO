@@ -14,7 +14,7 @@ make sample mapping take multiple samples
         matching mapped_location's.
      c) Remove pslocs handling code from joining candidate mappings. Will
         greatly simplify the joining code, especially in the paired end case.
--35) (idea) Store subseq_len and subseq_offset in the indexable_subtemplates,
+X -35) (idea) Store subseq_len and subseq_offset in the indexable_subtemplates,
      and store pointers to the originating indexable_subtemplate on the
      mapped_location's.
 -34) (idea) Incorporate the min_match_penalty and max_penalty_spread parameters
