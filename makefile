@@ -12,4 +12,3 @@ tags:
 	cd src; ctags *.c;
 	cd utilities; ctags *.c *.py;
 	cd python_lib; ctags *.py;
-	ctags --file-scope=no -R;
