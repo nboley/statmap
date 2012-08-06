@@ -758,7 +758,7 @@ find_matching_mapped_locations(
 {
     /* TODO for now, we just do a binary search to find a single mapped
      * location that has the same start as the base_loc. */
-
+    
     /*
      * construct a key (mapped_location) to search for
      * this is subtle - our criteria for matching are
@@ -775,7 +775,8 @@ find_matching_mapped_locations(
      * directory into potential_matches.
      */
 
-    mapped_location key = *base_loc;
+    mapped_location key;
+    copy_mapped_location( &key, base_loc );
     key.location.loc =
           base_loc->location.loc 
         - base_locs->probe->subseq_offset
@@ -791,8 +792,9 @@ find_matching_mapped_locations(
             (int(*)(const void*, const void*))cmp_mapped_locations_by_location
         );
 
-    if( match != NULL )
-        copy_mapped_location( match, matching_subset );
+    if( match != NULL ) {
+        add_mapped_location( match, matching_subset );
+    }
 }
 
 void
@@ -851,7 +853,7 @@ add_pseudo_loc_to_mapped_locations(
     // TODO check read start with modify_mapped_read_location_for_index_probe_offset?
     mapped_location tmp_loc = *loc;
     tmp_loc.location = *gen_loc;
-    copy_mapped_location( &tmp_loc, results );
+    add_mapped_location( &tmp_loc, results );
 
     return;
 }
@@ -907,7 +909,7 @@ build_potential_matches(
                     current_loc, *potential_matches, genome );
         } else {
             // add the mapped_location as-is
-            copy_mapped_location( current_loc, *potential_matches );
+            add_mapped_location( current_loc, *potential_matches );
         }
     }
 
@@ -938,7 +940,7 @@ init_mapped_locations_container_for_matches(
                 base_loc, matches_base, genome );
     } else {
         // add the mapped_location as-is
-        copy_mapped_location( base_loc, matches_base );
+        add_mapped_location( base_loc, matches_base );
     }
 
     // sort so we can use binary search when searching for matches
@@ -968,12 +970,12 @@ build_candidate_mappings_from_mapped_locations_container(
     for( i = 0; i < base_locs->length; i++ )
     {
         mapped_location* base_loc = base_locs->locations + i;
-
+        
         /* make a container for the matching mapped_locations */
         mapped_locations_container* matches = NULL;
         init_mapped_locations_container_for_matches(
                 &matches, base_locs, base_loc, genome );
-
+        
         /* search the other mapped_locations for matches */
         for( j = 0; j < mls_container->length; j++ )
         {
@@ -993,16 +995,16 @@ build_candidate_mappings_from_mapped_locations_container(
              */
             mapped_locations* potential_matches = NULL;
             build_potential_matches( &potential_matches, current_locs, genome );
-
+            
             find_matching_mapped_locations(
                     matching_subset,
                     potential_matches,
                     base_locs,
                     base_loc
                 );
-
+            
             free_mapped_locations( potential_matches );
-
+            
             /* if we found matches, add the subset to the set of matches.
              * Otherwise, optimize by terminating early */
             if( matching_subset->length > 0 )
@@ -1016,7 +1018,7 @@ build_candidate_mappings_from_mapped_locations_container(
                 break;
             }
         }
-
+        
         /* if we found matches in all of the mapped locations, it is valid */
         if( matches->length == mls_container->length )
         {
@@ -1028,7 +1030,7 @@ build_candidate_mappings_from_mapped_locations_container(
                     min_match_penalty
                 );
         }
-
+        
         free_mapped_locations_container( matches );
     }
 }

@@ -69,16 +69,19 @@ void
 free_mapped_locations( mapped_locations* results );
 
 void
-add_mapped_location( mapped_locations* results, 
+add_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs
+);
+
+void
+add_new_mapped_location( mapped_locations* results, 
                      GENOME_LOC_TYPE location, 
                      enum STRAND strnd,
                      float penalty );
 
 void
-copy_mapped_location(
-        mapped_location* loc,
-        mapped_locations* locs
-    );
+copy_mapped_location( mapped_location* dest, mapped_location* src );
 
 void
 print_mapped_locations( mapped_locations* results );

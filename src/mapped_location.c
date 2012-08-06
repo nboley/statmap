@@ -100,10 +100,10 @@ free_mapped_locations( mapped_locations* results )
 }
 
 void
-add_mapped_location( mapped_locations* results, 
-                     GENOME_LOC_TYPE location, 
-                     enum STRAND strnd,
-                     float penalty )
+add_new_mapped_location( mapped_locations* results, 
+                         GENOME_LOC_TYPE location, 
+                         enum STRAND strnd,
+                         float penalty )
 {
     // use 0.1 to avoid rounding error false asserts 
     assert( penalty < 0.1 );
@@ -148,16 +148,23 @@ add_mapped_location( mapped_locations* results,
 
 /* Wrapper to copy an existing mapped_location using add_mapped_location */
 void
-copy_mapped_location(
-        mapped_location* loc,
-        mapped_locations* locs
-    )
+add_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs
+)
 {
-    add_mapped_location( locs,
-            loc->location,
-            loc->strnd,
-            loc->penalty
+    add_new_mapped_location( locs,
+                             loc->location,
+                             loc->strnd,
+                             loc->penalty
         );
+}
+
+void
+copy_mapped_location( mapped_location* dest, mapped_location* src ) 
+{
+    *dest = *src;
+    return;
 }
 
 void
