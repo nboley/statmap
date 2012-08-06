@@ -69,7 +69,7 @@ get_locations_from_locations_node( const locations_node* const node,
     for( i = 0; i < num_locations; i++ )
     {
         
-        add_mapped_location(
+        add_new_mapped_location(
             results, 
             locs[i],
             strnd,
@@ -561,8 +561,7 @@ find_insert_location( sequences_node* seqs,
 
 /*
  * Add a sequence that doesnt currently exist into a sequences node. This means
- * that we dont need to deal with the extended GENOME_LOC array - FIXME, we may
- * still need to add if the sequence cant fit into 31 bits.
+ * that we dont need to deal with the extended GENOME_LOC array
  */
 static  sequences_node*
 add_new_sequence_to_sequences_node( sequences_node* seqs, 
@@ -736,15 +735,6 @@ add_duplicate_sequence_to_sequences_node(
     } 
     /* this has already been converted to a pointer */
     else {
-        /* 
-         *  FIXME - we set the type of locs_size and locs_array
-         *  to be signed so that we could detect overflows with the 
-         *  following asserts. In addition, we increased the sizes 
-         *  because we were getting sequences that had too many 
-         *  repeats. However, the correct fix is to split sequence
-         *  arrays that get too big into a child object.
-         *
-         */ 
         assert( loc->locs_array.locs_size >= 0 ); 
         assert( loc->locs_array.locs_start >= 0 ); 
 
@@ -977,13 +967,12 @@ find_sequences_in_sequences_node(
     /* we assume that the results are initialized */
     assert( results != NULL );
     assert( results->length <= results->allocated_length );
-    // assert( results->allocated_length < USHRT_MAX );
 
-    /* FIXME */
     if( results->allocated_length == USHRT_MAX )
     {
         fprintf(stderr, "Overran max results length\n" );
-        return 1;
+        assert( false );
+        exit( -1 );
     }
 
     /* get the total number of sequences that we need to consider */
@@ -1046,7 +1035,7 @@ find_sequences_in_sequences_node(
             if( !check_sequence_type_ptr(seqs, i) )
             {
                 /* add this location to the result set */
-                add_mapped_location(
+                add_new_mapped_location(
                     results, 
                     loc.loc,
                     strnd,
@@ -1101,7 +1090,7 @@ find_sequences_in_sequences_node(
                     */
                     
                     GENOME_LOC_TYPE tmp_loc = locs[j];
-                    add_mapped_location(
+                    add_new_mapped_location(
                         results, tmp_loc, strnd, cum_penalty
                     );
                 }
