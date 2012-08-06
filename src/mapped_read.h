@@ -291,10 +291,10 @@ fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
 void
 build_mapped_read_from_candidate_mappings( 
-    struct genome_data* genome,
-    candidate_mappings* mappings, 
-    struct mapped_read_t** mpd_rd,
-    MPD_RD_ID_T read_id );
+        struct mapped_read_t** mpd_rd,
+        candidate_mappings* mappings, 
+        MPD_RD_ID_T read_id
+    );
 
 
 int 

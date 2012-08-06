@@ -1177,18 +1177,16 @@ find_candidate_mappings_for_read(
 
 void
 add_mapped_reads_from_candidate_mappings(
+        struct mapped_reads_db* mpd_rds_db,
         candidate_mappings* mappings,
-        readkey_t readkey,
-        struct genome_data* genome,
-        struct mapped_reads_db* mpd_rds_db
+        readkey_t readkey
     )
 {
     struct mapped_read_t* mpd_rd;
 
     build_mapped_read_from_candidate_mappings(
-            genome,
-            mappings,
             &mpd_rd,
+            mappings,
             readkey
         );
 
@@ -1329,10 +1327,9 @@ find_candidate_mappings( void* params )
              * to the mapped reads db */
 
             add_mapped_reads_from_candidate_mappings(
+                    mpd_rds_db,
                     mappings,
-                    readkey,
-                    genome,
-                    mpd_rds_db
+                    readkey
                 );
         }
 
