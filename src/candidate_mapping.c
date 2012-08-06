@@ -370,16 +370,14 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
     return 0;
 }
 
-int sort_candidate_mappings( candidate_mappings* mappings )
+void
+sort_candidate_mappings( candidate_mappings* mappings )
 {
     qsort( mappings->mappings, 
            mappings->length, 
-           sizeof(candidate_mapping*),
+           sizeof(candidate_mapping),
            (int(*)(const void*, const void*))cmp_candidate_mappings
     );
-
-
-    return 0;
 }
 
 /* Append the candidate mappings from src onto dest */

@@ -710,7 +710,8 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     sam_fp.seek(0)
 
     if len(fragments)*n_dups != total_num_reads:
-        raise ValueError, "Mapping returned too few reads."
+        raise ValueError, "Mapping returned too few reads (%s/%s)" % \
+                (total_num_reads, len(fragments)*n_dups)
     
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):

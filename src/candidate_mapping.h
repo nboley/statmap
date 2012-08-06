@@ -133,7 +133,7 @@ print_candidate_mappings( candidate_mappings* mappings );
 inline int
 cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2 );
 
-int 
+void
 sort_candidate_mappings( candidate_mappings* mappings );
 
 candidate_mapping

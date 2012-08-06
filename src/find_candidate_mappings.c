@@ -22,6 +22,7 @@
 #include "rawread.h"
 #include "read.h"
 #include "mapped_read.h"
+#include "pseudo_location.h"
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
@@ -460,13 +461,8 @@ build_candidate_mappings_from_mapped_location(
     assert( subseq_len <= rst->length );
 
     /* set the strand */
-    if( result->strnd == FWD )
-    {
-        template_candidate_mapping.rd_strnd = FWD;
-    } else {
-        assert( result->strnd == BKWD );
-        template_candidate_mapping.rd_strnd = BKWD;
-    }
+    assert( result->strnd == FWD || result->strnd == BKWD );
+    template_candidate_mapping.rd_strnd = result->strnd;
 
     /* set metadata */
     template_candidate_mapping.penalty = result->penalty;
@@ -651,7 +647,6 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct indexable_subtemplates* ists,
         struct read_subtemplate* rst,
         struct index_t* index,
-
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array
     )
@@ -754,19 +749,6 @@ choose_base_mapped_locations(
 }
 
 void
-sort_mapped_locations_in_container(
-        mapped_locations_container* mls_container
-    )
-{
-    int i;
-    for( i = 0; i < mls_container->length; i++ )
-    {
-        mapped_locations* current = mls_container->container[i];
-        sort_mapped_locations_by_location( current );
-    }
-}
-
-void
 find_matching_mapped_locations(
         mapped_locations* matching_subset,
         mapped_locations* potential_matches,
@@ -824,22 +806,28 @@ build_candidate_mappings_from_matched_mapped_locations(
 {
     /* for now, build a candidate mapping from the first mapped_location in
      * the first mapped_locations in the matches */
+
+    /* for now, bulid a candidate mapping from all the mapped_locations
+     * in the first set */
     assert( matches->length > 0 );
     mapped_locations* locs = matches->container[0];
 
-    assert( locs->length > 0 );
-    mapped_location* loc = &( locs->locations[0] );
+    int i;
+    for( i = 0; i < locs->length; i++ )
+    {
+        mapped_location* loc = &( locs->locations[i] );
 
-    build_candidate_mappings_from_mapped_location(
-            genome,
-            rst,
+        build_candidate_mappings_from_mapped_location(
+                genome,
+                rst,
 
-            loc,
-            locs,
+                loc,
+                locs,
 
-            rst_mappings,
-            min_match_penalty
-        );
+                rst_mappings,
+                min_match_penalty
+            );
+    }
 }
 
 mapped_locations*
@@ -854,6 +842,113 @@ mapped_locations_from_template(
 }
 
 void
+add_pseudo_loc_to_mapped_locations(
+        GENOME_LOC_TYPE* gen_loc,
+        mapped_locations* results,
+        mapped_location* loc
+    )
+{
+    // TODO check read start with modify_mapped_read_location_for_index_probe_offset?
+    mapped_location tmp_loc = *loc;
+    tmp_loc.location = *gen_loc;
+    copy_mapped_location( &tmp_loc, results );
+
+    return;
+}
+
+void
+expand_pseudo_location_into_mapped_locations(
+        mapped_location* loc,
+        mapped_locations* results,
+        struct genome_data* genome
+    )
+{
+    assert( loc->location.chr == PSEUDO_LOC_CHR_INDEX );
+
+    struct pseudo_locations_t* ps_locs = genome->index->ps_locs;
+
+    int ps_loc_index = loc->location.loc;
+    struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
+
+    /* add every location to the matches list */
+    GENOME_LOC_TYPE* gen_locs = ps_loc->locs;
+    int i;
+    for( i = 0; i < ps_loc->num; i++ )
+    {
+        add_pseudo_loc_to_mapped_locations(
+                &( gen_locs[i] ),
+                results,
+                loc
+            );
+    }
+
+    return;
+}
+
+void
+build_potential_matches(
+        mapped_locations** potential_matches,
+        mapped_locations* template,
+        struct genome_data* genome
+    )
+{
+    init_mapped_locations( potential_matches, template->probe );
+
+    // loop over the mapped locations in the template, expanding them
+    // if they are pseudo locations
+    int i;
+    for( i = 0; i < template->length; i++ )
+    {
+        mapped_location* current_loc = template->locations + i;
+
+        if( current_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
+        {
+            expand_pseudo_location_into_mapped_locations(
+                    current_loc, *potential_matches, genome );
+        } else {
+            // add the mapped_location as-is
+            copy_mapped_location( current_loc, *potential_matches );
+        }
+    }
+
+    // sort so we can use binary search when searching for matches
+    sort_mapped_locations_by_location( *potential_matches );
+}
+
+void
+init_mapped_locations_container_for_matches(
+        mapped_locations_container** matches,
+        mapped_locations* base_locs,
+        mapped_location* base_loc,
+        struct genome_data* genome
+    )
+{
+    init_mapped_locations_container( matches );
+
+    /* initialize the set of matches with the base location's metadata */
+    mapped_locations* matches_base =
+        mapped_locations_from_template( base_locs );
+
+    /* handle pseudo locations */
+    /* if the GENOME_LOC_TYPE in base_loc is a pseudo location, we expand it
+     * here and add all of its potential mapped locations */
+    if( base_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
+    {
+        expand_pseudo_location_into_mapped_locations(
+                base_loc, matches_base, genome );
+    } else {
+        // add the mapped_location as-is
+        copy_mapped_location( base_loc, matches_base );
+    }
+
+    // sort so we can use binary search when searching for matches
+    sort_mapped_locations_by_location( matches_base );
+
+    add_mapped_locations_to_mapped_locations_container(
+            matches_base, *matches );
+}
+
+void
 build_candidate_mappings_from_mapped_locations_container(
         candidate_mappings* rst_mappings,
         mapped_locations_container* mls_container,
@@ -864,10 +959,6 @@ build_candidate_mappings_from_mapped_locations_container(
         float min_match_penalty
     )
 {
-    /* sort each of the mapped_locations in the container
-     * in order to binary search later */
-    sort_mapped_locations_in_container( mls_container );
-
     /* pick a mapped_locations to use as the basis for matching */
     mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
 
@@ -880,14 +971,8 @@ build_candidate_mappings_from_mapped_locations_container(
 
         /* make a container for the matching mapped_locations */
         mapped_locations_container* matches = NULL;
-        init_mapped_locations_container( &matches );
-
-        /* initialize the set of matches with the base location */
-        mapped_locations* matches_base =
-            mapped_locations_from_template( base_locs );
-        copy_mapped_location( base_loc, matches_base );
-        add_mapped_locations_to_mapped_locations_container(
-                matches_base, matches );
+        init_mapped_locations_container_for_matches(
+                &matches, base_locs, base_loc, genome );
 
         /* search the other mapped_locations for matches */
         for( j = 0; j < mls_container->length; j++ )
@@ -896,16 +981,27 @@ build_candidate_mappings_from_mapped_locations_container(
             if( current_locs == base_locs )
                 continue;
 
-            // store the matching subset of mapped locations from current_locs
+            /*
+             * store the matching subset of mapped_locations from current_locs
+             */
             mapped_locations* matching_subset = 
                 mapped_locations_from_template( current_locs );
 
+            /*
+             * build a set of potential matching mapped locations. We expand 
+             * pseudo locations here to consider all possibilities
+             */
+            mapped_locations* potential_matches = NULL;
+            build_potential_matches( &potential_matches, current_locs, genome );
+
             find_matching_mapped_locations(
                     matching_subset,
-                    current_locs,
+                    potential_matches,
                     base_locs,
                     base_loc
                 );
+
+            free_mapped_locations( potential_matches );
 
             /* if we found matches, add the subset to the set of matches.
              * Otherwise, optimize by terminating early */
@@ -914,6 +1010,7 @@ build_candidate_mappings_from_mapped_locations_container(
                 add_mapped_locations_to_mapped_locations_container(
                         matching_subset, matches
                     );
+                // TODO free?
             } else {
                 free_mapped_locations( matching_subset );
                 break;
@@ -965,12 +1062,8 @@ find_candidate_mappings_for_read_subtemplate(
     struct indexable_subtemplates* ists = NULL;
     init_indexable_subtemplates( &ists );
     build_indexable_subtemplates_from_read_subtemplate(
-            ists,
-            rst,
-            genome->index,
-
-            &fwd_penalty_array,
-            &rev_penalty_array
+            ists, rst, genome->index,
+            &fwd_penalty_array, &rev_penalty_array
         );
 
     // store all of the mapped_locations for this read subtemplate
@@ -1205,6 +1298,8 @@ find_candidate_mappings( void* params )
 
                 only_collect_error_data
             );
+
+        sort_candidate_mappings( mappings );
 
         // Free the read
         free_read( r );
