@@ -26,7 +26,47 @@
 #include "statmap.h"
 #include "util.h"
 
-/**** Setup functions ****/
+/**** Handle different sources of reads ****/
+
+void
+set_global_quality_parameters_from_input_file_type(
+        enum input_file_type_t input_file_type
+    )
+{
+    /* print out the determined format */
+    fprintf( stderr,
+             "NOTICE      :  Setting Input File Format to %i\n",
+             input_file_type );
+
+    switch( input_file_type )
+    {
+    case 1:
+        QUAL_SHIFT = 33;
+        ARE_LOG_ODDS = false;
+        break;
+    case 2:
+        QUAL_SHIFT = 64;
+        ARE_LOG_ODDS = false;
+        break;
+    case 3:
+        QUAL_SHIFT = 59;
+        ARE_LOG_ODDS = true;
+        break;
+    case 4:
+        QUAL_SHIFT = 50;
+        ARE_LOG_ODDS = false;
+        break;
+    default:
+        fprintf( stderr,
+                 "ERROR       :  Unrecognized file format type %i\n",
+                 input_file_type );
+        exit( -1 );
+    }
+
+    fprintf( stderr,
+             "NOTICE      :  Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i\n",
+             QUAL_SHIFT, ARE_LOG_ODDS );
+}
 
 enum input_file_type_t
 guess_input_file_type( struct args_t* args )
@@ -61,11 +101,11 @@ guess_input_file_type( struct args_t* args )
         }
         free_rawread( r );
     }
+    fclose( fp );
 
     fprintf( stderr,
              "NOTICE      :  Calculated max and min quality scores as '%i' and '%i'\n",
              max_qual, min_qual );
-
 
     /* if the max quality score is 73, ( 'I' ), then
        this is almost certainly a sanger format */
@@ -121,43 +161,54 @@ guess_input_file_type( struct args_t* args )
         }
     }
 
-    /* print out the determined format */
-    fprintf( stderr,
-             "NOTICE      :  Setting Input File Format to '%i'\n",
-             input_file_type );
-    fclose( fp );
+    set_global_quality_parameters_from_input_file_type( input_file_type );
+    return input_file_type;
+}
 
-    switch( input_file_type )
+int
+set_input_file_type( char* arg, struct args_t* args )
+{
+    int flag = atoi( arg );
+
+    switch( flag )
     {
-    case 1:
-        QUAL_SHIFT = 33;
-        ARE_LOG_ODDS = false;
-        break;
-    case 2:
-        QUAL_SHIFT = 64;
-        ARE_LOG_ODDS = false;
-        break;
-    case 3:
-        QUAL_SHIFT = 59;
-        ARE_LOG_ODDS = true;
-        break;
-    case 4:
-        QUAL_SHIFT = 50;
-        ARE_LOG_ODDS = false;
-        break;
-    default:
-        fprintf( stderr,
-                 "ERROR       :  Unrecognized file format type %i\n",
-                 input_file_type );
-        exit( -1 );
+        case 1:
+            args->input_file_type = SANGER_FQ;
+            break;
+        case 2:
+            args->input_file_type = ILLUMINA_v13_FQ;
+            break;
+        case 3:
+            args->input_file_type = ILLUMINA_v15_FQ;
+            break;
+        case 4:
+            args->input_file_type = SOLEXA_v14_FQ;
+            break;
+        case 5:
+            args->input_file_type = ILLUMINA_v15_FQ;
+            break;
+        case 6:
+            args->input_file_type = SOLEXA_LOG_ODDS_FQ;
+            break;
+        case 7:
+            args->input_file_type = TEST_SUITE_FORMAT;
+            break;
+        case 8:
+            args->input_file_type = MARKS_SOLEXA;
+            break;
+        case 9:
+            args->input_file_type = ILLUMINA_v18_FQ;
+            break;
+        default:
+            /* the flag type was unrecognized; signal failure with -1 */
+            return -1;
     }
 
-    fprintf( stderr,
-             "NOTICE      :  Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i\n",
-             QUAL_SHIFT, ARE_LOG_ODDS );
+    /* if the flag was recognized, set the appropriate global variables */
+    set_global_quality_parameters_from_input_file_type( args->input_file_type );
 
-
-    return input_file_type;
+    /* return the value of the successfully passed input file type flag */
+    return flag;
 }
 
 /******** Parse command line arguments ********/
@@ -223,6 +274,11 @@ static struct argp_option options[] =
      "Type of marginal mapping to do", 0 },
     {"is-full-fragment", 'F', NULL, OPTION_ARG_OPTIONAL,
      "(not implemented yet)", 0 },
+    {"input-file-type", 'i', "TYPE", 0,
+     "Type of sequencing platform used to generate the input reads. Valid "
+     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: SOLEXA_v14_FQ, 4: "
+     "ILLUMINA_v15_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
+     "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -320,6 +376,18 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     "FATAL       :  -F ( --is-full-fragment ) is not "
                     "implemented yet." );
             break;
+        case 'i':
+        {
+            // Note - cannot declare variables inside of a case without {}
+            int rv = set_input_file_type( arg, args );
+            if( rv < 0 )
+            {
+                argp_failure( state, 1, 0,
+                        "FATAL        :  Unrecognized input file type '%s'",
+                        arg );
+            }
+            break;
+        }
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
