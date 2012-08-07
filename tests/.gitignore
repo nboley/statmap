@@ -6,3 +6,4 @@ tmp*
 *.fa
 *.fastq
 *.map
+*.bwtout

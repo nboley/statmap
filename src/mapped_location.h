@@ -41,8 +41,6 @@ typedef struct {
 
     int subseq_len;
     int subseq_offset;
-
-    enum bool skip;
 } mapped_locations;
 
 int

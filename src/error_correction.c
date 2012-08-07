@@ -3,9 +3,212 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <math.h>
+#include<string.h>
 
 #include "config.h"
 #include "error_correction.h"
+
+/*
+ *  Code to estiamte error frequencies. Calls R.
+ *
+ */
+SEXP
+init_double_vector( int data_len, double* input_data )
+{
+    assert( data_len >= 0 );
+    SEXP* output_data = malloc(sizeof(SEXP));
+
+    PROTECT(*output_data = allocVector(REALSXP, data_len));
+    double* r_data_obj = REAL( *output_data );
+    
+    int i;
+    for( i = 0; i < data_len; i++ )
+    {
+        r_data_obj[i] = input_data[i];
+    }
+    
+    return *output_data;
+}
+
+SEXP
+init_int_vector( int data_len, int* input_data )
+{
+    assert( data_len >= 0 );
+    
+    SEXP* output_data = malloc(sizeof(SEXP));
+
+    PROTECT(*output_data = allocVector(INTSXP, data_len));
+    int* r_data_obj = INTEGER( *output_data );
+    
+    int i;
+    for( i = 0; i < data_len; i++ )
+    {
+        r_data_obj[i] = input_data[i];
+    }
+    
+    return *output_data;
+}
+
+void
+build_vectors_from_error_data( 
+    struct error_data_t* data,
+    SEXP* r_poss, SEXP* r_qual_scores,
+    SEXP* r_mm_cnts, SEXP* r_cnts
+)
+{
+    double* poss;
+    double* qual_scores;
+    int* mm_cnts;
+    int* cnts;
+    
+    int num_qual_scores = data->max_qual_score + 1;
+    int num_read_pos = data->max_read_length + 1;
+    
+    int flat_vector_len = num_qual_scores*num_read_pos;
+    
+    poss = calloc( flat_vector_len, sizeof(double) );
+    qual_scores = calloc( flat_vector_len, sizeof(double) );
+    mm_cnts = calloc( flat_vector_len, sizeof(int) );
+    cnts = calloc( flat_vector_len, sizeof(int) );
+
+    int record_index;
+    int pos, qual_score, flat_vec_pos;
+    for( record_index = 0; record_index < data->num_records; record_index++ )
+    {
+        flat_vec_pos = 0;
+        struct error_data_record_t* record = data->records[record_index];
+        for( pos = 0; pos < num_read_pos; pos++ )
+        {
+            for( qual_score = 0;
+                 qual_score < num_qual_scores; 
+                 qual_score++ )
+            {
+                poss[ flat_vec_pos ] = pos;
+                qual_scores[ flat_vec_pos ] = qual_score;
+                mm_cnts[ flat_vec_pos ] += 
+                    record->base_type_mismatch_cnts[qual_score][pos];
+                cnts[ flat_vec_pos ] +=
+                    record->base_type_cnts[qual_score][pos];
+            
+                flat_vec_pos += 1;
+            }
+        }
+    }
+
+    *r_poss = init_double_vector( flat_vector_len, poss );
+    *r_qual_scores = init_double_vector( flat_vector_len, qual_scores );
+    *r_mm_cnts = init_int_vector( flat_vector_len, mm_cnts );
+    *r_cnts = init_int_vector( flat_vector_len, cnts );
+    
+    free(poss);
+    free(qual_scores);
+    free(mm_cnts);
+    free(cnts);
+    
+    return;
+}
+
+
+void
+init_freqs_array_from_error_data( struct freqs_array** est_freqs, 
+                                  struct error_data_t* error_data )
+{
+    // TODO - move this into a function
+    *est_freqs = malloc( sizeof(struct freqs_array) );
+    (*est_freqs)->max_qual_score = error_data->max_qual_score;
+    (*est_freqs)->max_position = error_data->max_read_length;
+    (*est_freqs)->freqs = calloc( error_data->max_qual_score+1, sizeof(double*) );
+    
+    int i;
+    for( i = 0; i <= error_data->max_qual_score; i++ )
+    {
+        (*est_freqs)->freqs[i] = calloc( error_data->max_read_length+1, sizeof(double) );
+    }
+    
+    return;
+}
+
+void
+free_freqs_array( struct freqs_array* est_freqs )
+{
+    int i;
+    for( i = 0; i <= est_freqs->max_qual_score; i++ )
+    {
+        free( est_freqs->freqs[i] );
+    }
+    
+    free( est_freqs->freqs );
+    free( est_freqs );
+    
+    return;
+}
+
+void
+update_freqs_array( struct freqs_array* est_freqs, 
+                    struct error_data_t* error_data, 
+                    double* flat_freqs  )
+{
+    /* update the array with the estiamted freqs */
+    int pos, qual_score, flat_vec_pos;
+    flat_vec_pos = 0;
+    for( pos = 0; pos <= error_data->max_read_length; pos++ )
+    {
+        for( qual_score = 0;
+             qual_score <= error_data->max_qual_score; 
+             qual_score++ )
+        {
+            est_freqs->freqs[qual_score][pos] = flat_freqs[flat_vec_pos];
+            flat_vec_pos += 1;
+        }
+    }
+    
+    return;
+}
+
+void
+predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* predicted_freqs )
+{
+    fprintf( stderr, 
+             "NOTICE      :  Predicting the error models for readkeys %i - %i.\n",
+             data->records[record_index]->min_readkey, 
+             data->records[record_index]->max_readkey );
+    
+    SEXP mm_cnts, cnts, poss, qual_scores;
+
+    build_vectors_from_error_data( 
+        data, &poss, &qual_scores, &mm_cnts, &cnts
+    );
+    
+    SEXP call;
+    char plot_str[500];
+    sprintf( plot_str, "error_dist_BS%i_%i_%i", 
+             1,
+             data->records[record_index]->min_readkey, 
+             data->records[record_index]->max_readkey );
+    
+    call = lang6( install("predict_freqs"), 
+                  mm_cnts, cnts, poss, qual_scores, 
+                  mkString(plot_str) );
+    
+    SEXP res = eval( call, R_GlobalEnv );
+    double *flat_freqs = REAL( res );
+    
+    update_freqs_array( predicted_freqs, data, flat_freqs );
+    
+    goto cleanup;
+    
+cleanup:
+    
+    return;
+}
+
+
+/*
+ *
+ *  END code to estimate error frequencies 
+ *
+ */
+
 
 void
 init_error_model( 
@@ -16,6 +219,20 @@ init_error_model(
     *error_model = malloc( sizeof(struct error_model_t) );
     (*error_model)->error_model_type = error_model_type;
     (*error_model)->data = NULL;
+    return;
+}
+
+void
+update_estimated_error_model_from_error_data( 
+    struct error_model_t* error_model,
+    struct error_data_t* data
+)
+{    
+    struct freqs_array* pred_freqs;
+    init_freqs_array_from_error_data( &pred_freqs, data );    
+    predict_freqs( data, data->num_records-1, pred_freqs );
+    error_model->data = pred_freqs;
+    
     return;
 }
 
@@ -35,7 +252,7 @@ update_error_model_from_error_data(
         assert( error_model->data == NULL );
         return;
     } else if ( error_model->error_model_type == ESTIMATED ) {
-        error_model->data = data;
+        update_estimated_error_model_from_error_data( error_model, data );
     } else {
         fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
                  error_model->error_model_type );
@@ -47,38 +264,32 @@ update_error_model_from_error_data(
 
 void free_error_model( struct error_model_t* error_model )
 {
-    if ( error_model->error_model_type == ESTIMATED ) {
-        free_error_data( (struct error_data_t*) (error_model->data) );
-        error_model->data = NULL;
-    } else {
-        /* if we didn't free the error model, it had better be NULL */
-        assert( error_model->data == NULL );
-    }
-    
     free( error_model );
     return;
 }
 
 
+/*******************************************************************************
+ *
+ *
+ * Error data
+ *
+ *
+ ******************************************************************************/
+
 void
 init_error_data( struct error_data_t** data )
 {
     *data = calloc( sizeof(struct error_data_t), 1 );
-    
-    (*data)->num_unique_reads = 0;
-    (*data)->max_read_length = 0;
-    (*data)->position_mismatch_cnts = NULL;
-    
-    int j;
-    for( j = 0; j < max_num_qual_scores; j++ )
-    {
-        (*data)->qual_score_cnts[j] = 0;
-        (*data)->qual_score_mismatch_cnts[j] = 0;
-    }
 
+    (*data)->num_records = 0;
+    (*data)->records = NULL;
+    
+    (*data)->max_read_length = MAX_READ_LEN;
+    (*data)->max_qual_score = MAX_QUAL_SCORE;
+    
     /*
-     * set pointer to a mutex to control concurrent access to this struct
-     * set to NULL if no need for concurrent access
+     * mutex to control concurrent access to the 'data' struct
      */
     int rc;
     pthread_mutexattr_t mta;
@@ -87,7 +298,7 @@ init_error_data( struct error_data_t** data )
     rc = pthread_mutex_init( (*data)->mutex, &mta );
     
     return;
-}
+};
 
 void 
 free_error_data( struct error_data_t* data )
@@ -95,274 +306,306 @@ free_error_data( struct error_data_t* data )
     /* don't free unallocated memory */
     if( data == NULL )
         return;
-
-    if( NULL != data->position_mismatch_cnts )
-        free( data->position_mismatch_cnts );
     
-    if( data->mutex != NULL )
-        free( data->mutex );
+    int i;
+    for( i = 0; i < data->num_records; i++ )
+    {
+        free_error_data_record( data->records[i] );
+    }
+    
+    free( data->records );
+    
+    /* release the mutex */
+    assert( data->mutex != NULL );
+    pthread_mutex_destroy( data->mutex );
+    free( data->mutex );
     
     free( data );
-}
+};
 
 void
-update_max_read_length(
-    struct error_data_t* data,
-    int new_max_read_length
-)
+add_new_error_data_record( 
+    struct error_data_t* data, int min_readkey, int max_readkey )
 {
-    /* realloc memory */
-    data->position_mismatch_cnts = realloc(
-        data->position_mismatch_cnts,
-        sizeof(double) * new_max_read_length
-    );
-    assert( data->position_mismatch_cnts != NULL );
-
-    /* initialize new positions to 0 */
-    int i;
-    for( i = data->max_read_length; i < new_max_read_length; i++ )
-    {
-        data->position_mismatch_cnts[ i ] = 0;
-    }
-    /* updata data's new_max_read_length */
-    data->max_read_length = new_max_read_length;
-}
-
-void
-update_error_data(
-    struct error_data_t* data,
-    char* genome_seq,
-    char* read,
-    char* error_str,
-    int length
-)
-{
-    int i;
-    data->num_unique_reads += 1;
-    /*
-     * check length against max_read_length; if it is longer,
-     * reallocate memory, initialize new memory to 0, and update max_read_length
-     */
-    if( data->max_read_length < length )
-        update_max_read_length( data, length );
+    assert( data->num_records > 0 || data->records == NULL );
     
-    for( i = 0; i < length; i++ )
+    struct error_data_record_t* record;
+    init_error_data_record( 
+        &record, data->max_read_length, data->max_qual_score );
+    record->min_readkey = min_readkey;
+    record->max_readkey = max_readkey;
+    
+    pthread_mutex_lock( data->mutex );
+    
+    data->num_records += 1;
+    data->records = realloc( 
+        data->records, sizeof(struct error_data_record_t*)*data->num_records );
+    assert( NULL != data->records );
+    data->records[ data->num_records-1 ] = record;
+    
+    pthread_mutex_unlock( data->mutex );
+    
+    return;
+}
+
+void
+merge_in_error_data_record( struct error_data_t* data, int record_index,
+                            struct error_data_record_t* record )
+{
+    /* if the record index is < 0, use the last index */
+    if( record_index < 0 ) {
+        record_index = data->num_records - 1;
+    }
+    
+    assert( record_index < data->num_records && record_index >= 0 );
+    
+    
+    pthread_mutex_lock( data->mutex );
+    sum_error_data_records( data->records[record_index], record );
+    pthread_mutex_unlock( data->mutex );
+    
+    return;
+}
+
+void
+find_length_and_qual_score_limits( struct error_data_t* data,
+                                   int* min_qual_score, int* max_qual_score,
+                                   int* max_read_length )
+{
+    *min_qual_score = INT_MAX;
+    *max_qual_score = 0;
+    *max_read_length = 0;
+    
+    int i, j, k;
+    for( i=0; i < data->num_records; i++ )
     {
-        if( toupper(read[i]) != toupper(genome_seq[i])  )
+        struct error_data_record_t* record = data->records[i];
+        for( j = 0; j <= record->max_qual_score; j++ )
         {
-            data->qual_score_mismatch_cnts[ (unsigned char) error_str[i] ] += 1;
-            data->position_mismatch_cnts[ i ] += 1;
+            for( k = 0; k <= record->max_read_length; k++ )
+            {
+                if( record->base_type_cnts[j][k] > 0 )
+                {
+                    *min_qual_score = MIN( *min_qual_score, j );
+                    *max_qual_score = MAX( *min_qual_score, j );
+                    *max_read_length = MAX( *max_read_length, k );
+                }
+            }
         }
+    }
+    
+    return;
+}
+
+void log_error_data( FILE* ofp, struct error_data_t* data )
+{
+    /* first find the bounds of the actually observed read lengths and quality
+       scores so that we don't print out a bunch of zeros */
+    int min_qual_score, max_qual_score, max_read_len;
+    find_length_and_qual_score_limits( 
+        data, &min_qual_score, &max_qual_score, &max_read_len );
+
+    /* print the header */
+    fprintf( ofp, "nreads\tmin_readkey\tmax_readkey\tmax_readlen\tmin_qualscore\tmax_qualscore" );
+    
+    int i, j;
+    for( i = MAX(0, min_qual_score); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
+         i++ )
+    {
+        for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
+        {
+            fprintf( ofp, "\tE%i-%i", i, j );
+        }
+    }
+
+    for( i = MAX(0, min_qual_score); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
+         i++ )
+    {
+        for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
+        {
+            fprintf( ofp, "\tC%i-%i", i, j );
+        }
+    }
+    fprintf( ofp, "\n" );
+    
+    for( i=0; i < data->num_records; i++ )
+    {
+        /* sometimes there is trailing whitespace. Make sure these
+           records aren't printed out */
+        if( i == data->num_records - 1 
+            && 0 == data->records[i]->num_unique_reads )
+            break;
         
-        data->qual_score_cnts[ (unsigned char) error_str[i] ] += 1;
+        fprintf_error_data_record( 
+            ofp, data->records[i], 
+            min_qual_score, max_qual_score, max_read_len );
+    }
+}
+
+/*******************************************************************************
+ *
+ *
+ * Error record data
+ *
+ *
+ ******************************************************************************/
+
+/*
+ *
+ * Max read length and max qual score are both allowed, so the arrays
+ * are allocated to size max_qual_score+1 and max_read_len+1 ( although,
+ * the 0 size read length is never used. 
+ *
+ */
+void
+init_error_data_record( struct error_data_record_t** data, 
+                        int max_read_len, int max_qual_score )
+{
+    *data = malloc( sizeof(struct error_data_record_t) );
+    
+    (*data)->num_unique_reads = 0;
+    (*data)->max_read_length = max_read_len;
+    (*data)->max_qual_score = max_qual_score;
+
+    (*data)->min_readkey = -1;
+    (*data)->max_readkey = -1;
+    
+    (*data)->base_type_cnts = malloc( (1+max_qual_score)*sizeof(int*) );
+    (*data)->base_type_mismatch_cnts = malloc( (1+max_qual_score)*sizeof(int*));
+
+    int i;
+    for( i = 0; i <= max_qual_score; i++) 
+    {
+        (*data)->base_type_cnts[i] 
+            = malloc( (1 + max_read_len)*sizeof(int) );
+        memset( (*data)->base_type_cnts[i], 0, 
+                (1 + max_read_len)*sizeof(int)          );
+        
+        (*data)->base_type_mismatch_cnts[i] 
+            = malloc((1 + max_read_len)*sizeof(int));
+        memset( (*data)->base_type_mismatch_cnts[i], 0, 
+                (1 + max_read_len)*sizeof(int)          );
     }
     
     return;
 }
 
 void
-clear_error_data( struct error_data_t* data )
+free_error_data_record( struct error_data_record_t* data )
 {
-    int j;
-    /* reset quality score counts */
-    for( j = 0; j < max_num_qual_scores; j++ )
-    {
-        data->qual_score_cnts[j] = 0;
-        data->qual_score_mismatch_cnts[j] = 0;
-    }
-    /* reset position mismatch counts - free allocated memory and start over */
-    free( data->position_mismatch_cnts );
-    data->position_mismatch_cnts = NULL;
+    /* don't free unallocated memory */
+    if( data == NULL )
+        return;
     
-    data->num_unique_reads = 0;
-    data->max_read_length = 0;
+    int i;
+    for( i = 0; i < data->max_qual_score+1; i++ )
+    {
+        free( data->base_type_cnts[i] );
+        free( data->base_type_mismatch_cnts[i] );
+    }
+    
+    free( data->base_type_cnts );
+    free( data->base_type_mismatch_cnts );
+    
+    free( data );
 }
 
 void
-add_error_data(
-    struct error_data_t* dest,
-    struct error_data_t* src
+update_error_data_record(
+    struct error_data_record_t* data,
+    char* genome_seq,
+    char* read,
+    char* error_str,
+    int read_length
 )
 {
-    int i;
-
-    /* Don't bother trying to add error_data structs that store information about 0 reads */
-    if( src->num_unique_reads == 0 )
-        return;
-
-    /* check max_read_length on dest and src, update dest if necessary */
-    if( dest->max_read_length < src->max_read_length )
-        update_max_read_length( dest, src->max_read_length );
-
-    // add position_mismatch_cnts
-    for( i = 0; i < dest->max_read_length; i++ )
-        dest->position_mismatch_cnts[i] += src->position_mismatch_cnts[i];
-
-    // add qual_score_cnts and qual_score_mismatch_cnts
-    for( i = 0; i < max_num_qual_scores; i++ )
+    data->num_unique_reads += 1;
+    
+    int i;    
+    for( i = 0; i < read_length; i++ )
     {
-        dest->qual_score_cnts[i] += src->qual_score_cnts[i];
-        dest->qual_score_mismatch_cnts[i] += src->qual_score_mismatch_cnts[i];
+        if( toupper(read[i]) != toupper(genome_seq[i])  )
+        {
+            // Add 1 because read positions are 1 based
+            unsigned char error_char = (unsigned char) error_str[i];
+            data->base_type_mismatch_cnts[error_char][i+1] += 1;
+        }
+        
+        data->base_type_cnts[(unsigned char) error_str[i]][i+1] += 1;
     }
+    
+    return;
+}
 
+void
+sum_error_data_records(
+    struct error_data_record_t* dest,
+    struct error_data_record_t* src
+)
+{
+    int i, j;
+    
+    assert( dest->max_read_length == src->max_read_length );
+    assert( dest->max_qual_score == src->max_qual_score );
+    
+    // add position_mismatch_cnts
+    for( i = 0; i <= dest->max_qual_score; i++ ) 
+    {
+        for( j = 1; j <= dest->max_read_length; j++ ) 
+        {
+            dest->base_type_cnts[i][j] += src->base_type_cnts[i][j];
+            dest->base_type_mismatch_cnts[i][j]
+                    += src->base_type_mismatch_cnts[i][j];
+        }
+    }
+    
     // add num_unique_reads
     dest->num_unique_reads += src->num_unique_reads;
-}
-
-void average_error_data(
-    struct error_data_t* data
-)
-{
-    /* Avoid divide by zero if data is initialized, but no reads have been stored */
-    if( data->max_read_length == 0 )
-        return;
-
-    int i;
-
-    // average position_mismatch_cnts
-    for( i = 0; i < data->max_read_length; i++ )
-        data->position_mismatch_cnts[i] = data->position_mismatch_cnts[i] / data->max_read_length;
-
-    // average qual_score_cnts and qual_score_mismatch_cnts
-    for( i = 0; i < max_num_qual_scores; i++ )
-    {
-        data->qual_score_cnts[i] = data->qual_score_cnts[i] / data->max_read_length;
-        data->qual_score_mismatch_cnts[i] = data->qual_score_mismatch_cnts[i] / data->max_read_length;
-    }
-}
-
-/*
- * Weighted average of error data from dest and src, stored in dest
- */
-void weighted_average_error_data(
-    struct error_data_t* dest,
-    struct error_data_t* src,
-    double weight
-)
-{
-    assert( weight >= 0 && weight <= 1 );
-
-    /* If there are no unique mappers, we can't say anything new about the error estimates */
-    if( src->max_read_length == 0 )
-        return; // return dest unchanged
-
-    int i;
-    /* check max_read_length on dest and src, update dest if necessary */
-    if( dest->max_read_length < src->max_read_length )
-        update_max_read_length( dest, src->max_read_length );
-
-    /* average position_mismatch_cnts */
-    for( i = 0; i < dest->max_read_length; i++ )
-    {
-        dest->position_mismatch_cnts[ i ] =
-            dest->position_mismatch_cnts[ i ] * weight
-                +
-            src->position_mismatch_cnts[ i ] * ( 1 - weight );
-    }
-
-    /* average quality scores */
-    for( i = 0; i < max_num_qual_scores; i++ )
-    {
-        dest->qual_score_cnts[ i ] =
-            dest->qual_score_cnts[ i ] * weight
-                +
-            src->qual_score_cnts[ i ] * ( 1 - weight );
-
-        dest->qual_score_mismatch_cnts[ i ] =
-            dest->qual_score_mismatch_cnts[ i ] * weight
-                +
-            src->qual_score_mismatch_cnts[ i ] * ( 1 - weight );
-    }
-
-    /* update num_unique_reads in dest */
-    dest->num_unique_reads =
-        dest->num_unique_reads * weight
-            +
-        src->num_unique_reads * ( 1 - weight );
-}
-
-void log_error_data( struct error_data_t* ed )
-{
-    FILE* error_stats_log = fopen( ERROR_STATS_LOG, "a" );
-    assert( error_stats_log != NULL );
-    fprintf_error_data( error_stats_log, ed );
-    fclose( error_stats_log );
+    
+    return;
 }
 
 void
-update_global_error_data(
-    struct error_data_t* global,
-    struct error_data_t* local
-)
+fprintf_error_data_record( 
+    FILE* stream, struct error_data_record_t* data, 
+    int min_qual_score, int max_qual_score, int max_read_length )
 {
-    weighted_average_error_data( global, local, ERROR_WEIGHT );
+    fprintf( stream, "%i", data->num_unique_reads );
 
-    /* reset local error data */
-    clear_error_data( local );
-}
-
-void
-fprintf_error_data( FILE* stream, struct error_data_t* data )
-{
-    fprintf( stream, "num_unique_reads:\t%i\n", data->num_unique_reads );
-    fprintf( stream, "max_read_length:\t%i\n", data->max_read_length );
-
-    int i;
-    for( i = 0; i < data->max_read_length; i++ )
+    fprintf( stream, "\t%i", data->min_readkey );
+    fprintf( stream, "\t\t%i", data->max_readkey );
+    
+    fprintf( stream, "\t\t%i", MIN( max_read_length, data->max_read_length) );
+    fprintf( stream, "\t\t%i", MAX( 0, min_qual_score) );
+    fprintf( stream, "\t\t%i\t", 
+             MIN( max_qual_score, data->max_qual_score) );
+    
+    int i, j;
+    for( i = MAX(0, min_qual_score); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
+         i++ )
     {
-        fprintf( stream, "%i\t%e\n", i, data->position_mismatch_cnts[ i ] );
+        for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
+        {
+            fprintf( stream, "\t%i", data->base_type_mismatch_cnts[i][j] );
+        }
+    }
+
+    for( i = MAX(0, min_qual_score); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
+         i++ )
+    {
+        for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
+        {
+            fprintf( stream, "\t%i", data->base_type_cnts[i][j] );
+        }
     }
     
-    for( i = 0; i < max_num_qual_scores; i++ )
-    {
-        fprintf( stream, "%i\t%e\t%e\n", i, 
-                 data->qual_score_mismatch_cnts[ i ],
-                 data->qual_score_cnts[i] );
-    }
+    
+    fprintf( stream, "\n" );
 }
 
-void
-load_next_error_data_t_from_log_fp( struct error_data_t** ed,
-                                    FILE* fp )
-{
-    /* clear old error data */
-    if( *ed != NULL )
-        free_error_data( *ed );
 
-    /* set ed to NULL if we're at EOF */
-    if( feof(fp) ) {
-        *ed = NULL;
-        return;
-    }
 
-    /* otherwise, the fp should be on the first line of an error_data_t entry */
-    int rv, num_unique_reads, max_read_length;
-    rv = fscanf( fp, "num_unique_reads:\t%i\n", &num_unique_reads );
-    assert( rv == 1 ); // make sure the fp was on the first line of a new entry
-    fscanf( fp, "max_read_length:\t%i\n", &max_read_length );
-    assert( rv == 1 );
-
-    /* set up error_data_t */
-    init_error_data( ed );
-    (*ed)->num_unique_reads = num_unique_reads;
-
-    // load position_mismatch_cnts
-    int i;
-    for( i = 0; i < max_read_length; i++ )
-    {
-        double pmc;
-        rv = fscanf( fp, "%*i %le", &pmc );
-        assert( rv == 1 );
-        (*ed)->position_mismatch_cnts[i] = pmc;
-    }
-
-    // load qual_score_cnts and qual_score_mismatch_cnts
-    for( i = 0; i < max_num_qual_scores; i++ )
-    {
-        double qsc, qsmc;
-        rv = fscanf( fp, "%*i %le %le", &qsmc, &qsc );
-        assert( rv == 2 );
-        (*ed)->qual_score_cnts[i] = qsc;
-        (*ed)->qual_score_mismatch_cnts[i] = qsmc;
-    }
-}

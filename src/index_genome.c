@@ -1001,7 +1001,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                  we pass this flag all the way down to optimize the error data
                  bootstrap by terminating early on multimappers
                */
-              enum bool only_find_unique_mappers
+              enum bool only_find_unique_sequences
     )
 {
     const int num_letters = calc_num_letters( seq_length );
@@ -1217,7 +1217,10 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         /* deal with the sequence nodes */
         else {
             assert( node_type == 'q' );
-
+            
+            /* keep track of how many rsults we currently have */
+            int old_results_len = results->length;
+            
             /* debugging
             printf("Level: %i\t Node Type: %c\t\t\tPenalty: %e\n", 
                    node_level, node_type, curr_penalty );
@@ -1230,7 +1233,31 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 results,
                 penalty_array
             );
-
+            
+            
+            /* 
+               If we are only looking for unique sequences,
+               and we have already found some locations, then 
+               finding more locations implies that we have 
+               found some differing sequence ( because we know that
+               each node stores identical sequence ). This is not
+               to say that there are not non-identical sequence 
+               within results already, but adding any more will 
+               certainly be different. Thus, we set the results length
+               to 0 and continue. 
+             */
+            if( only_find_unique_sequences 
+                && old_results_len > 0 
+                && results->length > old_results_len )
+            {
+                /* we can set this to zero and not worry about
+                   a memory leak because the allocated length
+                   will still be non-zero, so we can clean this
+                   up properly */
+                results->length = 0;
+                goto cleanup;
+            }
+            
             // DEBUG
             //fprintf( stderr, "max_added_penalty: %f\n", max_added_penalty);
 
@@ -1250,26 +1277,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             print_mapped_locations( results );
             */
         }
-
-        /******* bootstrap check *******/
-        /* for the bootstrap mode, we only want unique mappers - so we can
-         * optimize by immediately terminating search when there are more than
-         * 1 mappings reported */
-        if( only_find_unique_mappers &&
-           (node_type == 'q' || node_type == 'l') )
-        {
-            /* if we're in bootstrap mode, and just processed a node that could
-               have added mapped results, check if we have more than 1 mapped
-               result - if so, set results to NULL and stop searching */
-            // XXX - check correctness. Poor search branches? Recheck?
-            if( results->length > 1 ) {
-                results->skip = true;
-                break;
-            }
-        }
-
     }
 
+cleanup:
     free_pmatch_stack( stack );
     return;
 }
@@ -1293,11 +1303,10 @@ find_matches_from_root( struct index_t* index,
                         struct penalty_array_t* fwd_pa,
                         struct penalty_array_t* rev_pa,
 
-                        enum bool only_find_unique_mappers
+                        enum bool only_find_unique_sequences
 )
 {
     assert( index->index_type == TREE );
-    /* FIXME - allow for different read lens and index lens */
     assert( index->seq_length == read_len );
     static_node* root = index->index;
 
@@ -1314,7 +1323,7 @@ find_matches_from_root( struct index_t* index,
                          fwd_pa,
                          rev_pa,
 
-                         only_find_unique_mappers
+                         only_find_unique_sequences
     ); 
 }
 
@@ -1341,11 +1350,9 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
     case 'q':
         /* sequence nodes dont have any children */
         return get_num_used_bytes( node );
-        break;
     case 'l':
         /* locations nodes dont have any children */
         return size_of_locations_node( node );
-        break;
     case 's':
         for( i = 0; i < 1<<(2*LETTER_LEN); i++ )
         {
@@ -1355,7 +1362,6 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_snode();
-        break;
     case 'd':
         for( i = 0; i < get_dnode_num_children( node ); i++ )
         {
@@ -1365,7 +1371,6 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_dnode( node );
-        break;
     }
 
     fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
@@ -1386,17 +1391,13 @@ calc_node_size( NODE_TYPE type, void* node  )
     case 'q':
         /* sequence nodes dont have any children */
         return get_num_used_bytes( node );
-        break;
     case 'l':
         /* locations nodes dont have any children */
         return size_of_locations_node( node );
-        break;
     case 's':
         return size_of_snode();
-        break;
     case 'd':
         return size_of_dnode( node );
-        break;
     }
 
     fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
@@ -1548,8 +1549,6 @@ free_ondisk_index( struct index_t* index ) {
     
     if( NULL != index->ps_locs ) {
         free_pseudo_locations( index->ps_locs );
-        //free( index->ps_locs->locs );
-        //free( index->ps_locs );
     }
 
     // DEBUG - wtf
@@ -1557,7 +1556,9 @@ free_ondisk_index( struct index_t* index ) {
     if( NULL != index->diploid_maps )
         free_diploid_maps_t( index->diploid_maps );
         */
-
+    
+    free( index );
+    
     return;
 }
 

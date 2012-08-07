@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <time.h>
 #include <sys/time.h> /* gettimeofday() */
@@ -146,10 +147,7 @@ guess_input_file_type( struct args_t* args )
         ARE_LOG_ODDS = false;
         break;
     default:
-        fprintf( stderr,
-                 "ERROR       :  Unrecognized file format type %i\n",
-                 input_file_type );
-        exit( -1 );
+        assert( false );
     }
 
     fprintf( stderr,
@@ -220,7 +218,8 @@ static struct argp_option options[] =
     {"output-dir", 'o', "DIR", 0,
      "Directory to write Statmap output to", 0 },
     {"search-type", 's', "TYPE", 0,
-     "Type of marginal mapping to do", 0 },
+     "Error model type: 'm' for mismatches, 'e' to estimate the error model ( see README for more details )", 
+     0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}

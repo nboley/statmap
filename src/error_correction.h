@@ -1,9 +1,35 @@
+#ifndef ERROR_CORRECTION_H
+#define ERROR_CORRECTION_H
+
+#include <R.h>
+#include <Rinternals.h>
+#include <Rdefines.h>
+#include <Rembedded.h>
+#include <Rmath.h>
+
 #include <pthread.h>
+#include <limits.h>
+#include <assert.h>
 
-#define ERROR_WEIGHT    0.5
-#define ERROR_STATS_LOG "error_stats.log"
+struct freqs_array {
+    int max_qual_score;
+    int max_position;
+    double** freqs;
+};
 
-#define max_num_qual_scores 256
+struct error_data_t;
+
+void
+predict_freqs( 
+    struct error_data_t* data, 
+    int record_index, 
+    struct freqs_array* predicted_freqs 
+);
+
+/*
+ * Error model functions
+ *
+ */
 
 enum error_model_type_t {
     MISMATCH    = 1,
@@ -11,27 +37,11 @@ enum error_model_type_t {
     ESTIMATED   = 3
 };
 
+struct error_data_t;
+
 struct error_model_t {
     enum error_model_type_t error_model_type;
     void* data;
-};
-
-struct error_data_t {
-    /* number of reads processed */
-    int num_unique_reads;
-
-    /* maximum read length processed */
-    int max_read_length;
-    /* array of counters of mismatches at each index in a read */
-    double* position_mismatch_cnts;
-    
-    /* count quality scores */
-    double qual_score_cnts[max_num_qual_scores];
-    /* count quality scores of mismatched bps */
-    double qual_score_mismatch_cnts[max_num_qual_scores];
-
-    /* mutex used by the global error_data_t struct for thread safety */
-    pthread_mutex_t* mutex;
 };
 
 void
@@ -49,6 +59,45 @@ update_error_model_from_error_data(
 void
 free_error_model( struct error_model_t* error_model );
 
+/*
+ *  Functions for saving error information
+ *
+ */
+
+struct error_data_record_t {
+    /* number of reads processed */
+    int num_unique_reads;
+
+    /* maximum read length processed */
+    int max_read_length;
+    int max_qual_score;
+
+    /* the readkey range that this record covers */
+    int min_readkey;
+    int max_readkey;
+    
+    /* 
+       2D array of counts per base. The first dimension
+       stores the qual scores, the second positions. So
+       base_type_cnts[qual_score][pos] returns the cnts 
+       for qual_score, pos 
+    */
+    int** base_type_cnts;
+    int** base_type_mismatch_cnts;
+};
+
+struct error_data_t {
+    int num_records;
+    int max_read_length;
+    int max_qual_score;
+    
+    struct error_data_record_t** records;
+    
+    /* mutex used by the global error_data_t struct for thread safety */
+    pthread_mutex_t* mutex;
+};
+
+
 void
 init_error_data( struct error_data_t** data );
 
@@ -56,38 +105,60 @@ void
 free_error_data( struct error_data_t* data );
 
 void
-update_error_data(
-    struct error_data_t* data,
+add_new_error_data_record( 
+    struct error_data_t* data, int min_readkey, int max_readkey );
+
+/*
+ * Merge record into the error_data_record number i in data->records.
+ * If record_index == -1, use the last record.
+ *
+ */
+void
+merge_in_error_data_record( struct error_data_t* data, int record_index,
+                            struct error_data_record_t* record );
+
+void
+find_length_and_qual_score_limits( struct error_data_t* data,
+                                   int* min_qual_score, int* max_qual_score,
+                                   int* max_read_length );
+
+void log_error_data( FILE* ofp, struct error_data_t* data );
+
+
+/*******************************************************************************
+ *
+ *
+ * Error record data
+ *
+ *
+ ******************************************************************************/
+
+
+void
+init_error_data_record( struct error_data_record_t** data, 
+                        int max_read_len, int max_qual_score );
+
+void
+free_error_data_record( struct error_data_record_t* data );
+
+void
+update_error_data_record(
+    struct error_data_record_t* data,
     char* genome_seq,
     char* read,
     char* error_str,
-    int length
+    int read_length
 );
 
 void
-add_error_data(
-    struct error_data_t* dest,
-    struct error_data_t* src
-);
-
-void average_error_data(
-    struct error_data_t* data
+sum_error_data_records(
+    struct error_data_record_t* dest,
+    struct error_data_record_t* src
 );
 
 void
-update_global_error_data(
-    struct error_data_t* global,
-    struct error_data_t* local
-);
+fprintf_error_data_record( 
+    FILE* stream, struct error_data_record_t* data,
+    int min_qual_score, int max_qual_score, int max_read_length );
 
-void
-clear_error_data( struct error_data_t* data );
-
-void
-fprintf_error_data( FILE* stream, struct error_data_t* data );
-
-void log_error_data( struct error_data_t* ed );
-
-void
-load_next_error_data_t_from_log_fp( struct error_data_t** ed,
-                                    FILE* fp );
+#endif

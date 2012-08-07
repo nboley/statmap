@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <time.h>
 #include <sys/time.h> /* gettimeofday() */
+#include <libgen.h> /* get the base directory name */
 
 #include <string.h>
 #include <limits.h>
@@ -37,6 +38,7 @@
 #include "diploid_map_data.h"
 #include "util.h"
 #include "error_correction.h"
+#include "r_lib.h"
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
@@ -139,6 +141,7 @@ map_marginal( struct args_t* args,
     struct error_model_t* error_model = NULL;
     if( args->search_type == ESTIMATE_ERROR_MODEL )
     {
+        fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
         init_error_model( &error_model, ESTIMATED );
         bootstrap_estimated_error_model( 
             genome,
@@ -159,7 +162,8 @@ map_marginal( struct args_t* args,
             args->search_type);
         exit( 1 );
     }
-    
+
+    fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
     find_all_candidate_mappings( 
         genome,
         rdb,
@@ -435,7 +439,18 @@ main( int argc, char** argv )
 {       
     /* Seed the random number generator */
     srand ( time(NULL) );
-    
+
+    /* get the base directory */
+    char* abs_path = NULL;
+    abs_path = realpath( argv[0], abs_path );
+    if( NULL == abs_path )
+    {
+        fprintf( stderr, "%s\n", argv[0] );
+        perror( "Couldnt find abs path" );
+        exit( -1 );
+    }
+    char* statmap_base_dir = dirname( abs_path );
+
     /* parse and sanity check arguments */
     struct args_t args = parse_arguments( argc, argv );
     
@@ -443,6 +458,14 @@ main( int argc, char** argv )
     FILE* arg_fp = fopen( "config.dat", "w" );
     write_config_file_to_stream( arg_fp, &args );
     fclose( arg_fp  );
+    
+    /* intialize an R instance */
+    if( args.search_type == ESTIMATE_ERROR_MODEL )
+    {
+        fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
+        init_R( );        
+        load_statmap_source( statmap_base_dir );
+    }
     
     if( args.assay_type == CHIP_SEQ )
     {
@@ -465,7 +488,10 @@ cleanup:
 
     free( args.genome_fname );
     free( args.genome_index_fname );
-    //free( args.output_directory );
+    
+    /* finish the R interpreter */
+    end_R();
+    fprintf( stderr, "NOTICE      :  Shutting down R interpreter.\n" );
 
     return 0;
 }
