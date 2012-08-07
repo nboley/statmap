@@ -749,25 +749,19 @@ choose_base_mapped_locations(
 }
 
 int
-find_strand_pivot_in_sorted_mapped_locations(
-        mapped_locations* sorted_mapped_locs
+find_start_of_pseudo_mapped_locations_for_strand(
+        mapped_locations* sorted_mapped_locs,
+        enum STRAND strand
     )
 {
-    /* Since mapped locations are sorted by
-     * 1) strand
-     * 2) chromosome
-     * 3) start bp
-     *
-     * we can find the index where sorted block of FWD strand mapped_locations
-     * ends and the sorted block of BKWD strand mapped_locations begins
-     */
-
     int pivot = -1; // If there are no BKWD strand reads, pivot will be -1
 
     int i;
     for( i = 0; i < sorted_mapped_locs->length; i++ )
     {
-        if( sorted_mapped_locs->locations[i].strnd == BKWD )
+        /* Assumes the sorted_mapped_locs are, indeed, sorted by
+         * sort_mapped_locations_by_location */
+        if( sorted_mapped_locs->locations[i].strnd == strand )
         {
             pivot = i;
             break;
@@ -785,70 +779,39 @@ search_for_matches_in_pseudo_locations(
         struct genome_data* genome
     )
 {
+    /* Assume the pseudo locations are sorted to come before the rest of there
+     * chromosomes */
+    assert( PSEUDO_LOC_CHR_INDEX == 0 );
+
     struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
 
-    /*
-     * potential_matches is a sorted mapped_locations. Since mapped_locations
-     * are sorted by strand, chromosome, and bp_start, and pseudo_locations are
-     * identified by having their chromosome == PSEUDO_LOC_CHR_INDEX, there are
-     * potentially two contiguous blocks of contiguous pseudo locations in
-     * potential_matches.
-     *
-     * Furthermore, the specific key we are searching for has a strand. So we
-     * want to identify which subset of pseudo locations could contain matches
-     * for the given key, and then search inside of it.
-     */
+    /* Find the start of the set of pseudo mapped locations with strand
+     * matching the key we are matching to */
+    int pslocs_start =
+        find_start_of_pseudo_mapped_locations_for_strand(
+            potential_matches,
+            key->strnd );
 
-    int strand_pivot =
-        find_strand_pivot_in_sorted_mapped_locations( potential_matches );
+    /* If there aren't any pseudo locations with the same strand as the key,
+     * nothing to do here */
+    if( pslocs_start == -1 )
+        return;
 
-    /* Pseudo locations all have chromsome index PSEUDO_LOC_CHR_INDEX (0).
-     * Assuming this does not change, there will be a block of all of the
-     * pseudo locations at the beginning of each of the FWD and BKWD strand
-     * mapped_locations segments */
-
-    /* find the start and end of the region of potential_matches that contains
-     * pseudo locations matching the strand of key */
-    assert( FWD < BKWD );
-
-    int pslocs_start, pslocs_end;
-
-    if( key->strnd == FWD )
-    {
-        pslocs_start = 0; // FWD < BKWD
-        if( strand_pivot > -1 )
-        {
-            /* if there were any BKWD stranded mapped_locations */
-            pslocs_end = strand_pivot;
-        } else {
-            pslocs_end = potential_matches->length;
-        }
-    }
-    else if( key->strnd == BKWD )
-    {
-        pslocs_end = potential_matches->length;
-
-        if( strand_pivot > -1 )
-        {
-            pslocs_start = strand_pivot;
-        } else {
-            /* set start == end so we don't iterate over anything */
-            pslocs_start = potential_matches->length;
-        }
-    } else {
-        fprintf( stderr, "FATAL       :  Unrecognized strand %i on mapped_location.\n", key->strnd );
-        assert(false);
-        exit( -1 );
-    }
-
+    /* Binary search each pseudo location's locations for matches to the key */
     int i;
-    for( i = pslocs_start; i < pslocs_end; i++ )
+    for( i = pslocs_start; i < potential_matches->length; i++ )
     {
+        /* We begin at the start of a group of pseudo mapped_location's. If we
+         * encounter a non-pseudo mapped_location, we've left the block of sorted
+         * pseudo mapped_locations and are done. */
+        if( potential_matches->locations[i].location.chr != PSEUDO_LOC_CHR_INDEX )
+            break;
+
         /* binary search each pseudo location for matches to key */
         int ps_loc_index = potential_matches->locations[i].location.loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
-        /* The pseudo locations are just GENOME_LOC_TYPEs, so we need to
+        /* The pseudo locations are just GENOME_LOC_TYPEs, so we
          * extract the GENOME_LOC_TYPE in order to use bsearch */
         GENOME_LOC_TYPE key_loc = key->location;
 
@@ -859,11 +822,10 @@ search_for_matches_in_pseudo_locations(
                 (int(*)(const void*, const void*))cmp_genome_location
             );
 
-        // TODO ? handle potential for multiple matches
         if( match != NULL )
         {
-            /* reconstruct mapped_location from key and the pseudo_location's
-             * GENOME_LOC_TYPE */
+            /* reconstruct mapped_location from the key mapped_location and 
+             * the matching GENOME_LOC_TYPE */
             mapped_location tmp;
             copy_mapped_location( &tmp, key );
             tmp.location = *match;
