@@ -1186,6 +1186,10 @@ add_mapped_reads_from_candidate_mappings(
 {
     struct mapped_read_t* mpd_rd;
 
+    /* The paired end reads joining code in build_mapped_read_from_candidate_mappings
+     * requires the candidate_mappings to be sorted */
+    sort_candidate_mappings( mappings );
+
     build_mapped_read_from_candidate_mappings(
             &mpd_rd,
             mappings,
@@ -1298,8 +1302,6 @@ find_candidate_mappings( void* params )
 
                 only_collect_error_data
             );
-
-        sort_candidate_mappings( mappings );
 
         // Free the read
         free_read( r );
