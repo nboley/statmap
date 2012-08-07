@@ -749,9 +749,9 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1, nreads=100, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
-        % ( read_len, n_threads, nreads, str(fasta_prefix) )
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_prefix=None ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
     rl = read_len
 
@@ -787,7 +787,9 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, fasta_prefix=None ):
     reads_of.close()
 
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len = read_len - 2  )
+    map_with_statmap( read_fnames, output_directory,
+                      min_penalty = min_penalty, max_penalty_spread=10,
+                      indexed_seq_len = read_len - 2  ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -965,8 +967,8 @@ def test_error_rate_estimation( ):
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_dirty_reads( rl, n_threads=1 ) 
-        print "PASS: Dirty Read Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
+        test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
+        print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
