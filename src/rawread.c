@@ -311,6 +311,53 @@ populate_read_from_fastq_file(
     return 0;
 }
 
+float*
+expected_num_random_reads( int genome_len, int read_len, float* mm_prbs )
+{
+    /* calculate the distribution of the number of mismatches */
+    double* num_mm_bin_prbs = calloc( read_len+1, sizeof(double) );
+    double* tmp_num_mm_bin_prbs = calloc( read_len+1, sizeof(double) );
+    
+    /* use the exact calculation from "The Distribution of a Sum of Binomial
+       Random Variables"  ( Ken Butler, Michael Stephens ) */
+    assert( read_len >= 2 );
+    num_mm_bin_prbs[0] = (1-mm_prbs[0])*(1-mm_prbs[1]);
+    num_mm_bin_prbs[1] = (1-mm_prbs[0])*mm_prbs[1] + mm_prbs[0]*(1-mm_prbs[1]);
+    num_mm_bin_prbs[2] = mm_prbs[0]*mm_prbs[1];
+    
+    int base_i, bin_i;
+    for( base_i = 2; base_i < read_len; base_i++ )
+    {
+        /* just to clean up the code below, this is the 
+           current mismatche probability in the recurrence relation */
+        double mm_prb = mm_prbs[base_i];
+        
+        /*** initialize the tmp bin prbs to the current ***/
+        /* special case 0 matches */
+        tmp_num_mm_bin_prbs[0]
+            = (1-num_mm_bin_prbs[0])*(1-mm_prb);
+
+        for( bin_i = 1; bin_i <= base_i; bin_i++ )
+        {
+            /* bin_i mismatches is i-1 mismatches from 
+               the base + 1 mismatch from the new, or i
+               from the base and 0 from the new */
+            tmp_num_mm_bin_prbs[bin_i]
+                = num_mm_bin_prbs[bin_i]*(1-mm_prb)
+                + num_mm_bin_prbs[bin_i-1]*mm_prb;
+            
+            /* copy the tmp value into base */
+            num_mm_bin_prbs[bin_i-1] = tmp_num_mm_bin_prbs[bin_i-1];
+        }
+        
+        /* copy the final value into the base */
+        num_mm_bin_prbs[base_i] = tmp_num_mm_bin_prbs[base_i];
+    }
+    
+    free( tmp_num_mm_bin_prbs );
+    return num_mm_bin_prbs;
+}
+
 enum bool
 filter_rawread( struct rawread* r,
                 struct error_model_t* error_model )
@@ -329,12 +376,7 @@ filter_rawread( struct rawread* r,
      * we consider a read 'mappable' if:
      * 1) There are enough hq bps
      *
-     */
-
-    /* Make sure the global option has been set 
-       ( it's initialized to -1 ); */
-    assert( min_num_hq_bps >= 0 );
-
+     */    
     int num_hq_bps = 0;
     int i;
     for( i = 0; i < r->length; i++ )

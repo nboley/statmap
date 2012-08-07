@@ -42,7 +42,6 @@
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
-int min_num_hq_bps = -1;
 
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
