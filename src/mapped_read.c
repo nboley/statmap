@@ -444,9 +444,7 @@ build_mapped_read_from_candidate_mappings(
     
     /* Initialize the packed mapped read */
     init_mapped_read( mpd_rd );
-    (*mpd_rd)->free_locations = true;
     (*mpd_rd)->read_id = read_id;
-    (*mpd_rd)->rdb = NULL;
 
     if( mappings->length == 0 )
         return;
