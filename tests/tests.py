@@ -664,9 +664,13 @@ def test_paired_end_sequence_finding( ):
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
+def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
+        n_reads=100, indexed_seq_len=None ):
     output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads )
     
+    # If no indexed_seq_len explicitly set, use read_len
+    indexed_seq_len = indexed_seq_len or read_len
+
     rl = read_len
     GENOME_LEN = gen_len
 
@@ -698,7 +702,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory, 
                       num_threads = n_threads, 
-                      indexed_seq_len = read_len-2,
+                      indexed_seq_len = indexed_seq_len,
                       search_type='m' ) # map with mismatches, since we won't be
                                         # able to bootstrap error scores from a
                                         # perfectly repeated genome
@@ -1314,6 +1318,14 @@ def test_multiple_indexable_subtemplates():
         test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
         print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
 
+def test_multiple_indexable_subtemplates_for_repeat_sequences():
+    rls = [ 40 ]
+    for rl in rls:
+        test_duplicated_reads( read_len=rl,
+                n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100,
+                indexed_seq_len = rl / 2  ) 
+        print "PASS: Multiple indexable subtemplates in a highly repeated genome %i BP test" % rl
+
 if False:
     num_repeats = 1
     num_chrs = 1
@@ -1363,6 +1375,9 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
+    print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
+    test_multiple_indexable_subtemplates_for_repeat_sequences()
+    # TODO: test multiple indexable subtemplates for diploid genome
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"

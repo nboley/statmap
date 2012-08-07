@@ -31,6 +31,9 @@ init_pseudo_locations(
 void
 free_pseudo_locations( struct pseudo_locations_t* locs );
 
+int
+cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
+                     const GENOME_LOC_TYPE* loc2 );
 void
 sort_pseudo_locations( struct pseudo_locations_t* locs );
 

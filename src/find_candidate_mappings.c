@@ -752,48 +752,81 @@ void
 find_matching_mapped_locations(
         mapped_locations* matching_subset,
         mapped_locations* potential_matches,
-        mapped_locations* base_locs,
-        mapped_location* base_loc
+        mapped_locations* base,
+
+        struct genome_data* genome
     )
 {
-    /* TODO for now, we just do a binary search to find a single mapped
-     * location that has the same start as the base_loc. */
-    
-    /*
-     * construct a key (mapped_location) to search for
-     * this is subtle - our criteria for matching are
-     * 1) strand
-     * 2) chromosome
-     * 3) location
-     *
-     * and the locations in base_locs and potential_matches both have distinct
-     * subseq_offsets.
-     *
-     * If i and j are the mapped_locations we're comparing, we
-     * want i - i_offset = j - j_offset for a match. We build a key mapped
-     * location with the loc = i - i_offset + j_offset = j in order to compare
-     * directory into potential_matches.
-     */
+    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
 
-    mapped_location key;
-    copy_mapped_location( &key, base_loc );
-    key.location.loc =
-          base_loc->location.loc 
-        - base_locs->probe->subseq_offset
-        + potential_matches->probe->subseq_offset;
+    int bm, pm;
+    /* compare every location in the set of base locations */
+    for( bm = 0; bm < base->length; bm++ )
+    {
+        /* build a key to search with */
 
-    /* search for mapped_location's in potential_matches that match original,
-     * adding them to the matching_subset */
-    mapped_location* match = bsearch(
-            &key,
-            potential_matches->locations,
-            potential_matches->length,
-            sizeof(mapped_location),
-            (int(*)(const void*, const void*))cmp_mapped_locations_by_location
-        );
+        /* TODO for now, we just do a binary search to find a single mapped
+         * location that has the same start as the base_loc. */
 
-    if( match != NULL ) {
-        add_mapped_location( match, matching_subset );
+        /*
+         * construct a key (mapped_location) to search for
+         * this is subtle - our criteria for matching are
+         * 1) strand
+         * 2) chromosome
+         * 3) location
+         *
+         * and the locations in base_locs and potential_matches both have distinct
+         * subseq_offsets.
+         *
+         * If i and j are the mapped_locations we're comparing, we
+         * want i - i_offset = j - j_offset for a match. We build a key mapped
+         * location with the loc = i - i_offset + j_offset = j in order to compare
+         * directory into potential_matches.
+         */
+
+        // reference to the current base location we're considering
+        mapped_location* base_loc = base->locations + bm;
+
+        mapped_location key;
+        copy_mapped_location( &key, base_loc );
+        key.location.loc =
+            base_loc->location.loc 
+            - base->probe->subseq_offset
+            + potential_matches->probe->subseq_offset;
+
+        for( pm = 0; pm < potential_matches->length; pm++ )
+        {
+            mapped_location* pmatch = &(potential_matches->locations[pm]);
+
+            if( pmatch->location.chr == PSEUDO_LOC_CHR_INDEX )
+            {
+                int ps_loc_index = pmatch->location.loc;
+                struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
+
+                /* if the potential match is a pseudo location, (linear) search
+                 * through all of the locations in the pseudo location */
+                int i;
+                for( i = 0; i < ps_loc->num; i++ )
+                {
+                    /* compare the expanded location and the key */
+                    if( 0 == cmp_genome_location(
+                                &(ps_loc->locs[i]), &(key.location) ) )
+                    {
+                        /* construct a mapped_location from this expanded
+                         * pseduo_location and add to the matching subset */
+                        mapped_location match = key;
+                        match.location = ps_loc->locs[i];
+                        add_mapped_location( &match, matching_subset );
+                    }
+                }
+            } else {
+                /* just compare the potential match and the key */
+                if( cmp_mapped_locations_by_location( &key, pmatch ) == 0 )
+                {
+                    add_mapped_location( pmatch, matching_subset );
+                }
+            }
+        }
     }
 }
 
@@ -833,10 +866,12 @@ build_candidate_mappings_from_matched_mapped_locations(
 }
 
 mapped_locations*
-mapped_locations_from_template(
+mapped_locations_template(
         mapped_locations* template
     )
 {
+    /* construct an empty set of mapped_locations with the metadata from
+     * template */
     mapped_locations* locs = NULL;
     init_mapped_locations( &locs, template->probe );
 
@@ -850,9 +885,8 @@ add_pseudo_loc_to_mapped_locations(
         mapped_location* loc
     )
 {
-    // TODO check read start with modify_mapped_read_location_for_index_probe_offset?
     mapped_location tmp_loc = *loc;
-    tmp_loc.location = *gen_loc;
+    tmp_loc.location = *gen_loc; // TODO check read start
     add_mapped_location( &tmp_loc, results );
 
     return;
@@ -872,7 +906,7 @@ expand_pseudo_location_into_mapped_locations(
     int ps_loc_index = loc->location.loc;
     struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
-    /* add every location to the matches list */
+    /* add every location to the results list */
     GENOME_LOC_TYPE* gen_locs = ps_loc->locs;
     int i;
     for( i = 0; i < ps_loc->num; i++ )
@@ -887,41 +921,12 @@ expand_pseudo_location_into_mapped_locations(
     return;
 }
 
-void
-build_potential_matches(
-        mapped_locations** potential_matches,
-        mapped_locations* template,
-        struct genome_data* genome
-    )
-{
-    init_mapped_locations( potential_matches, template->probe );
-
-    // loop over the mapped locations in the template, expanding them
-    // if they are pseudo locations
-    int i;
-    for( i = 0; i < template->length; i++ )
-    {
-        mapped_location* current_loc = template->locations + i;
-
-        if( current_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
-        {
-            expand_pseudo_location_into_mapped_locations(
-                    current_loc, *potential_matches, genome );
-        } else {
-            // add the mapped_location as-is
-            add_mapped_location( current_loc, *potential_matches );
-        }
-    }
-
-    // sort so we can use binary search when searching for matches
-    sort_mapped_locations_by_location( *potential_matches );
-}
-
-void
+mapped_locations*
 init_mapped_locations_container_for_matches(
         mapped_locations_container** matches,
         mapped_locations* base_locs,
         mapped_location* base_loc,
+
         struct genome_data* genome
     )
 {
@@ -929,11 +934,11 @@ init_mapped_locations_container_for_matches(
 
     /* initialize the set of matches with the base location's metadata */
     mapped_locations* matches_base =
-        mapped_locations_from_template( base_locs );
+        mapped_locations_template( base_locs );
 
-    /* handle pseudo locations */
-    /* if the GENOME_LOC_TYPE in base_loc is a pseudo location, we expand it
-     * here and add all of its potential mapped locations */
+    /* handle pseudo locations for the base location */
+    /* if base_loc is a pseudo location, we expand it here and add all of its
+     * potential mapped locations */
     if( base_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
     {
         expand_pseudo_location_into_mapped_locations(
@@ -943,17 +948,33 @@ init_mapped_locations_container_for_matches(
         add_mapped_location( base_loc, matches_base );
     }
 
-    // sort so we can use binary search when searching for matches
+    // sort so we can use binary search when searching for matches_base
     sort_mapped_locations_by_location( matches_base );
 
     add_mapped_locations_to_mapped_locations_container(
             matches_base, *matches );
+
+    return matches_base;
+}
+
+void
+sort_mapped_locations_in_container(
+        mapped_locations_container* mls_container
+    )
+{
+    int i;
+    for( i = 0; i < mls_container->length; i++ )
+    {
+        sort_mapped_locations_by_location( mls_container->container[i] );
+    }
+
+    return;
 }
 
 void
 build_candidate_mappings_from_mapped_locations_container(
         candidate_mappings* rst_mappings,
-        mapped_locations_container* mls_container,
+        mapped_locations_container* search_results,
         struct read_subtemplate* rst,
 
         struct genome_data* genome,
@@ -961,8 +982,11 @@ build_candidate_mappings_from_mapped_locations_container(
         float min_match_penalty
     )
 {
+    /* sort so we can binary search in the mapped_locations later */
+    sort_mapped_locations_in_container( search_results );
+
     /* pick a mapped_locations to use as the basis for matching */
-    mapped_locations* base_locs = choose_base_mapped_locations( mls_container );
+    mapped_locations* base_locs = choose_base_mapped_locations( search_results );
 
     /* consider each location in base_locs as a candidate for building a set of
      * matching mapped locations */
@@ -971,56 +995,51 @@ build_candidate_mappings_from_mapped_locations_container(
     {
         mapped_location* base_loc = base_locs->locations + i;
         
-        /* make a container for the matching mapped_locations */
+        /* store the matches as subsets of each set of mapped_locations in the
+         * search_results mapped_locations_container */
         mapped_locations_container* matches = NULL;
-        init_mapped_locations_container_for_matches(
-                &matches, base_locs, base_loc, genome );
+        /* If base_loc is a pseudo location, it is expanded into base. O.w.,
+         * base just contains base_loc */
+        mapped_locations* base_for_matches = 
+            init_mapped_locations_container_for_matches(
+                    &matches, base_locs, base_loc, genome );
         
         /* search the other mapped_locations for matches */
-        for( j = 0; j < mls_container->length; j++ )
+        for( j = 0; j < search_results->length; j++ )
         {
-            mapped_locations* current_locs = mls_container->container[j];
+            mapped_locations* current_locs = search_results->container[j];
             if( current_locs == base_locs )
                 continue;
 
             /*
-             * store the matching subset of mapped_locations from current_locs
+             * store the matching subset of mapped_locations from the current
+             * base location and the current locations
              */
             mapped_locations* matching_subset = 
-                mapped_locations_from_template( current_locs );
+                mapped_locations_template( current_locs );
 
-            /*
-             * build a set of potential matching mapped locations. We expand 
-             * pseudo locations here to consider all possibilities
-             */
-            mapped_locations* potential_matches = NULL;
-            build_potential_matches( &potential_matches, current_locs, genome );
-            
             find_matching_mapped_locations(
                     matching_subset,
-                    potential_matches,
-                    base_locs,
-                    base_loc
+                    current_locs,
+                    base_for_matches,
+                    genome
                 );
-            
-            free_mapped_locations( potential_matches );
             
             /* if we found matches, add the subset to the set of matches.
              * Otherwise, optimize by terminating early */
             if( matching_subset->length > 0 )
             {
                 add_mapped_locations_to_mapped_locations_container(
-                        matching_subset, matches
-                    );
-                // TODO free?
+                        matching_subset, matches );
             } else {
                 free_mapped_locations( matching_subset );
                 break;
             }
         }
         
-        /* if we found matches in all of the mapped locations, it is valid */
-        if( matches->length == mls_container->length )
+        /* if we were able to match across all of the indexable subtemplates,
+         * this is valid */
+        if( matches->length == search_results->length )
         {
             build_candidate_mappings_from_matched_mapped_locations(
                     genome,

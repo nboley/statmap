@@ -2,13 +2,11 @@ fix bug
 finish human indexing fix
 make sample mapping take multiple samples
 
--44) Expand diploid mapped_locations in the filtering step.
-     a) why are the current diploid tests passing if this isn't working?
--43) Clean up candidate_mapping struct.
+-44) Clean up candidate_mapping struct.
      a) maybe get rid of RECHECK. Since reads are often longer than the index
         probes, it's probably a good idea to always recheck them. Instead of
         setting RECHECK = INVALID, free the candidate mapping and set = NULL.
--42) generalize paired end joining code in mapped_reads.c
+-43) generalize paired end joining code in mapped_reads.c
      a) new candidate_mappings container that can be sorted by the pos_in_template
         of each candidate_mapping's originating read_subtemplate.
      b) rather than using the read type, use pos_in_template. For now, brute
@@ -16,6 +14,8 @@ make sample mapping take multiple samples
         pos_in_template. So we want to pair 1 to 2, 3, ... , -3, -2, -1.
      c) Get this running with assertions so we're only handling the established
         single end (1) and paired end cases (1, -1).
+-42) Expand diploid mapped_locations in the filtering step.
+     a) why are the current diploid tests passing if this isn't working?
 -41) Don't bulk add all locations from a pseudo_location into the
      mapped_locations used in the matching code (memory concerns).
      Search through the ps_locs instead (they are sorted).
