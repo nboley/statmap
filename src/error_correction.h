@@ -70,7 +70,7 @@ struct error_data_record_t {
 
     /* maximum read length processed */
     int max_read_length;
-    int max_num_qual_scores;
+    int max_qual_score;
 
     /* the readkey range that this record covers */
     int min_readkey;
@@ -89,7 +89,7 @@ struct error_data_record_t {
 struct error_data_t {
     int num_records;
     int max_read_length;
-    int max_num_qual_scores;
+    int max_qual_score;
     
     struct error_data_record_t** records;
     

@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <time.h>
 #include <sys/time.h> /* gettimeofday() */
+#include <libgen.h> /* get the base directory name */
 
 #include <string.h>
 #include <limits.h>
@@ -438,7 +439,18 @@ main( int argc, char** argv )
 {       
     /* Seed the random number generator */
     srand ( time(NULL) );
-    
+
+    /* get the base directory */
+    char* abs_path = NULL;
+    abs_path = realpath( argv[0], abs_path );
+    if( NULL == abs_path )
+    {
+        fprintf( stderr, "%s\n", argv[0] );
+        perror( "Couldnt find abs path" );
+        exit( -1 );
+    }
+    char* statmap_base_dir = dirname( abs_path );
+
     /* parse and sanity check arguments */
     struct args_t args = parse_arguments( argc, argv );
     
@@ -448,8 +460,12 @@ main( int argc, char** argv )
     fclose( arg_fp  );
     
     /* intialize an R instance */
-    fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
-    init_R();
+    if( args.search_type == ESTIMATE_ERROR_MODEL )
+    {
+        fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
+        init_R( );        
+        load_statmap_source( statmap_base_dir );
+    }
     
     if( args.assay_type == CHIP_SEQ )
     {

@@ -34,7 +34,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = False
+P_STATMAP_OUTPUT = True
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -142,6 +142,8 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
+
+    # add the search type
     if search_type != None:
         call += " -s " + search_type
 
@@ -454,7 +456,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
-        search_type=None, min_penalty=-7.0, max_penalty_spread=2.1 ):
+        search_type="m", min_penalty=-1.0, max_penalty_spread=1 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -541,12 +543,6 @@ def test_fivep_sequence_finding( ):
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
-
-def test_mismatch_searching():
-    rls = [ 15, 25, 50, 75  ]
-    for rl in rls:
-        test_sequence_finding( rl, False, search_type='m', min_penalty=0, max_penalty_spread=0 )
-        print "PASS: Mismatch Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly using mismatches )" % rl
 
 def test_untemplated_g_finding( ):
     rls = [ 15, 25, 50, 75  ]
@@ -1406,15 +1402,9 @@ if False:
 
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
-    #test_untemplated_g_finding()
-    #print "Starting test_error_rate_estimation()"
-    #test_error_rate_estimation( )
-    #return
-    
+    #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
-    print "Starting test_mismatch_searching()"
-    test_mismatch_searching()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
     print "Starting test_paired_end_sequence_finding()"

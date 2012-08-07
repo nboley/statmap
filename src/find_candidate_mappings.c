@@ -856,7 +856,7 @@ find_candidate_mappings( void* params )
     struct error_data_record_t* scratch_error_data_record;
     init_error_data_record( &scratch_error_data_record, 
                             error_data->max_read_length, 
-                            error_data->max_num_qual_scores );
+                            error_data->max_qual_score );
 
     for( i = 0; i < 2*READS_STAT_UPDATE_STEP_SIZE; i++ ) {
         candidate_mappings* mappings = candidate_mappings_cache[i];
@@ -1111,16 +1111,7 @@ bootstrap_estimated_error_model(
     add_new_error_data_record( error_data, 0, td_template.max_readkey );
 
     spawn_threads( &td_template );
-    
-    update_error_model_from_error_data( error_model, td_template.error_data );
-    
-    FILE* error_data_ofp = fopen( BOOTSTRAP_ERROR_STATS_LOG, "w" );
-    log_error_data( error_data_ofp, error_data );
-    fclose( error_data_ofp );
-    free_error_data( error_data );
-    
-    free_error_model( bootstrap_error_model );
-    
+        
     clock_t stop = clock();
     fprintf(stderr, "PERFORMANCE :  Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )\n",
             *(td_template.mapped_cnt), rdb->readkey, 
@@ -1132,6 +1123,15 @@ bootstrap_estimated_error_model(
     
     rewind_rawread_db( rdb );
     
+    update_error_model_from_error_data( error_model, td_template.error_data );
+    
+    FILE* error_data_ofp = fopen( BOOTSTRAP_ERROR_STATS_LOG, "w" );
+    log_error_data( error_data_ofp, error_data );
+    fclose( error_data_ofp );
+    free_error_data( error_data );
+    
+    free_error_model( bootstrap_error_model );
+
     return;
 }
 

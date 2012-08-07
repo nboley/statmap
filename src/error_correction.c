@@ -52,7 +52,6 @@ init_int_vector( int data_len, int* input_data )
 void
 build_vectors_from_error_data( 
     struct error_data_t* data,
-    int record_index,
     SEXP* r_poss, SEXP* r_qual_scores,
     SEXP* r_mm_cnts, SEXP* r_cnts
 )
@@ -62,17 +61,9 @@ build_vectors_from_error_data(
     int* mm_cnts;
     int* cnts;
     
-    /* found out how much space to allocate */
-    int min_qual_score;
-    int max_qual_score;
-    int max_read_length;
-    find_length_and_qual_score_limits( 
-        data, &min_qual_score, &max_qual_score, &max_read_length );
+    int num_qual_scores = data->max_qual_score + 1;
+    int num_read_pos = data->max_read_length + 1;
     
-    struct error_data_record_t* record = data->records[record_index];
-    
-    int num_qual_scores = MAX(0, (max_qual_score-min_qual_score+1));
-    int num_read_pos = MAX( 0, (max_read_length+1) );
     int flat_vector_len = num_qual_scores*num_read_pos;
     
     poss = calloc( flat_vector_len, sizeof(double) );
@@ -80,25 +71,30 @@ build_vectors_from_error_data(
     mm_cnts = calloc( flat_vector_len, sizeof(int) );
     cnts = calloc( flat_vector_len, sizeof(int) );
 
+    int record_index;
     int pos, qual_score, flat_vec_pos;
-    flat_vec_pos = 0;
-    for( pos = 1; pos <= max_read_length; pos++ )
+    for( record_index = 0; record_index < data->num_records; record_index++ )
     {
-        for( qual_score = min_qual_score; 
-             qual_score <= max_qual_score; 
-             qual_score++ )
+        flat_vec_pos = 0;
+        struct error_data_record_t* record = data->records[record_index];
+        for( pos = 0; pos < num_read_pos; pos++ )
         {
-            poss[ flat_vec_pos ] = pos;
-            qual_scores[ flat_vec_pos ] = qual_score;
-            mm_cnts[ flat_vec_pos ] = 
-                record->base_type_mismatch_cnts[qual_score][pos];
-            cnts[ flat_vec_pos ] =
-                record->base_type_cnts[qual_score][pos];
+            for( qual_score = 0;
+                 qual_score < num_qual_scores; 
+                 qual_score++ )
+            {
+                poss[ flat_vec_pos ] = pos;
+                qual_scores[ flat_vec_pos ] = qual_score;
+                mm_cnts[ flat_vec_pos ] += 
+                    record->base_type_mismatch_cnts[qual_score][pos];
+                cnts[ flat_vec_pos ] +=
+                    record->base_type_cnts[qual_score][pos];
             
-            flat_vec_pos += 1;
+                flat_vec_pos += 1;
+            }
         }
     }
-    
+
     *r_poss = init_double_vector( flat_vector_len, poss );
     *r_qual_scores = init_double_vector( flat_vector_len, qual_scores );
     *r_mm_cnts = init_int_vector( flat_vector_len, mm_cnts );
@@ -112,18 +108,19 @@ build_vectors_from_error_data(
     return;
 }
 
+
 void
 init_freqs_array_from_error_data( struct freqs_array** est_freqs, 
                                   struct error_data_t* error_data )
 {
     // TODO - move this into a function
     *est_freqs = malloc( sizeof(struct freqs_array) );
-    (*est_freqs)->max_qual_score = error_data->max_num_qual_scores;
+    (*est_freqs)->max_qual_score = error_data->max_qual_score;
     (*est_freqs)->max_position = error_data->max_read_length;
-    (*est_freqs)->freqs = calloc( error_data->max_num_qual_scores+1, sizeof(double*) );
+    (*est_freqs)->freqs = calloc( error_data->max_qual_score+1, sizeof(double*) );
     
     int i;
-    for( i = 0; i <= error_data->max_num_qual_scores; i++ )
+    for( i = 0; i <= error_data->max_qual_score; i++ )
     {
         (*est_freqs)->freqs[i] = calloc( error_data->max_read_length+1, sizeof(double) );
     }
@@ -148,22 +145,16 @@ free_freqs_array( struct freqs_array* est_freqs )
 
 void
 update_freqs_array( struct freqs_array* est_freqs, 
-                   struct error_data_t* error_data, 
-                   double* flat_freqs  )
+                    struct error_data_t* error_data, 
+                    double* flat_freqs  )
 {
-    int min_qual_score;
-    int max_qual_score;
-    int max_read_length;
-    find_length_and_qual_score_limits( 
-        error_data, &min_qual_score, &max_qual_score, &max_read_length );
-    
     /* update the array with the estiamted freqs */
     int pos, qual_score, flat_vec_pos;
     flat_vec_pos = 0;
-    for( pos = 1; pos <= max_read_length; pos++ )
+    for( pos = 0; pos <= error_data->max_read_length; pos++ )
     {
-        for( qual_score = min_qual_score; 
-             qual_score <= max_qual_score; 
+        for( qual_score = 0;
+             qual_score <= error_data->max_qual_score; 
              qual_score++ )
         {
             est_freqs->freqs[qual_score][pos] = flat_freqs[flat_vec_pos];
@@ -177,24 +168,31 @@ update_freqs_array( struct freqs_array* est_freqs,
 void
 predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* predicted_freqs )
 {
-    fprintf( stderr, "NOTICE      :  Building Error Model.\n" );    
+    fprintf( stderr, 
+             "NOTICE      :  Predicting the error models for readkeys %i - %i.\n",
+             data->records[record_index]->min_readkey, 
+             data->records[record_index]->max_readkey );
     
     SEXP mm_cnts, cnts, poss, qual_scores;
 
-    fprintf( stderr, "NOTICE      :  Building Vectors for Error Model.\n" );    
     build_vectors_from_error_data( 
-        data, record_index,
-        &poss, &qual_scores,
-        &mm_cnts, &cnts
+        data, &poss, &qual_scores, &mm_cnts, &cnts
     );
     
-    fprintf( stderr, "NOTICE      :  Calling 'predict_freqs'.\n" );    
     SEXP call;
-    call = lang5( install("predict_freqs"), mm_cnts, cnts, poss, qual_scores );
+    char plot_str[500];
+    sprintf( plot_str, "error_dist_BS%i_%i_%i", 
+             1,
+             data->records[record_index]->min_readkey, 
+             data->records[record_index]->max_readkey );
+    
+    call = lang6( install("predict_freqs"), 
+                  mm_cnts, cnts, poss, qual_scores, 
+                  mkString(plot_str) );
+    
     SEXP res = eval( call, R_GlobalEnv );
     double *flat_freqs = REAL( res );
-
-    fprintf( stderr, "NOTICE      :  Building the estimated freqs array.\n" );
+    
     update_freqs_array( predicted_freqs, data, flat_freqs );
     
     goto cleanup;
@@ -231,8 +229,7 @@ update_estimated_error_model_from_error_data(
 )
 {    
     struct freqs_array* pred_freqs;
-    init_freqs_array_from_error_data( &pred_freqs, data );
-    
+    init_freqs_array_from_error_data( &pred_freqs, data );    
     predict_freqs( data, data->num_records-1, pred_freqs );
     error_model->data = pred_freqs;
     
@@ -289,7 +286,7 @@ init_error_data( struct error_data_t** data )
     (*data)->records = NULL;
     
     (*data)->max_read_length = MAX_READ_LEN;
-    (*data)->max_num_qual_scores = MAX_QUAL_SCORE;
+    (*data)->max_qual_score = MAX_QUAL_SCORE;
     
     /*
      * mutex to control concurrent access to the 'data' struct
@@ -334,7 +331,7 @@ add_new_error_data_record(
     
     struct error_data_record_t* record;
     init_error_data_record( 
-        &record, data->max_read_length, data->max_num_qual_scores );
+        &record, data->max_read_length, data->max_qual_score );
     record->min_readkey = min_readkey;
     record->max_readkey = max_readkey;
     
@@ -383,7 +380,7 @@ find_length_and_qual_score_limits( struct error_data_t* data,
     for( i=0; i < data->num_records; i++ )
     {
         struct error_data_record_t* record = data->records[i];
-        for( j = 0; j <= record->max_num_qual_scores; j++ )
+        for( j = 0; j <= record->max_qual_score; j++ )
         {
             for( k = 0; k <= record->max_read_length; k++ )
             {
@@ -413,7 +410,7 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
     
     int i, j;
     for( i = MAX(0, min_qual_score); 
-         i <= MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
          i++ )
     {
         for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
@@ -423,7 +420,7 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
     }
 
     for( i = MAX(0, min_qual_score); 
-         i <= MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
          i++ )
     {
         for( j = 1; j <= MIN( max_read_len, data->max_read_length ); j++ )
@@ -470,7 +467,7 @@ init_error_data_record( struct error_data_record_t** data,
     
     (*data)->num_unique_reads = 0;
     (*data)->max_read_length = max_read_len;
-    (*data)->max_num_qual_scores = max_qual_score;
+    (*data)->max_qual_score = max_qual_score;
 
     (*data)->min_readkey = -1;
     (*data)->max_readkey = -1;
@@ -503,7 +500,7 @@ free_error_data_record( struct error_data_record_t* data )
         return;
     
     int i;
-    for( i = 0; i < data->max_num_qual_scores+1; i++ )
+    for( i = 0; i < data->max_qual_score+1; i++ )
     {
         free( data->base_type_cnts[i] );
         free( data->base_type_mismatch_cnts[i] );
@@ -551,10 +548,10 @@ sum_error_data_records(
     int i, j;
     
     assert( dest->max_read_length == src->max_read_length );
-    assert( dest->max_num_qual_scores == src->max_num_qual_scores );
+    assert( dest->max_qual_score == src->max_qual_score );
     
     // add position_mismatch_cnts
-    for( i = 0; i <= dest->max_num_qual_scores; i++ ) 
+    for( i = 0; i <= dest->max_qual_score; i++ ) 
     {
         for( j = 1; j <= dest->max_read_length; j++ ) 
         {
@@ -583,11 +580,11 @@ fprintf_error_data_record(
     fprintf( stream, "\t\t%i", MIN( max_read_length, data->max_read_length) );
     fprintf( stream, "\t\t%i", MAX( 0, min_qual_score) );
     fprintf( stream, "\t\t%i\t", 
-             MIN( max_qual_score, data->max_num_qual_scores) );
+             MIN( max_qual_score, data->max_qual_score) );
     
     int i, j;
     for( i = MAX(0, min_qual_score); 
-         i <= MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
          i++ )
     {
         for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
@@ -597,7 +594,7 @@ fprintf_error_data_record(
     }
 
     for( i = MAX(0, min_qual_score); 
-         i <= MIN( max_qual_score, data->max_num_qual_scores); 
+         i <= MIN( max_qual_score, data->max_qual_score); 
          i++ )
     {
         for( j = 1; j <= MIN( max_read_length, data->max_read_length ); j++ )
