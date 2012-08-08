@@ -327,118 +327,8 @@ recheck_locations(
     return;
 }
 
-static void
-add_candidate_mapping_from_haploid (
-        struct read_subtemplate* rst,
-        mapped_location*    result,
-        mapped_locations*   results,
-        candidate_mapping   cm,
-        candidate_mappings* mappings,
-        struct genome_data* genome
-    )
-{
-    /* set the chr */
-    cm.chr = (result->location).chr;
-
-    /* set the location. */
-    /* We need to play with this a bit to account
-       for index probes that are shorter than the read. */
-    /* Skip the pseudo chr, this wil be modified later, ( if ever actually ) */
-    int read_location = (result->location).loc;
-    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
-    {
-        read_location = modify_mapped_read_location_for_index_probe_offset(
-            (result->location).loc,
-            (result->location).chr,
-            result->strnd, 
-            results->probe->subseq_offset,
-            results->probe->subseq_length,
-            rst->length,
-            genome
-        );
-    }
-    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
-        return;
-    cm.start_bp = read_location;
-
-    /* add the candidate mapping */
-    add_candidate_mapping( mappings, &cm );
-}
-
-static void
-add_candidate_mapping_from_diploid (
-        struct read_subtemplate* rst,
-        mapped_location*    result,
-        mapped_locations*   results,
-        candidate_mapping   cm,
-        candidate_mappings* mappings,
-        struct genome_data* genome
-    )
-{
-    /* add the paternal candidate mapping. */
-    add_candidate_mapping_from_haploid(
-        rst, result, results, cm, mappings, genome
-    );
-
-    /*
-     * If this read mapped to a pseudo location, don't add another candidate mapping
-     * Expand it when we expand all of the pseudo locs, later
-     */
-    if( result->location.chr == PSEUDO_LOC_CHR_INDEX )
-        return;
-
-    /* named variables for clarity */
-    int paternal_chr_index = (result->location).chr;
-    int paternal_loc = (result->location).loc;
-
-    /* look up maternal chr_index */
-    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr_index] );
-    int maternal_chr_index = find_diploid_chr_index(
-            genome, prefix, MATERNAL
-        );
-    assert( maternal_chr_index > 0 ); // pseudo chr is not allowed
-    free( prefix );
-
-    /* look up associated diploid map data structure */
-    int map_data_index = get_map_data_index_from_chr_index(
-            genome, paternal_chr_index
-        );
-    assert( map_data_index >= 0 );
-
-    /* get maternal start pos from diploid index */
-    /* locations offset because diploid index is 1-indexed, but statmap is 0-indexed */
-    int maternal_start = find_diploid_locations(
-            &(genome->index->diploid_maps->maps[map_data_index]),
-            paternal_loc + 1
-        ) - 1;
-    assert( maternal_start >= 0 ); // if not, this isn't true shared sequence
-
-    int read_location;
-    if( (result->location).chr != PSEUDO_LOC_CHR_INDEX )
-    {
-        read_location = modify_mapped_read_location_for_index_probe_offset(
-            maternal_start,
-            maternal_chr_index,
-            result->strnd, 
-            results->probe->subseq_offset,
-            results->probe->subseq_length,
-            rst->length,
-            genome
-        );
-    }
-    if( read_location < 0 ) // the read location was invalid; skip this mapped_location
-        return;
-
-    /* modify cm to be maternal complement of original paternal cm */
-    cm.start_bp = read_location;
-    cm.chr = maternal_chr_index;
-
-    /* add maternal candidate mapping */
-    add_candidate_mapping( mappings, &cm );
-}
-
 static inline void
-build_candidate_mappings_from_mapped_location(
+build_candidate_mapping_from_mapped_location(
         struct genome_data* genome,
         struct read_subtemplate* rst,
 
@@ -452,7 +342,7 @@ build_candidate_mappings_from_mapped_location(
     int subseq_len = results->probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
-    candidate_mapping template_candidate_mapping 
+    candidate_mapping cm 
         = init_candidate_mapping_from_template( 
             rst, max_penalty_spread 
         );
@@ -462,23 +352,33 @@ build_candidate_mappings_from_mapped_location(
 
     /* set the strand */
     assert( result->strnd == FWD || result->strnd == BKWD );
-    template_candidate_mapping.rd_strnd = result->strnd;
+    cm.rd_strnd = result->strnd;
 
     /* set metadata */
-    template_candidate_mapping.penalty = result->penalty;
-    template_candidate_mapping.subseq_offset = results->probe->subseq_offset;
+    cm.penalty = result->penalty;
+    cm.subseq_offset = results->probe->subseq_offset;
 
-    /* Build, verify, and add candidate mappings depending on type of loc */
-    /* TODO might not need to pass the subtemplate to these fns; it is only
-     * used for rst->length, and that is also stored on the cm template */
-    if( result->location.is_paternal && result->location.is_maternal )
-        add_candidate_mapping_from_diploid(
-            rst, result, results, template_candidate_mapping, mappings, genome
+    /* set location information */
+    cm.chr = result->location.chr;
+
+    /* We need to play with this a bit to account for index probes that are
+     * shorter than the read length */
+    int read_location =
+        modify_mapped_read_location_for_index_probe_offset(
+            result->location.loc,
+            result->location.chr,
+            result->strnd,
+            results->probe->subseq_offset,
+            results->probe->subseq_length,
+            rst->length,
+            genome
         );
-    else
-        add_candidate_mapping_from_haploid(
-            rst, result, results, template_candidate_mapping, mappings, genome
-        );
+    if( read_location < 0 ) // the read location was invalid; skip this mapped_locations_container
+        return;
+
+    cm.start_bp = read_location;
+
+    add_candidate_mapping( mappings, &cm );
 }
 
 /* 
@@ -811,13 +711,16 @@ search_for_matches_in_pseudo_locations(
         int ps_loc_index = potential_matches->locations[i].location.loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
+
         /* The pseudo locations are just GENOME_LOC_TYPEs, so we
          * extract the GENOME_LOC_TYPE in order to use bsearch */
         GENOME_LOC_TYPE key_loc = key->location;
+        /* is this was a diploid location, make sure it was expanded */
+        assert( !( key_loc.is_paternal && key_loc.is_maternal ) );
 
         GENOME_LOC_TYPE* match = bsearch( &key_loc,
                 ps_loc->locs,
-                ps_locs->num,
+                ps_loc->num,
                 sizeof(GENOME_LOC_TYPE),
                 (int(*)(const void*, const void*))cmp_genome_location
             );
@@ -839,67 +742,61 @@ void
 find_matching_mapped_locations(
         mapped_locations* matching_subset,
         mapped_locations* potential_matches,
-        mapped_locations* base,
+        
+        mapped_location* base,
+        mapped_locations* base_locs, // for the subseq_offset
 
         struct genome_data* genome
     )
 {
-    int bm;
-    /* for every location in the current location's matching subset */
-    for( bm = 0; bm < base->length; bm++ )
-    {
-        // reference to the current base location we're considering
-        mapped_location* base_loc = base->locations + bm;
-        /* if any base locatino was a pseudo location, it should have been
-         * expanded */
-        assert( base_loc->location.chr != PSEUDO_LOC_CHR_INDEX );
+    /* any base location should have been expanded into real locations */
+    assert( base->location.chr != PSEUDO_LOC_CHR_INDEX );
 
-        /*
-         * construct a key (mapped_location) to search for
-         *
-         * this is subtle - our criteria for matching are
-         * 1) strand
-         * 2) chromosome
-         * 3) location
-         *
-         * and the locations in base_locs and potential_matches both have distinct
-         * subseq_offsets.
-         *
-         * If i and j are the mapped_locations we're comparing, we
-         * want i - i_offset = j - j_offset for a match. We build a key mapped
-         * location with the loc = i - i_offset + j_offset = j in order to compare
-         * directory into potential_matches.
-         */
+    /*
+     * construct a key (mapped_location) to search for
+     *
+     * this is subtle - our criteria for matching are
+     * 1) strand
+     * 2) chromosome
+     * 3) location
+     *
+     * and the locations in base_locs and potential_matches both have distinct
+     * subseq_offsets.
+     *
+     * If i and j are the mapped_locations we're comparing, we
+     * want i - i_offset = j - j_offset for a match. We build a key mapped
+     * location with the loc = i - i_offset + j_offset = j in order to compare
+     * directory into potential_matches.
+     */
 
-        mapped_location key;
-        copy_mapped_location( &key, base_loc );
-        key.location.loc =
-            base_loc->location.loc 
-            - base->probe->subseq_offset
-            + potential_matches->probe->subseq_offset;
+    mapped_location key;
+    copy_mapped_location( &key, base );
+    key.location.loc =
+        base->location.loc 
+        - base_locs->probe->subseq_offset
+        + potential_matches->probe->subseq_offset;
 
-        /* match to the pseudo locations */
-        search_for_matches_in_pseudo_locations(
-                matching_subset, potential_matches, &key, genome );
+    /* match to the pseudo locations */
+    search_for_matches_in_pseudo_locations(
+            matching_subset, potential_matches, &key, genome );
 
-        /* match to the remaining locations */
-        /* since base_loc is not a pseudo location, we can simply do a binary
-         * search over the potential_matches. */
-        mapped_location* match = bsearch( &key,
-                potential_matches->locations,
-                potential_matches->length,
-                sizeof(mapped_location),
-                (int(*)(const void*, const void*))cmp_mapped_locations_by_location
-            );
+    /* match to the remaining locations */
+    /* since base is not a pseudo location, we can simply do a binary
+     * search over the potential_matches. */
+    mapped_location* match = bsearch( &key,
+            potential_matches->locations,
+            potential_matches->length,
+            sizeof(mapped_location),
+            (int(*)(const void*, const void*))cmp_mapped_locations_by_location
+        );
 
-        // TODO ? handle potential for multiple matches
-        if( match != NULL )
-            add_mapped_location( match, matching_subset );
-    }
+    // TODO ? handle potential for multiple matches
+    if( match != NULL )
+        add_mapped_location( match, matching_subset );
 }
 
 void
-build_candidate_mappings_from_matched_mapped_locations(
+build_candidate_mapping_from_matched_mapped_locations(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         mapped_locations_container* matches,
@@ -918,9 +815,9 @@ build_candidate_mappings_from_matched_mapped_locations(
     int i;
     for( i = 0; i < locs->length; i++ )
     {
-        mapped_location* loc = &( locs->locations[i] );
+        mapped_location* loc = locs->locations;
 
-        build_candidate_mappings_from_mapped_location(
+        build_candidate_mapping_from_mapped_location(
                 genome,
                 rst,
 
@@ -989,40 +886,177 @@ expand_pseudo_location_into_mapped_locations(
     return;
 }
 
-mapped_locations*
-init_mapped_locations_container_for_matches(
-        mapped_locations_container** matches,
-        mapped_locations* base_locs,
-        mapped_location* base_loc,
+enum bool
+build_maternal_loc_from_paternal_loc(
+        int *return_chr, int *return_loc,
+        int paternal_chr, int paternal_loc,
 
-        struct genome_data* genome
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+        mapped_location* loc,
+        mapped_locations* locs
     )
 {
-    init_mapped_locations_container( matches );
+    /* lookup the maternal chromosome given the paternal chromosome */
+    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr] );
+    int maternal_chr =
+        find_diploid_chr_index( genome, prefix, MATERNAL );
+    assert( maternal_chr != PSEUDO_LOC_CHR_INDEX );
+    free( prefix );
 
-    /* initialize the set of matches with the base location's metadata */
-    mapped_locations* matches_base =
-        mapped_locations_template( base_locs );
+    /* look up the diploid map data structure */
+    int map_data_index =
+        get_map_data_index_from_chr_index( genome, paternal_chr );
 
-    /* handle pseudo locations for the base location */
-    /* if base_loc is a pseudo location, we expand it here and add all of its
-     * potential mapped locations */
-    if( base_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
+    /* get maternal start position from diploid index */
+    /* locations are offset by + 1, - 1 because the diploid index is 1-indexed,
+     * but Statmap is 0-indexed */
+    int maternal_loc =
+        find_diploid_locations(
+                &(genome->index->diploid_maps->maps[map_data_index]),
+                paternal_loc + 1
+            ) - 1;
+    assert( maternal_loc >= 0 ); // If not, this isn't shared sequence
+
+    /* Adjust the mapped location to take any offsets into account */
+    // TODO is this necessary? also gets run when we build candidate mappings
+    int read_location = modify_mapped_read_location_for_index_probe_offset(
+            maternal_loc,
+            maternal_chr,
+            loc->strnd,
+            locs->probe->subseq_offset,
+            locs->probe->subseq_length,
+            rst->length,
+            genome
+        );
+
+    /* If the read_location is < 0, it is not valid. (How does this happen?) */
+    if( read_location < 0 )
+        return false;
+
+    /* Return the found maternal location (chr, loc) */
+    *return_chr = maternal_chr;
+    *return_loc = maternal_loc;
+
+    return true;
+}
+
+void
+expand_diploid_mapped_location(
+        mapped_location* loc,
+        mapped_locations* src,
+        mapped_locations* dst,
+
+        struct genome_data* genome,
+        struct read_subtemplate* rst
+
+    )
+{
+    assert( loc->location.is_paternal && loc->location.is_maternal );
+    /* This should only be called on real locations */
+    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
+
+    /* Diploid locations are encoded as the paternal location, with both
+     * diploid flags set. */
+    
+    /* For paternal, all we need to do is make sure only the paternal flag is 
+     * set. */
+    mapped_location paternal;
+    copy_mapped_location( &paternal, loc );
+    paternal.location.is_maternal = 0;
+    add_mapped_location( &paternal, dst );
+
+    /* For maternal, we need to make sure only the maternal flag is set, and 
+     * lookup the maternal location in the diploid index */
+    mapped_location maternal;
+    copy_mapped_location( &maternal, loc );
+    maternal.location.is_paternal = 0;
+
+    /* prepare information to lookup info about the maternal chromosome */
+    int paternal_chr = loc->location.chr;
+    int paternal_loc = loc->location.loc;
+
+    int maternal_chr = -1;
+    int maternal_loc = -1;
+    enum bool valid = 
+        build_maternal_loc_from_paternal_loc(
+                &maternal_chr, &maternal_loc,
+                paternal_chr, paternal_loc,
+                genome, rst, loc, src
+            );
+
+    if( valid )
     {
-        expand_pseudo_location_into_mapped_locations(
-                base_loc, matches_base, genome );
-    } else {
-        // add the mapped_location as-is
-        add_mapped_location( base_loc, matches_base );
+        /* finished building out the maternal mapped_location */
+        maternal.location.chr = maternal_chr;
+        maternal.location.loc = maternal_loc;
+        add_mapped_location( &maternal, dst );
     }
 
-    // sort so we can use binary search when searching for matches_base
-    sort_mapped_locations_by_location( matches_base );
+    return;
+}
 
-    add_mapped_locations_to_mapped_locations_container(
-            matches_base, *matches );
+void
+expand_diploid_mapped_locations(
+        mapped_locations** locs,
+        struct genome_data* genome,
+        struct read_subtemplate* rst
+    )
+{
+    /* build a new list of mapped_locations, containing expanded versions
+     * of any diploid locations and the original versions of all others */
+    mapped_locations* tmp_locs = mapped_locations_template( *locs );
 
-    return matches_base;
+    int i;
+    for( i = 0; i < (*locs)->length; i++ )
+    {
+        mapped_location* loc = (*locs)->locations + i;
+
+        /* A diploid mapped location. */
+        if( loc->location.is_paternal && loc->location.is_maternal )
+        {
+            expand_diploid_mapped_location(
+                    loc, *locs, tmp_locs, genome, rst );
+        } else {
+            /* Add non-diploid mapped_location unchanged */
+            add_mapped_location( loc, tmp_locs );
+        }
+    }
+
+    /* free the original mapped_locations */
+    free_mapped_locations( *locs );
+
+    /* set the original mapepd_locations pointer to use the new, expanded
+     * mapped_locations */
+    *locs = tmp_locs;
+}
+
+void
+expand_diploid_locations_for_mapped_locations_in_container(
+        mapped_locations_container* container,
+        struct genome_data* genome,
+        struct read_subtemplate* rst
+    )
+{
+    int i;
+    for( i = 0; i < container->length; i++ )
+    {
+        expand_diploid_mapped_locations(
+                &(container->container[i]),
+                genome,
+                rst
+            );
+    }
+}
+
+mapped_locations*
+build_potential_matches(
+        mapped_locations* locs
+    )
+{
+    mapped_locations* potential_matches = mapped_locations_template( locs );
+
+    return potential_matches;
 }
 
 void
@@ -1039,86 +1073,179 @@ sort_mapped_locations_in_container(
     return;
 }
 
-void
-build_candidate_mappings_from_mapped_locations_container(
-        candidate_mappings* rst_mappings,
+enum bool
+matching_mapped_locations_containers(
         mapped_locations_container* search_results,
-        struct read_subtemplate* rst,
+        mapped_locations_container* matches
+    )
+{
+    /* all of the indexable subtemplates should have matches */
+    if( search_results->length != matches->length )
+        return false;
 
+    /* each set of mapped_locations in the matches should have the same length.
+     * There is a correspondence across the rows of the mapped_locations for a
+     * match for a specific indexable_subtemplate */
+
+    int i;
+    assert( matches->length > 0 );
+    for( i = 1; i < matches->length; i++ )
+    {
+        /* just compare everything mapped_location's length to the first
+         * mapped_locations */
+        if( matches->container[0]->length != matches->container[i]->length )
+            return false;
+    }
+
+    return true;
+}
+
+mapped_locations*
+expand_base_mapped_locations(
+        mapped_location* base_loc,
+        mapped_locations* base_locs,
         struct genome_data* genome,
+        struct read_subtemplate* rst // needed for read_len in diploid expansion
+    )
+{
+    /* initialize the expanded set of locations with the base's metadata */
+    mapped_locations* expanded_locs =
+        mapped_locations_template( base_locs );
 
+    /* if base_loc is a pseudo location, expand it and add all of its
+     * potential mapped_location's */
+    if( base_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
+    {
+        expand_pseudo_location_into_mapped_locations(
+                base_loc, expanded_locs, genome );
+    } else {
+        // add the mapped_location as-is
+        add_mapped_location( base_loc, expanded_locs );
+    }
+
+    /* if any of the expanded locations are diploid locations (they have both
+     * is_paternal == 1 and is_maternal == 1), expand them into separate
+     * paternal and maternal copies */
+    expand_diploid_mapped_locations( &expanded_locs, genome, rst );
+
+    /* sort in order to use binary search later */
+    sort_mapped_locations_by_location( expanded_locs );
+
+    return expanded_locs;
+}
+
+void
+build_candidate_mappings_from_base_mapped_location(
+        mapped_location* base,
+        mapped_locations* base_locs,
+        mapped_locations_container* search_results,
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+        candidate_mappings* rst_mappings,
         float min_match_penalty
     )
 {
-    /* sort so we can binary search in the mapped_locations later */
+    /* initialize the container of matching mapped_locations */
+    mapped_locations_container* matches = NULL;
+    init_mapped_locations_container( &matches );
+
+    /* build a mapped_locations container for the current base location */
+    mapped_locations* base_container = mapped_locations_template( base_locs );
+    add_mapped_location( base, base_container );
+    add_mapped_locations_to_mapped_locations_container(
+            base_container, matches );
+
+    /* search the other mapped_locations for matches to base */
+    int i;
+    for( i = 0; i < search_results->length; i++ )
+    {
+        mapped_locations* current_locs = search_results->container[i];
+        if( current_locs == base_locs )
+            continue;
+
+        mapped_locations* matching_subset =
+            mapped_locations_template( current_locs );
+
+        find_matching_mapped_locations(
+                matching_subset,
+                current_locs,
+                base, base_locs,
+                genome
+            );
+
+        /* if we found matches, add the subset to the set of matches.
+         * Otherwise, optimize by terminating early */
+        if( matching_subset->length > 0 )
+        {
+            add_mapped_locations_to_mapped_locations_container(
+                    matching_subset, matches );
+        } else {
+            free_mapped_locations( matching_subset );
+            break;
+        }
+    }
+
+    /* if we were able to match across all of the indexable subtemplates, this
+     * is a valid match for base */
+    if( matches->length == search_results->length )
+    {
+        build_candidate_mapping_from_matched_mapped_locations(
+                genome,
+                rst,
+                matches,
+                rst_mappings,
+                min_match_penalty
+            );
+    }
+
+    free_mapped_locations_container( matches );
+}
+
+void
+build_candidate_mappings_from_search_results(
+        candidate_mappings* rst_mappings,
+        mapped_locations_container* search_results,
+        struct read_subtemplate* rst,
+        struct genome_data* genome,
+        float min_match_penalty
+    )
+{
+    /* expand the diploid locations in all of the mapped_locations */
+    expand_diploid_locations_for_mapped_locations_in_container(
+            search_results, genome, rst );
+
+    /* sort each mapped_locations in order to binary search later */
     sort_mapped_locations_in_container( search_results );
 
     /* pick a mapped_locations to use as the basis for matching */
     mapped_locations* base_locs = choose_base_mapped_locations( search_results );
 
-    /* consider each location in base_locs as a candidate for building a set of
-     * matching mapped locations */
+    /* consider each base location */
     int i, j;
     for( i = 0; i < base_locs->length; i++ )
     {
         mapped_location* base_loc = base_locs->locations + i;
-        
-        /* store the matches as subsets of each set of mapped_locations in the
-         * search_results mapped_locations_container */
-        mapped_locations_container* matches = NULL;
-        /* If base_loc is a pseudo location, it is expanded into base. O.w.,
-         * base just contains base_loc */
-        mapped_locations* base_for_matches = 
-            init_mapped_locations_container_for_matches(
-                    &matches, base_locs, base_loc, genome );
-        
-        /* search the other mapped_locations for matches */
-        for( j = 0; j < search_results->length; j++ )
-        {
-            mapped_locations* current_locs = search_results->container[j];
-            if( current_locs == base_locs )
-                continue;
 
-            /*
-             * store the matching subset of mapped_locations from the current
-             * base location and the current locations
-             */
-            mapped_locations* matching_subset = 
-                mapped_locations_template( current_locs );
+        /* if the base_loc is a pseudo location, expand it to consider all
+         * the possible locations it could be */
+        mapped_locations* expanded_base =
+            expand_base_mapped_locations( base_loc, base_locs, genome, rst );
 
-            find_matching_mapped_locations(
-                    matching_subset,
-                    current_locs,
-                    base_for_matches,
-                    genome
-                );
-            
-            /* if we found matches, add the subset to the set of matches.
-             * Otherwise, optimize by terminating early */
-            if( matching_subset->length > 0 )
-            {
-                add_mapped_locations_to_mapped_locations_container(
-                        matching_subset, matches );
-            } else {
-                free_mapped_locations( matching_subset );
-                break;
-            }
-        }
-        
-        /* if we were able to match across all of the indexable subtemplates,
-         * this is valid */
-        if( matches->length == search_results->length )
+        /* match across each of the expanded locations from the base */
+        for( j = 0; j < expanded_base->length; j++ )
         {
-            build_candidate_mappings_from_matched_mapped_locations(
+            mapped_location* base = expanded_base->locations + j;
+
+            build_candidate_mappings_from_base_mapped_location(
+                    base,
+                    base_locs,
+                    search_results,
                     genome,
                     rst,
-                    matches,
                     rst_mappings,
                     min_match_penalty
                 );
         }
-        
-        free_mapped_locations_container( matches );
     }
 }
 
@@ -1171,9 +1298,9 @@ find_candidate_mappings_for_read_subtemplate(
             only_collect_error_data
         );
 
-    /* build candidate mappings from each set of mapped locations in the mapped
-     * locations container */
-    build_candidate_mappings_from_mapped_locations_container(
+    /* build candidate mappings from matching subsets of the mapped_locations
+     * for each indexable_subtemplate returned by the index search */
+    build_candidate_mappings_from_search_results(
             rst_mappings,
             ml_container,
             rst,

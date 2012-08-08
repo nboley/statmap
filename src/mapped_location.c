@@ -26,7 +26,7 @@ cmp_mapped_locations_by_location( const mapped_location* loc1,
     if( loc1->location.chr != loc2->location.chr )
         return loc1->location.chr - loc2->location.chr;
     
-    return loc1->location.loc != loc2->location.loc;
+    return loc1->location.loc - loc2->location.loc;
 }
 
 int
