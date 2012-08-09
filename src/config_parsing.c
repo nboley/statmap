@@ -57,11 +57,13 @@ set_global_quality_parameters_from_input_file_type(
         QUAL_SHIFT = 50;
         ARE_LOG_ODDS = false;
         break;
+#if 0
     default:
         fprintf( stderr,
                  "ERROR       :  Unrecognized file format type %i\n",
                  input_file_type );
         exit( -1 );
+#endif
     }
 
     fprintf( stderr,
