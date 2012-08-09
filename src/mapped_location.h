@@ -27,7 +27,7 @@
  */
 
 typedef struct {
-    GENOME_LOC_TYPE location;
+    INDEX_LOC_TYPE location;
     enum STRAND strnd;
     float penalty;
 } mapped_location;
@@ -74,7 +74,7 @@ add_mapped_location(
 
 void
 add_new_mapped_location( mapped_locations* results, 
-                     GENOME_LOC_TYPE location, 
+                     INDEX_LOC_TYPE location, 
                      enum STRAND strnd,
                      float penalty );
 

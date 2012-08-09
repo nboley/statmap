@@ -650,7 +650,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
             else 
             /* Add all of the locs in the referenced array */
             {
-                GENOME_LOC_TYPE* gen_locs 
+                INDEX_LOC_TYPE* gen_locs 
                     = get_overflow_genome_locations_array_start( 
                         qnode,  num_letters )
                     + loc.locs_array.locs_start;
@@ -703,14 +703,14 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
             else 
             /* Add all of the locs in the referenced array */
             {
-                GENOME_LOC_TYPE* gen_locs 
+                INDEX_LOC_TYPE* gen_locs 
                     = get_overflow_genome_locations_array_start( qnode,  num_letters )
                     + loc.locs_array.locs_start;
 
                 int j;
                 for(j = 0; j < loc.locs_array.locs_size; j++ )
                 {
-                    GENOME_LOC_TYPE loc = gen_locs[j];
+                    INDEX_LOC_TYPE loc = gen_locs[j];
 
                     *child_seqs = add_sequence_to_sequences_node(   
                         genome,
@@ -765,7 +765,7 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 void 
 add_sequence( struct genome_data* genome,
               LETTER_TYPE* seq, const int seq_length,
-              GENOME_LOC_TYPE genome_loc ) 
+              INDEX_LOC_TYPE genome_loc ) 
 {
     /* direct references to index and pseudo_locations */
     struct index_t* index = genome->index;

@@ -100,7 +100,7 @@ free_mapped_locations( mapped_locations* results )
 
 void
 add_new_mapped_location( mapped_locations* results, 
-                         GENOME_LOC_TYPE location, 
+                         INDEX_LOC_TYPE location, 
                          enum STRAND strnd,
                          float penalty )
 {

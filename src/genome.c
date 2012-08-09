@@ -420,7 +420,7 @@ find_seq_ptr( struct genome_data* genome,
     */
     
     if( chr_index == PSEUDO_LOC_CHR_INDEX ) {
-        GENOME_LOC_TYPE* ps_loc = &(genome->index->ps_locs->locs[loc].locs[0]);
+        INDEX_LOC_TYPE* ps_loc = &(genome->index->ps_locs->locs[loc].locs[0]);
         chr_index = ps_loc->chr;
         loc = ps_loc->loc;
         // fprintf( stderr, "%.20s\n", genome->chrs[chr_index] + loc );
@@ -622,7 +622,7 @@ index_contig(
     int seq_len,
     SIGNED_LOC start,
     SIGNED_LOC stop,
-    GENOME_LOC_TYPE loc
+    INDEX_LOC_TYPE loc
 )
 {
     SIGNED_LOC bp_index;
@@ -710,7 +710,7 @@ index_diploid_chrs(
     struct genome_data* genome,
     int chr_index,
     int seq_len,
-    GENOME_LOC_TYPE loc
+    INDEX_LOC_TYPE loc
 )
 {
     /* get paternal and maternal indexes for this chr */
@@ -815,7 +815,7 @@ index_haploid_chr(
     struct genome_data* genome,
     int chr_index,
     int seq_len,
-    GENOME_LOC_TYPE loc
+    INDEX_LOC_TYPE loc
 )
 {
     /* set flags */
@@ -837,9 +837,7 @@ extern void
 index_genome( struct genome_data* genome )
 {
     /* initialize the constant loc elements */
-    GENOME_LOC_TYPE loc;
-    /* Not a junction read */
-    loc.read_type = 0;
+    INDEX_LOC_TYPE loc;
     
     int seq_len = genome->index->seq_length;
     

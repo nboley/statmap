@@ -11,19 +11,19 @@
 
 struct pseudo_location_t {
     int num;
-    GENOME_LOC_TYPE* locs;
+    INDEX_LOC_TYPE* locs;
 };
 
 void
 add_new_loc_to_pseudo_location( 
         struct pseudo_location_t* ps_loc,
-        const GENOME_LOC_TYPE* const loc,
+        const INDEX_LOC_TYPE* const loc,
         struct genome_data* genome );
 
 void
 add_loc_to_pseudo_location( 
         struct pseudo_location_t* ps_loc,
-        const GENOME_LOC_TYPE* const loc );
+        const INDEX_LOC_TYPE* const loc );
 
 /*
  * Pseudo locations container
@@ -43,8 +43,8 @@ void
 free_pseudo_locations( struct pseudo_locations_t* locs );
 
 int
-cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
-                     const GENOME_LOC_TYPE* loc2 );
+cmp_genome_location( const INDEX_LOC_TYPE* loc1, 
+                     const INDEX_LOC_TYPE* loc2 );
 void
 sort_pseudo_locations( struct pseudo_locations_t* locs );
 

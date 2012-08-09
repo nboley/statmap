@@ -21,7 +21,7 @@ size_of_locations_node( locations_node* node );
 
 locations_node*
 add_location_to_locations_node( locations_node* node,
-                                GENOME_LOC_TYPE loc );
+                                INDEX_LOC_TYPE loc );
 
 inline void
 get_locations_from_locations_node( const locations_node* const node, 
@@ -69,12 +69,12 @@ typedef union __attribute__((__packed__)) {
     /* 
      * store an actual location in the genome. 
      */
-    GENOME_LOC_TYPE loc;
+    INDEX_LOC_TYPE loc;
     /* store the locations of the genome locations array */
     struct __attribute__((__packed__)) {
         /* 
          * store the index of the start of the array for this location, 
-         * in units of sizeof(GENOME_LOC_TYPE) bytes after the end of 
+         * in units of sizeof(INDEX_LOC_TYPE) bytes after the end of 
          * the standard genome loc array.
          */
         signed locs_start :29;
@@ -150,7 +150,7 @@ typedef struct {
     * get_genome_locations_array_start
     * The length is, again, just given by the num_sequence_types
     *
-    GENOME_LOC_TYPE* locations;
+    INDEX_LOC_TYPE* locations;
 
     *
     * store the array of expanded genome locations. This is for cases in which, 
@@ -161,7 +161,7 @@ typedef struct {
     * get_overflow_genome_locations_array_start(sequences_node*, LEVEL_TYPE) 
     * the length is unknown, but should be determined by the other locations. 
     *
-    GENOME_LOC_TYPE* overflow_locations;
+    INDEX_LOC_TYPE* overflow_locations;
 
 )
 
@@ -241,7 +241,7 @@ inline locs_union*
 get_genome_locations_array_start( const sequences_node* const seqs, 
                                   LEVEL_TYPE seq_num_letters );
 
-inline GENOME_LOC_TYPE* 
+inline INDEX_LOC_TYPE* 
 get_overflow_genome_locations_array_start( 
     const sequences_node* const seqs, 
     LEVEL_TYPE seq_num_letters
@@ -310,7 +310,7 @@ add_sequence_to_sequences_node(
     sequences_node* seqs, 
     LETTER_TYPE* new_seq,
     LEVEL_TYPE num_letters,
-    GENOME_LOC_TYPE loc );
+    INDEX_LOC_TYPE loc );
 
 /**** END SEQUENCES functions *************************************************/
 

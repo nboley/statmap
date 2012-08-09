@@ -711,23 +711,23 @@ search_for_matches_in_pseudo_locations(
         int ps_loc_index = potential_matches->locations[i].location.loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
-        /* The pseudo locations are just GENOME_LOC_TYPEs, so we
-         * extract the GENOME_LOC_TYPE in order to use bsearch */
-        GENOME_LOC_TYPE key_loc = key->location;
+        /* The pseudo locations are just INDEX_LOC_TYPE, so we
+         * extract the INDEX_LOC_TYPE in order to use bsearch */
+        INDEX_LOC_TYPE key_loc = key->location;
         /* is this was a diploid location, make sure it was expanded */
         assert( !( key_loc.is_paternal && key_loc.is_maternal ) );
 
-        GENOME_LOC_TYPE* match = bsearch( &key_loc,
+        INDEX_LOC_TYPE* match = bsearch( &key_loc,
                 ps_loc->locs,
                 ps_loc->num,
-                sizeof(GENOME_LOC_TYPE),
+                sizeof(INDEX_LOC_TYPE),
                 (int(*)(const void*, const void*))cmp_genome_location
             );
 
         if( match != NULL )
         {
             /* reconstruct mapped_location from the key mapped_location and 
-             * the matching GENOME_LOC_TYPE */
+             * the matching INDEX_LOC_TYPE */
             mapped_location tmp;
             copy_mapped_location( &tmp, key );
             tmp.location = *match;
@@ -844,7 +844,7 @@ mapped_locations_template(
 
 void
 add_pseudo_loc_to_mapped_locations(
-        GENOME_LOC_TYPE* gen_loc,
+        INDEX_LOC_TYPE* gen_loc,
         mapped_locations* results,
         mapped_location* loc,
         struct genome_data* genome
@@ -872,7 +872,7 @@ expand_pseudo_location_into_mapped_locations(
     struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
     /* add every location to the results list */
-    GENOME_LOC_TYPE* gen_locs = ps_loc->locs;
+    INDEX_LOC_TYPE* gen_locs = ps_loc->locs;
     int i;
     for( i = 0; i < ps_loc->num; i++ )
     {

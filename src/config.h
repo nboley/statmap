@@ -254,12 +254,9 @@ typedef struct __attribute__((__packed__))
 {
     unsigned is_paternal    :1;
     unsigned is_maternal    :1;
-
-    unsigned unused_space   :1;
     
-    /* read_type 0 = normal, 1 = junction */
-    unsigned read_type      :1;
-
+    unsigned unused_space   :2;
+    
     /* the chr that the read came from */
     unsigned chr            :CHR_BITS;
 
@@ -270,7 +267,7 @@ typedef struct __attribute__((__packed__))
      */
     unsigned loc            :LOCATION_BITS;
 
-} GENOME_LOC_TYPE;
+} INDEX_LOC_TYPE;
 
 enum CHR_SOURCE
 {
