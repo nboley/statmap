@@ -313,12 +313,11 @@ free_genome( struct genome_data* gen )
         return;
     }
 
-    /* BUG - make this recognize the tree */
-    if( false && gen->index != NULL )
+    if( gen->index != NULL )
     {
         free_tree( gen->index );
     }
-
+    
     if( gen->index != NULL )
     {
         if( NULL != gen->index->ps_locs )

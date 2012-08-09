@@ -280,8 +280,6 @@ update_traces_from_mapped_reads_worker( void* params )
     free_mapped_read( r );
     
     pthread_exit( NULL );
-    
-    return 0;
 }
 
 void
@@ -304,7 +302,7 @@ update_traces_from_mapped_reads(
     rewind_mapped_reads_db( reads_db );
     
     /* If the number of threads is one, then just do everything in serial */
-    if( true || num_threads == 1 )
+    if( num_threads == 1 )
     {
         struct mapped_read_t* r;
         int read_num = 0;
@@ -468,8 +466,6 @@ update_mapped_reads_from_trace_worker( void* params )
     free_mapped_read( r );
 
     pthread_exit( NULL );
-    
-    return 0;
 }
 
 
@@ -1819,11 +1815,14 @@ update_cond_prbs_from_trace_and_assay_type(
     
     case CHIP_SEQ:
         update_reads = update_chipseq_mapped_read_prbs;
-        break;
+        break;    
+    }
     
-    default:
+    if( NULL == update_reads )
+    {
         fprintf( stderr, "ERROR       :  Unrecognized assay type (%i). Did you mix statmap versions?\n", assay_type);
         exit(1);
+
     }
     
     /* BUG!!! */

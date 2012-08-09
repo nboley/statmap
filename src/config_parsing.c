@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <time.h>
 #include <sys/time.h> /* gettimeofday() */
@@ -271,7 +272,7 @@ static struct argp_option options[] =
     {"output-dir", 'o', "DIR", 0,
      "Directory to write Statmap output to", 0 },
     {"search-type", 's', "TYPE", 0,
-     "Type of marginal mapping to do", 0 },
+     "Error model type: 'm' for mismatches, 'e' to estimate the error model ( see README for more details )", 0 },
     {"is-full-fragment", 'F', NULL, OPTION_ARG_OPTIONAL,
      "(not implemented yet)", 0 },
     {"input-file-type", 'i', "TYPE", 0,

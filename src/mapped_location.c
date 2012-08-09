@@ -1,4 +1,4 @@
-  /* Copyright (c) 2009-2012, Nathan Boley */
+/* Copyright (c) 2009-2012, Nathan Boley */
 
 #include <stdlib.h>
 #include <assert.h>
@@ -82,8 +82,6 @@ init_mapped_locations(
     (*results)->allocated_length = RESULTS_GROWTH_FACTOR;
 
     (*results)->probe = probe;
-    
-    (*results)->skip = false;
     
     return;
 }

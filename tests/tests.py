@@ -21,6 +21,9 @@ import StringIO
 import tempfile
 
 import numpy
+sys.path.append( "../python_lib/" )
+from error_model import load_error_data
+
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
@@ -31,7 +34,7 @@ CALL_PEAKS_PATH = '../utilities/call_peaks.py'
 ### verbosity level information 
 #
 # whether or not to print statmap output
-P_STATMAP_OUTPUT = False
+P_STATMAP_OUTPUT = True
 if not P_STATMAP_OUTPUT:
     stdout = tempfile.TemporaryFile()
     stderr = tempfile.TemporaryFile()
@@ -40,7 +43,7 @@ else:
     stderr = sys.stderr
 
 # TODO - fix so this doesn't create conflicting output directories
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -139,6 +142,8 @@ def map_with_statmap( read_fnames, output_dir,
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
+
+    # add the search type
     if search_type != None:
         call += " -s " + search_type
 
@@ -451,7 +456,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
-        search_type=None, min_penalty=-7.0, max_penalty_spread=2.1 ):
+        search_type="m", min_penalty=-1.0, max_penalty_spread=1 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -539,12 +544,6 @@ def test_fivep_sequence_finding( ):
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
-
-def test_mismatch_searching():
-    rls = [ 15, 25, 50, 75  ]
-    for rl in rls:
-        test_sequence_finding( rl, False, search_type='m', min_penalty=0, max_penalty_spread=0 )
-        print "PASS: Mismatch Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly using mismatches )" % rl
 
 def test_untemplated_g_finding( ):
     rls = [ 15, 25, 50, 75  ]
@@ -756,9 +755,9 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
-        % ( read_len, min_penalty, n_threads, str(fasta_prefix) )
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_prefix=None ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
     rl = read_len
 
@@ -768,7 +767,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=rl )
+    fragments = sample_uniformily_from_genome( r_genome, nsamples=nreads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
@@ -819,7 +818,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     nonmapping_reads_set = set( line.strip()[1:] for i, line in enumerate(nonmapping_fp) if i%4 == 0 )
     nonmapping_fp.close()
 
-    all_read_ids = set(map(str, range(100)))
+    all_read_ids = set(map(str, range(nreads)))
     all_read_ids = all_read_ids - mapped_read_ids
     all_read_ids = all_read_ids - unmappable_reads_set
     all_read_ids = list(all_read_ids)
@@ -833,7 +832,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
     
-    unmapped_reads = set( map( str, xrange( 100 ) ) ).difference(
+    unmapped_reads = set( map( str, xrange( nreads ) ) ).difference(
             nonmapping_reads_set.union(
                 unmappable_reads_set.union(
                     set(mapped_reads_dict.keys())
@@ -894,14 +893,89 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, fasta_prefix=None 
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
 
+def test_error_rate_estimation( ):
+    """Test to ensure that the error modelling code is working properly.
+    
+    We use the following error model:
+    
+    Error rate from position:
+        0.01 + (pos/read_len)*0.04
+        
+    Error rate from char string:
+        ?: +0.05
+        a: +0.03
+        d: +0.02
+        f: +0.01
+        h: +0.00
+    """
+    error_char_mappings = dict(zip('?adfh', [0.05, 0.03, 0.02, 0.01, 0.00] ))
+    
+    rl = read_len = 50
+    indexed_seq_len = 20
+    nsamples = 20000
+    output_directory = "smo_test_error_rate_estimation"
+    
+    
+    ###### Prepare the data for the test #######################################
+    # build a random genome
+    genome_of = open("tmp.genome.fa", "w")
+    r_genome = build_random_genome( [2000,2000], ["1","2"] )
+    write_genome_to_fasta( r_genome, genome_of, 1 )
+    genome_of.close()
+    
+    # sample uniformly from the genome. This gives us the sequences
+    # that we need to map. Note that we dont RC them, so every read should be in
+    # the 5' direction
+    fragments = sample_uniformily_from_genome( 
+        r_genome, nsamples=nsamples, frag_len=rl )
+    reads = build_reads_from_fragments( 
+        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
+    
+    # mutate the reads according to some simple eror model
+    def iter_mutated_reads( reads ):
+        for read in reads:
+            error_str = "".join( random.choice('?adfh') 
+                                 for i in xrange(len(read)) )
+            error_rates = [ 0.01 + 0.04*float(i)/len(read) 
+                            + error_char_mappings[char]
+                            for i, char in enumerate( error_str ) ]
+            mutated_read = []
+            for base, error_prb in izip(read, error_rates):
+                if random.random() < error_prb:
+                    mutated_read.append( random.choice('acgtACGT') )
+                else:
+                    mutated_read.append( base )
+            mutated_read = ''.join( mutated_read )
+            yield ( mutated_read, error_str, read )
+
+    mutated_reads = list( iter_mutated_reads( reads ) )
+
+    # build and write the reads    
+    reads_of = open("tmp.fastq", "w")
+    build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
+    reads_of.close()
+    
+    ###### Write out the test files, and run statmap ###########################
+    
+    ## Map the data
+    read_fnames = [ "tmp.fastq", ]
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len )
+    
+    ###### Make sure that the error data looks correct #########################
+    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
+    
+    ###### Cleanup the created files ###########################################
+    if CLEANUP:
+        os.remove("./tmp.genome.fa")
+        os.remove("./tmp.fastq")
+        shutil.rmtree(output_directory)
+
+
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
         test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
         print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
-        # FIXME - do the work to fix these tests
-        #test_dirty_reads( rl, n_threads=1, min_penalty=-1 ) 
-        #print "PASS: Dirty Read (-1 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
@@ -1330,10 +1404,10 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
+    #print "Starting test_untemplated_g_finding()"
+    #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
-    print "Starting test_mismatch_searching()"
-    test_mismatch_searching()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
     print "Starting test_paired_end_sequence_finding()"
@@ -1367,11 +1441,9 @@ def main( RUN_SLOW_TESTS ):
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
-
-    if False:
-        print "Starting test_untemplated_g_finding()"
-        test_untemplated_g_finding()
-
+        print "[SLOW] Starting test_error_rate_estimation()"
+        test_error_rate_estimation( )
+    
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 

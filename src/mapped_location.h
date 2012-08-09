@@ -39,8 +39,6 @@ typedef struct {
     int allocated_length;
 
     struct indexable_subtemplate* probe;
-
-    enum bool skip;
 } mapped_locations;
 
 int
