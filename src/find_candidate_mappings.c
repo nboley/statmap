@@ -654,7 +654,7 @@ find_start_of_pseudo_mapped_locations_for_strand(
         enum STRAND strand
     )
 {
-    int pivot = -1; // If there are no BKWD strand reads, pivot will be -1
+    int start = -1; // Use -1 to signal no locations with given strand
 
     int i;
     for( i = 0; i < sorted_mapped_locs->length; i++ )
@@ -663,12 +663,12 @@ find_start_of_pseudo_mapped_locations_for_strand(
          * sort_mapped_locations_by_location */
         if( sorted_mapped_locs->locations[i].strnd == strand )
         {
-            pivot = i;
+            start = i;
             break;
         }
     }
 
-    return pivot;
+    return start;
 }
 
 void
@@ -710,7 +710,6 @@ search_for_matches_in_pseudo_locations(
         /* binary search each pseudo location for matches to key */
         int ps_loc_index = potential_matches->locations[i].location.loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
-
 
         /* The pseudo locations are just GENOME_LOC_TYPEs, so we
          * extract the GENOME_LOC_TYPE in order to use bsearch */
@@ -886,61 +885,6 @@ expand_pseudo_location_into_mapped_locations(
     return;
 }
 
-enum bool
-build_maternal_loc_from_paternal_loc(
-        int *return_chr, int *return_loc,
-        int paternal_chr, int paternal_loc,
-
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        mapped_location* loc,
-        mapped_locations* locs
-    )
-{
-    /* lookup the maternal chromosome given the paternal chromosome */
-    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr] );
-    int maternal_chr =
-        find_diploid_chr_index( genome, prefix, MATERNAL );
-    assert( maternal_chr != PSEUDO_LOC_CHR_INDEX );
-    free( prefix );
-
-    /* look up the diploid map data structure */
-    int map_data_index =
-        get_map_data_index_from_chr_index( genome, paternal_chr );
-
-    /* get maternal start position from diploid index */
-    /* locations are offset by + 1, - 1 because the diploid index is 1-indexed,
-     * but Statmap is 0-indexed */
-    int maternal_loc =
-        find_diploid_locations(
-                &(genome->index->diploid_maps->maps[map_data_index]),
-                paternal_loc + 1
-            ) - 1;
-    assert( maternal_loc >= 0 ); // If not, this isn't shared sequence
-
-    /* Adjust the mapped location to take any offsets into account */
-    // TODO is this necessary? also gets run when we build candidate mappings
-    int read_location = modify_mapped_read_location_for_index_probe_offset(
-            maternal_loc,
-            maternal_chr,
-            loc->strnd,
-            locs->probe->subseq_offset,
-            locs->probe->subseq_length,
-            rst->length,
-            genome
-        );
-
-    /* If the read_location is < 0, it is not valid. (How does this happen?) */
-    if( read_location < 0 )
-        return false;
-
-    /* Return the found maternal location (chr, loc) */
-    *return_chr = maternal_chr;
-    *return_loc = maternal_loc;
-
-    return true;
-}
-
 void
 expand_diploid_mapped_location(
         mapped_location* loc,
@@ -978,20 +922,16 @@ expand_diploid_mapped_location(
 
     int maternal_chr = -1;
     int maternal_loc = -1;
-    enum bool valid = 
-        build_maternal_loc_from_paternal_loc(
-                &maternal_chr, &maternal_loc,
-                paternal_chr, paternal_loc,
-                genome, rst, loc, src
-            );
+    build_maternal_loc_from_paternal_loc(
+            &maternal_chr, &maternal_loc,
+            paternal_chr, paternal_loc,
+            genome
+        );
 
-    if( valid )
-    {
-        /* finished building out the maternal mapped_location */
-        maternal.location.chr = maternal_chr;
-        maternal.location.loc = maternal_loc;
-        add_mapped_location( &maternal, dst );
-    }
+    /* finished building out the maternal mapped_location */
+    maternal.location.chr = maternal_chr;
+    maternal.location.loc = maternal_loc;
+    add_mapped_location( &maternal, dst );
 
     return;
 }

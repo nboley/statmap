@@ -200,11 +200,12 @@ void free_tree( struct index_t* root );
 build_static_node_from_dynamic_node( dynamic_node* dnode, 
                                      static_node** snode   );
 
- void 
+void
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
-                                        LEVEL_TYPE level   );
+                                        LEVEL_TYPE level,
+                                        struct genome_data* genome );
 
  int 
 find_child_index_in_dynamic_node ( 
@@ -219,8 +220,8 @@ index_genome( struct genome_data* genome );
 find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 */
 
- void 
-add_sequence( struct index_t* index, struct pseudo_locations_t* ps_locs, 
+void 
+add_sequence( struct genome_data* genome,
               LETTER_TYPE* seq, const int seq_length,
               GENOME_LOC_TYPE genome_loc );
 

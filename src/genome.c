@@ -646,7 +646,7 @@ index_contig(
         }
 
         /* Add the sequence into the tree */
-        add_sequence( genome->index, genome->index->ps_locs, translation, seq_len, loc );
+        add_sequence( genome, translation, seq_len, loc );
 
         free( translation );
     }
@@ -880,25 +880,5 @@ index_genome( struct genome_data* genome )
     /* sort all of the pseudo locations */
     sort_pseudo_locations( genome->index->ps_locs );
 
-    /* We stop doing this, in favor of writing them to 
-       disk in the actual index file */
-    #if 0 
-
-    FILE* ps_locs_of = fopen(PSEUDO_LOCATIONS_FNAME, "w");
-    if( NULL == ps_locs_of )
-    {
-        char buffer[500];
-        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
-        perror( buffer );
-        exit( -1 );
-    }
-    fprint_pseudo_locations( ps_locs_of, genome->index->ps_locs );
-    fclose(ps_locs_of);
-    
-    #endif
-    
     return;
 }
-
-
-

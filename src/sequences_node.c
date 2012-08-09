@@ -647,6 +647,7 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
 static  sequences_node*
 add_duplicate_sequence_to_sequences_node(
     /* this is necessary when we need to add pseudo locations */
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     /* where in the seqs array this belongs, in seq_len units */
@@ -756,14 +757,14 @@ add_duplicate_sequence_to_sequences_node(
             int i;
             for( i = 0; i < loc->locs_array.locs_size; i++ )
             {
-                add_loc_to_pseudo_location( 
-                    ps_locs->locs + psloc_index, of_locs + i );
+                add_new_loc_to_pseudo_location( 
+                    ps_locs->locs + psloc_index, of_locs + i, genome );
                 // printf("%i: Chr %i\tLoc: %u\n", i, of_locs[i].chr, of_locs[i].loc);
             }
 
             /* add the new location */
-            add_loc_to_pseudo_location( 
-                ps_locs->locs + psloc_index, &new_loc );
+            add_new_loc_to_pseudo_location( 
+                ps_locs->locs + psloc_index, &new_loc, genome );
             
             /* remove the array memory */
             /* 1) shift the other memory forward */
@@ -885,6 +886,7 @@ add_duplicate_sequence_to_sequences_node(
 sequences_node*
 add_sequence_to_sequences_node(     
     /* this is necessary when we need to add pseudo locations */
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     LETTER_TYPE* new_seq,
@@ -904,7 +906,8 @@ add_sequence_to_sequences_node(
         int ps_loc_index = 
             get_genome_locations_array_start( seqs, num_letters )
             [il.location].loc.loc;
-        add_loc_to_pseudo_location( ps_locs->locs+ps_loc_index, &loc );
+        add_new_loc_to_pseudo_location(
+                ps_locs->locs+ps_loc_index, &loc, genome );
         return seqs;
     } 
     else if( il.is_duplicate == true )
@@ -922,7 +925,7 @@ add_sequence_to_sequences_node(
         );
         
         return add_duplicate_sequence_to_sequences_node( 
-            ps_locs, seqs, il.location, num_letters, loc 
+            genome, ps_locs, seqs, il.location, num_letters, loc 
         );
     } else {
         return add_new_sequence_to_sequences_node( 
