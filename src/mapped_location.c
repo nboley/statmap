@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include "mapped_location.h"
+#include "diploid_map_data.h"
 
 /*************************************************************************
  *
@@ -158,6 +159,74 @@ add_mapped_location(
                              loc->strnd,
                              loc->penalty
         );
+}
+
+void
+expand_diploid_mapped_location(
+        mapped_location* loc,
+        mapped_locations* locs,
+        struct genome_data* genome
+    )
+{
+    assert( loc->location.is_paternal && loc->location.is_maternal );
+    /* This should only be called on real locations */
+    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
+
+    /* build the paternal location */
+    mapped_location paternal;
+    copy_mapped_location( &paternal, loc );
+    
+    /* Set the diploid flags */
+    paternal.location.is_paternal = 1;
+    paternal.location.is_maternal = 0;
+
+    /* Since the shared diploid location uses the chr and loc from the paternal
+     * copy, we don't need to change anything else */
+    add_mapped_location( &paternal, locs );
+
+    /* build the maternal location */
+    mapped_location maternal;
+    copy_mapped_location( &maternal, loc );
+    maternal.location.is_paternal = 0;
+    maternal.location.is_maternal = 1;
+    /* lookup the maternal location from the paternal location information
+     * used on the shared diploid location */
+
+    int paternal_chr = loc->location.chr;
+    int paternal_loc = loc->location.loc;
+
+    int maternal_chr = -1;
+    int maternal_loc = -1;
+    build_maternal_loc_from_paternal_loc(
+            &maternal_chr, &maternal_loc,
+            paternal_chr, paternal_loc,
+            genome
+        );
+
+    /* finished building the maternal mapped_location */
+    maternal.location.chr = maternal_chr;
+    maternal.location.loc = maternal_loc;
+    add_mapped_location( &maternal, locs );
+
+    return;
+}
+
+void
+add_and_expand_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs,
+    struct genome_data* genome
+)
+{
+    /* if this is a shared diploid location, expand it into the paternal and
+     * maternal copies */
+    if( loc->location.is_paternal && loc->location.is_maternal )
+    {
+        assert( genome != NULL );
+        expand_diploid_mapped_location( loc, locs, genome );
+    } else {
+        add_mapped_location( loc, locs );
+    }
 }
 
 void

@@ -81,6 +81,12 @@ add_new_mapped_location( mapped_locations* results,
                      float penalty );
 
 void
+add_and_expand_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs,
+    struct genome_data* genome );
+
+void
 copy_mapped_location( mapped_location* dest, mapped_location* src );
 
 void

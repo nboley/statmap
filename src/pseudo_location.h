@@ -1,5 +1,5 @@
-#ifndef PSEUDO_LOCATIONS
-#define PSEUDO_LOCATIONS
+#ifndef PSEUDO_LOCATION
+#define PSEUDO_LOCATION
 
 #include "config.h"
 #include "genome.h"
@@ -65,4 +65,4 @@ load_pseudo_locations_from_mmapped_data(
 unsigned int 
 add_new_pseudo_location( struct pseudo_locations_t* locs );
 
-#endif // PSEUDO_LOCATIONS
+#endif // PSEUDO_LOCATION

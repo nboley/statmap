@@ -846,12 +846,13 @@ void
 add_pseudo_loc_to_mapped_locations(
         GENOME_LOC_TYPE* gen_loc,
         mapped_locations* results,
-        mapped_location* loc
+        mapped_location* loc,
+        struct genome_data* genome
     )
 {
     mapped_location tmp_loc = *loc;
-    tmp_loc.location = *gen_loc; // TODO check read start
-    add_mapped_location( &tmp_loc, results );
+    tmp_loc.location = *gen_loc;
+    add_and_expand_mapped_location( &tmp_loc, results, genome );
 
     return;
 }
@@ -878,115 +879,12 @@ expand_pseudo_location_into_mapped_locations(
         add_pseudo_loc_to_mapped_locations(
                 &( gen_locs[i] ),
                 results,
-                loc
+                loc,
+                genome
             );
     }
 
     return;
-}
-
-void
-expand_diploid_mapped_location(
-        mapped_location* loc,
-        mapped_locations* src,
-        mapped_locations* dst,
-
-        struct genome_data* genome,
-        struct read_subtemplate* rst
-
-    )
-{
-    assert( loc->location.is_paternal && loc->location.is_maternal );
-    /* This should only be called on real locations */
-    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
-
-    /* Diploid locations are encoded as the paternal location, with both
-     * diploid flags set. */
-    
-    /* For paternal, all we need to do is make sure only the paternal flag is 
-     * set. */
-    mapped_location paternal;
-    copy_mapped_location( &paternal, loc );
-    paternal.location.is_maternal = 0;
-    add_mapped_location( &paternal, dst );
-
-    /* For maternal, we need to make sure only the maternal flag is set, and 
-     * lookup the maternal location in the diploid index */
-    mapped_location maternal;
-    copy_mapped_location( &maternal, loc );
-    maternal.location.is_paternal = 0;
-
-    /* prepare information to lookup info about the maternal chromosome */
-    int paternal_chr = loc->location.chr;
-    int paternal_loc = loc->location.loc;
-
-    int maternal_chr = -1;
-    int maternal_loc = -1;
-    build_maternal_loc_from_paternal_loc(
-            &maternal_chr, &maternal_loc,
-            paternal_chr, paternal_loc,
-            genome
-        );
-
-    /* finished building out the maternal mapped_location */
-    maternal.location.chr = maternal_chr;
-    maternal.location.loc = maternal_loc;
-    add_mapped_location( &maternal, dst );
-
-    return;
-}
-
-void
-expand_diploid_mapped_locations(
-        mapped_locations** locs,
-        struct genome_data* genome,
-        struct read_subtemplate* rst
-    )
-{
-    /* build a new list of mapped_locations, containing expanded versions
-     * of any diploid locations and the original versions of all others */
-    mapped_locations* tmp_locs = mapped_locations_template( *locs );
-
-    int i;
-    for( i = 0; i < (*locs)->length; i++ )
-    {
-        mapped_location* loc = (*locs)->locations + i;
-
-        /* A diploid mapped location. */
-        if( loc->location.is_paternal && loc->location.is_maternal )
-        {
-            expand_diploid_mapped_location(
-                    loc, *locs, tmp_locs, genome, rst );
-        } else {
-            /* Add non-diploid mapped_location unchanged */
-            add_mapped_location( loc, tmp_locs );
-        }
-    }
-
-    /* free the original mapped_locations */
-    free_mapped_locations( *locs );
-
-    /* set the original mapepd_locations pointer to use the new, expanded
-     * mapped_locations */
-    *locs = tmp_locs;
-}
-
-void
-expand_diploid_locations_for_mapped_locations_in_container(
-        mapped_locations_container* container,
-        struct genome_data* genome,
-        struct read_subtemplate* rst
-    )
-{
-    int i;
-    for( i = 0; i < container->length; i++ )
-    {
-        expand_diploid_mapped_locations(
-                &(container->container[i]),
-                genome,
-                rst
-            );
-    }
 }
 
 mapped_locations*
@@ -1044,8 +942,7 @@ mapped_locations*
 expand_base_mapped_locations(
         mapped_location* base_loc,
         mapped_locations* base_locs,
-        struct genome_data* genome,
-        struct read_subtemplate* rst // needed for read_len in diploid expansion
+        struct genome_data* genome
     )
 {
     /* initialize the expanded set of locations with the base's metadata */
@@ -1060,13 +957,8 @@ expand_base_mapped_locations(
                 base_loc, expanded_locs, genome );
     } else {
         // add the mapped_location as-is
-        add_mapped_location( base_loc, expanded_locs );
+        add_and_expand_mapped_location( base_loc, expanded_locs, genome );
     }
-
-    /* if any of the expanded locations are diploid locations (they have both
-     * is_paternal == 1 and is_maternal == 1), expand them into separate
-     * paternal and maternal copies */
-    expand_diploid_mapped_locations( &expanded_locs, genome, rst );
 
     /* sort in order to use binary search later */
     sort_mapped_locations_by_location( expanded_locs );
@@ -1150,10 +1042,6 @@ build_candidate_mappings_from_search_results(
         float min_match_penalty
     )
 {
-    /* expand the diploid locations in all of the mapped_locations */
-    expand_diploid_locations_for_mapped_locations_in_container(
-            search_results, genome, rst );
-
     /* sort each mapped_locations in order to binary search later */
     sort_mapped_locations_in_container( search_results );
 
@@ -1167,9 +1055,9 @@ build_candidate_mappings_from_search_results(
         mapped_location* base_loc = base_locs->locations + i;
 
         /* if the base_loc is a pseudo location, expand it to consider all
-         * the possible locations it could be */
+         * the possible locations */
         mapped_locations* expanded_base =
-            expand_base_mapped_locations( base_loc, base_locs, genome, rst );
+            expand_base_mapped_locations( base_loc, base_locs, genome );
 
         /* match across each of the expanded locations from the base */
         for( j = 0; j < expanded_base->length; j++ )
