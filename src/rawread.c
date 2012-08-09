@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "statmap.h"
+#include "genome.h"
 #include "error_correction.h"
 #include "rawread.h"
 #include "quality.h"
@@ -311,51 +312,103 @@ populate_read_from_fastq_file(
     return 0;
 }
 
-float*
-expected_num_random_reads( int genome_len, int read_len, float* mm_prbs )
+ 
+int floatcmp(const void* elem1, const void* elem2)
 {
-    /* calculate the distribution of the number of mismatches */
-    double* num_mm_bin_prbs = calloc( read_len+1, sizeof(double) );
-    double* tmp_num_mm_bin_prbs = calloc( read_len+1, sizeof(double) );
-    
-    /* use the exact calculation from "The Distribution of a Sum of Binomial
-       Random Variables"  ( Ken Butler, Michael Stephens ) */
-    assert( read_len >= 2 );
-    num_mm_bin_prbs[0] = (1-mm_prbs[0])*(1-mm_prbs[1]);
-    num_mm_bin_prbs[1] = (1-mm_prbs[0])*mm_prbs[1] + mm_prbs[0]*(1-mm_prbs[1]);
-    num_mm_bin_prbs[2] = mm_prbs[0]*mm_prbs[1];
-    
-    int base_i, bin_i;
-    for( base_i = 2; base_i < read_len; base_i++ )
-    {
-        /* just to clean up the code below, this is the 
-           current mismatche probability in the recurrence relation */
-        double mm_prb = mm_prbs[base_i];
-        
-        /*** initialize the tmp bin prbs to the current ***/
-        /* special case 0 matches */
-        tmp_num_mm_bin_prbs[0]
-            = (1-num_mm_bin_prbs[0])*(1-mm_prb);
+    if(*(const float*)elem1 < *(const float*)elem2)
+        return -1;
+    return *(const float*)elem1 > *(const float*)elem2;
+}
 
-        for( bin_i = 1; bin_i <= base_i; bin_i++ )
+int dblcmp(const void* elem1, const void* elem2)
+{
+    if(*(const double*)elem1 < *(const double*)elem2)
+        return -1;
+    return *(const double*)elem1 > *(const double*)elem2;
+}
+
+float 
+sample_from_penalty_dist( double* prbs, int read_len )
+{
+    double penalty = 1.0;
+    int i;
+    for( i = 0; i < read_len; i++ )
+    {
+        double prb = prbs[i];
+        if( random() < prb )
         {
-            /* bin_i mismatches is i-1 mismatches from 
-               the base + 1 mismatch from the new, or i
-               from the base and 0 from the new */
-            tmp_num_mm_bin_prbs[bin_i]
-                = num_mm_bin_prbs[bin_i]*(1-mm_prb)
-                + num_mm_bin_prbs[bin_i-1]*mm_prb;
-            
-            /* copy the tmp value into base */
-            num_mm_bin_prbs[bin_i-1] = tmp_num_mm_bin_prbs[bin_i-1];
+            penalty *= prb;
+        } else {
+            penalty *= ( 1-prb );
         }
-        
-        /* copy the final value into the base */
-        num_mm_bin_prbs[base_i] = tmp_num_mm_bin_prbs[base_i];
     }
     
-    free( tmp_num_mm_bin_prbs );
-    return num_mm_bin_prbs;
+    return log10( penalty );
+}
+
+float
+calc_expected_num_random_reads( float* penalties, int read_len, 
+                                float min_penalty, long genome_len  )
+{
+    /* calc the max number of mismatches that would satisfy the 
+       penalty */
+    
+    /* first, create a sorted copy of the mismatch probabilities */
+    float* sorted_penalties;
+    sorted_penalties = malloc( sizeof(float)*read_len );
+    memcpy( sorted_penalties, penalties, sizeof(float)*read_len );
+    qsort( sorted_penalties, read_len, sizeof(float), floatcmp );
+    int i;
+    float curr_penalty = 0;
+    for( i = read_len-1; i >= 0; i-- )
+    {
+        fprintf( stderr, "%e\t", sorted_penalties[i] );
+        curr_penalty += sorted_penalties[i];
+        if( curr_penalty < min_penalty )
+            break;
+    }
+    
+    /* decrement the index if the last penalty made us exceed the max */
+    int max_num_mm = read_len - i;
+    if( curr_penalty < min_penalty )
+        max_num_mm -= 1;
+    
+    free( sorted_penalties );
+    
+    /* estimate the chance that a random sequence matches. See the paper 
+       for details */
+    /* this is just a fast 4^(read_len-max_num_mm) */
+    float num_uniq_genome_seq = exp2f( 1+read_len-max_num_mm );
+    fprintf( stderr, "Exp num random reads: %e\n", ((float)genome_len)/num_uniq_genome_seq ); 
+    return ((float)genome_len)/num_uniq_genome_seq;
+}
+
+float
+estimate_upper_quantile( float* log_prbs, int read_len, float quantile )
+{
+    const int nsamples = 1000;
+    
+    /* first convert the log prbs to normal prbs */
+    double* prbs = calloc( read_len, sizeof(double) );
+    
+    int i;
+    for( i = 0; i < read_len; i++ ) {
+        prbs[i] = pow( 10, log_prbs[i] );
+    }
+
+    /* sample from the dist, and sort the samples */
+    float* samples= calloc( nsamples, sizeof(float) );
+    for( i = 0; i < nsamples; i++ )
+    {
+        samples[i] = sample_from_penalty_dist( prbs, read_len );
+    }
+    qsort( samples, nsamples, sizeof(double), dblcmp );    
+    float estimate = (float) samples[MAX(1, (int) quantile*nsamples)];
+        
+    free( samples );
+    free( prbs );
+    
+    return estimate;
 }
 
 enum bool
@@ -371,35 +424,50 @@ filter_rawread( struct rawread* r,
     if( MISMATCH == error_model->error_model_type )
         return false;
     
-    /***************************************************************
-     * check to make sure this read is mappable
-     * we consider a read 'mappable' if:
-     * 1) There are enough hq bps
-     *
-     */    
-    int num_hq_bps = 0;
-    int i;
-    for( i = 0; i < r->length; i++ )
-    {
-        /*
-           compute the inverse probability of error (quality)
-           NOTE when error_prb receieves identical bp's, it returns the
-           inverse automatically
-         */
-        double error = error_prb( r->char_seq[i], r->char_seq[i], 
-                                  r->error_str[i], i, error_model );
-        double qual = pow(10, error );
-        
-        /* count the number of hq basepairs */
-        if( qual > 0.999 )
-            num_hq_bps += 1;
-    }
-
-    if ( num_hq_bps < min_num_hq_bps )
+    float* mm_prbs = build_mismatch_prbs( error_model, r );
+    if( calc_expected_num_random_reads( mm_prbs, r->length, -7, 1e8  ) > 1.0 )
         return true;
-        
+    
     return false;
 }
+
+/*
+ * Find the necessary penalties so that we map the expected number of reads.
+ *
+ *
+ *
+ */
+void
+find_mapping_params( struct rawread* r, 
+                     struct error_model_t* error_model, 
+                     struct genome_data* genome )
+{
+    /* min match penalty
+     *
+     * Set max penalty spread so that the probability of not finding the
+     * correct mapping location ( assuming one exists ) is less than 1%
+     *
+     *
+     */
+    #define EXP_MISSED_READ_RATE 0.01
+    float* log_mm_prbs = build_mismatch_prbs( error_model, r );
+    
+    float min_match_penalty 
+        = estimate_upper_quantile(log_mm_prbs, r->length, EXP_MISSED_READ_RATE);
+    float max_penalty_ratio = 3.0;
+    
+    
+    long effective_genome_len = 0;
+    int i;
+    for( i = 0; i < genome->num_chrs; i++ )
+        effective_genome_len += genome->chr_lens[ i ];
+    
+    float expected_num_random_reads = calc_expected_num_random_reads( 
+        log_mm_prbs, r->length, min_match_penalty, effective_genome_len );
+    
+    printf( "Tuning params: %e\t%e\t%e\n", min_match_penalty, max_penalty_ratio, expected_num_random_reads );
+}
+
 
 /******* BEGIN raw read DB code ********************************************/
 

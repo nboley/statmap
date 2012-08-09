@@ -78,6 +78,12 @@ build_reverse_penalty_array(
         struct penalty_array_t* rev_pa
     );
 
+float*
+build_mismatch_prbs( 
+    struct error_model_t* error_model,
+    struct rawread* rd );
+
+
 /* convert a solexa quality score into a mutation probability */
 double mutation_probability( int );
 

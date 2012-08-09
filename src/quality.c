@@ -96,9 +96,10 @@ error_prb_for_estimated_model(
         struct error_model_t* error_model
     )
 {
+    assert( pos > 0 );
     struct freqs_array* freqs = error_model->data;
     double prb = freqs->freqs[(unsigned char)error_score][pos];
-
+    
     if( ref == obs )
         return log10(1 - prb);
     else
@@ -116,6 +117,8 @@ error_prb(
         struct error_model_t* error_model
     )
 {
+    assert( pos > 0 );
+    
     switch ( error_model->error_model_type ) 
     {
     case MISMATCH:
@@ -197,7 +200,7 @@ build_penalty_array(
                         code_bp(ref_bp),
                         code_bp(seq_bp),
                         rd->error_str[pos],
-                        pos,
+                        pos+1,
                         error_model
                     );
             }
@@ -222,6 +225,42 @@ build_reverse_penalty_array(
         rev_pa->array[rev_pa->len-1-i] = fwd_pa->array[i];
     }
 }
+
+float*
+build_mismatch_prbs( struct error_model_t* error_model,
+                     struct rawread* rd )
+{
+    float* mm_prbs = calloc( rd->length, sizeof(float) );
+    
+    int pos, ref_bp, seq_bp;
+    /* for each position in the rawread */
+    for( pos = 0; pos < rd->length; pos++ )
+    {
+        /* for each possible basepair (A,C,G,T) in the reference sequence */
+        for( ref_bp = 0; ref_bp < 4; ref_bp++ )
+        {
+            /* for each possible basepair (A,C,G,T) in the observed sequence */
+            for( seq_bp = 0; seq_bp < 4; seq_bp++ )
+            {
+                /* estimate error probability based on observed sequence and
+                   error data */
+                if( ref_bp != seq_bp )
+                {
+                    mm_prbs[pos] = error_prb(
+                        code_bp(ref_bp),
+                        code_bp(seq_bp),
+                        rd->error_str[pos],
+                        pos+1,
+                        error_model
+                    );
+                }
+            }
+        }
+    }
+    
+    return mm_prbs;
+}
+
 
 double
 mutation_probability( int qscore )

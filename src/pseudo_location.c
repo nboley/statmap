@@ -91,7 +91,7 @@ sort_pseudo_location( struct pseudo_location_t* loc )
     return;
 }
 
- void
+void
 add_loc_to_pseudo_location( 
     struct pseudo_location_t* ps_loc, const GENOME_LOC_TYPE* const loc)
 {

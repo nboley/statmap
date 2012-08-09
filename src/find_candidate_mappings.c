@@ -756,6 +756,8 @@ find_candidate_mappings( void* params )
                     readkey, *mapped_cnt);
         }
         
+        find_tuning_params( r1, error_model, genome );
+        
         if( filter_rawread( r1, error_model ) ||
             filter_rawread( r2, error_model ) )
         {
