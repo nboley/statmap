@@ -246,6 +246,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               float max_penalty_spread,
               mapped_locations* results,
 
+              struct genome_data* genome,
+
               /* fwd stranded data  */
               LETTER_TYPE* fwd_seq, 
               /* rev stranded data */
@@ -268,6 +270,8 @@ find_matches_from_root(
         float min_match_penalty,
         float max_penalty_spread,
         mapped_locations* results,
+
+        struct genome_data* genome,
 
         /* the length of the two reads ( below ) */
         const int read_len,

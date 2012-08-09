@@ -27,7 +27,8 @@ inline void
 get_locations_from_locations_node( const locations_node* const node, 
                                    mapped_locations* results,
                                    const float penalty,
-                                   const enum STRAND strnd );
+                                   const enum STRAND strnd,
+                                   struct genome_data* genome );
 
 /*** END Locations Node *********************************************************/
 
@@ -299,7 +300,9 @@ find_sequences_in_sequences_node(
         mapped_locations* results,
 
         /* the penalty array */
-        struct penalty_t* pa
+        struct penalty_t* pa,
+
+        struct genome_data* genome
     );
 
 sequences_node*

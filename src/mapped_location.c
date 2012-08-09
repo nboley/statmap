@@ -24,10 +24,10 @@ cmp_mapped_locations_by_location( const mapped_location* loc1,
     if( loc1->strnd != loc2->strnd )
         return loc1->strnd - loc2->strnd;
     
-    if( loc1->location.chr != loc2->location.chr )
-        return loc1->location.chr - loc2->location.chr;
+    if( loc1->chr != loc2->chr )
+        return loc1->chr - loc2->chr;
     
-    return loc1->location.loc - loc2->location.loc;
+    return loc1->loc - loc2->loc;
 }
 
 int
@@ -65,9 +65,6 @@ sort_mapped_locations_by_penalty( mapped_locations* results )
   );
 }
 
-
-
-
 void
 init_mapped_locations(
         mapped_locations** results,
@@ -100,7 +97,8 @@ free_mapped_locations( mapped_locations* results )
 
 void
 add_new_mapped_location( mapped_locations* results, 
-                         INDEX_LOC_TYPE location, 
+                         unsigned int chr,
+                         unsigned int loc,
                          enum STRAND strnd,
                          float penalty )
 {
@@ -127,17 +125,18 @@ add_new_mapped_location( mapped_locations* results,
     }
 
     /* This should be optimized out */
-    mapped_location* loc = results->locations + results->length;
+    mapped_location* new_loc = results->locations + results->length;
 
     /* set the location */
-    loc->location = location;
-    assert( loc->location.loc >= 0 );
+    new_loc->chr = chr;
+    new_loc->loc = loc;
+    assert( new_loc->loc >= 0 );
     
     /* set the read strand */
-    loc->strnd = strnd;
+    new_loc->strnd = strnd;
 
     /* set the penalty */
-    loc->penalty = penalty;
+    new_loc->penalty = penalty;
     
     /* add the new results to the end of the results set */
     results->length++;
@@ -153,45 +152,48 @@ add_mapped_location(
 )
 {
     add_new_mapped_location( locs,
-                             loc->location,
+                             loc->chr,
+                             loc->loc,
                              loc->strnd,
-                             loc->penalty
-        );
+                             loc->penalty );
 }
 
 void
-expand_diploid_mapped_location(
-        mapped_location* loc,
-        mapped_locations* locs,
+copy_mapped_location( mapped_location* dest, mapped_location* src ) 
+{
+    *dest = *src;
+    return;
+}
+
+void
+expand_diploid_index_location(
+        INDEX_LOC_TYPE* iloc,
+        mapped_locations* results,
+        enum STRAND strnd,
+        float penalty,
         struct genome_data* genome
     )
 {
-    assert( loc->location.is_paternal && loc->location.is_maternal );
+    /* This should only be called on a shared diploid location */
+    assert( iloc->is_paternal && iloc->is_maternal );
     /* This should only be called on real locations */
-    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
+    // TODO ? really? or should we just skip them for now?
+    assert( iloc->chr != PSEUDO_LOC_CHR_INDEX );
 
-    /* build the paternal location */
-    mapped_location paternal;
-    copy_mapped_location( &paternal, loc );
-    
-    /* Set the diploid flags */
-    paternal.location.is_paternal = 1;
-    paternal.location.is_maternal = 0;
-
-    /* Since the shared diploid location uses the chr and loc from the paternal
-     * copy, we don't need to change anything else */
-    add_mapped_location( &paternal, locs );
+    /* add the paternal location.
+     * the shared diploid location uses the paternal chr and loc, so we don't
+     * need to do anything extra here */
+    add_new_mapped_location( results,
+                             iloc->chr,
+                             iloc->loc,
+                             strnd,
+                             penalty );
 
     /* build the maternal location */
-    mapped_location maternal;
-    copy_mapped_location( &maternal, loc );
-    maternal.location.is_paternal = 0;
-    maternal.location.is_maternal = 1;
     /* lookup the maternal location from the paternal location information
-     * used on the shared diploid location */
-
-    int paternal_chr = loc->location.chr;
-    int paternal_loc = loc->location.loc;
+     * stored on the shared diploid location */
+    int paternal_chr = iloc->chr;
+    int paternal_loc = iloc->loc;
 
     int maternal_chr = -1;
     int maternal_loc = -1;
@@ -200,38 +202,37 @@ expand_diploid_mapped_location(
             paternal_chr, paternal_loc,
             genome
         );
+    assert( maternal_chr != -1 );
+    assert( maternal_loc != -1 );
 
-    /* finished building the maternal mapped_location */
-    maternal.location.chr = maternal_chr;
-    maternal.location.loc = maternal_loc;
-    add_mapped_location( &maternal, locs );
-
+    add_new_mapped_location( results,
+                             maternal_chr,
+                             maternal_loc,
+                             strnd,
+                             penalty );
     return;
 }
 
 void
-add_and_expand_mapped_location(
-    mapped_location* loc,
-    mapped_locations* locs,
-    struct genome_data* genome
-)
+add_and_expand_location_from_index(
+        mapped_locations* results,
+        INDEX_LOC_TYPE* iloc,
+        enum STRAND strnd,
+        float penalty,
+        struct genome_data* genome
+    )
 {
-    /* if this is a shared diploid location, expand it into the paternal and
-     * maternal copies */
-    if( loc->location.is_paternal && loc->location.is_maternal )
+    if( iloc->is_paternal && iloc->is_maternal )
     {
         assert( genome != NULL );
-        expand_diploid_mapped_location( loc, locs, genome );
+        expand_diploid_index_location( iloc, results, strnd, penalty, genome );
     } else {
-        add_mapped_location( loc, locs );
+        add_new_mapped_location( results,
+                                 iloc->chr,
+                                 iloc->loc,
+                                 strnd,
+                                 penalty );
     }
-}
-
-void
-copy_mapped_location( mapped_location* dest, mapped_location* src ) 
-{
-    *dest = *src;
-    return;
 }
 
 void
@@ -243,8 +244,8 @@ print_mapped_locations( mapped_locations* results )
     for( i = 0; i < results->length; i++)
     {
         printf("\t%i:%i\t%.6f\n", 
-               results->locations[i].location.chr,
-               results->locations[i].location.loc,
+               results->locations[i].chr,
+               results->locations[i].loc,
                results->locations[i].penalty
         );
     }

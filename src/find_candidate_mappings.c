@@ -97,7 +97,7 @@ find_optimal_subseq_offset(
 
 void
 search_index(
-        struct index_t* index, 
+        struct genome_data* genome,
         struct indexable_subtemplate* ist,
 
         float min_match_penalty,
@@ -107,6 +107,9 @@ search_index(
         enum bool only_find_unique_sequence
     )
 {
+    // reference to index
+    struct index_t* index = genome->index;
+
     int subseq_length = index->seq_length;
     
     /* prepare the results container */
@@ -149,6 +152,8 @@ search_index(
             min_match_penalty,
             max_penalty_spread,
             *results,
+
+            genome,
 
             /* length of the reads */
             subseq_length,
@@ -359,14 +364,14 @@ build_candidate_mapping_from_mapped_location(
     cm.subseq_offset = results->probe->subseq_offset;
 
     /* set location information */
-    cm.chr = result->location.chr;
+    cm.chr = result->chr;
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
     int read_location =
         modify_mapped_read_location_for_index_probe_offset(
-            result->location.loc,
-            result->location.chr,
+            result->loc,
+            result->chr,
             result->strnd,
             results->probe->subseq_offset,
             results->probe->subseq_length,
@@ -607,7 +612,7 @@ search_index_for_indexable_subtemplates(
         /**** go to the index for mapping locations */
         mapped_locations *results = NULL;
         search_index(
-                genome->index, 
+                genome,
                 ist,
 
                 min_match_penalty,
@@ -679,45 +684,47 @@ search_for_matches_in_pseudo_locations(
         struct genome_data* genome
     )
 {
-    /* Assume the pseudo locations are sorted to come before the rest of there
-     * chromosomes */
+    /* Assume the pseudo chr is sorted to come before the rest of the chrs */
     assert( PSEUDO_LOC_CHR_INDEX == 0 );
 
     struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
 
     /* Find the start of the set of pseudo mapped locations with strand
      * matching the key we are matching to */
-    int pslocs_start =
+    int pslocs_start_in_sorted_mapped_locations =
         find_start_of_pseudo_mapped_locations_for_strand(
             potential_matches,
             key->strnd );
 
     /* If there aren't any pseudo locations with the same strand as the key,
      * nothing to do here */
-    if( pslocs_start == -1 )
+    if( pslocs_start_in_sorted_mapped_locations == -1 )
         return;
 
     /* Binary search each pseudo location's locations for matches to the key */
     int i;
-    for( i = pslocs_start; i < potential_matches->length; i++ )
+    for( i = pslocs_start_in_sorted_mapped_locations;
+         i < potential_matches->length;
+         i++ )
     {
         /* We begin at the start of a group of pseudo mapped_location's. If we
          * encounter a non-pseudo mapped_location, we've left the block of sorted
          * pseudo mapped_locations and are done. */
-        if( potential_matches->locations[i].location.chr != PSEUDO_LOC_CHR_INDEX )
+        if( potential_matches->locations[i].chr != PSEUDO_LOC_CHR_INDEX )
             break;
 
         /* binary search each pseudo location for matches to key */
-        int ps_loc_index = potential_matches->locations[i].location.loc;
+        int ps_loc_index = potential_matches->locations[i].loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
-        /* The pseudo locations are just INDEX_LOC_TYPE, so we
-         * extract the INDEX_LOC_TYPE in order to use bsearch */
-        INDEX_LOC_TYPE key_loc = key->location;
-        /* is this was a diploid location, make sure it was expanded */
-        assert( !( key_loc.is_paternal && key_loc.is_maternal ) );
+        /* The pseudo locations are INDEX_LOC_TYPE, so we construct an
+         * INDEX_LOC_TYPE to use as the key to bsearch.
+         * NOTE only chr and loc are considered in cmp_genome_location. */
+        INDEX_LOC_TYPE key_iloc;
+        key_iloc.chr = key->chr;
+        key_iloc.loc = key->loc;
 
-        INDEX_LOC_TYPE* match = bsearch( &key_loc,
+        INDEX_LOC_TYPE* match = bsearch( &key_iloc,
                 ps_loc->locs,
                 ps_loc->num,
                 sizeof(INDEX_LOC_TYPE),
@@ -726,11 +733,12 @@ search_for_matches_in_pseudo_locations(
 
         if( match != NULL )
         {
-            /* reconstruct mapped_location from the key mapped_location and 
-             * the matching INDEX_LOC_TYPE */
+            /* build a mapped_location with the metadata from key and the
+             * location from the matching INDEX_LOC_TYPE */
             mapped_location tmp;
             copy_mapped_location( &tmp, key );
-            tmp.location = *match;
+            tmp.chr = match->chr;
+            tmp.loc = match->loc;
 
             add_mapped_location( &tmp, matching_subset );
         }
@@ -749,7 +757,7 @@ find_matching_mapped_locations(
     )
 {
     /* any base location should have been expanded into real locations */
-    assert( base->location.chr != PSEUDO_LOC_CHR_INDEX );
+    assert( base->chr != PSEUDO_LOC_CHR_INDEX );
 
     /*
      * construct a key (mapped_location) to search for
@@ -770,8 +778,8 @@ find_matching_mapped_locations(
 
     mapped_location key;
     copy_mapped_location( &key, base );
-    key.location.loc =
-        base->location.loc 
+    key.loc =
+        base->loc 
         - base_locs->probe->subseq_offset
         + potential_matches->probe->subseq_offset;
 
@@ -846,13 +854,17 @@ void
 add_pseudo_loc_to_mapped_locations(
         INDEX_LOC_TYPE* gen_loc,
         mapped_locations* results,
-        mapped_location* loc,
-        struct genome_data* genome
+        mapped_location* loc
     )
 {
-    mapped_location tmp_loc = *loc;
-    tmp_loc.location = *gen_loc;
-    add_and_expand_mapped_location( &tmp_loc, results, genome );
+    mapped_location tmp_loc;
+    copy_mapped_location( &tmp_loc, loc );
+
+    tmp_loc.chr = gen_loc->chr;
+    tmp_loc.loc = gen_loc->loc;
+
+    // add_and_expand (diploid) ?
+    add_mapped_location( &tmp_loc, results );
 
     return;
 }
@@ -864,11 +876,11 @@ expand_pseudo_location_into_mapped_locations(
         struct genome_data* genome
     )
 {
-    assert( loc->location.chr == PSEUDO_LOC_CHR_INDEX );
+    assert( loc->chr == PSEUDO_LOC_CHR_INDEX );
 
     struct pseudo_locations_t* ps_locs = genome->index->ps_locs;
 
-    int ps_loc_index = loc->location.loc;
+    int ps_loc_index = loc->loc;
     struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
     /* add every location to the results list */
@@ -879,22 +891,11 @@ expand_pseudo_location_into_mapped_locations(
         add_pseudo_loc_to_mapped_locations(
                 &( gen_locs[i] ),
                 results,
-                loc,
-                genome
+                loc
             );
     }
 
     return;
-}
-
-mapped_locations*
-build_potential_matches(
-        mapped_locations* locs
-    )
-{
-    mapped_locations* potential_matches = mapped_locations_template( locs );
-
-    return potential_matches;
 }
 
 void
@@ -951,13 +952,13 @@ expand_base_mapped_locations(
 
     /* if base_loc is a pseudo location, expand it and add all of its
      * potential mapped_location's */
-    if( base_loc->location.chr == PSEUDO_LOC_CHR_INDEX )
+    if( base_loc->chr == PSEUDO_LOC_CHR_INDEX )
     {
         expand_pseudo_location_into_mapped_locations(
                 base_loc, expanded_locs, genome );
     } else {
         // add the mapped_location as-is
-        add_and_expand_mapped_location( base_loc, expanded_locs, genome );
+        add_mapped_location( base_loc, expanded_locs );
     }
 
     /* sort in order to use binary search later */

@@ -27,7 +27,8 @@
  */
 
 typedef struct {
-    INDEX_LOC_TYPE location;
+    unsigned int chr; // TODO use MRL_CHR_TYPE, etc. ?
+    unsigned int loc; // maybe put some unified types in config.h?
     enum STRAND strnd;
     float penalty;
 } mapped_location;
@@ -67,22 +68,26 @@ void
 free_mapped_locations( mapped_locations* results );
 
 void
+add_new_mapped_location(
+    mapped_locations* results, 
+    unsigned int chr,
+    unsigned int loc,
+    enum STRAND strnd,
+    float penalty );
+
+void
 add_mapped_location(
     mapped_location* loc,
-    mapped_locations* locs
-);
+    mapped_locations* locs );
 
 void
-add_new_mapped_location( mapped_locations* results, 
-                     INDEX_LOC_TYPE location, 
-                     enum STRAND strnd,
-                     float penalty );
-
-void
-add_and_expand_mapped_location(
-    mapped_location* loc,
-    mapped_locations* locs,
-    struct genome_data* genome );
+add_and_expand_location_from_index(
+        mapped_locations* results,
+        INDEX_LOC_TYPE* iloc,
+        enum STRAND strnd,
+        float penalty,
+        struct genome_data* genome
+    );
 
 void
 copy_mapped_location( mapped_location* dest, mapped_location* src );

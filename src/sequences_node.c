@@ -55,11 +55,12 @@ add_location_to_locations_node( locations_node* node,
     return node;
 }
 
- void
+void
 get_locations_from_locations_node( const locations_node* const node, 
                                    mapped_locations* results,
                                    const float penalty,
-                                   const enum STRAND strnd )
+                                   const enum STRAND strnd,
+                                   struct genome_data* genome )
 {
     int num_locations = *( (unsigned short*) node );
     INDEX_LOC_TYPE* locs = 
@@ -68,13 +69,13 @@ get_locations_from_locations_node( const locations_node* const node,
     int i;
     for( i = 0; i < num_locations; i++ )
     {
-        
-        add_new_mapped_location(
-            results, 
-            locs[i],
-            strnd,
-            penalty
-        );
+        add_and_expand_location_from_index(
+                results,
+                locs + i,
+                strnd,
+                penalty,
+                genome
+            );
     }
     
     return;
@@ -959,7 +960,9 @@ find_sequences_in_sequences_node(
         mapped_locations* results,
 
         /* the penalty array */
-        struct penalty_t* pa
+        struct penalty_t* pa,
+
+        struct genome_data* genome
     )
 {
 
@@ -1036,14 +1039,13 @@ find_sequences_in_sequences_node(
 
             if( !check_sequence_type_ptr(seqs, i) )
             {
-                /* add this location to the result set */
-                add_new_mapped_location(
-                    results, 
-                    loc.loc,
-                    strnd,
-                    cum_penalty
-                );
-
+                add_and_expand_location_from_index(
+                        results,
+                        &(loc.loc),
+                        strnd,
+                        cum_penalty,
+                        genome
+                    );
             } else 
             /* Add all of the locs in the referenced array */
             {
@@ -1092,9 +1094,13 @@ find_sequences_in_sequences_node(
                     */
                     
                     INDEX_LOC_TYPE tmp_loc = locs[j];
-                    add_new_mapped_location(
-                        results, tmp_loc, strnd, cum_penalty
-                    );
+                    add_and_expand_location_from_index(
+                            results,
+                            &tmp_loc,
+                            strnd,
+                            cum_penalty,
+                            genome
+                        );
                 }
             }
         }
