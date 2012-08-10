@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <math.h>
-#include<string.h>
+#include <string.h>
 
 #include "config.h"
 #include "error_correction.h"
@@ -12,7 +12,7 @@
  *  Code to estiamte error frequencies. Calls R.
  *
  */
-SEXP
+SEXP*
 init_double_vector( int data_len, double* input_data )
 {
     assert( data_len >= 0 );
@@ -27,10 +27,10 @@ init_double_vector( int data_len, double* input_data )
         r_data_obj[i] = input_data[i];
     }
     
-    return *output_data;
+    return output_data;
 }
 
-SEXP
+SEXP*
 init_int_vector( int data_len, int* input_data )
 {
     assert( data_len >= 0 );
@@ -46,14 +46,14 @@ init_int_vector( int data_len, int* input_data )
         r_data_obj[i] = input_data[i];
     }
     
-    return *output_data;
+    return output_data;
 }
 
 void
 build_vectors_from_error_data( 
     struct error_data_t* data,
-    SEXP* r_poss, SEXP* r_qual_scores,
-    SEXP* r_mm_cnts, SEXP* r_cnts
+    SEXP** r_poss, SEXP** r_qual_scores,
+    SEXP** r_mm_cnts, SEXP** r_cnts
 )
 {
     double* poss;
@@ -173,7 +173,10 @@ predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* 
              data->records[record_index]->min_readkey, 
              data->records[record_index]->max_readkey );
     
-    SEXP mm_cnts, cnts, poss, qual_scores;
+    SEXP *mm_cnts = NULL;
+    SEXP *cnts = NULL; 
+    SEXP *poss = NULL;
+    SEXP *qual_scores = NULL;
 
     build_vectors_from_error_data( 
         data, &poss, &qual_scores, &mm_cnts, &cnts
@@ -187,7 +190,7 @@ predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* 
              data->records[record_index]->max_readkey );
     
     call = lang6( install("predict_freqs"), 
-                  mm_cnts, cnts, poss, qual_scores, 
+                  *mm_cnts, *cnts, *poss, *qual_scores, 
                   mkString(plot_str) );
     
     SEXP res = eval( call, R_GlobalEnv );
@@ -198,6 +201,11 @@ predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* 
     goto cleanup;
     
 cleanup:
+
+    free( mm_cnts );
+    free( cnts );
+    free( poss );
+    free( qual_scores );
     
     return;
 }
@@ -219,6 +227,11 @@ init_error_model(
     *error_model = malloc( sizeof(struct error_model_t) );
     (*error_model)->error_model_type = error_model_type;
     (*error_model)->data = NULL;
+
+    if( error_model_type == ESTIMATED )
+    {
+    }
+
     return;
 }
 
@@ -228,11 +241,16 @@ update_estimated_error_model_from_error_data(
     struct error_data_t* data
 )
 {    
-    struct freqs_array* pred_freqs;
-    init_freqs_array_from_error_data( &pred_freqs, data );    
+    struct freqs_array* pred_freqs = error_model->data;
+
+    if( pred_freqs == NULL )
+    {
+        init_freqs_array_from_error_data( &pred_freqs, data );    
+    }
+    
     predict_freqs( data, data->num_records-1, pred_freqs );
     error_model->data = pred_freqs;
-    
+
     return;
 }
 
@@ -264,6 +282,11 @@ update_error_model_from_error_data(
 
 void free_error_model( struct error_model_t* error_model )
 {
+    if( error_model->error_model_type == ESTIMATED )
+    {
+        free_freqs_array( error_model->data );
+    }
+
     free( error_model );
     return;
 }

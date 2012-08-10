@@ -459,6 +459,8 @@ main( int argc, char** argv )
     goto cleanup;
     
 cleanup:
+    free( abs_path );
+
     close_rawread_db( args.rdb );
     
     if( args.NC_rdb != NULL )

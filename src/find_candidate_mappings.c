@@ -1075,6 +1075,8 @@ build_candidate_mappings_from_search_results(
                     min_match_penalty
                 );
         }
+
+        free_mapped_locations( expanded_base );
     }
 }
 
