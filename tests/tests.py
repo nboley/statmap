@@ -21,9 +21,10 @@ import StringIO
 import tempfile
 
 import numpy
-sys.path.append( "../python_lib/" )
-from error_model import load_error_data
 
+# add python_lib to the path relative to the location of tests.py
+sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
+from error_model import load_error_data
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
@@ -311,7 +312,7 @@ def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
     
     return files_out
 
-def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
+def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
     # store a list of the true fragments
     truth = []
     # calculate the genome lengths sum, to make
@@ -332,7 +333,7 @@ def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
     
     return truth
 
-def build_reads_from_fragments( \
+def build_reads_from_fragments(
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
     reads = []
     for chr, start, stop in fragments:
@@ -475,7 +476,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=rev_comp, paired_end=False )
     
@@ -602,7 +603,7 @@ def test_paired_end_reads( read_len ):
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
     assert 2*rl < 200 # make sure the fragments are long enough
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=200 )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=100, frag_len=200 )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
     
@@ -680,7 +681,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     # note: if we do rev_comp, statmap still correctly maps the read, but our comparison back to
@@ -767,7 +768,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=nreads, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nreads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
@@ -926,7 +927,7 @@ def test_error_rate_estimation( ):
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in
     # the 5' direction
-    fragments = sample_uniformily_from_genome( 
+    fragments = sample_uniformly_from_genome( 
         r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
@@ -1082,7 +1083,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads,
+    fragments = sample_uniformly_from_genome( genome, nsamples=nreads,
             frag_len=read_len )
     # note: if we do rev_comp, statmap still correctly maps the read, but our
     # comparison back to the original genome will fail (incorrectly). Since
@@ -1181,7 +1182,7 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len,
     indexed_seq_len = indexed_seq_len or read_len
 
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads, frag_len=read_len )
+    fragments = sample_uniformly_from_genome( genome, nsamples=nreads, frag_len=read_len )
     reads = build_reads_from_fragments(
             genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
         )
@@ -1314,7 +1315,7 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     # we want to sample whole chunks of the genome, then build_read_from_fragments will take
     # care of simulating paired end reads
     assert 2*rl < 50 # make sure the fragments are long enough
-    fragments = sample_uniformily_from_genome( genome, nsamples=100, frag_len=50)
+    fragments = sample_uniformly_from_genome( genome, nsamples=100, frag_len=50)
     reads = build_reads_from_fragments(
         genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
 
@@ -1391,7 +1392,7 @@ if False:
     assert all( frag_len < chr_len for chr_len in chr_sizes )
     
     r_genome = build_random_genome( chr_sizes, chr_names )
-    truth = sample_uniformily_from_genome( r_genome, nsamples=1000, frag_len=frag_len )
+    truth = sample_uniformly_from_genome( r_genome, nsamples=1000, frag_len=frag_len )
     reads = build_reads_from_fragments( r_genome, truth, paired_end=paired )
     
     sample_file = gzip.open( 'clean_error_strs.fastq.gz' )
