@@ -747,7 +747,7 @@ build_random_starting_trace(
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {        
         /* reset the read cond prbs under a uniform prior */
-        reset_read_cond_probs( cond_prbs_db, r );
+        reset_read_cond_probs( cond_prbs_db, r, rdb );
         
         /* update the read conditional probabilities from the trace */
         update_mapped_read_prbs( cond_prbs_db, traces, r );        

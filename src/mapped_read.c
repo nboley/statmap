@@ -36,7 +36,6 @@ init_mapped_read( struct mapped_read_t** rd )
     (*rd) = malloc(sizeof(struct mapped_read_t));
     (*rd)->read_id = 0;
     (*rd)->num_mappings = 0;
-    (*rd)->rdb = NULL;
     (*rd)->free_locations = true;
     (*rd)->locations = NULL;
     return;
@@ -82,11 +81,11 @@ add_location_to_mapped_read(
 
 
 void
-reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd )
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
+                       struct mapped_read_t* rd,
+                       struct mapped_reads_db* mpd_rds_db )
 {
-    struct fragment_length_dist_t* fl_dist = NULL;
-    if( rd->rdb != NULL )
-        fl_dist = rd->rdb->fl_dist;
+    struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
     
     if( 0 == rd->num_mappings )
         return;
@@ -613,7 +612,7 @@ close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
     fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->fp );
     
     fclose( rdb->fp );
-    
+
     return;
 }
 
@@ -657,8 +656,6 @@ add_read_to_mapped_reads_db(
 
     int error;
 
-    rd->rdb = rdb;
-    
     pthread_mutex_lock( rdb->mutex );
     error = write_mapped_read_to_file( rd, rdb->fp );
     rdb->num_mapped_reads += 1;
@@ -697,7 +694,6 @@ get_next_read_from_mapped_reads_db(
 )
 {
     init_mapped_read( rd );
-    (*rd)->rdb = rdb;
 
     /* Make sure the db is open for reading */
     if( rdb->mode != 'r' )
@@ -744,16 +740,15 @@ get_next_read_from_mapped_reads_db(
 
 
 void
-reset_all_read_cond_probs( 
-    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db )
-                           
+reset_all_read_cond_probs( struct mapped_reads_db* rdb,
+                           struct cond_prbs_db_t* cond_prbs_db )
 {
     rewind_mapped_reads_db( rdb );
     struct mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {
-        reset_read_cond_probs( cond_prbs_db, r );
+        reset_read_cond_probs( cond_prbs_db, r, rdb );
         free_mapped_read( r );
     }
     

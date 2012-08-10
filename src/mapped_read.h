@@ -257,11 +257,9 @@ set_seq_error_in_mapped_read_location(
 struct mapped_read_t {
     MPD_RD_ID_T read_id;
     MPD_RD_ID_T num_mappings;
-    /* the database that this read is in - useful because the 
-       DB often conatains meta data ( ie, frag len dist ) */
-    struct mapped_reads_db* rdb;
-    enum bool free_locations;
     struct mapped_read_location* locations;
+
+    enum bool free_locations;
 }; // BUG WTF? weird segfault with this __attribute__((__packed__));
 
 typedef struct {
@@ -283,9 +281,6 @@ void
 add_location_to_mapped_read( 
     struct mapped_read_t* rd, struct mapped_read_location* loc );
 
-void
-reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd );
-                       
 void
 fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
@@ -381,8 +376,13 @@ get_next_read_from_mapped_reads_db(
 );
 
 void
-reset_all_read_cond_probs( 
-    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db );
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
+                       struct mapped_read_t* rd,
+                       struct mapped_reads_db* mpd_rds_db );
+                       
+void
+reset_all_read_cond_probs( struct mapped_reads_db* rdb,
+                           struct cond_prbs_db_t* cond_prbs_db );
 
 /*
  * this requires code from iterative mapping to write out the
