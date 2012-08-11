@@ -90,9 +90,7 @@ class StatmapOutput:
                 num_threads = 1
             
         statmap_o.set_num_threads( num_threads )
-        statmap_o.set_min_num_hq_bps(
-            self.config.contents.min_num_hq_bps ) # stored in config
-
+        
         # load genome
         self.genome = load_genome_from_disk( GENOME_FNAME )
 

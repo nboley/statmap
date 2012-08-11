@@ -330,20 +330,21 @@ int dblcmp(const void* elem1, const void* elem2)
 float 
 sample_from_penalty_dist( double* prbs, int read_len )
 {
-    double penalty = 1.0;
+    float penalty = 0.0;
     int i;
     for( i = 0; i < read_len; i++ )
     {
         double prb = prbs[i];
-        if( random() < prb )
+        double rnum = ((double)rand())/((double)RAND_MAX);
+        if( rnum < prb )
         {
-            penalty *= prb;
+            penalty += log10(prb);
         } else {
-            penalty *= ( 1-prb );
+            penalty += log10( 1-prb );
         }
     }
     
-    return log10( penalty );
+    return penalty;
 }
 
 float
@@ -362,7 +363,6 @@ calc_expected_num_random_reads( float* penalties, int read_len,
     float curr_penalty = 0;
     for( i = read_len-1; i >= 0; i-- )
     {
-        fprintf( stderr, "%e\t", sorted_penalties[i] );
         curr_penalty += sorted_penalties[i];
         if( curr_penalty < min_penalty )
             break;
@@ -379,7 +379,6 @@ calc_expected_num_random_reads( float* penalties, int read_len,
        for details */
     /* this is just a fast 4^(read_len-max_num_mm) */
     float num_uniq_genome_seq = exp2f( 1+read_len-max_num_mm );
-    fprintf( stderr, "Exp num random reads: %e\n", ((float)genome_len)/num_uniq_genome_seq ); 
     return ((float)genome_len)/num_uniq_genome_seq;
 }
 
@@ -387,6 +386,7 @@ float
 estimate_upper_quantile( float* log_prbs, int read_len, float quantile )
 {
     const int nsamples = 1000;
+    srand ( time(NULL) );
     
     /* first convert the log prbs to normal prbs */
     double* prbs = calloc( read_len, sizeof(double) );
@@ -395,20 +395,20 @@ estimate_upper_quantile( float* log_prbs, int read_len, float quantile )
     for( i = 0; i < read_len; i++ ) {
         prbs[i] = pow( 10, log_prbs[i] );
     }
-
+    
     /* sample from the dist, and sort the samples */
     float* samples= calloc( nsamples, sizeof(float) );
     for( i = 0; i < nsamples; i++ )
     {
         samples[i] = sample_from_penalty_dist( prbs, read_len );
     }
-    qsort( samples, nsamples, sizeof(double), dblcmp );    
+    qsort( samples, nsamples, sizeof(float), floatcmp );    
     float estimate = (float) samples[MAX(1, (int) quantile*nsamples)];
         
     free( samples );
     free( prbs );
     
-    return estimate;
+    return estimate ;
 }
 
 enum bool
@@ -442,21 +442,16 @@ find_mapping_params( struct rawread* r,
                      struct error_model_t* error_model, 
                      struct genome_data* genome )
 {
-    /* min match penalty
-     *
-     * Set max penalty spread so that the probability of not finding the
-     * correct mapping location ( assuming one exists ) is less than 1%
-     *
-     *
-     */
-    #define EXP_MISSED_READ_RATE 0.01
+    if( MISMATCH == error_model->error_model_type )
+        return;
+
+    #define EXP_MISSED_READ_RATE 0.005
     float* log_mm_prbs = build_mismatch_prbs( error_model, r );
     
     float min_match_penalty 
-        = estimate_upper_quantile(log_mm_prbs, r->length, EXP_MISSED_READ_RATE);
+        = estimate_upper_quantile(log_mm_prbs, r->length, 1-EXP_MISSED_READ_RATE);
     float max_penalty_ratio = 3.0;
-    
-    
+        
     long effective_genome_len = 0;
     int i;
     for( i = 0; i < genome->num_chrs; i++ )
@@ -465,7 +460,10 @@ find_mapping_params( struct rawread* r,
     float expected_num_random_reads = calc_expected_num_random_reads( 
         log_mm_prbs, r->length, min_match_penalty, effective_genome_len );
     
-    printf( "Tuning params: %e\t%e\t%e\n", min_match_penalty, max_penalty_ratio, expected_num_random_reads );
+    printf( "Tuning params: %e\t%e\t%e\n", 
+            min_match_penalty, max_penalty_ratio, expected_num_random_reads );
+    
+    return;
 }
 
 

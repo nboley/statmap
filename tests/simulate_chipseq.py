@@ -417,12 +417,12 @@ def map_with_statmap( iterative=True, paired_end=True ):
     if paired_end:
         statmap_call = "%s -g tmp.genome.bin -1 tmp.1.fastq -2 tmp.2.fastq \
                                      -3 tmp.nc.1.fastq -4 tmp.nc.2.fastq \
-                                     -o smo_chipseq_sim -q 0 \
+                                     -o smo_chipseq_sim \
                                      -n %i -f ./data/fl_dist.txt \
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     else:
         statmap_call = "%s -g tmp.genome.bin -r tmp.1.fastq -c tmp.nc.1.fastq \
-                                     -o smo_chipseq_sim -q 0 \
+                                     -o smo_chipseq_sim \
                                      -n %i -f ./data/fl_dist.txt \
                                  " % ( sc.STATMAP_PATH, NUM_SAMPLES )
     

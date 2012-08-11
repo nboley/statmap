@@ -101,8 +101,7 @@ def test():
 
     # set global variables
     statmap_o.set_num_threads( 4 )
-    statmap_o.set_min_num_hq_bps( 10 )
-
+    
     # print them again
     print statmap_o.get_num_threads()
     print statmap_o.get_min_num_hq_bps()
