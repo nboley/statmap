@@ -151,12 +151,7 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     /* Ensure all of the flags are turned off */
     MRL_FLAG_TYPE flag = 0;
 
-    /* deal with pseudo location */
     set_chr_in_mapped_read_location( loc, cm->chr );
-    if( PSEUDO_LOC_CHR_INDEX == cm->chr )
-    {
-        flag |= FIRST_READ_IS_PSEUDO;
-    }
  
     /* Add the location */
     if( BKWD == cm->rd_strnd )
@@ -192,12 +187,6 @@ join_two_candidate_mappings(
     
     if( FWD == first_read->rd_strnd )
         flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
-    
-    if( PSEUDO_LOC_CHR_INDEX == first_read->chr )
-        flag |= FIRST_READ_IS_PSEUDO;
-    
-    if( PSEUDO_LOC_CHR_INDEX == second_read->chr )
-        flag |= SECOND_READ_IS_PSEUDO;
     
     /* Set the chr */
     set_chr_in_mapped_read_location( loc, first_read->chr );

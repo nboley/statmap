@@ -141,9 +141,6 @@ ML_PRB_TYPE_from_float( float value  )
 #define FIRST_READ_WAS_REV_COMPLEMENTED 2
 /* Set if the first read ( ie read_name/1 ) maps to start_pos */
 #define FIRST_PAIR_IS_FIRST_IN_GENOME 4
-/* set if this is a pseudo read */
-#define FIRST_READ_IS_PSEUDO 32
-#define SECOND_READ_IS_PSEUDO 64
 
 /* ACCESS THIS THROUGH THE BELOW FUNCTIONS */
 
