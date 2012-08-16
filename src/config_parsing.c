@@ -282,6 +282,8 @@ static struct argp_option options[] =
      "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: SOLEXA_v14_FQ, 4: "
      "ILLUMINA_v15_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
      "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
+    {"paired-end-reads-map-to-opposite-strands", 'P', NULL, 0,
+     "(not implemented yet)", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -376,8 +378,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
             break;
         case 'F':
             argp_failure( state, 1, 0,
-                    "FATAL       :  -F ( --is-full-fragment ) is not "
-                    "implemented yet." );
+                    "FATAL       :  -F ( --is-full-fragment ) is not implemented yet." );
             break;
         case 'i':
         {
@@ -391,6 +392,10 @@ parse_opt( int key, char *arg, struct argp_state *state )
             }
             break;
         }
+        case 'P':
+            argp_failure( state, 1, 0,
+                    "FATAL       :  -P ( --paired-end-reads-map-to-opposite-strands ) is not implemented yet." );
+            break;
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
