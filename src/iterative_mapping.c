@@ -1816,6 +1816,13 @@ update_cond_prbs_from_trace_and_assay_type(
     case CHIP_SEQ:
         update_reads = update_chipseq_mapped_read_prbs;
         break;    
+
+    // case STRANDED_RNASEQ:
+
+    default:
+        fprintf( stderr, "FATAL       :  Unrecognized assay type in iterative mapping.\n");
+        assert(false);
+        exit(-1);
     }
     
     if( NULL == update_reads )

@@ -131,7 +131,8 @@ typedef char NODE_TYPE;
 enum assay_type_t {
     // UNKNOWN = 0,
     CAGE = 1,
-    CHIP_SEQ = 2
+    CHIP_SEQ = 2,
+    STRANDED_RNASEQ = 3
 };
 
 /* 
