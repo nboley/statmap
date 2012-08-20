@@ -86,3 +86,35 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
     return;
 }
 
+FILE* 
+open_check_error( char* fname, char* file_mode )
+{
+    FILE* tmp;
+    tmp = fopen( fname, file_mode );
+    if( tmp == NULL )
+    {
+        fprintf( stderr, "Error opening '%s\n'", fname );
+        exit( -1 );
+    }
+    return tmp;
+}
+
+/*
+   Wrapper for realloc that checks return value
+*/
+void*
+safe_realloc( void* ptr, size_t size )
+{
+    void* ra_ptr;
+    ra_ptr = realloc( ptr, size );
+
+    /* man 3 realloc, line 44 - may return NULL if size == 0 */
+    if( ra_ptr == NULL && size != 0 )
+    {
+        fprintf(stderr, "FATAL       :  Error realloc'ing %zi bytes.\n", size);
+        exit( -1 );
+    }
+
+    return ra_ptr;
+}
+

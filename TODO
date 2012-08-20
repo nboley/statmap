@@ -2,10 +2,42 @@ fix bug
 finish human indexing fix
 make sample mapping take multiple samples
 
-error estimates code
-fragment length estimation code
-write network breaking code
+-44) Clean up candidate_mapping struct.
+     a) maybe get rid of RECHECK. Since reads are often longer than the index
+        probes, it's probably a good idea to always recheck them. Instead of
+        setting RECHECK = INVALID, free the candidate mapping and set = NULL.
+-43) generalize paired end joining code in mapped_reads.c
+     a) new candidate_mappings container that can be sorted by the pos_in_template
+        of each candidate_mapping's originating read_subtemplate.
+     b) rather than using the read type, use pos_in_template. For now, brute
+        force - every cm should be paired with a cm of a subsequent
+        pos_in_template. So we want to pair 1 to 2, 3, ... , -3, -2, -1.
+     c) Get this running with assertions so we're only handling the established
+        single end (1) and paired end cases (1, -1).
+-42) Expand diploid mapped_locations in the filtering step.
+     a) why are the current diploid tests passing if this isn't working?
+-41) Don't bulk add all locations from a pseudo_location into the
+     mapped_locations used in the matching code (memory concerns).
+     Search through the ps_locs instead (they are sorted).
 
+-40) error estimates code
+-39) fragment length estimation code
+     Estiamte fragment length dist for single end reads
+-38) write network breaking code
+     Probably the most important TODO. 
+-37) Reconsider mapped_reads
+-36) Move psloc handling to candidate mapping building.
+     a) add compiler flag (config.h) to use/not use pslocs
+   X b) Search pslocs if we encounter them in a mapped_location while finding
+        matching mapped_location's.
+   X c) Remove pslocs handling code from joining candidate mappings. Will
+        greatly simplify the joining code, especially in the paired end case.
+X -35) (idea) Store subseq_len and subseq_offset in the indexable_subtemplates,
+     and store pointers to the originating indexable_subtemplate on the
+     mapped_location's.
+-34) (idea) Incorporate the min_match_penalty and max_penalty_spread parameters
+     into the error model, instead of passing them as parameters all over the
+     place in find_candidate_mappings. *Wait for error_model merge*
 -33) Eliminated the thrad path in the update trace code - it appears
      to be slow. There is probably some optimization to be done, but 
      for now we just set the threads to always be one.
@@ -81,7 +113,8 @@ X -10) Fix the marginal vs cond prb calculations in print to sam
 -5) Fix the 'merge' join for the candidate map joining
     Currently, this is correct but it is just using the naive N^2 algorithm.
     At the very least, it needs to be N^2 in chromosome and matched read pairs
--3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
+M -3) Make sure that snps work when there are more than 4 ( hint, I've gotten assertion errors )
+M     ( The SNP code has been removed in favor of the much better diploid mapping code )
 -2) In get_next_read_from_mapped_reads_db, we have an unnecessary memcopy to 
     clean up the memory usage. Get rid of this. 
 X -3) Finish location node type
@@ -98,9 +131,10 @@ M 0.95) Fix sam printing for threaded apps and paired end reads
 M ( I dont know what I was talking about when I added this TODO - but it seems to work )
 X 0.96) Fix sample wiggle printing code so that it works for other trace types
 X 1) Allow users to specify an output directory ( generic chdir )
-1.01) Finish the recheck code
-1.1) Make srue the read len calc is good for paired end reads
-     That is, we should grab a  couple of sequences from both files
+X 1.01) Finish the recheck code
+M 1.1) Make srue the read len calc is good for paired end reads
+M      That is, we should grab a couple of sequences from both files
+M THis is no longer necessary because of the recheck code
 2) Cleanup the rawreaddb interface
    i) create a cursor interface
    X ii) integrate locking and readkey with the cursor/db interface
@@ -109,12 +143,13 @@ X 2.1) Make mapped short read location type take a bitfield
 X      to conserve on disk storage space
 X 2.1) fix mapped_location vs mapped_read_location name confusion
 X 2.2) cleanup error codes to make them standard
-2.3) Remove the signed bits in the sequences node UNION ( currently here for debugging )
+M 2.3) Remove the signed bits in the sequences node UNION ( currently here for debugging )
+M      We can actually remove these when we need the extra space
 3) Add checks for paired end reads to ensure the read names are identical 
    ( except slashes )
-3.1) Finish on disk indexes
-3.11) remove useless code ( esp marshalling code, and ifdef's out code )
-3) Fix unit tests to correctly identify reads that didnt map due to mutation rates
+X 3.1) Finish on disk indexes
+X 3.11) remove useless code ( esp marshalling code, and ifdef's out code )
+X 3) Fix unit tests to correctly identify reads that didnt map due to mutation rates
 3.1 ) The get next candidate mapping will stop returning read ids if it gets to 
     the end of the db ( iow, the file is empty ) even if there are still read ids
     remaining. We fix this in the sam printing code by looking at rawreads instead.
@@ -125,24 +160,24 @@ X 2.2) cleanup error codes to make them standard
 4) Add standard error interface code
 5) Fix miscount of mapped reads for paired end reads
 X 6) Change chipseq sim to iterate a fixed number of bps, rather than a fixed rate
-7) Seperate seq length from *indexed* sequence length in option parsing. ( currently, 
-   I say that if the required number of HQ basepairs is too high, that it should be the 
-   indexed sequence length. This isnt *exactly* correct, because we could want this feature
-   for reads that have varying sizes. )
+X 7) Seperate seq length from *indexed* sequence length in option parsing. ( currently, 
+X   I say that if the required number of HQ basepairs is too high, that it should be the 
+X   indexed sequence length. This isnt *exactly* correct, because we could want this feature
+X   for reads that have varying sizes. )
 9) Check the atoi, atof formatting in parse args. 
-10) Change the node type to an enum
+M 10) Change the node type to an enum
+M     Actually, who cares about this
 X 11) allow mapping of N's
-12) Allow mapping of really short reads
+M 12) Allow mapping of really short reads
+M Fine for now, we only need to fix this if we need it for the RNAseq mapping code.
 X 13) Create candidate_mappings.h ( and, maybe, mapped_locations.h )
 X    Currently, mapped_locations, candidate_mappings, and mapped_reads are all in mapped_location.h/c
 X    This is a bit confusing, and a pretty large file. I should probably split them out into 
 X    seperate files. 
 13b) Do the smae as 13 excpet with db_interface.c, which is way confusing. 
-14)  Check for duplicates in the snp coverage file
 O 15)  Add code to iteratively map directly from a sam file
 O 15b) Write code to produce a mappings_db from a sam file
-16) Allow reference genomes from multiple files
-17) Write config file parser, and use it
+X 16) Allow reference genomes from multiple files
+X 17) Write config file parser, and use it
 18) Add optimization to filter impossible paired end reads 
     ( by FL ) when we dont have to estimate the dist
-19) Paralelize bootstrap Code ( Or, actually make it the parametric bootstrap )

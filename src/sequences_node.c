@@ -69,11 +69,10 @@ get_locations_from_locations_node( const locations_node* const node,
     for( i = 0; i < num_locations; i++ )
     {
         
-        add_mapped_location(
+        add_new_mapped_location(
             results, 
             locs[i],
             strnd,
-            0,
             penalty
         );
     }
@@ -562,8 +561,7 @@ find_insert_location( sequences_node* seqs,
 
 /*
  * Add a sequence that doesnt currently exist into a sequences node. This means
- * that we dont need to deal with the extended GENOME_LOC array - FIXME, we may
- * still need to add if the sequence cant fit into 31 bits.
+ * that we dont need to deal with the extended GENOME_LOC array
  */
 static  sequences_node*
 add_new_sequence_to_sequences_node( sequences_node* seqs, 
@@ -649,6 +647,7 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
 static  sequences_node*
 add_duplicate_sequence_to_sequences_node(
     /* this is necessary when we need to add pseudo locations */
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     /* where in the seqs array this belongs, in seq_len units */
@@ -737,15 +736,6 @@ add_duplicate_sequence_to_sequences_node(
     } 
     /* this has already been converted to a pointer */
     else {
-        /* 
-         *  FIXME - we set the type of locs_size and locs_array
-         *  to be signed so that we could detect overflows with the 
-         *  following asserts. In addition, we increased the sizes 
-         *  because we were getting sequences that had too many 
-         *  repeats. However, the correct fix is to split sequence
-         *  arrays that get too big into a child object.
-         *
-         */ 
         assert( loc->locs_array.locs_size >= 0 ); 
         assert( loc->locs_array.locs_start >= 0 ); 
 
@@ -767,14 +757,14 @@ add_duplicate_sequence_to_sequences_node(
             int i;
             for( i = 0; i < loc->locs_array.locs_size; i++ )
             {
-                add_loc_to_pseudo_location( 
-                    ps_locs->locs + psloc_index, of_locs + i );
+                add_new_loc_to_pseudo_location( 
+                    ps_locs->locs + psloc_index, of_locs + i, genome );
                 // printf("%i: Chr %i\tLoc: %u\n", i, of_locs[i].chr, of_locs[i].loc);
             }
 
             /* add the new location */
-            add_loc_to_pseudo_location( 
-                ps_locs->locs + psloc_index, &new_loc );
+            add_new_loc_to_pseudo_location( 
+                ps_locs->locs + psloc_index, &new_loc, genome );
             
             /* remove the array memory */
             /* 1) shift the other memory forward */
@@ -896,6 +886,7 @@ add_duplicate_sequence_to_sequences_node(
 sequences_node*
 add_sequence_to_sequences_node(     
     /* this is necessary when we need to add pseudo locations */
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     LETTER_TYPE* new_seq,
@@ -915,7 +906,8 @@ add_sequence_to_sequences_node(
         int ps_loc_index = 
             get_genome_locations_array_start( seqs, num_letters )
             [il.location].loc.loc;
-        add_loc_to_pseudo_location( ps_locs->locs+ps_loc_index, &loc );
+        add_new_loc_to_pseudo_location(
+                ps_locs->locs+ps_loc_index, &loc, genome );
         return seqs;
     } 
     else if( il.is_duplicate == true )
@@ -933,7 +925,7 @@ add_sequence_to_sequences_node(
         );
         
         return add_duplicate_sequence_to_sequences_node( 
-            ps_locs, seqs, il.location, num_letters, loc 
+            genome, ps_locs, seqs, il.location, num_letters, loc 
         );
     } else {
         return add_new_sequence_to_sequences_node( 
@@ -967,7 +959,8 @@ find_sequences_in_sequences_node(
 
         mapped_locations* results,
 
-        struct penalty_array_t* pa
+        /* the penalty array */
+        struct penalty_t* pa
     )
 {
 
@@ -977,13 +970,12 @@ find_sequences_in_sequences_node(
     /* we assume that the results are initialized */
     assert( results != NULL );
     assert( results->length <= results->allocated_length );
-    // assert( results->allocated_length < USHRT_MAX );
 
-    /* FIXME */
     if( results->allocated_length == USHRT_MAX )
     {
         fprintf(stderr, "Overran max results length\n" );
-        return 1;
+        assert( false );
+        exit( -1 );
     }
 
     /* get the total number of sequences that we need to consider */
@@ -1046,11 +1038,10 @@ find_sequences_in_sequences_node(
             if( !check_sequence_type_ptr(seqs, i) )
             {
                 /* add this location to the result set */
-                add_mapped_location(
+                add_new_mapped_location(
                     results, 
                     loc.loc,
                     strnd,
-                    0,
                     cum_penalty
                 );
 
@@ -1102,8 +1093,8 @@ find_sequences_in_sequences_node(
                     */
                     
                     GENOME_LOC_TYPE tmp_loc = locs[j];
-                    add_mapped_location(
-                        results, tmp_loc, strnd, 0, cum_penalty
+                    add_new_mapped_location(
+                        results, tmp_loc, strnd, cum_penalty
                     );
                 }
             }

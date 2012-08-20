@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include "mapped_location.h"
+#include "diploid_map_data.h"
 
 /*************************************************************************
  *
@@ -17,52 +18,27 @@
  */
 
 int
-cmp_mapped_locations_by_location( void* loc1, void* loc2 )
+cmp_mapped_locations_by_location( const mapped_location* loc1, 
+                                  const mapped_location* loc2 )
 {
-    /* first test the chromosome identifier */
-    if( ((mapped_location*) loc1)->location.chr
-        > ((mapped_location*) loc2)->location.chr )
-    {
-        return 1;
-    }
-  
-    if( ((mapped_location*) loc1)->location.chr 
-        < ((mapped_location*) loc2)->location.chr )
-    {
-        return -1;
-    }
-
-    /* since the chromosomes must be identical... */
-    if( ((mapped_location*) loc1)->location.loc
-        > ((mapped_location*) loc2)->location.loc )
-    {
-        return 1;
-    }
-  
-    if( ((mapped_location*) loc1)->location.loc 
-        < ((mapped_location*) loc2)->location.loc )
-    {
-        return -1;
-    }
-
+    if( loc1->strnd != loc2->strnd )
+        return loc1->strnd - loc2->strnd;
     
-    return 0;
+    if( loc1->location.chr != loc2->location.chr )
+        return loc1->location.chr - loc2->location.chr;
+    
+    return loc1->location.loc - loc2->location.loc;
 }
 
 int
-cmp_mapped_locations_by_penalty( void* loc1, void* loc2 )
+cmp_mapped_locations_by_penalty( const mapped_location* loc1, 
+                                 const mapped_location* loc2 )
 {
-    if( ((mapped_location*) loc1)->penalty
-        > ((mapped_location*) loc2)->penalty )
-    {
+    if( loc1->penalty > loc2->penalty )
         return -1;
-    } 
- 
-    if( ((mapped_location*) loc1)->penalty 
-        < ((mapped_location*) loc2)->penalty )
-    {
+
+    if( loc1->penalty < loc2->penalty )
         return 1;
-    }
     
     return 0;
 
@@ -93,7 +69,10 @@ sort_mapped_locations_by_penalty( mapped_locations* results )
 
 
 void
-init_mapped_locations( mapped_locations** results )
+init_mapped_locations(
+        mapped_locations** results,
+        struct indexable_subtemplate* probe
+    )
 {
     *results = malloc( sizeof(mapped_locations) );
     (*results)->locations = 
@@ -101,9 +80,8 @@ init_mapped_locations( mapped_locations** results )
     
     (*results)->length = 0;
     (*results)->allocated_length = RESULTS_GROWTH_FACTOR;
-    
-    (*results)->subseq_len = -1;
-    (*results)->subseq_offset = -1;
+
+    (*results)->probe = probe;
     
     return;
 }
@@ -121,11 +99,10 @@ free_mapped_locations( mapped_locations* results )
 }
 
 void
-add_mapped_location( mapped_locations* results, 
-                     GENOME_LOC_TYPE location, 
-                     enum STRAND strnd,
-                     int trim_offset,
-                     float penalty )
+add_new_mapped_location( mapped_locations* results, 
+                         GENOME_LOC_TYPE location, 
+                         enum STRAND strnd,
+                         float penalty )
 {
     // use 0.1 to avoid rounding error false asserts 
     assert( penalty < 0.1 );
@@ -159,15 +136,101 @@ add_mapped_location( mapped_locations* results,
     /* set the read strand */
     loc->strnd = strnd;
 
-    /* set the trim offset */
-    loc->trim_offset = trim_offset;
-
     /* set the penalty */
     loc->penalty = penalty;
     
     /* add the new results to the end of the results set */
     results->length++;
 
+    return;
+}
+
+/* Wrapper to copy an existing mapped_location using add_mapped_location */
+void
+add_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs
+)
+{
+    add_new_mapped_location( locs,
+                             loc->location,
+                             loc->strnd,
+                             loc->penalty
+        );
+}
+
+void
+expand_diploid_mapped_location(
+        mapped_location* loc,
+        mapped_locations* locs,
+        struct genome_data* genome
+    )
+{
+    assert( loc->location.is_paternal && loc->location.is_maternal );
+    /* This should only be called on real locations */
+    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
+
+    /* build the paternal location */
+    mapped_location paternal;
+    copy_mapped_location( &paternal, loc );
+    
+    /* Set the diploid flags */
+    paternal.location.is_paternal = 1;
+    paternal.location.is_maternal = 0;
+
+    /* Since the shared diploid location uses the chr and loc from the paternal
+     * copy, we don't need to change anything else */
+    add_mapped_location( &paternal, locs );
+
+    /* build the maternal location */
+    mapped_location maternal;
+    copy_mapped_location( &maternal, loc );
+    maternal.location.is_paternal = 0;
+    maternal.location.is_maternal = 1;
+    /* lookup the maternal location from the paternal location information
+     * used on the shared diploid location */
+
+    int paternal_chr = loc->location.chr;
+    int paternal_loc = loc->location.loc;
+
+    int maternal_chr = -1;
+    int maternal_loc = -1;
+    build_maternal_loc_from_paternal_loc(
+            &maternal_chr, &maternal_loc,
+            paternal_chr, paternal_loc,
+            genome
+        );
+
+    /* finished building the maternal mapped_location */
+    maternal.location.chr = maternal_chr;
+    maternal.location.loc = maternal_loc;
+    add_mapped_location( &maternal, locs );
+
+    return;
+}
+
+void
+add_and_expand_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs,
+    struct genome_data* genome
+)
+{
+    /* if this is a shared diploid location, expand it into the paternal and
+     * maternal copies */
+    if( loc->location.is_paternal && loc->location.is_maternal )
+    {
+        assert( genome != NULL );
+        expand_diploid_mapped_location( loc, locs, genome );
+    } else {
+        add_mapped_location( loc, locs );
+    }
+}
+
+void
+copy_mapped_location( mapped_location* dest, mapped_location* src ) 
+{
+    *dest = *src;
     return;
 }
 
@@ -195,4 +258,46 @@ print_mapped_locations( mapped_locations* results )
  **************************************************************************/
 
 
+/*** Mapped locations container ***/
+void
+init_mapped_locations_container(
+        mapped_locations_container** mlc
+    )
+{
+    *mlc = malloc( sizeof( mapped_locations_container ) );
 
+    (*mlc)->container = NULL;
+    (*mlc)->length = 0;
+}
+
+void
+free_mapped_locations_container(
+        mapped_locations_container* mlc
+    )
+{
+    if( mlc == NULL ) return;
+
+    // free the mapped locations stored in this container
+    int i;
+    for( i = 0; i < mlc->length; i++ )
+    {
+        free_mapped_locations( mlc->container[i] );
+    }
+
+    free( mlc->container );
+
+    free( mlc );
+}
+
+void
+add_mapped_locations_to_mapped_locations_container(
+        mapped_locations* ml,
+        mapped_locations_container* mlc
+    )
+{
+    mlc->length += 1;
+    mlc->container = realloc( mlc->container,
+            sizeof( mapped_locations* ) * mlc->length );
+
+    mlc->container[ mlc->length-1 ] = ml;
+}

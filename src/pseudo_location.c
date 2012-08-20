@@ -5,6 +5,8 @@
 
 #include "config.h"
 #include "pseudo_location.h"
+#include "genome.h"
+#include "diploid_map_data.h"
 
 static void* 
 realloc_CE( void* ptr, size_t size )
@@ -21,35 +23,23 @@ realloc_CE( void* ptr, size_t size )
 }
 
 int
-cmp_genome_location( void* loc1, void* loc2 )
+cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
+                     const GENOME_LOC_TYPE* loc2 )
 {
     /* first test the chromosome identifier */
-    if( ((GENOME_LOC_TYPE*) loc1)->chr
-        > ((GENOME_LOC_TYPE*) loc2)->chr )
-    {
+    if( loc1->chr > loc2->chr )
         return 1;
-    }
   
-    if( ((GENOME_LOC_TYPE*) loc1)->chr 
-        < ((GENOME_LOC_TYPE*) loc2)->chr )
-    {
+    if( loc1->chr < loc2->chr )
         return -1;
-    }
 
     /* since the chromosomes must be identical... */
-    if( ((GENOME_LOC_TYPE*) loc1)->loc
-        > ((GENOME_LOC_TYPE*) loc2)->loc )
-    {
+    if( loc1->loc > loc2->loc )
         return 1;
-    }
   
-    if( ((GENOME_LOC_TYPE*) loc1)->loc 
-        < ((GENOME_LOC_TYPE*) loc2)->loc )
-    {
+    if( loc1->loc < loc2->loc )
         return -1;
-    }
 
-    
     return 0;
 }
 
@@ -92,8 +82,60 @@ sort_pseudo_location( struct pseudo_location_t* loc )
 }
 
 void
+add_diploid_loc_to_pseudo_location(
+        struct pseudo_location_t* ps_loc,
+        const GENOME_LOC_TYPE* const loc,
+        struct genome_data* genome
+    )
+{
+    ps_loc->num += 2;
+    ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
+
+    /* add the paternal loc. It is identical to the shared diploid
+     * location, except only the is_paternal flag is on */
+    GENOME_LOC_TYPE tmp_paternal = *loc;
+    tmp_paternal.is_paternal = 1;
+    tmp_paternal.is_maternal = 0;
+    ps_loc->locs[ps_loc->num-2] = tmp_paternal;
+
+    /* add the maternal loc. Lookup the maternal chromosome and location,
+     * and set the diploid flags */
+    GENOME_LOC_TYPE tmp_maternal = *loc;
+    tmp_maternal.is_paternal = 0;
+    tmp_maternal.is_maternal = 1;
+
+    int maternal_chr, maternal_loc;
+    build_maternal_loc_from_paternal_loc(
+            &maternal_chr, &maternal_loc,
+            loc->chr, loc->loc,
+            genome
+        );
+    tmp_maternal.chr = maternal_chr;
+    tmp_maternal.loc = maternal_loc;
+    ps_loc->locs[ps_loc->num-1] = tmp_maternal;
+}
+
+void
+add_new_loc_to_pseudo_location( 
+        struct pseudo_location_t* ps_loc,
+        const GENOME_LOC_TYPE* const loc,
+        struct genome_data* genome )
+{
+    /* if loc is a shared diploid location, expand it here */
+    if( loc->is_paternal && loc->is_maternal )
+    {
+        add_diploid_loc_to_pseudo_location( ps_loc, loc, genome );
+    } else {
+        ps_loc->num += 1;
+        ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
+        ps_loc->locs[ps_loc->num-1] = *loc;
+    }
+};
+
+void
 add_loc_to_pseudo_location( 
-    struct pseudo_location_t* ps_loc, const GENOME_LOC_TYPE* const loc)
+        struct pseudo_location_t* ps_loc,
+        const GENOME_LOC_TYPE* const loc )
 {
     ps_loc->num += 1;
     ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
@@ -180,8 +222,6 @@ load_pseudo_locations_from_mmapped_data(
 
     init_pseudo_locations( ps_locs );
 
-    size_t size = 0;
-    size = *( (size_t*) data );
     data += sizeof(size_t);
     
     (*ps_locs)->num = *( (int*) data );

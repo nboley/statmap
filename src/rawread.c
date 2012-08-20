@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <ctype.h>
 #include <pthread.h>
-#include <assert.h>
 
 #include "config.h"
 #include "statmap.h"
@@ -15,70 +14,37 @@
 #include "rawread.h"
 #include "quality.h"
 #include "dna_sequence.h"
+#include "util.h"
+#include "read.h"
 
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        exit( -1 );
-    }
-    return tmp;
-}
+/***** Rawread initialization and utility functions *****/
 
-inline void 
+void 
 init_rawread( struct rawread** r,
-              int seq_len,
-              size_t readname_len  )
+              size_t read_len,
+              size_t readname_len )
 {
     *r = malloc( sizeof( struct rawread ) );
 
-    /* BUG TODO check for nulls */
-    (*r)->length = seq_len;
-    (*r)->name = malloc( sizeof(char)*(readname_len+1) );
-    (*r)->char_seq = malloc( sizeof(char)*seq_len );
-    (*r)->error_str = malloc( sizeof(char)*seq_len );
+    (*r)->name = calloc( readname_len+1, sizeof(char) );
+    (*r)->length = read_len;
+    (*r)->char_seq = malloc( read_len*sizeof(char) );
+    (*r)->error_str = malloc( read_len*sizeof(char) );
 }
 
 inline void 
 free_rawread( struct rawread* r )
 {
-    if( r->name != NULL )
-        free( r->name );
+    /* free dynamically allocated strings */
+    free( r->name );
+    free( r->char_seq );
+    free( r->error_str );
 
-    if( r->char_seq != NULL )    
-        free( r->char_seq );
-
-    if( r->error_str != NULL )
-        free( r->error_str );
-    
     free( r );
 }
 
-void
-fprintf_rawread( FILE* fp, struct rawread* r )
-{
-    fprintf(fp, "%u\n", r->length);
-    fprintf(fp, "%s\n", r->name);
-    fprintf(fp, "%.*s\n", r->length, r->char_seq);
-    fprintf(fp, "%.*s\n", r->length, r->error_str);
-    fprintf(fp, "%u\n", r->end);
-    fprintf(fp, "%u\n", r->strand);
-    fprintf(fp, "\n\n");
-}
+/***** FASTQ file parsing *****/
 
-void
-fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
-{
-    
-    fprintf(fastq_fp, "@%s\n", r->name);
-    fprintf(fastq_fp, "%.*s\n", r->length, r->char_seq);    
-    fprintf(fastq_fp, "+%s\n", r->name);
-    fprintf(fastq_fp, "%.*s\n", r->length, r->error_str);
-}
 /*
  *   Move the filepointer until we see a @, indicating the start of the next 
  *   read.
@@ -86,9 +52,14 @@ fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r )
 void
 move_fastq_fp_to_next_read( FILE* fp )
 {
+    /* The next read begins with "\n@" */
+    /* XXX - an error string could begin with @, which would also satisfy */
     long current_pos = ftell( fp );
     while( !feof(fp) ) {
         char character = fgetc( fp );
+        // XXX - assumes @ only appears at the beginning of a readname
+        // it can also be part of an error string, and there's no reason it
+        // couldn't be used again in a read name
         if( character == '@' )
         {
             fseek( fp, current_pos, SEEK_SET );
@@ -100,60 +71,8 @@ move_fastq_fp_to_next_read( FILE* fp )
     return;
 }
 
-/*
- * Populate a rawread object from a file pointer. 
- *
- * Given a file pointer that is positioned at the begining of a read
- * this initializes and populates a read.
- *
- * Returns 0 on success, negative values on failure. The value depends
- * upon the failure mode, read below for more info.
- *
- */
-
-enum READ_END
-determine_read_end_from_readname( char* readname )
-{
-    /* find the final / */
-    char* fwd_slash_pntr = 
-        strrchr ( readname, '/' );
-    
-    enum READ_END end = UNKNOWN;
-    
-    /* if there is no slash, assume its not a paired end read */
-    if( fwd_slash_pntr == NULL )
-    {
-        return NORMAL;
-    } else {
-        /* Determine the read end from integer following the slash */
-        switch( atoi( fwd_slash_pntr + 1 ) )
-        {
-        case 1:
-            end = FIRST;
-            break;
-        case 2:
-            end = SECOND;
-            break;
-        default:
-            fprintf(stderr, 
-                    "Unrecognized read end '%i'\n", 
-                    atoi( fwd_slash_pntr + 1 ) );
-            exit( -1 );
-        }
-
-        /* set the slash to '\0', to eliminate it from the read name */
-        if( NULL != fwd_slash_pntr )
-            *fwd_slash_pntr = '\0';
-        
-        return end;
-    }
-    
-    /* we should never get here */
-    assert( false );
-}
-
 /* 
-   Reads the next line from fp, and striped trailing whitespace. 
+   Reads the next line from fp, and strips trailing whitespace. 
 
    If 'expected_first_char' != ''. them strip the first character and 
    error if it's not expected.
@@ -219,9 +138,22 @@ int safe_get_next_line( FILE* input_file,
     return 0;
 }
 
+/*
+ * Populate a rawread object from a file pointer. 
+ *
+ * Given a file pointer (or pointers) that is (are) positioned at the begining
+ * of a read, this initializes and populates the read.
+ *
+ * Returns 0 on success, negative values on failure. The value depends
+ * upon the failure mode, read below for more info.
+ *
+ */
 int
-populate_read_from_fastq_file( 
-    FILE* input_file, struct rawread** r, enum READ_END end )
+populate_rawread_from_fastq_file(
+        FILE* input_file,
+        struct rawread** r,
+        enum READ_END end
+    )
 {
     /* Store the return of the scanf's */
     int rv;
@@ -246,6 +178,12 @@ populate_read_from_fastq_file(
         if( 1 == rv )
             continue;
         
+        /*
+         * Since we aren't relying on the /1 and /2 suffixes to determine
+         * read end anymore, end should always be known
+         */
+        assert( end != UNKNOWN );
+
         /* If the read end is known, eliminate the slash */
         if( end == FIRST || end == SECOND )
         {
@@ -257,8 +195,8 @@ populate_read_from_fastq_file(
         } else if( end == NORMAL )   {
             /* if the end is normal, we dont need to do antyhing */
         } else {
-            assert( end == UNKNOWN );
-            end = determine_read_end_from_readname( readname );
+            fprintf(stderr, "ERROR       :  Read end should be known\n");
+            assert(false);
         }
             
         /*** get the actual read */
@@ -305,13 +243,8 @@ populate_read_from_fastq_file(
     /* Set the read end */
     (*r)->end = end;
     
-    /* Set the strand ( FIXME ) when this is known */
-    (*r)->strand = UNKNOWN;
-    
-    assert( EOF != 0 );
     return 0;
 }
-
  
 int floatcmp(const void* elem1, const void* elem2)
 {
@@ -476,8 +409,10 @@ init_rawread_db( struct rawread_db_t** rdb )
 
     (*rdb)->readkey = 0;
 
-    (*rdb)->lock = malloc( sizeof(pthread_spinlock_t) );
-    pthread_spin_init( (*rdb)->lock, PTHREAD_PROCESS_PRIVATE );
+    pthread_mutexattr_t mta;
+    pthread_mutexattr_init(&mta);
+    (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->mutex, &mta );
 
     (*rdb)->single_end_reads = NULL;
     (*rdb)->paired_end_1_reads = NULL;
@@ -513,13 +448,31 @@ close_rawread_db( struct rawread_db_t* rdb )
         fclose( rdb->non_mapping_paired_end_2_reads );
     }
     
-    pthread_spin_destroy( rdb->lock );
-    free( (void*) rdb->lock );
+    pthread_mutex_destroy( rdb->mutex );
+    free( rdb->mutex );
     
     free( rdb );
     return;
 }
 
+void
+lock_rawread_db(
+        struct rawread_db_t* rdb
+    )
+{
+    //fprintf(stderr, "BEFORE lock on rk %d, PID : %u\n", rdb->readkey, pthread_self());
+    pthread_mutex_lock( rdb->mutex );
+    //fprintf(stderr, "Locked on readkey %d, PID : %u\n", rdb->readkey, pthread_self() );
+}
+
+void
+unlock_rawread_db(
+        struct rawread_db_t* rdb
+    )
+{
+    //fprintf(stderr, "Unlocked on readkey %d, PID : %u\n", rdb->readkey, pthread_self() );
+    pthread_mutex_unlock( rdb->mutex );
+}
 
 void
 add_single_end_reads_to_rawread_db( 
@@ -647,85 +600,5 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     }        
     
 }
-
-int
-get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey, 
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey )
-{
-    pthread_spin_lock( rdb->lock );
-    
-    if( max_readkey >= 0
-        && rdb->readkey >= (readkey_t) max_readkey )
-    {
-        pthread_spin_unlock( rdb->lock );
-        *r1 = NULL;
-        *r2 = NULL;
-        return EOF;
-    }
-
-    /* 
-     * Store the return value - 
-     * 0 indicates success, negative failure , EOF no more reads.
-     */
-    int rv = -10;
-
-    /* If the reads are single ended */
-    if( rdb->single_end_reads != NULL )
-    {
-        /* indicate that the reads are single ended */
-        *r2 = NULL;
-        
-        rv = populate_read_from_fastq_file( 
-            rdb->single_end_reads, r1, NORMAL );
-        if( rv == EOF )
-        {
-            *r1 = NULL;
-            pthread_spin_unlock( rdb->lock );
-            return EOF;
-        }        
-
-        (*r1)->assay = rdb->assay;
-    } 
-    /* If the reads are paired */
-    else {
-        assert( rdb->paired_end_1_reads != NULL );
-        assert( rdb->paired_end_2_reads != NULL );
-        
-        rv = populate_read_from_fastq_file( 
-            rdb->paired_end_1_reads, r1, FIRST );
-        if ( rv == EOF )
-        {
-            /* Make sure the mate is empty as well */
-            rv = populate_read_from_fastq_file( 
-                rdb->paired_end_2_reads, r2, SECOND );
-            assert( EOF == rv );
-            assert( rawread_db_is_empty( rdb ) );
-            
-            *r1 = NULL;
-            *r2 = NULL;
-            pthread_spin_unlock( rdb->lock );
-            return EOF;
-        }
-        
-        rv = populate_read_from_fastq_file( 
-            rdb->paired_end_2_reads, r2, SECOND );
-        
-        /* if returned an EOF, then it should have been returned for r1 */
-        assert( rv == 0 );
-        
-        (*r1)->assay = rdb->assay;
-        (*r2)->assay = rdb->assay;
-    }
-
-    /* increment the read counter */
-    *readkey = rdb->readkey;
-    rdb->readkey += 1;
-
-    pthread_spin_unlock( rdb->lock );
-    return 0;
-}
-
 
 /******* END raw read DB code ********************************************/

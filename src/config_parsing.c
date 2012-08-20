@@ -27,7 +27,49 @@
 #include "statmap.h"
 #include "util.h"
 
-/**** Setup functions ****/
+/**** Handle different sources of reads ****/
+
+void
+set_global_quality_parameters_from_input_file_type(
+        enum input_file_type_t input_file_type
+    )
+{
+    /* print out the determined format */
+    fprintf( stderr,
+             "NOTICE      :  Setting Input File Format to %i\n",
+             input_file_type );
+
+    switch( input_file_type )
+    {
+    case 1:
+        QUAL_SHIFT = 33;
+        ARE_LOG_ODDS = false;
+        break;
+    case 2:
+        QUAL_SHIFT = 64;
+        ARE_LOG_ODDS = false;
+        break;
+    case 3:
+        QUAL_SHIFT = 59;
+        ARE_LOG_ODDS = true;
+        break;
+    case 4:
+        QUAL_SHIFT = 50;
+        ARE_LOG_ODDS = false;
+        break;
+#if 0
+    default:
+        fprintf( stderr,
+                 "ERROR       :  Unrecognized file format type %i\n",
+                 input_file_type );
+        exit( -1 );
+#endif
+    }
+
+    fprintf( stderr,
+             "NOTICE      :  Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i\n",
+             QUAL_SHIFT, ARE_LOG_ODDS );
+}
 
 enum input_file_type_t
 guess_input_file_type( struct args_t* args )
@@ -50,7 +92,7 @@ guess_input_file_type( struct args_t* args )
     for( i = 0; i < 10000; i++ )
     {
         struct rawread* r;
-        populate_read_from_fastq_file( fp, &r, UNKNOWN );
+        populate_rawread_from_fastq_file( fp, &r, NORMAL );
         /* If we have reached and EOF, then break */
         if( r == NULL )
             break;
@@ -62,11 +104,11 @@ guess_input_file_type( struct args_t* args )
         }
         free_rawread( r );
     }
+    fclose( fp );
 
     fprintf( stderr,
              "NOTICE      :  Calculated max and min quality scores as '%i' and '%i'\n",
              max_qual, min_qual );
-
 
     /* if the max quality score is 73, ( 'I' ), then
        this is almost certainly a sanger format */
@@ -122,40 +164,54 @@ guess_input_file_type( struct args_t* args )
         }
     }
 
-    /* print out the determined format */
-    fprintf( stderr,
-             "NOTICE      :  Setting Input File Format to '%i'\n",
-             input_file_type );
-    fclose( fp );
+    set_global_quality_parameters_from_input_file_type( input_file_type );
+    return input_file_type;
+}
 
-    switch( input_file_type )
+int
+set_input_file_type( char* arg, struct args_t* args )
+{
+    int flag = atoi( arg );
+
+    switch( flag )
     {
-    case 1:
-        QUAL_SHIFT = 33;
-        ARE_LOG_ODDS = false;
-        break;
-    case 2:
-        QUAL_SHIFT = 64;
-        ARE_LOG_ODDS = false;
-        break;
-    case 3:
-        QUAL_SHIFT = 59;
-        ARE_LOG_ODDS = true;
-        break;
-    case 4:
-        QUAL_SHIFT = 50;
-        ARE_LOG_ODDS = false;
-        break;
-    default:
-        assert( false );
+        case 1:
+            args->input_file_type = SANGER_FQ;
+            break;
+        case 2:
+            args->input_file_type = ILLUMINA_v13_FQ;
+            break;
+        case 3:
+            args->input_file_type = ILLUMINA_v15_FQ;
+            break;
+        case 4:
+            args->input_file_type = SOLEXA_v14_FQ;
+            break;
+        case 5:
+            args->input_file_type = ILLUMINA_v15_FQ;
+            break;
+        case 6:
+            args->input_file_type = SOLEXA_LOG_ODDS_FQ;
+            break;
+        case 7:
+            args->input_file_type = TEST_SUITE_FORMAT;
+            break;
+        case 8:
+            args->input_file_type = MARKS_SOLEXA;
+            break;
+        case 9:
+            args->input_file_type = ILLUMINA_v18_FQ;
+            break;
+        default:
+            /* the flag type was unrecognized; signal failure with -1 */
+            return -1;
     }
 
-    fprintf( stderr,
-             "NOTICE      :  Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i\n",
-             QUAL_SHIFT, ARE_LOG_ODDS );
+    /* if the flag was recognized, set the appropriate global variables */
+    set_global_quality_parameters_from_input_file_type( args->input_file_type );
 
-
-    return input_file_type;
+    /* return the value of the successfully passed input file type flag */
+    return flag;
 }
 
 /******** Parse command line arguments ********/
@@ -211,13 +267,21 @@ static struct argp_option options[] =
      "In iterative mapping, number of samples to take from the mapping posterior", 0},
     {"threads", 't', "THREADS", 0,
      "Number of threads to use. Defaults to all available, but no more than 8.", 0},
+    {"min-num-hq-bps", 'q', "NUM", 0,
+     "Number of HQ (above 99% prob correctness) bps needed in order to map a read", 0},
     {"frag-len-dist", 'f', "DIST", 0,
      "Fragment length distribution file", 0},
     {"output-dir", 'o', "DIR", 0,
      "Directory to write Statmap output to", 0 },
     {"search-type", 's', "TYPE", 0,
-     "Error model type: 'm' for mismatches, 'e' to estimate the error model ( see README for more details )", 
-     0 },
+     "Error model type: 'm' for mismatches, 'e' to estimate the error model ( see README for more details )", 0 },
+    {"is-full-fragment", 'F', NULL, OPTION_ARG_OPTIONAL,
+     "(not implemented yet)", 0 },
+    {"input-file-type", 'i', "TYPE", 0,
+     "Type of sequencing platform used to generate the input reads. Valid "
+     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: SOLEXA_v14_FQ, 4: "
+     "ILLUMINA_v15_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
+     "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -279,12 +343,15 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     break;
                 default:
                     argp_failure( state, 1, 0, 
-                            "FATAL       :  Unrecognized assay type: '%s'\n",
+                            "FATAL       :  Unrecognized assay type: '%s'",
                             arg );
             }
             break;
         case 'f':
             args->frag_len_fname = arg;
+            break;
+        case 'q':
+            args->min_num_hq_bps = atoi(arg);
             break;
         case 'n':
             args->num_starting_locations = atoi(arg);
@@ -302,12 +369,28 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     args->search_type = MISMATCHES;
                     break;
                 default:
-                    fprintf(stderr,
-                            "FATAL       :  Unrecognized search type '%s'\n",
+                    argp_failure( state, 1, 0,
+                            "FATAL       :  Unrecognized search type '%s'",
                             arg );
-                    exit(-1);
             }
             break;
+        case 'F':
+            argp_failure( state, 1, 0,
+                    "FATAL       :  -F ( --is-full-fragment ) is not "
+                    "implemented yet." );
+            break;
+        case 'i':
+        {
+            // Note - cannot declare variables inside of a case without {}
+            int rv = set_input_file_type( arg, args );
+            if( rv < 0 )
+            {
+                argp_failure( state, 1, 0,
+                        "FATAL        :  Unrecognized input file type '%s'",
+                        arg );
+            }
+            break;
+        }
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
@@ -367,6 +450,7 @@ parse_arguments( int argc, char** argv )
 
     args.min_match_penalty = -1;
     args.max_penalty_spread = -1;
+    args.min_num_hq_bps = -1;
 
     args.num_starting_locations = -1;
 
@@ -438,6 +522,14 @@ parse_arguments( int argc, char** argv )
         strftime( buffer, 200, "statmap_output_%Y_%m_%d_%H_%M_%S", timeinfo );
         args.output_directory = calloc( strlen(buffer)+1, sizeof(char) );
         strncpy( args.output_directory, buffer, strlen(buffer) );
+    }
+    /* copy the output directory argument into a new buffer so output_directory
+     * can be freed later */
+    else {
+        char* saved_ptr = args.output_directory; // this is a char* into argv
+        args.output_directory = calloc( strlen(args.output_directory)+1,
+                sizeof(char) );
+        strncpy( args.output_directory, saved_ptr, strlen(saved_ptr) );
     }
 
     error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
@@ -655,8 +747,18 @@ parse_arguments( int argc, char** argv )
         fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
     }
 
+    /* set the min num hq basepairs if it's unset */
+    if( args.min_num_hq_bps == -1 )
+    {
+        args.min_num_hq_bps = 12;
+        fprintf(stderr,
+                "NOTICE      :  Number of min hq bps is being set to %i \n",
+                args.min_num_hq_bps);
+    }
+
     /* Set the global variables */
     num_threads = args.num_threads;
+    min_num_hq_bps = args.min_num_hq_bps;
 
     /* 
      * Dont allow penalty spreads greater than the min match penalty - 
@@ -720,6 +822,7 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
     
     fprintf( arg_fp, "min_match_penalty:\t%.4f\n", args->min_match_penalty );
     fprintf( arg_fp, "max_penalty_spread:\t%.4f\n", args->max_penalty_spread );
+    fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
 
     fprintf( arg_fp, "num_starting_locations:\t%i\n", args->num_starting_locations );
     
@@ -804,6 +907,8 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
             &((*args)->min_match_penalty) );
     fscanf( arg_fp, "max_penalty_spread:\t%f\n", 
             &((*args)->max_penalty_spread) );
+    fscanf( arg_fp, "min_num_hq_bps:\t%i\n", 
+            &((*args)->min_num_hq_bps) );
 
     fscanf( arg_fp, "num_starting_locations:\t%i\n", 
             &((*args)->num_starting_locations) );
@@ -811,12 +916,12 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
 
-    fscanf( arg_fp, "search_type:\t%d\n",
+    fscanf( arg_fp, "search_type:\t%u\n",
             &((*args)->search_type) );
 
-    fscanf( arg_fp, "input_file_type:\t%d\n", 
+    fscanf( arg_fp, "input_file_type:\t%u\n", 
             &( (*args)->input_file_type) );
-    fscanf( arg_fp, "assay_type:\t%d\n", 
+    fscanf( arg_fp, "assay_type:\t%u\n", 
             &( (*args)->assay_type) );
 
     fclose( arg_fp  );

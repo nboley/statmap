@@ -8,6 +8,7 @@
 #include "config.h"
 #include "quality.h"
 #include "mapped_location.h"
+#include "pseudo_location.h"
 
 /*** Locations Node Type ********************************************************/
 typedef void locations_node;
@@ -297,18 +298,19 @@ find_sequences_in_sequences_node(
 
         mapped_locations* results,
 
-        struct penalty_array_t* pa
+        /* the penalty array */
+        struct penalty_t* pa
     );
 
-/* FWD declaration */
-struct pseudo_locations_t;
 sequences_node*
 add_sequence_to_sequences_node(     
+    /* this is necessary when we need to add pseudo locations */
+    struct genome_data* genome,
     struct pseudo_locations_t* ps_locs,
     sequences_node* seqs, 
     LETTER_TYPE* new_seq,
     LEVEL_TYPE num_letters,
-    GENOME_LOC_TYPE location );
+    GENOME_LOC_TYPE loc );
 
 /**** END SEQUENCES functions *************************************************/
 

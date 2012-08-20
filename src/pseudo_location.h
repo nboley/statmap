@@ -1,4 +1,8 @@
+#ifndef PSEUDO_LOCATION
+#define PSEUDO_LOCATION
+
 #include "config.h"
+#include "genome.h"
 
 /*
  * A single pseudo location. This stores all of the real 
@@ -11,8 +15,15 @@ struct pseudo_location_t {
 };
 
 void
+add_new_loc_to_pseudo_location( 
+        struct pseudo_location_t* ps_loc,
+        const GENOME_LOC_TYPE* const loc,
+        struct genome_data* genome );
+
+void
 add_loc_to_pseudo_location( 
-    struct pseudo_location_t* ps_loc, const GENOME_LOC_TYPE* const loc);
+        struct pseudo_location_t* ps_loc,
+        const GENOME_LOC_TYPE* const loc );
 
 /*
  * Pseudo locations container
@@ -31,6 +42,9 @@ init_pseudo_locations(
 void
 free_pseudo_locations( struct pseudo_locations_t* locs );
 
+int
+cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
+                     const GENOME_LOC_TYPE* loc2 );
 void
 sort_pseudo_locations( struct pseudo_locations_t* locs );
 
@@ -50,3 +64,5 @@ load_pseudo_locations_from_mmapped_data(
 /* return the index of the new entry */
 unsigned int 
 add_new_pseudo_location( struct pseudo_locations_t* locs );
+
+#endif // PSEUDO_LOCATION

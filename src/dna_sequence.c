@@ -191,7 +191,7 @@ print_packed_sequence( LETTER_TYPE* seq, int seq_length )
 }
 
 LETTER_TYPE* 
-translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
+translate_seq(char* seq, int seq_len)
 {
     unsigned short result_len, trans_val;
     unsigned char bp;
@@ -200,12 +200,10 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
     result_len = calc_num_letters( seq_len );
 
     /* calloc initializes the memory to 0 */
-    *result = calloc(result_len, sizeof(LETTER_TYPE));
+    LETTER_TYPE* result = calloc(result_len, sizeof(LETTER_TYPE));
 
-    // printf("%p\n", *result);
-
-    /*Memory check*/
-    if (*result == NULL)
+    /* Memory check */
+    if( result == NULL )
     {
         fprintf(stderr, "Out of memory in translate sequence.\n");
         fprintf(stderr, "( this is extremely unlikely unless there is a memory leak ) \n");
@@ -297,12 +295,10 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
                     break;
                 case 'N':
                 case 'n':
-                    free( *result );
-                    *result = NULL;
+                    free(result);
                     return NULL;
                 default:          
-                    free( *result );
-                    *result = NULL;
+                    free(result);
                     fprintf (stderr, "Error in the sequence - read '%c'\n", bp);
                     return NULL;
             }
@@ -311,10 +307,10 @@ translate_seq(char* seq, int seq_len, LETTER_TYPE **result)
         }
 
         /* set the current letter in the array */
-        (*result)[index] = current_letter;
+        result[index] = current_letter;
     }
 
-    return *result;
+    return result;
 }
 
  LETTER_TYPE*

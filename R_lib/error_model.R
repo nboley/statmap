@@ -51,8 +51,7 @@ build.mo = function( mm_cnts, cnts, pos, qual ) {
     # for this not to be true because of the index probe size, so we throw a 
     # fatal exception if this doesn't hold.
     if( length( obs.pos ) < 12 ) {
-        stop( "FATAL     : Too few observed unique positions (", 
-              length(obs.pos), ") to build error model." );
+        stop( "FATAL     : Too few observed unique positions (", length(obs.pos), ") to build error model." );
         return;
     }
 
@@ -129,7 +128,7 @@ predict_freqs_for_record = function( mm_cnts, cnts, pos, qual, plot.str=NULL ) {
     pred.freqs = logistic( predict( mo ) );
     rv[] = max( pred.freqs );
     rv[ data$good.pos ] = pred.freqs;
-
+    
     if( !is.null(plot.str) )
     {
         png(paste("error_model/", plot.str, ".png", sep=""), width=1200, height=1200);

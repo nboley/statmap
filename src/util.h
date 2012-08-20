@@ -10,4 +10,13 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
 void
 safe_link_into_output_directory( char* fname, char* output_dir, char* output_fname );
 
+FILE* 
+open_check_error( char* fname, char* file_mode );
+
+/*
+   Wrapper for realloc that checks return value
+*/
+void*
+safe_realloc( void* ptr, size_t size );
+
 #endif /* UTIL_H */

@@ -296,6 +296,8 @@ init_error_data( struct error_data_t** data )
     rc = pthread_mutexattr_init(&mta);
     (*data)->mutex = malloc( sizeof(pthread_mutex_t) );
     rc = pthread_mutex_init( (*data)->mutex, &mta );
+
+    assert( rc == 0 );
     
     return;
 };
@@ -317,6 +319,7 @@ free_error_data( struct error_data_t* data )
     
     /* release the mutex */
     assert( data->mutex != NULL );
+
     pthread_mutex_destroy( data->mutex );
     free( data->mutex );
     

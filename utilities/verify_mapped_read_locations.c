@@ -47,15 +47,14 @@ int main( int argc, char** argv )
     struct genome_data* genome;
     load_genome_from_disk( &genome, GENOME_FNAME );
 
-    
     char* mpd_rd_fname = "mapped_reads.db";
     struct mapped_reads_db* mpd_rdb;
-    open_mapped_reads_db( &mpd_rdb, mpd_rd_fname );
+    open_mapped_reads_db_for_reading( &mpd_rdb, mpd_rd_fname );
     rewind_mapped_reads_db( mpd_rdb );
 
     char* new_mpd_rd_fname = "new_mapped_reads.db";
     struct mapped_reads_db* new_mpd_rdb;
-    new_mapped_reads_db( &new_mpd_rdb, new_mpd_rd_fname );
+    open_mapped_reads_db_for_writing( &new_mpd_rdb, new_mpd_rd_fname );
 
     struct mapped_read_t* mapped_rd;
     
@@ -66,7 +65,7 @@ int main( int argc, char** argv )
     while( NULL != mapped_rd )
     {
         // printf("%i\t%i\n", mapped_rd->read_id, mapped_rd->num_mappings );
-        unsigned int i;
+        MPD_RD_ID_T i;
         enum bool discovered_error = false;
         for( i = 0; i < mapped_rd->num_mappings; i++ )
         {

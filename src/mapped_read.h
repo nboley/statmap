@@ -13,8 +13,7 @@
 #include "candidate_mapping.h"
 #include "rawread.h"
 
-typedef unsigned int MPD_RD_NUM_MAPPINGS_T;
-typedef unsigned int MPD_RD_ID_T;
+typedef int MPD_RD_ID_T;
 
 struct fragment_length_dist_t;
 struct genome_data;
@@ -156,17 +155,13 @@ struct mapped_read_location {
     MRL_CHR_TYPE chr;
 
     struct {
-        // MADE_SIGNED_REVERT
-        // unsigned start_pos :LOCATION_BITS;
         signed start_pos :LOCATION_BITS;
         
         /* THIS IS EXCLUSIVE, ie NOT including stop */
         signed frag_len :FRAGMENT_LENGTH_BITS;
-        // MRL_STOP_POS_TYPE stop_pos;
     } position;
     
     ML_PRB_TYPE seq_error;
-    // ML_PRB_TYPE cond_prob;
 } __attribute__((__packed__));
 
 /* 
@@ -254,24 +249,6 @@ set_seq_error_in_mapped_read_location(
     assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
 }
 
-/** COND PROB **/
-
-/*
-static inline float
-get_cond_prob_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ 
-    return  ML_PRB_TYPE_to_float( loc->cond_prob ); 
-}
-
-static inline void
-set_cond_prob_in_mapped_read_location( 
-    struct mapped_read_location* loc, float value )
-{ 
-    assert( value == -1 || ( value >= -0.000001 && value <= 1.00001 ) );
-    loc->cond_prob = ML_PRB_TYPE_from_float( value ); 
-}
-*/
-
 /*
  * A full mapped read.
  *
@@ -279,7 +256,7 @@ set_cond_prob_in_mapped_read_location(
 
 struct mapped_read_t {
     MPD_RD_ID_T read_id;
-    MPD_RD_NUM_MAPPINGS_T num_mappings;
+    MPD_RD_ID_T num_mappings;
     /* the database that this read is in - useful because the 
        DB often conatains meta data ( ie, frag len dist ) */
     struct mapped_reads_db* rdb;
@@ -314,10 +291,10 @@ fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
 
 void
 build_mapped_read_from_candidate_mappings( 
-    struct genome_data* genome,
-    candidate_mappings* mappings, 
-    struct mapped_read_t** mpd_rd,
-    long read_id );
+        struct mapped_read_t** mpd_rd,
+        candidate_mappings* mappings, 
+        MPD_RD_ID_T read_id
+    );
 
 
 int 
@@ -336,32 +313,34 @@ write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  );
  *
  */
 
+struct mapped_reads_db_index_t {
+    MPD_RD_ID_T read_id;
+    char* ptr;
+};
+
 struct mapped_reads_db {
     FILE* fp;
 
-    /* Set this to locked when we mmap it - 
-       then forbid any new writes to the 
-       file 
-    */
-    enum bool write_locked;
-    
-    pthread_spinlock_t* access_lock;
+    char mode; // 'r' or 'w'
+    MPD_RD_ID_T num_mapped_reads;
+
+    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
     char* mmapped_data;
     size_t mmapped_data_size; 
     
-    char** mmapped_reads_starts;
-    unsigned long num_mmapped_reads;
-
+    /* mmap index */
+    struct mapped_reads_db_index_t* index;
+    
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
     char* num_succ_iterations;
     
     struct fragment_length_dist_t* fl_dist;
 
-    unsigned long current_read;
+    MPD_RD_ID_T current_read;
 };
 
 typedef struct {
@@ -371,10 +350,10 @@ typedef struct {
 } mapped_reads_db_cursor;
 
 void
-new_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+open_mapped_reads_db_for_reading( struct mapped_reads_db** rdb, char* fname );
 
 void
-open_mapped_reads_db( struct mapped_reads_db** rdb, char* fname );
+open_mapped_reads_db_for_writing( struct mapped_reads_db** rdb, char* fname );
 
 void
 build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
@@ -394,14 +373,12 @@ add_read_to_mapped_reads_db(
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb );
 
-enum bool
-mapped_reads_db_is_empty( struct mapped_reads_db* rdb );
-
 /* returns EOF, and sets rd to NULL if we reach the end of the file */
 int
 get_next_read_from_mapped_reads_db( 
     struct mapped_reads_db* rdb, 
-    struct mapped_read_t** rd );
+    struct mapped_read_t** rd
+);
 
 void
 reset_all_read_cond_probs( 
@@ -435,7 +412,10 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb );
 void
 index_mapped_reads_db( struct mapped_reads_db* rdb );
 
-
+void
+print_mapped_reads_db_index(
+        struct mapped_reads_db* rdb
+    );
 /*
  *  END Mapped Reads DB
  *

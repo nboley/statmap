@@ -105,9 +105,8 @@ class StatmapOutput:
         # load mapped reads
         if load_mapped_reads:
             # load default mapped reads db
-            self.mpd_rdb = open_mapped_reads_db( MAPPED_READS_DB_FNAME )
-            mmap_mapped_reads_db( self.mpd_rdb )
-            index_mapped_reads_db( self.mpd_rdb )
+            self.mpd_rdb = open_mapped_reads_db_for_reading(
+                    MAPPED_READS_DB_FNAME )
 
             # load fl dist (if needed - depends on assay type)
             if self.config.contents.assay_type == CHIP_SEQ:
@@ -119,9 +118,8 @@ class StatmapOutput:
 
             if load_nc:
                 # load negative control reads
-                self.NC_mpd_rdb = open_mapped_reads_db( MAPPED_NC_READS_DB_FNAME )
-                mmap_mapped_reads_db( self.NC_mpd_rdb )
-                index_mapped_reads_db( self.NC_mpd_rdb )
+                self.NC_mpd_rdb = open_mapped_reads_db_for_reading(
+                        MAPPED_NC_READS_DB_FNAME )
 
                 # load the fragment length distribution estimate
                 build_fl_dist_from_filename( self.NC_mpd_rdb, FL_DIST_FNAME )

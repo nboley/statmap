@@ -1,7 +1,7 @@
 /* Copyright (c) 2009-2012 Nathan Boley */
 
-#ifndef READS_HEADER
-#define READS_HEADER
+#ifndef RAWREADS_HEADER
+#define RAWREADS_HEADER
 
 #include <math.h>
 #include <pthread.h>
@@ -10,7 +10,8 @@
 
 #define READ_BUFFER_SIZE 65536
 
-typedef unsigned int readkey_t;
+typedef int readkey_t;
+
 /* 
  * Define a struct to hold read data. 
  * 
@@ -20,19 +21,15 @@ typedef unsigned int readkey_t;
  *
  */
 
+/*
+ * Exact representation of read information stored in FASTA file
+ */
 struct rawread {
-    /* should equal to strlen( char_seq ) */
-    unsigned char length;
     char* name;
+    int length;
     char* char_seq;
     char* error_str;
     enum READ_END end;
-    enum STRAND strand;
-    enum assay_type_t assay;
-    // LETTER_TYPE* packed_seq;
-    // float* penalties;
-    // float* inverse_penalties; 
-    // float* mutation_type_penalties;
 };
 
 /* fwd declaration for error_model_t */
@@ -41,34 +38,21 @@ struct error_model_t;
 /* Initialize a raw read. The length's are needed to init the char strings */
 void 
 init_rawread( struct rawread** r,
-              int seq_len,
-              size_t readname_len);
+              size_t read_len,
+              size_t readname_len );
 
 /* Free a raw read. */
 void 
 free_rawread( struct rawread* r );
 
-void
-fprintf_rawread( FILE* fp, struct rawread* r );
-
-void
-fprintf_rawread_to_fastq( FILE* fastq_fp, struct rawread* r );
-
-void
-marshal_rawread( struct rawread* r, char** buffer, size_t* buffer_size );
-
-void
-unmarshal_rawread( struct rawread** r, char* buffer );
-
 /* Populate a read from the next read in a fastq file */
 
 int
-populate_read_from_fastq_file( FILE* f, struct rawread** r, enum READ_END end );
-
-/* determine whether reads are mappable */
-enum bool
-filter_rawread( struct rawread* r,
-                struct error_model_t* error_model );
+populate_rawread_from_fastq_file(
+        FILE* input_file,
+        struct rawread** r,
+        enum READ_END end
+    );
 
 /**************** Raw Read DB **********************/
 /* An API for consolidating the many types of 
@@ -103,8 +87,9 @@ struct rawread_db_t {
        reset this to 0. 
     */
     readkey_t readkey;
-    /* We lock this mutex whenever we grab a read */
-    pthread_spinlock_t* lock; 
+    /* We lock this whenever we grab a read */
+    //pthread_spinlock_t* lock; 
+    pthread_mutex_t* mutex;
 
     FILE* single_end_reads;
     FILE* paired_end_1_reads;
@@ -129,6 +114,16 @@ void
 close_rawread_db( struct rawread_db_t* rdb );
 
 void
+lock_rawread_db(
+        struct rawread_db_t* rdb
+    );
+
+void
+unlock_rawread_db(
+        struct rawread_db_t* rdb
+    );
+
+void
 add_single_end_reads_to_rawread_db( 
     struct rawread_db_t* rdb, char* rifname, 
     enum inputfile_type iftype,
@@ -150,19 +145,6 @@ rawread_db_is_empty( struct rawread_db_t* rdb );
 void
 move_fp_to_next_read( FILE* fp );
 
-/* 
-   if the next readkey would be greater than maqx readkey, then
-   dont return anything. negative values indicate that this should
-   be ignored 
-*/
-int
-get_next_read_from_rawread_db( 
-    struct rawread_db_t* rdb, readkey_t* readkey,
-    struct rawread** r1, struct rawread** r2,
-    long max_readkey );
-
 /**************** END Raw Read DB **********************/
 
-#endif // READS_HEADER
-
-
+#endif // RAWREADS_HEADER

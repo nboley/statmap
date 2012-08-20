@@ -138,13 +138,13 @@ error_prb(
 /**** Penalty array functions ****/
 
 void
-init_penalty_array( int len, struct penalty_array_t* pa )
+init_penalty_array( struct penalty_array_t* pa, int length )
 {
     /* Set dimensions of array */
-    pa->len = len;
+    pa->len = length;
 
     /* Allocate memory for array of len penalty_t structs */
-    pa->array = malloc( len * sizeof(struct penalty_t) );
+    pa->array = malloc( length * sizeof(struct penalty_t) );
 }
 
 void
@@ -179,9 +179,9 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 /**** penalty array builders ****/
 void
 build_penalty_array(
-        struct rawread* rd,
+        struct penalty_array_t* pa,
         struct error_model_t* error_model,
-        struct penalty_array_t* pa
+        char* error_str
     )
 {
     int pos, ref_bp, seq_bp;
@@ -199,7 +199,7 @@ build_penalty_array(
                 pa->array[pos].penalties[ref_bp][seq_bp] = error_prb(
                         code_bp(ref_bp),
                         code_bp(seq_bp),
-                        rd->error_str[pos],
+                        error_str[pos],
                         pos+1,
                         error_model
                     );
@@ -311,7 +311,7 @@ multiple_letter_penalty(
         const int num_letters,
         const float min_penalty,
 
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     )
 {
     int j;
@@ -392,7 +392,7 @@ compute_penalty(
         const float min_penalty,
 
         /* the penalty array */
-        struct penalty_array_t* pa
+        struct penalty_t* pa
     )
 {
     int i;
@@ -410,7 +410,7 @@ compute_penalty(
            add penalty
            NOTE - penalty_t float array and LETTER_TYPE must use same encoding
         */
-        penalty += pa->array[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
+        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
 
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 

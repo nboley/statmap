@@ -6,7 +6,7 @@
 
 #include "config.h"
 #include "genome.h"
-#include "rawread.h"
+#include "read.h"
 #include "mapped_read.h"
 #include "pseudo_location.h"
 #include "error_correction.h"
@@ -331,23 +331,30 @@ fprintf_mapped_read_to_sam(
     struct mapped_read_t* mpd_rd,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
-    struct rawread* rr1,
-    struct rawread* rr2,
+    struct read* r,
     enum bool expand_pseudo_locations
 )
 {
     assert( expand_pseudo_locations == false );
 
-    size_t i = 0;
+    /* HACK - assumptions to get this to compile */
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+
+    MPD_RD_ID_T i = 0;
     for( i = 0; i < mpd_rd->num_mappings; i++ )
     {
         float cond_prob = get_cond_prb( cond_prbs_db, mpd_rd->read_id, i );
         
         /* if this is a paired end read */
-        if( rr2 != NULL )
+        if( r->num_subtemplates == 2 )
         {
+            // reference to read subtemplates
+            struct read_subtemplate* r1 = &(r->subtemplates[0]);
+            struct read_subtemplate* r2 = &(r->subtemplates[1]);
+
             /* make sure the flag agrees */
-            assert( rr1->end == FIRST  );
+            assert( r1->pos_in_template.pos == POS_PAIRED_END_1 );
+            assert( r2->pos_in_template.pos == POS_PAIRED_END_2 );
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
@@ -356,17 +363,21 @@ fprintf_mapped_read_to_sam(
 
                 genome,
 
-                rr1->name,
-                rr1->char_seq,
-                rr1->error_str,
-                rr1->length,
+                r->name,
+                r1->char_seq,
+                r1->error_str,
+                r1->length,
 
-                rr2->name,
-                rr2->char_seq,
-                rr2->error_str,
-                rr2->length
+                r->name, // XXX - will this work? Gets rid of /0 and /1!
+                r2->char_seq,
+                r2->error_str,
+                r2->length
             );
         } else {
+            // reference to first read subtemplate
+            struct read_subtemplate* r1 = &(r->subtemplates[0]);
+            assert( r1->pos_in_template.pos == POS_SINGLE_END );
+
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd->locations + i,
@@ -374,9 +385,9 @@ fprintf_mapped_read_to_sam(
                 
                 genome,
                 
-                rr1->name,
-                rr1->char_seq,
-                rr1->error_str
+                r->name,
+                r1->char_seq,
+                r1->error_str
             );
         }
     }
@@ -388,19 +399,38 @@ fprintf_mapped_read_to_sam(
  */
 void
 write_nonmapping_read_to_fastq(
-        struct rawread* rd1, struct rawread* rd2,
+        struct read* r,
         FILE* single_end_reads_fp,
         FILE* paired_end_1_reads_fp,
         FILE* paired_end_2_reads_fp
     )
 {
+    /* HACK - assumptions to get this to compile */
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+
     /* If this is a single end read */
-    if( rd2 == NULL )
+    if( r->num_subtemplates == 1 )
     {
-        fprintf_rawread_to_fastq( single_end_reads_fp, rd1 );
-    } else {
-        fprintf_rawread_to_fastq( paired_end_1_reads_fp, rd1 );
-        fprintf_rawread_to_fastq( paired_end_2_reads_fp, rd2 );
+        // reference to read subtemplate
+        struct read_subtemplate* r1 = &(r->subtemplates[0]);
+
+        // check position in template
+        assert( r1->pos_in_template.pos == POS_SINGLE_END );
+
+        fprintf_read_subtemplate_to_fastq( single_end_reads_fp, r->name, r1 );
+    }
+    /* if this is a paired end read */
+    else {
+        // references to read subtemplates
+        struct read_subtemplate* r1 = &(r->subtemplates[0]);
+        struct read_subtemplate* r2 = &(r->subtemplates[1]);
+
+        // check position in template
+        assert( r1->pos_in_template.pos == POS_PAIRED_END_1 );
+        assert( r2->pos_in_template.pos == POS_PAIRED_END_2 );
+
+        fprintf_read_subtemplate_to_fastq( paired_end_1_reads_fp, r->name, r1 );
+        fprintf_read_subtemplate_to_fastq( paired_end_2_reads_fp, r->name, r2 );
     }
 }
 
@@ -419,20 +449,21 @@ write_nonmapping_reads_to_fastq(
     rewind_rawread_db( rdb );
     rewind_mapped_reads_db( mappings_db );
     
-    struct rawread *rd1, *rd2;
+    struct read* rd;
     struct mapped_read_t* mapped_rd;
     
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
         &mapped_rd
     );
+    assert( error == 0 );
     
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2, -1 );
+        rdb, &readkey, &rd, -1 );
 
-    while( rd1 != NULL )
+    while( rd != NULL )
     {
-        /* if this rawread doesn't have an associated mapped reads */
+        /* if this read doesn't have an associated mapped reads */
         if( mapped_rd == NULL
             || ( mapped_rd != NULL
                    &&
@@ -440,25 +471,25 @@ write_nonmapping_reads_to_fastq(
           )
         {
             /* then it was unmappable, and was never added to the mpd rd db */
-            write_nonmapping_read_to_fastq( rd1, rd2,
+            write_nonmapping_read_to_fastq( rd,
                     rdb->unmappable_single_end_reads,
                     rdb->unmappable_paired_end_1_reads,
                     rdb->unmappable_paired_end_2_reads
                 );
         }
-        /* if the rawread has an associated mapped reads */
+        /* if the read has an associated mapped reads */
         else if( mapped_rd != NULL &&
                  readkey == mapped_rd->read_id &&
                  mapped_rd->num_mappings == 0 )
         {
             /*
-               If the rawread has an associate mapped read, but the mapped read
+               If the read has an associate mapped read, but the mapped read
                has no mapping, it was declared mappable but did not map.
 
                Nonmapping reads are added to the mapped reads db; see
-               find_candidate_mappings.c:889
+               find_candidate_mappings.c:1028
             */
-            write_nonmapping_read_to_fastq( rd1, rd2,
+            write_nonmapping_read_to_fastq( rd,
                     rdb->non_mapping_single_end_reads,
                     rdb->non_mapping_paired_end_1_reads,
                     rdb->non_mapping_paired_end_2_reads
@@ -478,14 +509,12 @@ write_nonmapping_reads_to_fastq(
             );
         }
 
-        /* Free the raw reads */
-        free_rawread( rd1 );
-        if( rd2 != NULL )
-            free_rawread( rd2 );
+        /* Free the read */
+        free_read( rd );
         
-        /* we always get the next raw read */
+        /* we always get the next read */
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd, -1 );
 
     }
 
@@ -495,11 +524,8 @@ cleanup:
     if( NULL != mapped_rd )
         free_mapped_read( mapped_rd );
 
-    /* Free the raw reads */
-    if( rd1 != NULL )
-        free_rawread( rd1 );
-    if( rd2 != NULL )
-        free_rawread( rd2 );
+    /* Free the read */
+    free_read( rd );
 
     fflush( rdb->unmappable_single_end_reads );
     fflush( rdb->non_mapping_single_end_reads );
@@ -529,41 +555,42 @@ write_mapped_reads_to_sam(
     int error;
 
     readkey_t readkey;
-    
+
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
     rewind_rawread_db( rdb );
     rewind_mapped_reads_db( mappings_db );
-    
-    struct rawread *rd1, *rd2;
+
+    struct read* rd;
     struct mapped_read_t* mapped_rd;
 
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
         &mapped_rd
     );
+    assert( error == 0 );
 
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd1, &rd2, -1 );
+        rdb, &readkey, &rd, -1 );
 
-    while( NULL != rd1 
+    while( NULL != rd 
            && NULL != mapped_rd
            && readkey < mapped_rd->read_id )
     {
-        free_rawread( rd1 );
-        rd1 = NULL;
-        if( rd2 !=  NULL ) {
-            free_rawread( rd2 );
-            rd2 = NULL;
-        }
+        free_read( rd );
         
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd, -1 );
     }
 
-    while( rd1 != NULL
+    while( rd != NULL
            && mapped_rd != NULL ) 
     {    
+        if( readkey != mapped_rd->read_id )
+        {
+            fprintf( stderr, "readkey: %d\n", readkey );
+            fprintf( stderr, "mapped_rd->read_id: %d\n", mapped_rd->read_id );
+        }
         assert( readkey == mapped_rd->read_id );
         
         if( readkey > 0 && readkey%1000000 == 0 )
@@ -579,15 +606,13 @@ write_mapped_reads_to_sam(
 
             fprintf_mapped_read_to_sam( 
                 sam_ofp, mapped_rd, cond_prbs_db, 
-                genome, rd1, rd2, expand_pseudo_locations );
+                genome, rd, expand_pseudo_locations );
         }
         
         free_mapped_read( mapped_rd );
         
-        /* Free the raw reads */
-        free_rawread( rd1 );
-        if( rd2 != NULL )
-            free_rawread( rd2 );
+        /* Free the read */
+        free_read( rd );
 
         error = get_next_read_from_mapped_reads_db( 
             mappings_db, 
@@ -595,21 +620,16 @@ write_mapped_reads_to_sam(
         );
 
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd1, &rd2, -1 );
+            rdb, &readkey, &rd, -1 );
         
-        while( NULL != rd1 
+        while( NULL != rd 
                && NULL != mapped_rd
                && readkey < mapped_rd->read_id )
         {
-            free_rawread( rd1 );
-            rd1 = NULL;
-            if( rd2 !=  NULL ) {
-                free_rawread( rd2 );
-                rd2 = NULL;
-            }
+            free_read( rd );
             
             get_next_read_from_rawread_db( 
-                rdb, &readkey, &rd1, &rd2, -1 );
+                rdb, &readkey, &rd, -1 );
         }
         
     }
@@ -620,11 +640,9 @@ cleanup:
     if( NULL != mapped_rd )
         free_mapped_read( mapped_rd );
 
-    /* Free the raw reads */
-    if( rd1 != NULL )
-        free_rawread( rd1 );
-    if( rd2 != NULL )
-        free_rawread( rd2 );
+    /* Free the read */
+    if( rd != NULL )
+        free_read( rd );
         
     return;
 }

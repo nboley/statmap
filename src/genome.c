@@ -556,6 +556,7 @@ add_chrs_from_fasta_file(
                 /* OVERFLOW BUG - check chr_name */
                 /* read in the next string as the chromosome */
                 error = fscanf(f, "%254s", chr_name );
+                assert( error > 0 );
                 while( fgetc(f) != '\n' )
                     ;
 
@@ -612,13 +613,6 @@ add_chrs_from_fasta_file(
 }
 
 /*
- * Forward declaration for translate_sequence. I wanted to avoid including
- * DNA sequence.h for this single declaration 
- */
-LETTER_TYPE* 
-translate_seq(char*, int num_letters, LETTER_TYPE** );
-
-/*
  * Iterate through each indexable sequence in the given chromosome
  * between bp's start and stop, adding it to the index.
  */
@@ -643,7 +637,7 @@ index_contig(
 
         /* Add the normal sequence */
         LETTER_TYPE *translation;
-        translate_seq( genome->chrs[loc.chr] + bp_index, seq_len, &translation );
+        translation = translate_seq(genome->chrs[loc.chr] + bp_index, seq_len);
 
         /* If we cant add this sequence (probably an N ), continue */
         if( translation == NULL ) {
@@ -651,7 +645,7 @@ index_contig(
         }
 
         /* Add the sequence into the tree */
-        add_sequence( genome->index, genome->index->ps_locs, translation, seq_len, loc );
+        add_sequence( genome, translation, seq_len, loc );
 
         free( translation );
     }
@@ -885,25 +879,5 @@ index_genome( struct genome_data* genome )
     /* sort all of the pseudo locations */
     sort_pseudo_locations( genome->index->ps_locs );
 
-    /* We stop doing this, in favor of writing them to 
-       disk in the actual index file */
-    #if 0 
-
-    FILE* ps_locs_of = fopen(PSEUDO_LOCATIONS_FNAME, "w");
-    if( NULL == ps_locs_of )
-    {
-        char buffer[500];
-        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
-        perror( buffer );
-        exit( -1 );
-    }
-    fprint_pseudo_locations( ps_locs_of, genome->index->ps_locs );
-    fclose(ps_locs_of);
-    
-    #endif
-    
     return;
 }
-
-
-

@@ -510,7 +510,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
-            raise ValueError, "Mapping returned too many results."
+            raise ValueError, "Mapping returned too many results (read has %i mappings, expected 1)." \
+                    % len(reads_data)
         
         locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
         
@@ -662,9 +663,13 @@ def test_paired_end_sequence_finding( ):
         print "PASS: Paired End Mapping %i BP Test. ( Statmap appears to be mapping randomly oriented, paired end perfect reads correctly )" % rl
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads=100 ):
+def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
+        n_reads=100, indexed_seq_len=None ):
     output_directory = "smo_test_duplicated_reads_%i_%i_%i_%i_%i_%i" % ( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads )
     
+    # If no indexed_seq_len explicitly set, use read_len
+    indexed_seq_len = indexed_seq_len or read_len
+
     rl = read_len
     GENOME_LEN = gen_len
 
@@ -696,7 +701,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory, 
                       num_threads = n_threads, 
-                      indexed_seq_len = read_len-2,
+                      indexed_seq_len = indexed_seq_len,
                       search_type='m' ) # map with mismatches, since we won't be
                                         # able to bootstrap error scores from a
                                         # perfectly repeated genome
@@ -708,7 +713,8 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads, n_reads
     sam_fp.seek(0)
 
     if len(fragments)*n_dups != total_num_reads:
-        raise ValueError, "Mapping returned too few reads."
+        raise ValueError, "Mapping returned too few reads (%s/%s)" % \
+                (total_num_reads, len(fragments)*n_dups)
     
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
@@ -749,9 +755,9 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1, nreads=100, fasta_prefix=None ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
-        % ( read_len, n_threads, nreads, str(fasta_prefix) )
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_prefix=None ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
+        % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
     rl = read_len
 
@@ -787,7 +793,10 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, fasta_prefix=None ):
     reads_of.close()
 
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len = read_len - 2  )
+    map_with_statmap( read_fnames, output_directory,
+                      min_penalty = min_penalty, max_penalty_spread=10,
+                      indexed_seq_len = read_len - 2,
+                      num_threads = n_threads ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -965,8 +974,8 @@ def test_error_rate_estimation( ):
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_dirty_reads( rl, n_threads=1 ) 
-        print "PASS: Dirty Read Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
+        test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
+        print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
     rls = [ 50, 75  ]
@@ -1161,11 +1170,16 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
-def map_duplicated_diploid_genome( genome, output_filenames, read_len, genome_len, n_dups, nreads=1000 ):
+def map_duplicated_diploid_genome( genome, output_filenames, read_len,
+                                   genome_len, n_dups, nreads=1000,
+                                   indexed_seq_len=None,
+                                   num_threads=1 ):
     '''
     Given a diploid genome, randomly sample reads and map with statmap.
     Test output of SAM from basis with expectation of duplicates
     '''
+    indexed_seq_len = indexed_seq_len or read_len
+
     # sample reads uniformly from both genomes to get reads
     fragments = sample_uniformily_from_genome( genome, nsamples=nreads, frag_len=read_len )
     reads = build_reads_from_fragments(
@@ -1180,9 +1194,10 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len, genome_le
     # map the data
     output_directory = "smo_test_diploid_mapping_%i" % (read_len)
     read_fnames = [ "tmp.fastq" ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
-            genome_fnames = output_filenames
-        )
+    map_with_statmap( read_fnames, output_directory,
+                      genome_fnames = output_filenames,
+                      indexed_seq_len=indexed_seq_len,
+                      num_threads = num_threads )
 
     # test the sam file to make sure that each of the reads appears
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1255,45 +1270,6 @@ def test_diploid_genome():
         genome, output_filenames = build_diploid_genome( rl )
         map_diploid_genome( genome, output_filenames, rl )
         print "PASS: Diploid genome Mapping %i BP Test. ( Statmap appears to be mapping diploid genomes correctly )" % rl
-
-def parse_error_data_log( log_fname ):
-    '''
-    Given the filename of an error stats log file, returns a list of of the
-    error data structs described
-    '''
-
-    class ErrorDataStruct:
-        def __init__( self, num_unique_reads=0 ):
-            self.num_unique_reads = num_unique_reads 
-            self.max_read_length = 0
-            self.loc_error_rates = []
-            self.qual_score_error_rates = []
-
-    ed_structs = []
-    # state variables
-    eds = None
-    state = 0
-    with open( log_fname ) as elfp:
-        for l in elfp:
-            if l.startswith("Num Unique Reads:"):
-                # start of a new struct, add to list
-                eds = ErrorDataStruct(num_unique_reads=
-                        int(l.split()[-1])
-                    )
-                ed_structs.append(eds)
-            elif l.startswith("Max Read Length:"):
-                eds.max_read_length = int(l.split()[-1])
-            elif l.startswith("Loc Error Rates:"):
-                state = 0
-            elif l.startswith("Qual Score Error Rates:"):
-                state = 1
-            else:
-                if state == 0:
-                    eds.loc_error_rates.append( float(l.split()[-1]) )
-                elif state == 1:
-                    eds.qual_score_error_rates.append( float(l.split()[-1]) )
-
-    return ed_structs
 
 def test_diploid_genome_with_multiple_chrs():
     '''
@@ -1374,6 +1350,35 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
+def test_multiple_indexable_subtemplates():
+    rls = [ 50, 75 ]
+    for rl in rls:
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 )
+        print "PASS: Multiple indexable subtemplates %i BP test." % rl
+        # - 5 so the find_optimal_subseq_offset code should choose different offsets
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
+        print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
+
+def test_multiple_indexable_subtemplates_for_repeat_sequences():
+    rls = [ 50, 75 ]
+    for rl in rls:
+        test_duplicated_reads( read_len=rl,
+                n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100,
+                indexed_seq_len = rl / 2  ) 
+        print "PASS: Multiple indexable subtemplates in a highly repeated genome %i BP test" % rl
+
+def test_multiple_indexable_subtemplates_for_diploid_mapping():
+    n_dups = 4000
+    genome_len=100
+
+    rls = [ 50 ]
+    for rl in rls:
+        genome, output_filenames = build_diploid_genome(
+                rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
+        map_duplicated_diploid_genome( genome, output_filenames, rl,
+                genome_len=genome_len, n_dups=n_dups, nreads=100,
+                indexed_seq_len=rl/2, num_threads=-1 )
+        print "PASS: Multiple indexable subtemplates in a highly repeated diploid genome %i BP test " % rl
 
 if False:
     num_repeats = 1
@@ -1425,6 +1430,13 @@ def main( RUN_SLOW_TESTS ):
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
+
+    print "Start test_multiple_indexable_subtemplates()"
+    test_multiple_indexable_subtemplates()
+    print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
+    test_multiple_indexable_subtemplates_for_repeat_sequences()
+    print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
+    test_multiple_indexable_subtemplates_for_diploid_mapping()
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"

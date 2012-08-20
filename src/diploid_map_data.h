@@ -113,4 +113,12 @@ void
 free_diploid_maps_t(
     struct diploid_maps_t* dmt
 );
+
+void
+build_maternal_loc_from_paternal_loc(
+        int *return_chr, int *return_loc,
+        int paternal_chr, int paternal_loc,
+        struct genome_data* genome
+    );
+
 #endif // #ifndef DIPLOID_MAP

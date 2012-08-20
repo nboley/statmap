@@ -21,7 +21,6 @@ tags:
 	cd src; ctags *.c;
 	cd utilities; ctags *.c *.py;
 	cd python_lib; ctags *.py;
-	ctags --file-scope=no -R;
 
 ### the 'src' subdirectory
 statmap: $(src_objects)
@@ -48,5 +47,4 @@ verify_mapped_read_locations : utilities/verify_mapped_read_locations.c
 	./src/candidate_mapping.o ./src/error_correction.o ./src/util.o \
 	-lm -pthread
 	cp utilities/verify_mapped_read_locations ./bin/
-
 

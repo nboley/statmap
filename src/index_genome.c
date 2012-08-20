@@ -550,11 +550,12 @@ build_static_node_from_dynamic_node( dynamic_node* dnode,
     return;
 }
 
- void 
+void
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
-                                        LEVEL_TYPE level   )
+                                        LEVEL_TYPE level,
+                                        struct genome_data* genome )
 {
     int i;
     
@@ -691,6 +692,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                        it is only used to add pseudo locations and, since we 
                        are building a dynamic node from a sequences node, 
                        anything that is already a pseudo loc wont change */
+                    genome,
                     NULL,
                     *child_seqs, 
                     sequences + i*num_letters + 1, 
@@ -711,6 +713,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
                     GENOME_LOC_TYPE loc = gen_locs[j];
 
                     *child_seqs = add_sequence_to_sequences_node(   
+                        genome,
                         NULL,
                         *child_seqs, 
                         sequences + i*num_letters + 1, 
@@ -760,11 +763,14 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 
 
 void 
-add_sequence( struct index_t* index,
-              struct pseudo_locations_t* ps_locs,
+add_sequence( struct genome_data* genome,
               LETTER_TYPE* seq, const int seq_length,
               GENOME_LOC_TYPE genome_loc ) 
 {
+    /* direct references to index and pseudo_locations */
+    struct index_t* index = genome->index;
+    struct pseudo_locations_t* ps_locs = index->ps_locs;
+
     assert( index->index_type == TREE );
     static_node* root = index->index;
 
@@ -889,6 +895,7 @@ add_sequence( struct index_t* index,
     assert( *node_type_ref == 'q' );
     /* add the sequence to current node */
     *node_ref = add_sequence_to_sequences_node(   
+        genome,
         ps_locs,
         (sequences_node*) *node_ref, 
         seq + level,
@@ -945,7 +952,8 @@ add_sequence( struct index_t* index,
             (sequences_node*) *node_ref, 
             &new_node, 
             num_levels, 
-            level 
+            level,
+            genome
         );
 
         /* Free the old sequences node */
@@ -994,8 +1002,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               /* rev stranded data */
               LETTER_TYPE* rev_seq, 
 
-              struct penalty_array_t* fwd_pa,
-              struct penalty_array_t* rev_pa,
+              struct penalty_t* fwd_penalties,
+              struct penalty_t* rev_penalties,
 
               /*
                  we pass this flag all the way down to optimize the error data
@@ -1040,13 +1048,13 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         
         /* select sequence and penalty_array depending on fwd/bkwd strand */
         LETTER_TYPE* seq;
-        struct penalty_array_t* penalty_array;
+        struct penalty_t* penalties;
         if( strnd == FWD ) {
             seq = fwd_seq;
-            penalty_array = fwd_pa;
+            penalties = fwd_penalties;
         } else {
             seq = rev_seq;
-            penalty_array = rev_pa;
+            penalties = rev_penalties;
         }
 
         /* TODO */
@@ -1085,7 +1093,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    penalty_array 
+                    penalties
                 );
 
                 /* if this letter exceeds the max, continue */
@@ -1132,7 +1140,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     letter, seq[node_level], 
                     node_level, seq_length,
                     min_match_penalty - curr_penalty,
-                    penalty_array
+                    penalties
                 );
 
                 /* 
@@ -1231,7 +1239,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 curr_penalty, min_match_penalty,
                 seq, seq_length, num_letters, node_level, strnd,
                 results,
-                penalty_array
+                penalties
             );
             
             
@@ -1286,24 +1294,25 @@ cleanup:
 
 
 extern void
-find_matches_from_root( struct index_t* index,
-             
-                        float min_match_penalty,
-                        float max_penalty_spread,
-                        mapped_locations* results,
+find_matches_from_root(
+        struct index_t* index,
 
-                        /* the length of the two reads ( below ) */
-                        const int read_len,
+        float min_match_penalty,
+        float max_penalty_spread,
+        mapped_locations* results,
 
-                        /* the fwd stranded data */
-                        LETTER_TYPE* fwd_seq, 
-                        /* the bkwd stranded data */
-                        LETTER_TYPE* rev_seq, 
+        /* the length of the two reads ( below ) */
+        const int read_len,
 
-                        struct penalty_array_t* fwd_pa,
-                        struct penalty_array_t* rev_pa,
+        /* the fwd stranded data */
+        LETTER_TYPE* fwd_seq, 
+        /* the bkwd stranded data */
+        LETTER_TYPE* rev_seq, 
 
-                        enum bool only_find_unique_sequences
+        struct penalty_t* fwd_penalties,
+        struct penalty_t* rev_penalties,
+
+        enum bool only_find_unique_sequences
 )
 {
     assert( index->index_type == TREE );
@@ -1320,8 +1329,8 @@ find_matches_from_root( struct index_t* index,
                          fwd_seq,
                          rev_seq,
 
-                         fwd_pa,
-                         rev_pa,
+                         fwd_penalties,
+                         rev_penalties,
 
                          only_find_unique_sequences
     ); 
@@ -1513,11 +1522,10 @@ add_ODI_stack_item( struct ODI_stack* stack,
 }
 
 int
-cmp_ODI_stack_item( const void* a, const void* b )
+cmp_ODI_stack_item( const ODI_stack_item* a,
+                    const ODI_stack_item* b )
 {
-    int rv = 0;
-    rv = ((ODI_stack_item*)b)->level - ((ODI_stack_item*)a)->level;
-    return rv;
+    return b->level - a->level;
 } 
 
 void
@@ -1527,7 +1535,7 @@ sort_ODI_stack( struct ODI_stack* stack )
         stack->stack,
         stack->size, 
         sizeof(ODI_stack_item), 
-        cmp_ODI_stack_item
+        (int(*)( const void*, const void* ))cmp_ODI_stack_item
     );
     
     return;
@@ -1551,14 +1559,8 @@ free_ondisk_index( struct index_t* index ) {
         free_pseudo_locations( index->ps_locs );
     }
 
-    // DEBUG - wtf
-    /*
-    if( NULL != index->diploid_maps )
-        free_diploid_maps_t( index->diploid_maps );
-        */
-    
     free( index );
-    
+
     return;
 }
 

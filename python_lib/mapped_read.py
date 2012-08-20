@@ -36,26 +36,26 @@ struct fragment_length_dist_t {
         ("rev_chipseq_bs_density_start", POINTER(c_float)),
     ]
 
+MPD_RD_ID_T = c_int
+
 class c_mapped_reads_db_t(Structure):
     """
 struct mapped_reads_db {
     FILE* fp;
 
-    /* Set this to locked when we mmap it - 
-       then forbid any new writes to the 
-       file 
-    */
-    enum bool write_locked;
-    
-    pthread_spinlock_t access_lock;
+    char mode; // 'r' or 'w'
+    MPD_RD_ID_T num_mapped_reads;
+
+    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
     char* mmapped_data;
     size_t mmapped_data_size; 
     
-    char** mmapped_reads_starts;
-    unsigned long num_mmapped_reads;
+    /* mmap index */
+    struct mapped_reads_db_index_t* index;
+    // MPD_RD_ID_T num_indexed_reads;
 
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
@@ -63,28 +63,27 @@ struct mapped_reads_db {
     
     struct fragment_length_dist_t* fl_dist;
 
-    unsigned long current_read;
+    MPD_RD_ID_T current_read;
 };
     """
     _fields_ = [
         ("fp", c_void_p), # unused
 
-        ("write_locked", c_uint), # enum bool
+        ("mode", c_char),
+        ("num_mapped_reads", MPD_RD_ID_T),
 
         ("access_lock", c_void_p), # unused (will this work?)
 
         ("mmapped_data", c_char_p),
         ("mmapped_data_size", c_size_t),
 
-        ("mmapped_reads_starts", POINTER(c_char_p)),
-        ("num_mmapped_reads", c_ulong),
-
+        ("index", c_void_p),
+        
         ("num_succ_iterations", c_char_p),
 
         ("fl_dist", POINTER(c_fragment_length_dst_t)),
 
-        ("current_read", c_ulong),
-
+        ("current_read", MPD_RD_ID_T),
     ]
 
 class c_cond_prbs_db_t(Structure):
@@ -105,23 +104,25 @@ struct cond_prbs_db_t {
         ("max_rd_id", c_uint),
     ]
 
-def open_mapped_reads_db( fname ):
-    '''
-    Return a pointer to c_mapped_reads_db_t from fname
-    '''
+def open_mapped_reads_db_for_reading( fname ):
     c_mpd_rd_db_p = c_void_p()
-    statmap_o.open_mapped_reads_db( byref(c_mpd_rd_db_p), c_char_p(fname) )
+    statmap_o.open_mapped_reads_db_for_reading(
+            byref(c_mpd_rd_db_p), c_char_p(fname) )
     c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
     return c_mpd_rd_db_p
 
+def open_mapped_reads_db_for_writing( fname ):
+    c_mpd_rd_db_p = c_void_p()
+    statmap_o.open_mapped_reads_db_for_writing(
+            byref(c_mpd_rd_db_p), c_char_p(fname) )
+    c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
+    return c_mpd_rd_db_p
+
+def open_mapped_reads_db_for_writing( fname ):
+    c_mpd_rd
+
 def build_fl_dist_from_filename( mpd_rd_db_p, filename ):
     statmap_o.build_fl_dist_from_filename( mpd_rd_db_p, filename )
-
-def mmap_mapped_reads_db( mpd_rd_db_p ):
-    statmap_o.mmap_mapped_reads_db( mpd_rd_db_p )
-
-def index_mapped_reads_db( mpd_rd_db_p ):
-    statmap_o.index_mapped_reads_db( mpd_rd_db_p )
 
 def build_chipseq_bs_density( fl_dist_p ):
     statmap_o.build_chipseq_bs_density( fl_dist_p )

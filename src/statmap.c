@@ -42,6 +42,7 @@
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
+int min_num_hq_bps = -1;
 
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
@@ -111,23 +112,6 @@ map_marginal( struct args_t* args,
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
     
-    /***** initialize the mappings dbs */
-    
-    candidate_mappings_db candidate_mappings;
-    if( false == is_nc )
-    {
-        init_candidate_mappings_db( &candidate_mappings, 
-                                    CANDIDATE_MAPPINGS_DB_FNAME );
-        new_mapped_reads_db( mpd_rds_db, MAPPED_READS_DB_FNAME );
-    } else {
-        init_candidate_mappings_db( &candidate_mappings, 
-                                    CANDIDATE_MAPPINGS_NC_DB_FNAME );
-        new_mapped_reads_db( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
-    }
-
-    
-    /***** END initialize the mappings dbs */
-    
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
@@ -143,7 +127,7 @@ map_marginal( struct args_t* args,
         bootstrap_estimated_error_model( 
             genome,
             rdb,
-            &candidate_mappings,
+            *mpd_rds_db,
             error_model
         );
         
@@ -159,31 +143,39 @@ map_marginal( struct args_t* args,
             args->search_type);
         exit( 1 );
     }
-
+    
+    /* initialize the mapped reads db */
+    if( false == is_nc )
+    {
+        open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    } else {
+        open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
+    
     fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
+
     find_all_candidate_mappings( 
         genome,
         rdb,
-        &candidate_mappings,
+        *mpd_rds_db,
         error_model,
         args->min_match_penalty,
         args->max_penalty_spread
     );
     
     free_error_model( error_model );
-    
-    /* combine and output all of the partial mappings - this includes
-       joining paired end reads. */
-    fprintf(stderr, "NOTICE      :  Joining Candidate Mappings\n" );
-    gettimeofday( &start, NULL );
-    join_all_candidate_mappings( &candidate_mappings, *mpd_rds_db, genome );
-    gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Joined Candidate Mappings in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-    /*  close candidate mappings db */
-    close_candidate_mappings_db( &candidate_mappings );
-    
+
+    /* close the mapped reads db that was opened for writing, and reopen it for
+     * reading */
+    close_mapped_reads_db( mpd_rds_db );
+
+    if( false == is_nc )
+    {
+        open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_READS_DB_FNAME );
+    } else {
+        open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
+
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
@@ -237,13 +229,6 @@ iterative_mapping( struct args_t* args,
         exit(-1);
     }
  
-    /* Iterative mapping */
-    /* mmap and index the necessary data */
-    fprintf(stderr, "NOTICE      :  mmapping mapped reads DB.\n" );
-    mmap_mapped_reads_db( mpd_rds_db );
-    fprintf(stderr, "NOTICE      :  indexing mapped reads DB.\n" );
-    index_mapped_reads_db( mpd_rds_db );
-    
     /* Do the iterative mapping */
     generic_update_mapping( mpd_rds_db,
                             genome, 
@@ -251,8 +236,6 @@ iterative_mapping( struct args_t* args,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
         
-    munmap_mapped_reads_db( mpd_rds_db );
-    
     return;
 }
 
@@ -485,6 +468,7 @@ cleanup:
 
     free( args.genome_fname );
     free( args.genome_index_fname );
+    free( args.output_directory );
     
     /* finish the R interpreter */
     end_R();

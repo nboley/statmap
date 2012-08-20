@@ -721,3 +721,36 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
     assert( *segments != NULL );
 
 }
+
+void
+build_maternal_loc_from_paternal_loc(
+        int *return_chr, int *return_loc,
+        int paternal_chr, int paternal_loc,
+        struct genome_data* genome
+    )
+{
+    /* lookup the maternal chromosome given the paternal chromosome */
+    char* prefix = get_chr_prefix( genome->chr_names[paternal_chr] );
+    int maternal_chr =
+        find_diploid_chr_index( genome, prefix, MATERNAL );
+    assert( maternal_chr != PSEUDO_LOC_CHR_INDEX );
+    free( prefix );
+
+    /* look up the diploid map data structure */
+    int map_data_index =
+        get_map_data_index_from_chr_index( genome, paternal_chr );
+
+    /* get maternal start position from diploid index */
+    /* locations are offset by + 1, - 1 because the diploid index is 1-indexed,
+     * but Statmap is 0-indexed */
+    int maternal_loc =
+        find_diploid_locations(
+                &(genome->index->diploid_maps->maps[map_data_index]),
+                paternal_loc + 1
+            ) - 1;
+    assert( maternal_loc >= 0 ); // If not, this isn't shared sequence
+
+    /* Return the found maternal location (chr, loc) */
+    *return_chr = maternal_chr;
+    *return_loc = maternal_loc;
+}

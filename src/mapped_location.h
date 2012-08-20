@@ -29,7 +29,6 @@
 typedef struct {
     GENOME_LOC_TYPE location;
     enum STRAND strnd;
-    int trim_offset;
     float penalty;
 } mapped_location;
 
@@ -39,15 +38,16 @@ typedef struct {
     int length;
     int allocated_length;
 
-    int subseq_len;
-    int subseq_offset;
+    struct indexable_subtemplate* probe;
 } mapped_locations;
 
 int
-cmp_mapped_locations_by_location( void* loc1, void* loc2 );
+cmp_mapped_locations_by_location( const mapped_location* loc1, 
+                                  const mapped_location* loc2 );
 
 int
-cmp_mapped_locations_by_penalty( void* loc1, void* loc2 );
+cmp_mapped_locations_by_penalty( const mapped_location* loc1, 
+                                 const mapped_location* loc2 );
 
 void 
 sort_mapped_locations_by_location( mapped_locations* results );
@@ -58,17 +58,34 @@ sort_mapped_locations_by_penalty( mapped_locations* results );
 /* Deal with mapped locations arrays */
 
 void
-init_mapped_locations( mapped_locations** results );
+init_mapped_locations(
+        mapped_locations** results,
+        struct indexable_subtemplate* origin
+    );
 
 void
 free_mapped_locations( mapped_locations* results );
 
 void
-add_mapped_location( mapped_locations* results, 
+add_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs
+);
+
+void
+add_new_mapped_location( mapped_locations* results, 
                      GENOME_LOC_TYPE location, 
                      enum STRAND strnd,
-                     int trim_offset,
                      float penalty );
+
+void
+add_and_expand_mapped_location(
+    mapped_location* loc,
+    mapped_locations* locs,
+    struct genome_data* genome );
+
+void
+copy_mapped_location( mapped_location* dest, mapped_location* src );
 
 void
 print_mapped_locations( mapped_locations* results );
@@ -78,7 +95,28 @@ print_mapped_locations( mapped_locations* results );
  *
  **************************************************************************/
 
+/*** mapped_locations_container ***/
 
+typedef struct {
+    /* container of pointers to mapped_locations */
+    mapped_locations** container;
+    int length;
+} mapped_locations_container;
 
+void
+init_mapped_locations_container(
+        mapped_locations_container** mlc
+    );
+
+void
+free_mapped_locations_container(
+        mapped_locations_container* mlc
+    );
+
+void
+add_mapped_locations_to_mapped_locations_container(
+        mapped_locations* ml,
+        mapped_locations_container* mlc
+    );
 
 #endif /* define MAPPED_LOCATION */

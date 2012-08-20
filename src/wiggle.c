@@ -84,20 +84,21 @@ cmp_wig_line_info_by_position( const struct wig_line_info* a,
 }
 
 static int 
-cmp_wig_line_info( const void* a, const void* b)
+cmp_wig_line_info( const struct wig_line_info *a,
+                   const struct wig_line_info *b )
 {
     /* compare on the file pointer. if it is null, the file is empty, 
        and it is always smaller */
-    if( ((struct wig_line_info*) a)->fp == NULL )
+    if( a->fp == NULL )
     {
-        if( ((struct wig_line_info*) b)->fp == NULL )
+        if( b->fp == NULL )
         {
             return 0;
         } else {
             return 1;
         }
     }
-    if( ((struct wig_line_info*) b)->fp == NULL )
+    if( b->fp == NULL )
     {
         return -1;
     }
@@ -108,8 +109,7 @@ cmp_wig_line_info( const void* a, const void* b)
         return pos_cmp;
     
     /* finally, compare on the file index */
-    return ((struct wig_line_info*) a)->file_index 
-        - ((struct wig_line_info*) b)->file_index;
+    return a->file_index - b->file_index;
 }
 
 /* 
@@ -267,7 +267,13 @@ aggregate_over_wiggles(
         parse_next_line( lines+i, chr_names, track_names );
     }
     
-    qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+    qsort(
+            lines,
+            num_wigs,
+            sizeof( struct wig_line_info ),
+            (int(*)( const void*, const void* ))cmp_wig_line_info
+        );
+
     while( NULL != lines[0].fp )
     {
         if( lines[0].trace_index > curr_trace_index )
@@ -310,7 +316,12 @@ aggregate_over_wiggles(
         for( i = 0; i <= ub; i++ )
             parse_next_line( lines+i, chr_names, track_names );
         
-        qsort( lines, num_wigs, sizeof( struct wig_line_info ), cmp_wig_line_info );
+        qsort(
+                lines,
+                num_wigs,
+                sizeof( struct wig_line_info ),
+                (int(*)( const void*, const void* ))cmp_wig_line_info
+            );
     }
 
     /* make sure all of the files are empty */
