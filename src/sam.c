@@ -14,7 +14,7 @@
 void
 fprintf_nonpaired_mapped_read_as_sam( 
     FILE* sam_fp,
-    struct mapped_read_location* loc,
+    mapped_read_location* loc,
     float cond_prob,
     struct genome_data* genome,
     char* key, 
@@ -96,7 +96,7 @@ fprintf_nonpaired_mapped_read_as_sam(
 void
 fprintf_paired_mapped_read_as_sam( 
     FILE* sam_fp,
-    struct mapped_read_location* loc,
+    mapped_read_location* loc,
     const float cond_prob,
 
     struct genome_data* genome,
@@ -328,7 +328,7 @@ fprintf_paired_mapped_read_as_sam(
 void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
-    struct mapped_read_t* mpd_rd,
+    mapped_read_t* mpd_rd,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
     struct read* r,
@@ -340,10 +340,14 @@ fprintf_mapped_read_to_sam(
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
+    mapped_read_index* mpd_rd_index;
+    init_mapped_read_index( &mpd_rd_index, mpd_rd );
+
     MPD_RD_ID_T i = 0;
-    for( i = 0; i < mpd_rd->num_mappings; i++ )
+    for( i = 0; i < mpd_rd_index->num_mappings; i++ )
     {
-        float cond_prob = get_cond_prb( cond_prbs_db, mpd_rd->read_id, i );
+        float cond_prob =
+            get_cond_prb( cond_prbs_db, mpd_rd_index->read_id, i );
         
         /* if this is a paired end read */
         if( r->num_subtemplates == 2 )
@@ -358,7 +362,7 @@ fprintf_mapped_read_to_sam(
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
-                mpd_rd->locations + i,
+                mpd_rd_index->mappings + i,
                 cond_prob,
 
                 genome,
@@ -380,7 +384,7 @@ fprintf_mapped_read_to_sam(
 
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
-                mpd_rd->locations + i,
+                mpd_rd_index->mappings + i,
                 cond_prob,
                 
                 genome,
@@ -450,7 +454,7 @@ write_nonmapping_reads_to_fastq(
     rewind_mapped_reads_db( mappings_db );
     
     struct read* rd;
-    struct mapped_read_t* mapped_rd;
+    mapped_read_t* mapped_rd;
     
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
@@ -463,28 +467,36 @@ write_nonmapping_reads_to_fastq(
 
     while( rd != NULL )
     {
-        /* if this read doesn't have an associated mapped reads */
-        if( mapped_rd == NULL
-            || ( mapped_rd != NULL
-                   &&
-                 readkey < mapped_rd->read_id )
-          )
+        /* if the mapped reads db is empty and there are still rawreads, these
+         * rawreads were nonmapping */
+        if( mapped_rd == NULL )
+        {
+            write_nonmapping_read_to_fastq( rd,
+                    rdb->unmappable_single_end_reads,
+                    rdb->unmappable_paired_end_1_reads,
+                    rdb->unmappable_paired_end_2_reads );
+            continue;
+        }
+
+        mapped_read_index* mapped_rd_index;
+        init_mapped_read_index( &mapped_rd_index, mapped_rd );
+
+        /* if this rawread doesn't have an associated mapped reads */
+        if( readkey < mapped_rd_index->read_id )
         {
             /* then it was unmappable, and was never added to the mpd rd db */
             write_nonmapping_read_to_fastq( rd,
                     rdb->unmappable_single_end_reads,
                     rdb->unmappable_paired_end_1_reads,
-                    rdb->unmappable_paired_end_2_reads
-                );
+                    rdb->unmappable_paired_end_2_reads );
         }
         /* if the read has an associated mapped reads */
-        else if( mapped_rd != NULL &&
-                 readkey == mapped_rd->read_id &&
-                 mapped_rd->num_mappings == 0 )
+        else if( readkey == mapped_rd_index->read_id &&
+                 mapped_rd_index->num_mappings == 0 )
         {
             /*
-               If the read has an associate mapped read, but the mapped read
-               has no mapping, it was declared mappable but did not map.
+               If the read has an associated mapped read, but the mapped read
+               has no mappings, it was declared mappable but did not map.
 
                Nonmapping reads are added to the mapped reads db; see
                find_candidate_mappings.c:1028
@@ -492,15 +504,13 @@ write_nonmapping_reads_to_fastq(
             write_nonmapping_read_to_fastq( rd,
                     rdb->non_mapping_single_end_reads,
                     rdb->non_mapping_paired_end_1_reads,
-                    rdb->non_mapping_paired_end_2_reads
-                );
+                    rdb->non_mapping_paired_end_2_reads );
         }
-
 
         /* if we need to get the next mapped read */
         /* if mapped_rd is null, we are out of mapped reads */
         if( mapped_rd != NULL
-            && readkey == mapped_rd->read_id )
+            && readkey == mapped_rd_index->read_id )
         {
             free_mapped_read( mapped_rd );
             error = get_next_read_from_mapped_reads_db( 
@@ -508,6 +518,8 @@ write_nonmapping_reads_to_fastq(
                 &mapped_rd
             );
         }
+
+        free_mapped_read_index( mapped_rd_index );
 
         /* Free the read */
         free_read( rd );
@@ -562,7 +574,7 @@ write_mapped_reads_to_sam(
     rewind_mapped_reads_db( mappings_db );
 
     struct read* rd;
-    struct mapped_read_t* mapped_rd;
+    mapped_read_t* mapped_rd;
 
     error = get_next_read_from_mapped_reads_db( 
         mappings_db, 
@@ -573,9 +585,11 @@ write_mapped_reads_to_sam(
     get_next_read_from_rawread_db( 
         rdb, &readkey, &rd, -1 );
 
+    /* iterate through rawreads until we get to the rawread that matches the
+     * first mapped read. This sets up the following while loop */
     while( NULL != rd 
            && NULL != mapped_rd
-           && readkey < mapped_rd->read_id )
+           && readkey < get_read_id_from_mapped_read( mapped_rd ) )
     {
         free_read( rd );
         
@@ -585,20 +599,24 @@ write_mapped_reads_to_sam(
 
     while( rd != NULL
            && mapped_rd != NULL ) 
-    {    
-        if( readkey != mapped_rd->read_id )
+    {
+        mapped_read_index* mapped_rd_index;
+        init_mapped_read_index( &mapped_rd_index, mapped_rd );
+
+        if( readkey != mapped_rd_index->read_id )
         {
             fprintf( stderr, "readkey: %d\n", readkey );
-            fprintf( stderr, "mapped_rd->read_id: %d\n", mapped_rd->read_id );
+            fprintf( stderr, "mapped_rd->read_id: %d\n",
+                     mapped_rd_index->read_id );
         }
-        assert( readkey == mapped_rd->read_id );
+        assert( readkey == mapped_rd_index->read_id );
         
         if( readkey > 0 && readkey%1000000 == 0 )
             fprintf( stderr, "NOTICE       : Written %u reads to sam\n", readkey );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 
-            && mapped_rd->num_mappings > 0 )
+            && mapped_rd_index->num_mappings > 0 )
         {
             /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
@@ -609,6 +627,7 @@ write_mapped_reads_to_sam(
                 genome, rd, expand_pseudo_locations );
         }
         
+        free_mapped_read_index( mapped_rd_index );
         free_mapped_read( mapped_rd );
         
         /* Free the read */
@@ -624,7 +643,7 @@ write_mapped_reads_to_sam(
         
         while( NULL != rd 
                && NULL != mapped_rd
-               && readkey < mapped_rd->read_id )
+               && readkey < get_read_id_from_mapped_read( mapped_rd ) )
         {
             free_read( rd );
             

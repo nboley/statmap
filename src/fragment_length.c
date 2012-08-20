@@ -98,35 +98,45 @@ init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp )
 
 
 int 
-get_frag_len( struct mapped_read_t* rd )
+get_frag_len( mapped_read_t* rd )
 {
+    mapped_read_index* rd_index;
+    init_mapped_read_index( &rd_index, rd );
+
     /* If there are not mapped locations, ther is no frag len */
-    if( rd->num_mappings == 0 )
+    if( rd_index->num_mappings == 0 )
         return -1;
     
     /* if the reads aren't paired, we can't infer the frag len */
-    if ((get_flag_from_mapped_read_location(rd->locations + 0)&IS_PAIRED) == 0)
+    if ((get_flag_from_mapped_read_location(rd_index->mappings + 0)
+        &IS_PAIRED) == 0)
         return -1;
     
-    /* initial;ize the fraglen to the fraglen of the first mapped location */
-    int frag_len = 1 + get_stop_from_mapped_read_location( rd->locations + 0 )
-        - get_start_from_mapped_read_location( rd->locations + 0 );
+    /* initialize the fraglen to the fraglen of the first mapped location */
+    int frag_len = 1 +
+        get_stop_from_mapped_read_location( rd_index->mappings + 0 ) -
+        get_start_from_mapped_read_location( rd_index->mappings + 0 );
     
     MPD_RD_ID_T i;
-    for( i = 1; i < rd->num_mappings; i++ )
+    for( i = 1; i < rd_index->num_mappings; i++ )
     {
+        mapped_read_location* current_loc = rd_index->mappings + i;
+
         /* reads should never be a mixture of paired and unpaired reads 
          XXX IS THIS ACTUALLY TRUE? WE COULD JUST CONTINUE... */
-        assert( (get_flag_from_mapped_read_location(rd->locations + i)
-                 &IS_PAIRED) != 0 );
+        assert( (get_flag_from_mapped_read_location( current_loc )
+                    &IS_PAIRED) != 0 );
         
-        int tmp_fl = 1 + get_stop_from_mapped_read_location( rd->locations + i )
-            - get_start_from_mapped_read_location( rd->locations + i );
+        int tmp_fl = 1 +
+            get_stop_from_mapped_read_location( current_loc ) -
+            get_start_from_mapped_read_location( current_loc );
         
         /* if all of the fraglens don't match, then skip this rd */
         if( frag_len != tmp_fl )
             return -1;
     }
+
+    free_mapped_read_index( rd_index );
 
     return frag_len;
 }
@@ -151,7 +161,7 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
     }
     
     /* loop through each read */
-    struct mapped_read_t* rd;
+    mapped_read_t* rd;
     rewind_mapped_reads_db( rdb );
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )

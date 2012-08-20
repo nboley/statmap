@@ -12,12 +12,9 @@
 #include "statmap.h"
 #include "read.h"
 #include "candidate_mapping.h"
-#include "mapped_read.h"
 #include "genome.h"
 #include "diploid_map_data.h"
 #include "util.h"
-
-struct mapped_read_t;
 
 /** 
     Some bastard code. I need this later on when I unpack the pseudo loc reads
