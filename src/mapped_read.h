@@ -98,7 +98,64 @@ ML_PRB_TYPE_from_float( float value  )
 #endif
 }
 
-/* TODO - make this a bitfield */
+/*
+ * Compact representation of a full mapped read.
+ *
+ * We assume that each mapped_read_t has at least
+ * 1) 1 read_id_node (for now, it has *exactly* 1 read_id_node)
+ * 2) 0 mapped_read_location's ( we use a byte flag to indicate if there are
+ *    any mapped read locations )
+ * 3) 1 subread
+ *
+ * Note that we use signed bitfields for except single-fit fields. Signed
+ * bitfields are much better for debugging, but signed 1-bit fields don't make
+ * any sense (two's complement means the only two values it can have are 0 and
+ * -1). 
+ *
+ *  Depending on the assay type, the sublocations may represent fragments in a
+ *  paired end assay (originating from read subtemplates) or junctions in
+ *  a gapped alignment (originating from indexable subtemplates). The
+ *  next_subread_is flags handle all possibilities.
+ *
+ */
+
+/*
+mapped_read_t {
+
+    // 4 bytes
+    struct {
+        signed read_id :31;
+        unsigned are_more :1;
+    } read_id_node;
+    // potentially more read ids
+
+    struct mapped_read_location {
+
+        // 6 bytes
+        signed chr :CHR_BITS;       // 15 bits
+        unsigned are_more :1        // 1 bit
+        signed flag :FLAG_BITS;     // 1 byte TODO we may be able to get rid of this
+        ML_PRB_TYPE seq_error;      // 4 bytes
+
+        // 6 bytes
+        struct {
+            signed start_pos    :LOCATION_BITS; ( 29 )
+            signed length       :SUBTEMPLATE_LENGTH_BITS; ( 16 )
+            unsigned strand     :1;
+
+            unsigned next_subread_is_gapped :1;
+            unsigned next_subread_is_ungapped :1;
+        }
+        // potentially more sublocations
+    }
+
+    // potentially more mapped read locations
+
+} __attribute__((__packed__));
+*/
+
+typedef void mapped_read_t;
+typedef void mapped_read_location;
 
 #define MRL_FLAG_TYPE unsigned char
 #define MRL_CHR_TYPE unsigned short
@@ -114,75 +171,56 @@ ML_PRB_TYPE_from_float( float value  )
 /* Set if the first read ( ie read_name/1 ) maps to start_pos */
 #define FIRST_PAIR_IS_FIRST_IN_GENOME 4
 
-/*
- * A full mapped read.
- *
- */
-
-/*
-mapped_read_t {
-
-    size_t num_allocated_bytes;
-
-    // 4 bytes
-    struct {
-        read_id :31;
-        are_more :1;
-    } read_id_node;
-    // potentially more read ids
-
-    struct mapped_read_location {
-
-        size_t num_allocated_bytes;
-
-        // 2 bytes
-        unsigned chr :CHR_BITS; // 15 bits
-        unsigned flag :FLAG_BITS; // 8 bits TODO we may be able to get rid of this
-        ML_PRB_TYPE seq_error;  // 4 bytes
-        unsigned are_more :1    // 1 bit
-
-        // 6 bytes
-        struct {
-            signed start_pos :LOCATION_BITS; ( 29 )
-            signed length    :SUBTEMPLATE_LENGTH_BITS; ( 16 )
-            signed strand    :1;
-            signed are_more  :1;
-        }
-        // potentially more read subtemplates
-    }
-
-    // potentially more mapped read locations
-
-} __attribute__((__packed__));
-*/
-
-typedef void mapped_read_location;
-
 #define SUBTEMPLATE_LENGTH_BITS 16
-#define MAX_SUBTEMPLATE_LENGTH 65535 // 2**16 - 1
+#define MAX_SUBTEMPLATE_LENGTH 32767 // 2**16 / 2 - 1
 
 #define FLAG_BITS 8
-#define MAX_FLAG_LENGTH 255 // 2**8 - 1
+#define MAX_FLAG_LENGTH 127 // 2**8 / 2 - 1
 
-// 11 bytes
+#define MAX_READ_ID 1073741823 // 2**31 / 2 - 1 = 1073741823
+/*
+ * Structures used to access and manipulate the mapped_read_t and
+ * mapped_read_location pseudo structs
+ *
+ * Note - the following structures must all be aligned on byte boundaries so we
+ * can use sizeof and pointer arithmetic to work with the mapped_read_t pseudo
+ * structure
+ */
+
+// 4 bytes
 typedef struct {
+    unsigned read_id :31;
+    unsigned are_more :1;
+} read_id_node;
 
-    size_t num_allocated_bytes; // 4 bytes
-
-    unsigned chr :CHR_BITS; // 15 bits
-    unsigned flag :FLAG_BITS; // 8 bits
-    ML_PRB_TYPE seq_error; // 4 bytes
-    unsigned are_more :1;   // 1 bits
-
+typedef struct {
+    unsigned chr :CHR_BITS;     // 15 bits
+    unsigned are_more :1;       // 1 bit
+    unsigned flag :FLAG_BITS;   // 1 byte TODO get rid of this
+    ML_PRB_TYPE seq_error;      // 4 bytes
 } mapped_read_location_prologue;
 
 // 6 bytes
 typedef struct {
-    unsigned start_pos :LOCATION_BITS; // 29 bits
-    unsigned length :SUBTEMPLATE_LENGTH_BITS; // 16 bits
+    signed start_pos :LOCATION_BITS; // 29 bits
+    signed length :SUBTEMPLATE_LENGTH_BITS; // 16 bits
     unsigned strand :1;
-    unsigned are_more :1;
-} mapped_read_subtemplate_location;
+
+    unsigned next_subread_is_gapped :1;
+    unsigned next_subread_is_ungapped :1;
+} mapped_read_sublocation;
+
+/* Temporary container for stashing mapped read sublocations while we're
+ * building a mapped read location */
+struct {
+    mapped_read_sublocation* container;
+    int length;
+} mapped_read_sublocations_container;
+
+struct {
+    mapped_read_location* container;
+    int length;
+}
 
 /* 
  * small, inline functions for setting and accessing the items
@@ -245,8 +283,8 @@ set_chr_in_mapped_read_location( const mapped_read_location* loc, MRL_CHR_TYPE v
 
 /** FRAGMENT/READ COVERAGE **/
 
-static mapped_read_subtemplate_location*
-get_start_of_subtemplate_locations( const mapped_read_location* loc )
+static mapped_read_sublocation*
+get_start_of_sublocations( const mapped_read_location* loc )
 {
     /* Given a pointer to a mapped_read_location, return a pointer to the start
      * of the first read subtemplate mapped location in the
@@ -256,7 +294,7 @@ get_start_of_subtemplate_locations( const mapped_read_location* loc )
     char* ptr = (char*) loc;
     ptr += sizeof(mapped_read_location_prologue);
 
-    return (mapped_read_subtemplate_location*) ptr;
+    return (mapped_read_sublocation*) ptr;
 }
 
 static inline MRL_START_POS_TYPE
@@ -264,8 +302,8 @@ get_start_from_mapped_read_location( const mapped_read_location* loc )
 {
     /* TODO for now, just return the start location of the first subtemplate
      * location */
-    mapped_read_subtemplate_location* st_loc
-        = get_start_of_subtemplate_locations( loc );
+    mapped_read_sublocation* st_loc
+        = get_start_of_sublocations( loc );
     return (MRL_STOP_POS_TYPE) st_loc->start_pos;
 }
 
@@ -273,8 +311,8 @@ static inline MRL_STOP_POS_TYPE
 get_stop_from_mapped_read_location( const mapped_read_location* loc )
 {
     /* TODO for now, just return the stop of the first subtemplate location */
-    mapped_read_subtemplate_location* st_loc
-        = get_start_of_subtemplate_locations( loc );
+    mapped_read_sublocation* st_loc
+        = get_start_of_sublocations( loc );
     return (MRL_STOP_POS_TYPE) st_loc->start_pos + st_loc->length;
 }
 
@@ -282,8 +320,8 @@ static inline MRL_FL_TYPE
 get_fl_from_mapped_read_location( const mapped_read_location* loc )
 {
     /* TODO for now, just return the stop of the first subtemplate location */
-    mapped_read_subtemplate_location* st_loc
-        = get_start_of_subtemplate_locations( loc );
+    mapped_read_sublocation* st_loc
+        = get_start_of_sublocations( loc );
     return (MRL_FLAG_TYPE) st_loc->length;
 }
 
@@ -294,8 +332,8 @@ set_start_and_stop_in_mapped_read_location(
         int stop )
 {
     // TODO for now, just set start and stop of the first subtemplate location
-    mapped_read_subtemplate_location* st_loc
-        = get_start_of_subtemplate_locations( loc );
+    mapped_read_sublocation* st_loc
+        = get_start_of_sublocations( loc );
 
     assert( start >= 0 );
     assert( start < LOCATION_MAX );
@@ -327,23 +365,6 @@ set_seq_error_in_mapped_read_location(
         (mapped_read_location_prologue*) loc;
     prologue->seq_error = value;
 }
-
-typedef void mapped_read_t;
-
-/* Note - the following structures must all be aligned on byte boundaries so we
- * can use sizeof and pointer arithmetic to work with the mapped_read_t pseudo
- * structure */
-
-/* Structures used to access and manipulate the mapped_read_t and
- * mapped_read_location pseudo structs */
-
-#define MAX_READ_ID 2147483648 // 2**31 = 2147483648
-
-// 4 bytes
-typedef struct {
-    unsigned read_id :31;
-    unsigned are_more :1;
-} read_id_node;
 
 void
 init_mapped_read( mapped_read_t** rd );

@@ -20,54 +20,125 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+/****** Temporary containers ******/
+
+/*
+ * Mapped read sublocations container is a utility data strucutre to add in
+ * building mapped read locations
+ */
+
+void
+init_mapped_read_sublocations_container(
+        mapped_read_sublocations_container** c )
+{
+    (*c) = malloc( sizeof( mapped_read_sublocations_container ) );
+
+    (*c)->container = NULL;
+    (*c)->length = 0;
+}
+
+void
+free_mapped_read_sublocations_container(
+        mapped_read_sublocations_container* c )
+{
+    if( c == NULL ) return;
+
+    if( c->container != NULL )
+        free( c->container );
+
+    free(c);
+
+    return;
+}
+
+void
+add_mapped_read_sublocation_to_container(
+        mapped_read_sublocation* sub_loc,
+        mapped_read_sublocations_container* c )
+{
+    c->length += 1;
+    c->container = realloc( c->container,
+            sizeof( mapped_read_sublocation ) * c->length );
+    c->container[c->length-1] = *sub_loc;
+}
+
+
+void
+init_mapped_read_locations_container(
+        mapped_read_locations_container **c )
+{
+    (*c) = malloc( sizeof( mapped_read_locations_container ));
+
+    (*c)->container = NULL;
+    (*c)->length = 0;
+}
+
+void
+free_mapped_read_locations_container(
+        mapped_read_locations_container* c )
+{
+    if( c == NULL ) return;
+
+    if( c->container != NULL )
+        free( c->container );
+
+    free(c);
+
+    return;
+}
+
+void
+add_mapped_read_location_to_container(
+        mapped_read_location* loc,
+        mapped_read_locations_container* c )
+{
+    c->length += 1;
+    c->container = realloc( c->container,
+            sizeof( mapped_read_location ) * c->length );
+    c->container[c->length-1] = *loc;
+}
+
 /*************************************************************************
  *
  *  Mapped Read Locations
  *
  */
 
-size_t
-get_num_allocated_bytes_in_mapped_read_location( mapped_read_location* loc )
-{
-    mapped_read_location_prologue *prologue =
-        (mapped_read_location_prologue *) loc;
-    return prologue->num_allocated_bytes;
-}
-
 void
-set_num_allocated_bytes_in_mapped_read_location( size_t num_bytes,
-                                                 mapped_read_location* loc )
+build_mapped_read_location( mapped_read_location** loc,
+                            MRL_CHR_TYPE chr,
+                            MRL_FLAG_TYPE flag,
+                            ML_PRB_TYPE seq_error,
+                            mapped_read_sublocations_container* sublocations )
 {
-    mapped_read_location_prologue *prologue =
-        (mapped_read_location_prologue *) loc;
-    prologue->num_allocated_bytes = num_bytes;
-}
+    assert( sublocations->length > 0 );
 
-void
-init_mapped_read_location( mapped_read_location** loc,
-                           MRL_CHR_TYPE chr,
-                           MRL_FLAG_TYPE flag,
-                           ML_PRB_TYPE seq_error,
-                           enum bool are_more )
-{
-    /* Start by allocating space for the prologue */
-    *loc = malloc( sizeof( mapped_read_location_prologue ));
+    /* Start by allocating space for the prologue and the sublocations */
+    *loc = malloc( sizeof( mapped_read_location_prologue ) +
+                   ( sizeof( mapped_read_sublocation ) * sublocations->length ));
 
-    /* Cast loc to a pointer to prologue so we can set it up */
     mapped_read_location_prologue *prologue =
         (mapped_read_location_prologue *) *loc;
 
-    prologue->num_allocated_bytes = sizeof( mapped_read_location_prologue );
-
     assert( chr < CHR_NUM_MAX );
     prologue->chr = chr;
-
     prologue->flag = flag;
     prologue->seq_error = seq_error;
+    /* we don't know if there are more mapped read locations, so we set this to
+     * 0 by default. The add_mapped_read_location_to_mapped_read function will
+     * take care of setting this */
+    prologue->are_more = 0;
 
-    /* enum bool: false = 0, true = 1, so we can assign to an unsigned
-     * bitfield of length 1 */
-    prologue->are_more = are_more; 
+    mapped_read_sublocation *current_sublocation =
+        (mapped_read_sublocation *)
+        ( (char*)(*loc) + sizeof(mapped_read_location_prologue) );
+
+    int i;
+    for( i = 0; i < sublocations->length; i++ )
+    {
+        *current_sublocation = sublocations->container[i];
+        current_sublocation++; // pointer arithmetic
+    }
 }
 
 void
@@ -77,56 +148,6 @@ free_mapped_read_location( mapped_read_location* loc )
 
     free( loc );
     return;
-}
-
-mapped_read_location*
-realloc_mapped_read_location( mapped_read_location* loc, size_t size )
-{
-    mapped_read_location* ra_loc = realloc( loc, size );
-    if( ra_loc == NULL && size > 0 )
-    {
-        fprintf( stderr, "FATAL       :  Error allocating memory for mapped read location.\n");
-        assert(false);
-        exit(-1);
-    }
-
-    set_num_allocated_bytes_in_mapped_read_location( size, ra_loc );
-
-    return ra_loc;
-}
-
-// TODO store (start, stop) or (start, length) ?
-// Originally stored start, stop
-void
-add_subtemplate_location_to_mapped_read_location( mapped_read_location** loc,
-                                                  MRL_START_POS_TYPE start,
-                                                  MRL_FL_TYPE length,
-                                                  enum STRAND strand,
-                                                  enum bool are_more )
-{
-    /* Assumes the prologue has already been allocated and assigned */
-    mapped_read_location_prologue *prologue =
-        (mapped_read_location_prologue *) *loc;
-
-    size_t original_size = prologue->num_allocated_bytes;
-    size_t new_size = original_size + sizeof( mapped_read_subtemplate_location );
-    *loc = realloc_mapped_read_location( *loc, new_size );
-
-    mapped_read_subtemplate_location* new_st_loc = 
-        (mapped_read_subtemplate_location *) ( (char*)*loc + original_size );
-
-    new_st_loc->start_pos = start;
-    new_st_loc->length = length;
-
-    if( strand == FWD ) {
-        new_st_loc->strand = 0;
-    } else if ( strand == BKWD ) {
-        new_st_loc->strand = 1;
-    } else {
-        assert( strand == FWD || strand == BKWD );
-    }
-
-    new_st_loc->are_more = are_more;
 }
 
 
@@ -139,44 +160,185 @@ add_subtemplate_location_to_mapped_read_location( mapped_read_location** loc,
  *
  */
 
-void
-set_num_allocated_bytes_in_mapped_read( size_t size,
-                                        mapped_read_t* rd )
+char*
+skip_read_id_nodes_in_mapped_read( char* ptr )
 {
-    *( (size_t*) rd ) = size;
+    /* Given a pointer to the start of a mapped_read_t, this returns a pointer
+     * to the start of the mapped_read_locations (after any read_id_nodes) */
 
-    return;
+    /* loop over read_id_nodes */
+    while(true)
+    {
+        read_id_node* curr_node = (read_id_node *) ptr;
+        /* Save this read_id_node's are_more flag */
+        int are_more = curr_node->are_more;
+
+        /* Move the pointer */
+        ptr += sizeof( read_id_node );
+
+        /* If this was the last read id node, break */
+        if( !are_more ) {
+            break;
+        }
+    }
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_sublocations_in_mapped_read_location( char* ptr )
+{
+    /* Loop over each mapped_read_sublocation
+     * (we assume there is at least one) */
+    while(true)
+    {
+        mapped_read_sublocation* curr_subloc = (mapped_read_sublocation*) ptr;
+
+        /* If both next_subread flags are false, then there are no more
+         * mapped_read_sublocations for this mapped_read_location */
+        enum bool more_sublocs = true;
+        if( !( curr_subloc->next_subread_is_gapped ||
+               curr_subloc->next_subread_is_ungapped ) )
+        {
+            more_sublocs = false;
+        }
+
+        /* Skip this sub location */
+        ptr += sizeof( mapped_read_sublocation );
+
+        if( !more_sublocs )
+            break;
+    }
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_location_in_mapped_read_locations( char* ptr )
+{
+    ptr += sizeof( mapped_read_location_prologue );
+    ptr = skip_mapped_read_sublocations_in_mapped_read_location( ptr );
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_locations_in_mapped_read_t( char* ptr )
+{
+    /* Loop over each mapped_read_location
+     * (we assume there is at least one) */
+    while(true)
+    {
+        /* Save the value of are_more for this mapped_read_location */
+        mapped_read_location_prologue* curr_loc_prologue =
+            (mapped_read_location_prologue*) ptr;
+
+        int more_locs = curr_loc_prologue->are_more;
+
+        ptr = skip_mapped_read_location_in_mapped_read_locations( ptr );
+
+        if( !more_locs )
+            break;
+    }
+
+    return ptr;
 }
 
 size_t
-get_num_allocated_bytes_in_mapped_read( mapped_read_t* rd )
+get_num_bytes_in_mapped_read_location(
+        mapped_read_location* loc )
 {
-    return *( (size_t*) rd );
+    assert( loc != NULL );
+
+    /* Get a pointer we can use to iterate bytewise over the mapped_read_location */
+    char* ptr = (char*) loc;
+
+    /* Skip the prologue */
+    ptr += sizeof( mapped_read_location_prologue );
+    /* Skip the sublocations */
+    ptr = skip_mapped_read_sublocations_in_mapped_read_location( ptr );
+
+    return (size_t) (ptr - loc);
 }
 
-mapped_read_t*
-realloc_mapped_read( mapped_read_t* rd, size_t size )
+size_t
+get_num_bytes_in_mapped_read( mapped_read_t* rd )
 {
-    mapped_read_t* realloc_ptr = realloc( rd, size );
-    if( realloc_ptr == NULL && size > 0 )
+    /*
+     * ASSUMPTIONS
+     *
+     * This code assumes that each mapped_read_t has at least
+     * 1) 1 read_id_node
+     * 2) 1 mapped_read_location, which has at least
+     *     a) 1 mapped_read_sublocation
+     */
+
+    char* ptr = (char*) rd;
+    ptr = skip_read_id_nodes_in_mapped_read( ptr );
+    ptr = skip_mapped_read_locations_in_mapped_read_t( ptr );
+
+    return (size_t)(ptr - rd);
+}
+
+size_t
+get_size_of_mapped_read_locations_container(
+        mapped_read_locations_container* locs )
+{
+    size_t total_size = 0;
+
+    int i;
+    /* loop over each mapped_read_location in the container */
+    for( i = 0; i < locs->length; i++ )
     {
-        fprintf( stderr, "FATAL       :  Error allocating memory for mapped read.\n");
-        assert(false);
-        exit(-1);
+        mapped_read_location* loc = &(locs->container[i]);
+        size_t loc_size = get_size_of_mapped_read_location( loc );
+        total_size += loc_size;
     }
 
-    set_num_allocated_bytes_in_mapped_read( size, realloc_ptr );
-
-    return realloc_ptr;
+    return total_size;
 }
 
 void
-init_mapped_read( mapped_read_t** rd )
+build_mapped_read( mapped_read_t** rd,
+                   int* read_ids,
+                   int num_read_ids,
+                   mapped_read_locations_container* locs )
 {
-    *rd = NULL;
-    /* allocate enough memory to store num_allocated_bytes */
-    size_t alloc_size = sizeof( size_t );
-    *rd = realloc_mapped_read( *rd, alloc_size );
+    assert( num_read_ids > 0 );
+    assert( locs->length > 0 );
+
+    /* Allocate memory for the read_id_nodes and mapped_read_locations */
+    size_t read_id_nodes_bytes = sizeof( read_id_node ) * num_read_ids;
+    size_t mapped_read_locations_bytes =
+        get_size_of_mapped_read_locations_container( locs );
+    *rd = malloc( read_id_nodes_bytes + mapped_read_locations_bytes );
+
+    /* Get a pointer into the mapped_read_t to iterate over the bytes */
+    char* ptr = (char*) *rd;
+
+    /* Copy the read id nodes into the pseudo structure */
+    int i;
+    for( i = 0; i < num_read_ids; i++ )
+    {
+        read_id_node* curr_node = (read_id_node*) ptr;
+
+        curr_node->read_id = read_ids[i];
+
+        /* If this is the last read_id_node, set the are_more flag to 0 */
+        if( i == num_read_ids - 1 )
+        {
+            curr_node->are_more = 0;
+        }
+        else /* Otherwise, set it to 1 */
+        {
+            curr_node->are_more = 1;
+        }
+
+        ptr += sizeof( read_id_node );
+    }
+
+    /* Copy the mapped_read_locations into the pseudo structure */
+    memcpy( ptr, locs->container, mapped_read_locations_bytes );
 
     return;
 }
@@ -188,80 +350,11 @@ free_mapped_read( mapped_read_t* rd )
     return;
 }
 
-void
-add_read_id_node_to_mapped_read( MPD_RD_ID_T read_id,
-                                 mapped_read_t** rd,
-                                 enum bool are_more )
-{
-    /* IMPORTANT: assumes that we are building the mapped_read_t, and no
-     * mapped_read_locations have been added yet */
-
-    /* reallocate memory to store the new read id node */
-    size_t original_size = get_num_allocated_bytes_in_mapped_read( *rd );
-    size_t new_size = original_size + sizeof( read_id_node );
-    *rd = realloc_mapped_read( *rd, new_size );
-
-    read_id_node *node = (read_id_node*) ((char*)*rd + original_size);
-
-    /* Since we are using 31 bits to store the read_id, but READ_ID_TYPE can't
-     * be 31 bits in size, we check the value to make sure it will fit in the
-     * packed structure */
-    assert( read_id < MAX_READ_ID );
-
-    /* Set the read id */
-    node->read_id = read_id;
-
-    // TODO for now, every mapped_read should only have 1 read_id_node
-    assert( !are_more );
-
-    /* Set the are_more flag */
-    if( are_more )
-    {
-        node->are_more = 1;
-    } else {
-        node->are_more = 0;
-    }
-}
-
-MPD_RD_ID_T
-get_read_id_from_mapped_read( mapped_read_t* rd )
-{
-    /* TODO for now we assume each mapped_read_t has only one read id node.
-     * Therefore, we just take the first read id node and return the stored
-     * read id */
-    char* rd_ptr = (char*) rd;
-
-    /* skip num_allocated_bytes */
-    rd_ptr += sizeof( size_t );
-
-    /* cast to read_id_node pointer to dereference */
-    read_id_node *node = (read_id_node*) rd_ptr;
-    return node->read_id;
-}
-
-void
-add_location_to_mapped_read( mapped_read_location* loc,
-                             mapped_read_t** rd )
-{
-    /* Allocate new space for the location */
-    size_t original_size = get_num_allocated_bytes_in_mapped_read( *rd );
-    size_t loc_size = get_num_allocated_bytes_in_mapped_read_location( loc );
-    size_t new_size = original_size + loc_size;
-    *rd = realloc_mapped_read( *rd, new_size );
-
-    /* Pointer to start of new mapped_read_location in mapped_read_t */
-    mapped_read_location* new_loc =
-        (mapped_read_location *) ( (char*) *rd + original_size );
-
-    /* Direct copy bytes from mapped_read_location into rd */
-    memcpy( new_loc, loc, loc_size );
-}
-
 size_t 
 write_mapped_read_to_file( mapped_read_t* read, FILE* of  )
 {
     size_t num_written = 0;
-    size_t num_allocated = get_num_allocated_bytes_in_mapped_read( read );
+    size_t num_allocated = get_num_bytes_in_mapped_read( read );
 
     num_written = fwrite( read, sizeof(char), num_allocated, of );
     if( num_written != num_allocated )
@@ -270,106 +363,6 @@ write_mapped_read_to_file( mapped_read_t* read, FILE* of  )
     return 0;
 }
 
-char*
-skip_subtemplate_locations_in_mapped_read_location( char* rd )
-{
-    /* assumes the rd pointer is positioned at the start of
-     * a mapped_read_subtemplate_location */
-    char* rd_ptr = rd;
-
-    /* skip the subtemplate locations */
-    while(true)
-    {
-        mapped_read_subtemplate_location *st_loc =
-            (mapped_read_subtemplate_location *) rd_ptr;
-
-        if( !(st_loc->are_more) )
-        {
-            rd_ptr += sizeof( mapped_read_subtemplate_location );
-            break;
-        }
-
-        rd_ptr += sizeof( mapped_read_subtemplate_location );
-    }
-
-    return rd_ptr;
-}
-
-char*
-skip_mapped_read_location_in_mapped_read_t( char* rd )
-{
-    /* assumes the rd pointer is positioned at the start of
-     * a mapped_read_location_prologue */
-
-    char* rd_ptr = rd;
-
-    /* skip the prologue and all subtemplate location entries to get to the
-     * start of the next mapped_read_location */
-    rd_ptr += sizeof( mapped_read_location_prologue );
-
-    /* skip the subtemplate locations */
-    rd_ptr = skip_subtemplate_locations_in_mapped_read_location( rd_ptr );
-
-    return rd_ptr;
-}
-
-char*
-skip_mapped_read_locations_in_mapped_read_t( char* rd )
-{
-    while(true)
-    {
-        mapped_read_location_prologue* loc =
-            (mapped_read_location_prologue*) rd;
-
-        if( !(loc->are_more) )
-        {
-            /* skip the current (final) location */
-            rd = skip_mapped_read_location_in_mapped_read_t( rd );
-            break;
-        }
-
-        rd = skip_mapped_read_location_in_mapped_read_t( rd );
-    }
-
-    return rd;
-}
-
-char*
-get_start_of_mapped_read_locations_in_mapped_read_t( mapped_read_t* rd )
-{
-    /* Assumes rd is at the start of a mapped_read_t structure */
-
-    /* Cast the mapped_read_t to a char* in order to iterate over the
-     * bytepacked data structures using sizeof */
-    char* rd_ptr = (char*) rd;
-
-    /* skip num_allocated_bytes */
-    rd_ptr += sizeof( size_t );
-
-    /* skip read_id_node(s) */
-    while(true)
-    {
-        /* cast current location to read_id_node so it can be examined */
-        read_id_node* node = (read_id_node*) rd_ptr;
-
-        if( !(node->are_more) )
-        {
-            /* increment pointer to the start of the mapped read locations,
-             * and break */
-            rd_ptr += sizeof( read_id_node );
-            break;
-        }
-
-        rd_ptr += sizeof( read_id_node );
-    }
-
-    return rd_ptr;
-}
-
-/*
- * NOTE - this code assumes there is always at least one read_id_node and
- * one mapped_read_location in the pseudo structure
- */
 void
 index_mapped_read( mapped_read_t* rd,
                    mapped_read_index* index )
@@ -381,12 +374,10 @@ index_mapped_read( mapped_read_t* rd,
     index->mappings = malloc( num_allocated_locations*
                               sizeof(mapped_read_location*) );
 
-    /* Locate the start of the mapped read locations in this mapped read. Cast
-     * the pointer to a char* in order to iterate over the bytepacked data
-     * structure using sizeof */
-    char* rd_ptr = get_start_of_mapped_read_locations_in_mapped_read_t( rd );
-
     int num_mapped_locations = 0;
+
+    /* Locate the start of the mapped read locations in this mapped read. */
+    char* locs_ptr = skip_read_id_nodes_in_mapped_read( (char*) rd );
 
     /* index and count the mapped_read_location(s) */
     while(true)
@@ -403,12 +394,12 @@ index_mapped_read( mapped_read_t* rd,
                                        sizeof(mapped_read_location*));
         }
 
-        index->mappings[num_mapped_locations] = (mapped_read_location*) rd_ptr;
+        index->mappings[num_mapped_locations] = (mapped_read_location*) locs_ptr;
         num_mapped_locations += 1;
 
         /* cast read pointer to mapped_read_location_prologue */
-        mapped_read_location_prologue* loc =
-            (mapped_read_location_prologue *) rd_ptr;
+        mapped_read_location_prologue* prologue =
+            (mapped_read_location_prologue *) loc_ptr;
 
         /* if this was the last mapped_read_location, we're done counting */
         if( !( loc->are_more ) )
@@ -417,7 +408,7 @@ index_mapped_read( mapped_read_t* rd,
         }
 
         /* move rd_ptr to the start of the next mapped_read_location */
-        rd_ptr = skip_mapped_read_location_in_mapped_read_t( rd_ptr );
+        loc_ptr = skip_mapped_read_location_in_mapped_read_locations( loc_ptr );
     }
 
     /* reclaim any wasted memory */
@@ -476,7 +467,7 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     assert( seq_error >= 0.0 && seq_error <= 1.0 );
     
     init_mapped_read_location( loc, cm->chr, flag, seq_error, false );
-    add_subtemplate_location_to_mapped_read_location(
+    add_sublocation_to_mapped_read_location(
             loc, cm->start_bp, cm->rd_len, cm->rd_strnd, false );
     
     return 1;
@@ -527,7 +518,7 @@ join_two_candidate_mappings(
 
     /* Add this location as the first read subtemplate location */
     // TODO are_more = false for now, pending candidate mappings rewrite
-    add_subtemplate_location_to_mapped_read_location(
+    add_sublocation_to_mapped_read_location(
             loc, start, stop-start, first_read->rd_strnd, false );
     
     /* ignore reads with zero probability ( possible with FL dist ) */
