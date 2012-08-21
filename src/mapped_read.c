@@ -35,6 +35,15 @@ get_num_allocated_bytes_in_mapped_read_location( mapped_read_location* loc )
 }
 
 void
+set_num_allocated_bytes_in_mapped_read_location( size_t num_bytes,
+                                                 mapped_read_location* loc )
+{
+    mapped_read_location_prologue *prologue =
+        (mapped_read_location_prologue *) loc;
+    prologue->num_allocated_bytes = num_bytes;
+}
+
+void
 init_mapped_read_location( mapped_read_location** loc,
                            MRL_CHR_TYPE chr,
                            MRL_FLAG_TYPE flag,
@@ -70,10 +79,26 @@ free_mapped_read_location( mapped_read_location* loc )
     return;
 }
 
+mapped_read_location*
+realloc_mapped_read_location( mapped_read_location* loc, size_t size )
+{
+    mapped_read_location* ra_loc = realloc( loc, size );
+    if( ra_loc == NULL && size > 0 )
+    {
+        fprintf( stderr, "FATAL       :  Error allocating memory for mapped read location.\n");
+        assert(false);
+        exit(-1);
+    }
+
+    set_num_allocated_bytes_in_mapped_read_location( size, ra_loc );
+
+    return ra_loc;
+}
+
 // TODO store (start, stop) or (start, length) ?
 // Originally stored start, stop
 void
-add_subtemplate_location_to_mapped_read_location( mapped_read_location* loc,
+add_subtemplate_location_to_mapped_read_location( mapped_read_location** loc,
                                                   MRL_START_POS_TYPE start,
                                                   MRL_FL_TYPE length,
                                                   enum STRAND strand,
@@ -81,21 +106,14 @@ add_subtemplate_location_to_mapped_read_location( mapped_read_location* loc,
 {
     /* Assumes the prologue has already been allocated and assigned */
     mapped_read_location_prologue *prologue =
-        (mapped_read_location_prologue *) loc;
+        (mapped_read_location_prologue *) *loc;
 
     size_t original_size = prologue->num_allocated_bytes;
     size_t new_size = original_size + sizeof( mapped_read_subtemplate_location );
-
-    loc = realloc( loc, new_size );
-    if( loc == NULL )
-    {
-        fprintf( stderr, "Error allocating memory for mapped read location.\n");
-        assert(false);
-        exit(-1);
-    }
+    *loc = realloc_mapped_read_location( *loc, new_size );
 
     mapped_read_subtemplate_location* new_st_loc = 
-        (mapped_read_subtemplate_location *) ( (char*)loc + original_size );
+        (mapped_read_subtemplate_location *) ( (char*)*loc + original_size );
 
     new_st_loc->start_pos = start;
     new_st_loc->length = length;
@@ -136,18 +154,20 @@ get_num_allocated_bytes_in_mapped_read( mapped_read_t* rd )
     return *( (size_t*) rd );
 }
 
-void
+mapped_read_t*
 realloc_mapped_read( mapped_read_t* rd, size_t size )
 {
-    rd = realloc( rd, size );
-    if( rd == NULL && size > 0 )
+    mapped_read_t* realloc_ptr = realloc( rd, size );
+    if( realloc_ptr == NULL && size > 0 )
     {
         fprintf( stderr, "FATAL       :  Error allocating memory for mapped read.\n");
         assert(false);
         exit(-1);
     }
 
-    set_num_allocated_bytes_in_mapped_read( size, rd );
+    set_num_allocated_bytes_in_mapped_read( size, realloc_ptr );
+
+    return realloc_ptr;
 }
 
 void
@@ -156,7 +176,7 @@ init_mapped_read( mapped_read_t** rd )
     *rd = NULL;
     /* allocate enough memory to store num_allocated_bytes */
     size_t alloc_size = sizeof( size_t );
-    realloc_mapped_read( *rd, alloc_size );
+    *rd = realloc_mapped_read( *rd, alloc_size );
 
     return;
 }
@@ -170,18 +190,18 @@ free_mapped_read( mapped_read_t* rd )
 
 void
 add_read_id_node_to_mapped_read( MPD_RD_ID_T read_id,
-                                 enum bool are_more,
-                                 mapped_read_t* rd )
+                                 mapped_read_t** rd,
+                                 enum bool are_more )
 {
     /* IMPORTANT: assumes that we are building the mapped_read_t, and no
      * mapped_read_locations have been added yet */
 
     /* reallocate memory to store the new read id node */
-    size_t original_size = get_num_allocated_bytes_in_mapped_read( rd );
+    size_t original_size = get_num_allocated_bytes_in_mapped_read( *rd );
     size_t new_size = original_size + sizeof( read_id_node );
-    realloc_mapped_read( rd, new_size );
+    *rd = realloc_mapped_read( *rd, new_size );
 
-    read_id_node *node = (read_id_node*) ((char*)rd + original_size);
+    read_id_node *node = (read_id_node*) ((char*)*rd + original_size);
 
     /* Since we are using 31 bits to store the read_id, but READ_ID_TYPE can't
      * be 31 bits in size, we check the value to make sure it will fit in the
@@ -221,17 +241,17 @@ get_read_id_from_mapped_read( mapped_read_t* rd )
 
 void
 add_location_to_mapped_read( mapped_read_location* loc,
-                             mapped_read_t* rd )
+                             mapped_read_t** rd )
 {
     /* Allocate new space for the location */
-    size_t original_size = get_num_allocated_bytes_in_mapped_read( rd );
+    size_t original_size = get_num_allocated_bytes_in_mapped_read( *rd );
     size_t loc_size = get_num_allocated_bytes_in_mapped_read_location( loc );
     size_t new_size = original_size + loc_size;
-    realloc_mapped_read( rd, new_size );
+    *rd = realloc_mapped_read( *rd, new_size );
 
     /* Pointer to start of new mapped_read_location in mapped_read_t */
     mapped_read_location* new_loc =
-        (mapped_read_location *) ( (char*) rd + original_size );
+        (mapped_read_location *) ( (char*) *rd + original_size );
 
     /* Direct copy bytes from mapped_read_location into rd */
     memcpy( new_loc, loc, loc_size );
@@ -457,7 +477,7 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     
     init_mapped_read_location( loc, cm->chr, flag, seq_error, false );
     add_subtemplate_location_to_mapped_read_location(
-            *loc, cm->start_bp, cm->rd_len, cm->rd_strnd, false );
+            loc, cm->start_bp, cm->rd_len, cm->rd_strnd, false );
     
     return 1;
 }
@@ -508,7 +528,7 @@ join_two_candidate_mappings(
     /* Add this location as the first read subtemplate location */
     // TODO are_more = false for now, pending candidate mappings rewrite
     add_subtemplate_location_to_mapped_read_location(
-            *loc, start, stop-start, first_read->rd_strnd, false );
+            loc, start, stop-start, first_read->rd_strnd, false );
     
     /* ignore reads with zero probability ( possible with FL dist ) */
     if( seq_error > 2*ML_PRB_MIN ) {
@@ -524,7 +544,7 @@ mapped_read_from_candidate_mapping_arrays(
     int r1_array_len,
     candidate_mapping* r2_array,
     int r2_array_len,
-    mapped_read_t* mpd_rd
+    mapped_read_t** mpd_rd
 )
 {
     double prob_sum = 0;
@@ -575,7 +595,7 @@ mapped_read_from_candidate_mapping_arrays(
 /* returns the sum of sequencing error probabilities - used for renormalization */
 static inline double
 build_mapped_read_from_paired_candidate_mappings( 
-        mapped_read_t* mpd_rd,
+        mapped_read_t** mpd_rd,
         candidate_mappings* mappings
     )
 {
@@ -620,18 +640,18 @@ build_mapped_read_from_paired_candidate_mappings(
 /* returns the sum of sequencing error probabilities - used for renormalization */
 static inline double
 build_mapped_read_from_unpaired_candidate_mappings( 
-        mapped_read_t* mpd_rd,
+        mapped_read_t** mpd_rd,
         candidate_mappings* mappings
     )
 {
     double prob_sum = 0;
 
-    /* store local read location data */
-    mapped_read_location* loc;
-    
     int i;    
     for( i = 0; i < mappings->length; i++ )
     {        
+        /* store local read location data */
+        mapped_read_location* loc;
+    
         /* we expect a read to be either paired end or not - never both */
         assert( mappings->mappings[i].rd_type == SINGLE_END );
 
@@ -683,7 +703,7 @@ build_mapped_read_from_candidate_mappings(
     
     /* Initialize the mapped read */
     init_mapped_read( mpd_rd );
-    add_read_id_node_to_mapped_read( read_id, false, mpd_rd );
+    add_read_id_node_to_mapped_read( read_id, mpd_rd, false );
 
     if( mappings->length == 0 )
         return;
@@ -695,10 +715,10 @@ build_mapped_read_from_candidate_mappings(
     if( mappings->mappings[0].rd_type == SINGLE_END )
     {
         prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
-            *mpd_rd, mappings );
+            mpd_rd, mappings );
     } else {
         prob_sum = build_mapped_read_from_paired_candidate_mappings( 
-            *mpd_rd, mappings );
+            mpd_rd, mappings );
     }    
     
     /* If there are no proper mappings ( this can happen if, 
@@ -1186,16 +1206,21 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
     /* we use a char just to have a byte indexed memory block, meaning that we
        can use pointer ariuthmetic with sizeof */
-    char* read_start = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
+    char* ptr = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
     
     /* count mmapped reads to check they match the saved mapped reads count */
     MPD_RD_ID_T num_indexed_reads = 0;
 
     /* Loop through all of the reads */
-    while( ( (size_t)read_start - (size_t)rdb->mmapped_data ) 
-           < rdb->mmapped_data_size )
+    while( ((size_t)ptr - (size_t)rdb->mmapped_data)
+            < rdb->mmapped_data_size )
     {
         /* start of a mapped_read_t */
+
+        /* save a reference to the start of this mapped_read_t.
+         * Each index entry will be (read_id, ptr), where ptr is to the start
+         * of a mapped_read_t pseudo structure */
+        mapped_read_t* mapped_read_start = (mapped_read_t *) ptr;
 
         /* index the read_id_node's for this mapped_read_t */
         /* note - this assumes there is at least one read_id_node for each
@@ -1203,7 +1228,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
         while(true)
         {
             /* cast current location to read_id_node so it can be examined */
-            read_id_node* node = (read_id_node*) read_start;
+            read_id_node* node = (read_id_node*) ptr;
 
             /* add the read_id_node to the index */
 
@@ -1217,7 +1242,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
             assert( num_indexed_reads < num_allcd_reads );
 
             rdb->index[num_indexed_reads].read_id = node->read_id;
-            rdb->index[num_indexed_reads].ptr = read_start;
+            rdb->index[num_indexed_reads].ptr = mapped_read_start;
 
             num_indexed_reads += 1;
 
@@ -1225,15 +1250,15 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
             {
                 /* increment pointer to the start of the mapped read locations,
                  * and break */
-                read_start += sizeof( read_id_node );
+                ptr += sizeof( read_id_node );
                 break;
             }
 
-            read_start += sizeof( read_id_node );
+            ptr += sizeof( read_id_node );
         }
 
         /* skip over the rest of the mapped_read_t in the mmapped memory */ 
-        read_start = skip_mapped_read_locations_in_mapped_read_t( read_start );
+        ptr = skip_mapped_read_locations_in_mapped_read_t( ptr );
     }
 
     /* reclaim any wasted memory */
@@ -1254,6 +1279,9 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
         fprintf( stderr, 
                  "FATAL           :  The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.", 
                  num_indexed_reads, rdb->num_mapped_reads );
+
+        assert(false);
+        exit(-1);
     }
     
     return;

@@ -1242,7 +1242,7 @@ add_mapped_reads_from_candidate_mappings(
             readkey
         );
 
-    /* if we were actual able to build a mapped read with > 0 prb */
+    /* if we were actually able to build a mapped read with > 0 prb */
     if( NULL != mpd_rd ) {
         add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
         free_mapped_read( mpd_rd );

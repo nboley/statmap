@@ -204,13 +204,6 @@ init_mapped_read_location( mapped_read_location** loc,
 void
 free_mapped_read_location( mapped_read_location* loc );
 
-void
-add_subtemplate_location_to_mapped_read_location( mapped_read_location* loc,
-                                                  MRL_START_POS_TYPE start,
-                                                  MRL_FL_TYPE length,
-                                                  enum STRAND strand,
-                                                  enum bool are_more );
-
 /** FLAG **/
 
 static inline MRL_FLAG_TYPE
@@ -360,7 +353,7 @@ free_mapped_read( mapped_read_t* rd );
 
 void
 add_location_to_mapped_read( mapped_read_location* loc,
-                             mapped_read_t* rd );
+                             mapped_read_t** rd );
 
 MPD_RD_ID_T
 get_read_id_from_mapped_read( mapped_read_t* rd );
