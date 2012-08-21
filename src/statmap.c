@@ -218,6 +218,7 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     return;
 }
 
+#if 0
 void
 iterative_mapping( struct args_t* args, 
                    struct genome_data* genome, 
@@ -240,6 +241,7 @@ iterative_mapping( struct args_t* args,
         
     return;
 }
+#endif
 
 void
 map_generic_data(  struct args_t* args )
@@ -271,8 +273,10 @@ map_generic_data(  struct args_t* args )
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
+#if 0
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
+#endif
     
     if( args->frag_len_fp != NULL ) {
         build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
@@ -350,6 +354,7 @@ map_chipseq_data(  struct args_t* args )
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_ondisk_index( genome->index );
     
+#if 0
     /* if there is no negative control, we use the same iterative 
        scheme as the generic version. iterative_mapping takes care of 
        everything ( output, iterative, etc. ). We dont touch peak calling - 
@@ -404,6 +409,7 @@ map_chipseq_data(  struct args_t* args )
     
         fclose( s_mi );
     }
+#endif
     
     goto cleanup;
 
