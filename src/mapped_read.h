@@ -202,9 +202,9 @@ typedef struct {
 
 // 6 bytes
 typedef struct {
-    signed start_pos :LOCATION_BITS; // 29 bits
+    signed start_pos :LOCATION_BITS;        // 29 bits
     signed length :SUBTEMPLATE_LENGTH_BITS; // 16 bits
-    unsigned strand :1;
+    unsigned strand :1;                     // 0 = FWD, 1 = BKWD
 
     unsigned next_subread_is_gapped :1;
     unsigned next_subread_is_ungapped :1;
@@ -212,15 +212,15 @@ typedef struct {
 
 /* Temporary container for stashing mapped read sublocations while we're
  * building a mapped read location */
-struct {
+typedef struct {
     mapped_read_sublocation* container;
     int length;
 } mapped_read_sublocations_container;
 
-struct {
-    mapped_read_location* container;
+typedef struct {
+    mapped_read_location** container;
     int length;
-}
+} mapped_read_locations_container;
 
 /* 
  * small, inline functions for setting and accessing the items

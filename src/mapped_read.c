@@ -63,41 +63,6 @@ add_mapped_read_sublocation_to_container(
 }
 
 
-void
-init_mapped_read_locations_container(
-        mapped_read_locations_container **c )
-{
-    (*c) = malloc( sizeof( mapped_read_locations_container ));
-
-    (*c)->container = NULL;
-    (*c)->length = 0;
-}
-
-void
-free_mapped_read_locations_container(
-        mapped_read_locations_container* c )
-{
-    if( c == NULL ) return;
-
-    if( c->container != NULL )
-        free( c->container );
-
-    free(c);
-
-    return;
-}
-
-void
-add_mapped_read_location_to_container(
-        mapped_read_location* loc,
-        mapped_read_locations_container* c )
-{
-    c->length += 1;
-    c->container = realloc( c->container,
-            sizeof( mapped_read_location ) * c->length );
-    c->container[c->length-1] = *loc;
-}
-
 /*************************************************************************
  *
  *  Mapped Read Locations
@@ -148,6 +113,52 @@ free_mapped_read_location( mapped_read_location* loc )
 
     free( loc );
     return;
+}
+
+/***** Temporary container for mapped_read_location(s) *****/
+
+void
+init_mapped_read_locations_container(
+        mapped_read_locations_container **c )
+{
+    (*c) = malloc( sizeof( mapped_read_locations_container ));
+
+    (*c)->container = NULL;
+    (*c)->length = 0;
+}
+
+void
+free_mapped_read_locations_container(
+        mapped_read_locations_container* c )
+{
+    if( c == NULL ) return;
+
+    if( c->container != NULL )
+    {
+        /* free the mapped read locations */
+        int i;
+        for( i = 0; i < c->length; i++ )
+        {
+            free( c->container[i] ); // & (?)
+        }
+
+        free( c->container );
+    }
+
+    free(c);
+
+    return;
+}
+
+void
+add_mapped_read_location_to_container(
+        mapped_read_location* loc,
+        mapped_read_locations_container* c )
+{
+    c->length += 1;
+    c->container = realloc( c->container,
+            sizeof( mapped_read_location* ) * c->length );
+    c->container[c->length-1] = loc;
 }
 
 
@@ -245,7 +256,7 @@ skip_mapped_read_locations_in_mapped_read_t( char* ptr )
 }
 
 size_t
-get_num_bytes_in_mapped_read_location(
+get_size_of_mapped_read_location(
         mapped_read_location* loc )
 {
     assert( loc != NULL );
@@ -258,11 +269,11 @@ get_num_bytes_in_mapped_read_location(
     /* Skip the sublocations */
     ptr = skip_mapped_read_sublocations_in_mapped_read_location( ptr );
 
-    return (size_t) (ptr - loc);
+    return (size_t) (ptr - (char*) loc);
 }
 
 size_t
-get_num_bytes_in_mapped_read( mapped_read_t* rd )
+get_size_of_mapped_read( mapped_read_t* rd )
 {
     /*
      * ASSUMPTIONS
@@ -277,7 +288,7 @@ get_num_bytes_in_mapped_read( mapped_read_t* rd )
     ptr = skip_read_id_nodes_in_mapped_read( ptr );
     ptr = skip_mapped_read_locations_in_mapped_read_t( ptr );
 
-    return (size_t)(ptr - rd);
+    return (size_t)(ptr - (char*) rd);
 }
 
 size_t
@@ -354,13 +365,25 @@ size_t
 write_mapped_read_to_file( mapped_read_t* read, FILE* of  )
 {
     size_t num_written = 0;
-    size_t num_allocated = get_num_bytes_in_mapped_read( read );
+    size_t num_allocated = get_size_of_mapped_read( read );
 
     num_written = fwrite( read, sizeof(char), num_allocated, of );
     if( num_written != num_allocated )
         return -num_written;
 
     return 0;
+}
+
+MPD_RD_ID_T
+get_read_id_from_mapped_read( mapped_read_t* rd )
+{
+    /* for now, assume each mapped_read_t has only one read_id_node.
+     * Just take the first read id node and return the stored read id */
+    char* rd_ptr = (char*) rd;
+    
+    /* cast to read_id_node to dereference */
+    read_id_node *node = (read_id_node*) rd_ptr;
+    return node->read_id;
 }
 
 void
@@ -377,7 +400,7 @@ index_mapped_read( mapped_read_t* rd,
     int num_mapped_locations = 0;
 
     /* Locate the start of the mapped read locations in this mapped read. */
-    char* locs_ptr = skip_read_id_nodes_in_mapped_read( (char*) rd );
+    char* loc_ptr = skip_read_id_nodes_in_mapped_read( (char*) rd );
 
     /* index and count the mapped_read_location(s) */
     while(true)
@@ -394,7 +417,7 @@ index_mapped_read( mapped_read_t* rd,
                                        sizeof(mapped_read_location*));
         }
 
-        index->mappings[num_mapped_locations] = (mapped_read_location*) locs_ptr;
+        index->mappings[num_mapped_locations] = (mapped_read_location*) loc_ptr;
         num_mapped_locations += 1;
 
         /* cast read pointer to mapped_read_location_prologue */
@@ -402,7 +425,7 @@ index_mapped_read( mapped_read_t* rd,
             (mapped_read_location_prologue *) loc_ptr;
 
         /* if this was the last mapped_read_location, we're done counting */
-        if( !( loc->are_more ) )
+        if( !( prologue->are_more ) )
         {
             break;
         }
@@ -465,10 +488,34 @@ convert_unpaired_candidate_mapping_into_mapped_read(
     
     float seq_error = pow( 10, cm->penalty );
     assert( seq_error >= 0.0 && seq_error <= 1.0 );
-    
-    init_mapped_read_location( loc, cm->chr, flag, seq_error, false );
-    add_sublocation_to_mapped_read_location(
-            loc, cm->start_bp, cm->rd_len, cm->rd_strnd, false );
+
+    /* Build a single sublocation */
+    mapped_read_sublocation subloc;
+
+    subloc.start_pos = cm->start_bp;
+    subloc.length = cm->rd_len;
+
+    if( cm->rd_strnd == FWD ) {
+        subloc.strand = 0;
+    } else if( cm->rd_strnd == BKWD ) {
+        subloc.strand = 1;
+    } else {
+        assert( cm->rd_strnd == FWD || cm->rd_strnd == BKWD );
+    }
+
+    subloc.next_subread_is_gapped = 0;
+    subloc.next_subread_is_ungapped = 0;
+
+    /* Build a container for the subloc */
+
+    mapped_read_sublocations_container* sublocs = NULL;
+    init_mapped_read_sublocations_container( &sublocs );
+    add_mapped_read_sublocation_to_container( &subloc, sublocs );
+
+    /* Build the mapped read location with the container of sublocations */
+    build_mapped_read_location( loc, cm->chr, flag, seq_error, sublocs );
+
+    free_mapped_read_sublocations_container( sublocs );
     
     return 1;
 }
@@ -511,21 +558,41 @@ join_two_candidate_mappings(
     }
 
     float seq_error = pow( 10, first_read->penalty + second_read->penalty );
-    
-    /* Initialize the mapped read location */
-    // TODO - are_more - we don't know - add code to add_mapped_read_location
-    init_mapped_read_location( loc, chr, flag, seq_error, false );
 
-    /* Add this location as the first read subtemplate location */
-    // TODO are_more = false for now, pending candidate mappings rewrite
-    add_sublocation_to_mapped_read_location(
-            loc, start, stop-start, first_read->rd_strnd, false );
-    
     /* ignore reads with zero probability ( possible with FL dist ) */
     if( seq_error > 2*ML_PRB_MIN ) {
         return 1;
     }
 
+    /* Build a single sublocation (TODO for now) */
+    mapped_read_sublocation subloc;
+
+    subloc.start_pos = start;
+    subloc.length = stop - start;
+
+    if( first_read->rd_strnd == FWD )
+    {
+        subloc.strand = 0;
+    } else if( first_read->rd_strnd == BKWD ) {
+        subloc.strand = 1;
+    } else {
+        assert( first_read->rd_strnd == FWD || first_read->rd_strnd == BKWD );
+    }
+
+    subloc.next_subread_is_gapped = 0;
+    subloc.next_subread_is_ungapped = 0;
+
+    /* Build a container for the subloc */
+
+    mapped_read_sublocations_container* sublocs = NULL;
+    init_mapped_read_sublocations_container( &sublocs );
+    add_mapped_read_sublocation_to_container( &subloc, sublocs );
+
+    /* Build the mapped read location with the container of sublocations */
+    build_mapped_read_location( loc, chr, flag, seq_error, sublocs );
+
+    free_mapped_read_sublocations_container( sublocs );
+    
     return 0;
 }
 
@@ -535,8 +602,7 @@ mapped_read_from_candidate_mapping_arrays(
     int r1_array_len,
     candidate_mapping* r2_array,
     int r2_array_len,
-    mapped_read_t** mpd_rd
-)
+    mapped_read_locations_container* locs )
 {
     double prob_sum = 0;
     
@@ -574,9 +640,11 @@ mapped_read_from_candidate_mapping_arrays(
             /* if the location is valid ( non-zero probability ) */
             if( rv == 1 )
             {
-                add_location_to_mapped_read( loc, mpd_rd );
                 prob_sum += get_seq_error_from_mapped_read_location( loc );
+                add_mapped_read_location_to_container( loc, locs );
             }
+
+            free_mapped_read_location( loc );
         }
     }
     
@@ -585,8 +653,8 @@ mapped_read_from_candidate_mapping_arrays(
 
 /* returns the sum of sequencing error probabilities - used for renormalization */
 static inline double
-build_mapped_read_from_paired_candidate_mappings( 
-        mapped_read_t** mpd_rd,
+build_mapped_read_locations_from_paired_candidate_mappings( 
+        mapped_read_locations_container* locs,
         candidate_mappings* mappings
     )
 {
@@ -622,7 +690,7 @@ build_mapped_read_from_paired_candidate_mappings(
         p2_start,
         mappings->mappings + p2_start,
         mappings->length - p2_start,
-        mpd_rd
+        locs
     );
 
     return prob_sum;
@@ -630,19 +698,15 @@ build_mapped_read_from_paired_candidate_mappings(
 
 /* returns the sum of sequencing error probabilities - used for renormalization */
 static inline double
-build_mapped_read_from_unpaired_candidate_mappings( 
-        mapped_read_t** mpd_rd,
-        candidate_mappings* mappings
-    )
+build_mapped_read_locations_from_unpaired_candidate_mappings( 
+        mapped_read_locations_container* locs,
+        candidate_mappings* mappings )
 {
     double prob_sum = 0;
 
     int i;    
     for( i = 0; i < mappings->length; i++ )
-    {        
-        /* store local read location data */
-        mapped_read_location* loc;
-    
+    {
         /* we expect a read to be either paired end or not - never both */
         assert( mappings->mappings[i].rd_type == SINGLE_END );
 
@@ -650,6 +714,9 @@ build_mapped_read_from_unpaired_candidate_mappings(
         if( (mappings->mappings)[i].recheck != VALID )
             continue;
 
+        /* store local read location data */
+        mapped_read_location* loc;
+    
         int rv = 
             convert_unpaired_candidate_mapping_into_mapped_read( 
                 mappings->mappings + i, &loc );
@@ -658,8 +725,10 @@ build_mapped_read_from_unpaired_candidate_mappings(
         if( 1 == rv )
         {
             prob_sum += get_seq_error_from_mapped_read_location( loc );
-            add_location_to_mapped_read( loc, mpd_rd );
+            add_mapped_read_location_to_container( loc, locs );
         }
+
+        free_mapped_read_location( loc );
     }
 
     return prob_sum;
@@ -692,24 +761,26 @@ build_mapped_read_from_candidate_mappings(
      * 
      */
     
-    /* Initialize the mapped read */
-    init_mapped_read( mpd_rd );
-    add_read_id_node_to_mapped_read( read_id, mpd_rd, false );
-
     if( mappings->length == 0 )
         return;
     
     /* store the sum of the marginal probabilities */
     double prob_sum;
 
+    /* store the mapped locations */
+    mapped_read_locations_container* mapped_locs = NULL;
+    init_mapped_read_locations_container( &mapped_locs );
+
     /* this assumes all reads are either paired or not */
     if( mappings->mappings[0].rd_type == SINGLE_END )
     {
-        prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
-            mpd_rd, mappings );
+        prob_sum =
+            build_mapped_read_locations_from_unpaired_candidate_mappings( 
+                mapped_locs, mappings );
     } else {
-        prob_sum = build_mapped_read_from_paired_candidate_mappings( 
-            mpd_rd, mappings );
+        prob_sum =
+            build_mapped_read_locations_from_paired_candidate_mappings( 
+                mapped_locs, mappings );
     }    
     
     /* If there are no proper mappings ( this can happen if, 
@@ -720,7 +791,12 @@ build_mapped_read_from_candidate_mappings(
         *mpd_rd = NULL;
         return;
     }
+
+    int read_ids[] = { read_id };
+    build_mapped_read( mpd_rd, read_ids, 1, mapped_locs );
     
+    free_mapped_read_locations_container( mapped_locs );
+
     return;
 }
 
