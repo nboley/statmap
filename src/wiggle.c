@@ -579,8 +579,6 @@ write_marginal_mapped_reads_to_stranded_wiggles(
                 traces, rd->locations + j );
         }
         
-        free_mapped_read( rd );
-        
         read_num++;
     }
     

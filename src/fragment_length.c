@@ -182,8 +182,6 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 
         total_num_reads += 1;
         temp_fls[ fl ] += 1;
-        
-        free_mapped_read( rd );
     }
     
     /* check that we have looked at every read */

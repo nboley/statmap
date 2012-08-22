@@ -89,9 +89,8 @@ build_mapped_read_location( mapped_read_location** loc,
     prologue->chr = chr;
     prologue->flag = flag;
     prologue->seq_error = seq_error;
-    /* we don't know if there are more mapped read locations, so we set this to
-     * 0 by default. The add_mapped_read_location_to_mapped_read function will
-     * take care of setting this */
+    /* we don't know if there are more mapped read locations, so this defaults
+     * to 0. This is updated in build_mapped_read */
     prologue->are_more = 0;
 
     mapped_read_sublocation *current_sublocation =
@@ -354,6 +353,19 @@ build_mapped_read( mapped_read_t** rd,
         mapped_read_location* loc = locs->container[i];
         size_t loc_size = get_size_of_mapped_read_location( loc );
         memcpy( ptr, loc, loc_size );
+
+        /* Set the are_more flag in each mapped_read_location */
+        mapped_read_location_prologue* prologue =
+            (mapped_read_location_prologue*) ptr;
+
+        if( i == locs->length - 1 )
+        {
+            /* if this is the last mapped_read_location, set the are_more flag to 0 */
+            prologue->are_more = 0;
+        } else {
+            /* otherwise, set it to 1 */
+            prologue->are_more = 1;
+        }
 
         ptr += loc_size;
     }
@@ -717,7 +729,7 @@ build_mapped_read_locations_from_paired_candidate_mappings(
 }
 
 /* returns the sum of sequencing error probabilities - used for renormalization */
-static inline double
+double
 build_mapped_read_locations_from_unpaired_candidate_mappings( 
         mapped_read_locations_container* locs,
         candidate_mappings* mappings )
