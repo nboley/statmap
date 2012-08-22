@@ -396,8 +396,8 @@ write_mapped_read_to_file( mapped_read_t* read, FILE* of  );
 typedef struct {
     mapped_read_t* rd;
     MPD_RD_ID_T read_id;
-    MPD_RD_ID_T num_mappings; // TODO change to num_mappings
-    mapped_read_location** mappings; // TODO change to mappings
+    MPD_RD_ID_T num_mappings;
+    mapped_read_location** mappings;
 } mapped_read_index;
 
 void

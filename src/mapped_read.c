@@ -301,7 +301,7 @@ get_size_of_mapped_read_locations_container(
     /* loop over each mapped_read_location in the container */
     for( i = 0; i < locs->length; i++ )
     {
-        mapped_read_location* loc = &(locs->container[i]);
+        mapped_read_location* loc = locs->container[i];
         size_t loc_size = get_size_of_mapped_read_location( loc );
         total_size += loc_size;
     }
@@ -349,7 +349,14 @@ build_mapped_read( mapped_read_t** rd,
     }
 
     /* Copy the mapped_read_locations into the pseudo structure */
-    memcpy( ptr, locs->container, mapped_read_locations_bytes );
+    for( i = 0; i < locs->length; i++ )
+    {
+        mapped_read_location* loc = locs->container[i];
+        size_t loc_size = get_size_of_mapped_read_location( loc );
+        memcpy( ptr, loc, loc_size );
+
+        ptr += loc_size;
+    }
 
     return;
 }
@@ -385,6 +392,12 @@ get_read_id_from_mapped_read( mapped_read_t* rd )
     read_id_node *node = (read_id_node*) rd_ptr;
     return node->read_id;
 }
+
+/*************************************************************************
+ *
+ *  Mapped Read Index
+ *
+ */
 
 void
 index_mapped_read( mapped_read_t* rd,
@@ -466,11 +479,20 @@ free_mapped_read_index( mapped_read_index* index )
 {
     if( index == NULL ) return;
 
-    free( index->mappings );
+    if( index->mappings != NULL ) {
+        free( index->mappings );
+    }
+
     free( index );
 
     return;
 }
+
+/*************************************************************************
+ *
+ *  Convert Candidate Mappings to Mapped Reads
+ *
+ */
 
 /* returns 1 for success, 0 for failure */
 static inline int
@@ -559,11 +581,6 @@ join_two_candidate_mappings(
 
     float seq_error = pow( 10, first_read->penalty + second_read->penalty );
 
-    /* ignore reads with zero probability ( possible with FL dist ) */
-    if( seq_error > 2*ML_PRB_MIN ) {
-        return 1;
-    }
-
     /* Build a single sublocation (TODO for now) */
     mapped_read_sublocation subloc;
 
@@ -593,6 +610,11 @@ join_two_candidate_mappings(
 
     free_mapped_read_sublocations_container( sublocs );
     
+    /* ignore reads with zero probability ( possible with FL dist ) */
+    if( seq_error > 2*ML_PRB_MIN ) {
+        return 1;
+    }
+
     return 0;
 }
 
@@ -643,8 +665,6 @@ mapped_read_from_candidate_mapping_arrays(
                 prob_sum += get_seq_error_from_mapped_read_location( loc );
                 add_mapped_read_location_to_container( loc, locs );
             }
-
-            free_mapped_read_location( loc );
         }
     }
     
@@ -727,8 +747,6 @@ build_mapped_read_locations_from_unpaired_candidate_mappings(
             prob_sum += get_seq_error_from_mapped_read_location( loc );
             add_mapped_read_location_to_container( loc, locs );
         }
-
-        free_mapped_read_location( loc );
     }
 
     return prob_sum;
@@ -1032,7 +1050,6 @@ get_next_read_from_mapped_reads_db(
     if( rdb->current_read == rdb->num_mapped_reads )
     {
         pthread_mutex_unlock( rdb->mutex );
-        free_mapped_read( rd );
         *rd = NULL;
         return EOF;
     }
@@ -1101,10 +1118,7 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb,
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {
         reset_read_cond_probs( cond_prbs_db, r, rdb );
-        free_mapped_read( r );
     }
-    
-    free_mapped_read( r );
 }
 
 
@@ -1284,11 +1298,6 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     {
         /* start of a mapped_read_t */
 
-        /* save a reference to the start of this mapped_read_t.
-         * Each index entry will be (read_id, ptr), where ptr is to the start
-         * of a mapped_read_t pseudo structure */
-        mapped_read_t* mapped_read_start = (mapped_read_t *) ptr;
-
         /* index the read_id_node's for this mapped_read_t */
         /* note - this assumes there is at least one read_id_node for each
          * mapped_read_t */
@@ -1309,7 +1318,7 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
             assert( num_indexed_reads < num_allcd_reads );
 
             rdb->index[num_indexed_reads].read_id = node->read_id;
-            rdb->index[num_indexed_reads].ptr = mapped_read_start;
+            rdb->index[num_indexed_reads].ptr = ptr;
 
             num_indexed_reads += 1;
 
@@ -1399,11 +1408,8 @@ init_cond_prbs_db_from_mpd_rdb(
     {
         MPD_RD_ID_T read_id = get_read_id_from_mapped_read( mapped_rd );
         max_rd_id = MAX( max_rd_id, read_id );
-        free_mapped_read( mapped_rd );
     }
     (*cond_prbs_db)->max_rd_id = max_rd_id;
-    
-    free_mapped_read( mapped_rd );
     
     /* allocate space for the prb start pointers */
     (*cond_prbs_db)->cond_read_prbs = calloc( max_rd_id+1, sizeof(ML_PRB_TYPE*) );
@@ -1419,10 +1425,7 @@ init_cond_prbs_db_from_mpd_rdb(
             = calloc( rd_index->num_mappings, sizeof( ML_PRB_TYPE  )  );
 
         free_mapped_read_index( rd_index );
-        free_mapped_read( mapped_rd );
     }
-
-    free_mapped_read( mapped_rd ); // necessary?
 
     return;
 }

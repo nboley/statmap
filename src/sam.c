@@ -362,7 +362,7 @@ fprintf_mapped_read_to_sam(
 
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
-                mpd_rd_index->mappings + i,
+                mpd_rd_index->mappings[i],
                 cond_prob,
 
                 genome,
@@ -384,7 +384,7 @@ fprintf_mapped_read_to_sam(
 
             fprintf_nonpaired_mapped_read_as_sam( 
                 sam_fp,
-                mpd_rd_index->mappings + i,
+                mpd_rd_index->mappings[i],
                 cond_prob,
                 
                 genome,
@@ -395,6 +395,9 @@ fprintf_mapped_read_to_sam(
             );
         }
     }
+
+    free_mapped_read_index( mpd_rd_index );
+
     return;
 }
 
@@ -512,7 +515,6 @@ write_nonmapping_reads_to_fastq(
         if( mapped_rd != NULL
             && readkey == mapped_rd_index->read_id )
         {
-            free_mapped_read( mapped_rd );
             error = get_next_read_from_mapped_reads_db( 
                 mappings_db, 
                 &mapped_rd
@@ -533,9 +535,6 @@ write_nonmapping_reads_to_fastq(
     goto cleanup;
 
 cleanup:
-    if( NULL != mapped_rd )
-        free_mapped_read( mapped_rd );
-
     /* Free the read */
     free_read( rd );
 
@@ -628,7 +627,6 @@ write_mapped_reads_to_sam(
         }
         
         free_mapped_read_index( mapped_rd_index );
-        free_mapped_read( mapped_rd );
         
         /* Free the read */
         free_read( rd );
@@ -656,8 +654,6 @@ write_mapped_reads_to_sam(
     goto cleanup;
 
 cleanup:
-    if( NULL != mapped_rd )
-        free_mapped_read( mapped_rd );
 
     /* Free the read */
     if( rd != NULL )
