@@ -765,7 +765,7 @@ build_mapped_read_locations_from_unpaired_candidate_mappings(
 }
 
 void
-build_mapped_read_from_candidate_mappings( 
+OLD_build_mapped_read_from_candidate_mappings( 
         mapped_read_t** mpd_rd,
         candidate_mappings* mappings, 
         MPD_RD_ID_T read_id
@@ -826,6 +826,66 @@ build_mapped_read_from_candidate_mappings(
     build_mapped_read( mpd_rd, read_ids, 1, mapped_locs );
     
     free_mapped_read_locations_container( mapped_locs );
+
+    return;
+}
+
+void
+join_candidate_mappings( candidate_mappings* mappings, 
+                         joined_candidate_mappings*** joined_mappings, 
+                         float* penalty,
+                         int* joined_mappings_len
+    )
+{
+    return;
+}
+
+
+void
+filter_joined_candidate_mappings( candidate_mappings* mappings, 
+                                  joined_candidate_mappings** joined_mappings, 
+                                  in* joined_mappings_len
+    )
+{
+    /* For now, just don't filter */
+    return;
+}
+
+
+void
+build_mapped_read_from_candidate_mappings( 
+        mapped_read_t** mpd_rd,
+        candidate_mappings* mappings, 
+        MPD_RD_ID_T read_id
+    )
+{
+    /* 
+     * 1) Join candidate mappings ( read subtemplates ) from the same 
+     *    read template
+     *    - join_candidate_mappings
+     *      produces a list of pointers into 'mappings', where mappings
+     *      that shouldn't be joined are seperated by NULL pointers
+     *    - filter_joined_candidate_mappings
+     *      calculate error estiamtes, and filter bad joins
+     * 2) For each joined candidate mapping
+     *    - Init a mapped read ( and allocate memory )
+     *      - calculate_mapped_read_space_from_joined_candidate_mappings
+     *      - init_new_mapped_read_from_single_read_id
+     *          ( init the new mapped read, and add in the read id )
+     *    - Populate the new mapped read
+     *         FOR EACH set_of_joined_candidate_mappings in joined_mappings
+     *             - build_mapped_read_location_prologue
+     *             ( add this into mapped_read_t )
+     *             FOR EACH candidate mapping in set_of_joined_candidate_mappings
+     *                 - build_mapped_read_sublocation_from_candidate_mapping
+     *                 ( add this into mapped_read_t )
+     *               
+     * 3) Fix the SAM code
+     *    - almost trivial, because all of the information is inside of the 
+     *      mapped eads structure
+     *
+     */
+    
 
     return;
 }

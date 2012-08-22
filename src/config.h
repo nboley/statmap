@@ -237,12 +237,11 @@ enum RECHECK
     from a + read. So, we would add GGC here as a potential gene *end*
     for a *- strand gene* and CAA as a gene *start*
 */
-#define CHR_BITS 15
-#define CHR_NUM_MAX (32768 - 1) // 2**15 - 1
+#define CHR_BITS 14
+#define CHR_NUM_MAX (16384 - 1) // 2**14 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 29
-// MADE_SIGNED_REVERT
-#define LOCATION_MAX (536870912/2 - 1) // 2**29 = 536870912
+#define LOCATION_MAX (536870912 - 1) // 2**29 = 536870912
 
 #define FRAGMENT_LENGTH_BITS 20
 #define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
@@ -256,7 +255,7 @@ typedef struct __attribute__((__packed__))
     unsigned is_paternal    :1;
     unsigned is_maternal    :1;
     
-    unsigned unused_space   :2;
+    unsigned unused_space   :3;
     
     /* the chr that the read came from */
     unsigned chr            :CHR_BITS;

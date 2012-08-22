@@ -121,34 +121,38 @@ ML_PRB_TYPE_from_float( float value  )
 
 /*
 mapped_read_t {
-
     // 4 bytes
     struct {
-        signed read_id :31;
+        signed read_id    :READ_ID_BITS;          // 31 bits
         unsigned are_more :1;
     } read_id_node;
     // potentially more read ids
-
+    
+    // MIN 16 bytes ( 4 per extra read id, 6 per extra subtemplate )
     struct mapped_read_location {
-
         // 6 bytes
-        signed chr :CHR_BITS;       // 15 bits
-        unsigned are_more :1        // 1 bit
-        signed flag :FLAG_BITS;     // 1 byte TODO we may be able to get rid of this
-        ML_PRB_TYPE seq_error;      // 4 bytes
-
+        struct mapped_read_location_prologue{
+            unsigned chr      :CHR_BITS;              // 14 bits
+            unsigned strand   :1;                     // 1 bits
+            unsigned are_more :1;                     // 1 bit
+        
+            ML_PRB_TYPE seq_error[NUM_READ_IDS];      // 4 bytes
+            // 1 sequencing error for each read id
+        }
+        
         // 6 bytes
-        struct {
+        struct mapped_read_sublocation {
             signed start_pos    :LOCATION_BITS; ( 29 )
-            signed length       :SUBTEMPLATE_LENGTH_BITS; ( 16 )
-            unsigned strand     :1;
+            unsigned length     :SUBTEMPLATE_LENGTH_BITS; ( 15 )
 
-            unsigned next_subread_is_gapped :1;
+            unsigned rev_comp                 :1;
+            unsigned is_full_contig           :1;
+            unsigned next_subread_is_gapped   :1;
             unsigned next_subread_is_ungapped :1;
         }
         // potentially more sublocations
     }
-
+    
     // potentially more mapped read locations
 
 } __attribute__((__packed__));
@@ -171,12 +175,10 @@ typedef void mapped_read_location;
 /* Set if the first read ( ie read_name/1 ) maps to start_pos */
 #define FIRST_PAIR_IS_FIRST_IN_GENOME 4
 
-#define SUBTEMPLATE_LENGTH_BITS 16
-#define MAX_SUBTEMPLATE_LENGTH 32767 // 2**16 / 2 - 1
+#define SUBTEMPLATE_LENGTH_BITS 15
+#define MAX_SUBTEMPLATE_LENGTH 32767 // 2**15 - 1
 
-#define FLAG_BITS 8
-#define MAX_FLAG_LENGTH 127 // 2**8 / 2 - 1
-
+#define READ_ID_BITS 31
 #define MAX_READ_ID 1073741823 // 2**31 / 2 - 1 = 1073741823
 /*
  * Structures used to access and manipulate the mapped_read_t and
@@ -189,24 +191,27 @@ typedef void mapped_read_location;
 
 // 4 bytes
 typedef struct {
-    unsigned read_id :31;
+    unsigned read_id  :READ_ID_BITS;
     unsigned are_more :1;
 } read_id_node;
 
+// 6 bytes
 typedef struct {
-    unsigned chr :CHR_BITS;     // 15 bits
-    unsigned are_more :1;       // 1 bit
-    unsigned flag :FLAG_BITS;   // 1 byte TODO get rid of this
-    ML_PRB_TYPE seq_error;      // 4 bytes
+    unsigned chr      :CHR_BITS;
+    unsigned strand   :1;
+    unsigned are_more :1;
+    // For now, we assume that there is only 1 readid
+    ML_PRB_TYPE seq_error;      
 } mapped_read_location_prologue;
 
 // 6 bytes
 typedef struct {
-    signed start_pos :LOCATION_BITS;        // 29 bits
-    signed length :SUBTEMPLATE_LENGTH_BITS; // 16 bits
-    unsigned strand :1;                     // 0 = FWD, 1 = BKWD
-
-    unsigned next_subread_is_gapped :1;
+    signed start_pos    :LOCATION_BITS;
+    unsigned length     :SUBTEMPLATE_LENGTH_BITS;
+    
+    unsigned rev_comp                 :1;
+    unsigned is_full_contig           :1;
+    unsigned next_subread_is_gapped   :1;
     unsigned next_subread_is_ungapped :1;
 } mapped_read_sublocation;
 
