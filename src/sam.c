@@ -470,6 +470,8 @@ write_nonmapping_reads_to_fastq(
 
     while( rd != NULL )
     {
+        mapped_read_index* mapped_rd_index = NULL;
+
         /* if the mapped reads db is empty and there are still rawreads, these
          * rawreads were nonmapping */
         if( mapped_rd == NULL )
@@ -478,36 +480,34 @@ write_nonmapping_reads_to_fastq(
                     rdb->unmappable_single_end_reads,
                     rdb->unmappable_paired_end_1_reads,
                     rdb->unmappable_paired_end_2_reads );
-            continue;
-        }
+        } else {
+            init_mapped_read_index( &mapped_rd_index, mapped_rd );
 
-        mapped_read_index* mapped_rd_index;
-        init_mapped_read_index( &mapped_rd_index, mapped_rd );
+            /* if this rawread doesn't have an associated mapped reads */
+            if( readkey < mapped_rd_index->read_id )
+            {
+                /* then it was unmappable, and was never added to the mpd rd db */
+                write_nonmapping_read_to_fastq( rd,
+                        rdb->unmappable_single_end_reads,
+                        rdb->unmappable_paired_end_1_reads,
+                        rdb->unmappable_paired_end_2_reads );
+            }
+            /* if the read has an associated mapped reads */
+            else if( readkey == mapped_rd_index->read_id &&
+                     mapped_rd_index->num_mappings == 0 )
+            {
+                /*
+                   If the read has an associated mapped read, but the mapped read
+                   has no mappings, it was declared mappable but did not map.
 
-        /* if this rawread doesn't have an associated mapped reads */
-        if( readkey < mapped_rd_index->read_id )
-        {
-            /* then it was unmappable, and was never added to the mpd rd db */
-            write_nonmapping_read_to_fastq( rd,
-                    rdb->unmappable_single_end_reads,
-                    rdb->unmappable_paired_end_1_reads,
-                    rdb->unmappable_paired_end_2_reads );
-        }
-        /* if the read has an associated mapped reads */
-        else if( readkey == mapped_rd_index->read_id &&
-                 mapped_rd_index->num_mappings == 0 )
-        {
-            /*
-               If the read has an associated mapped read, but the mapped read
-               has no mappings, it was declared mappable but did not map.
-
-               Nonmapping reads are added to the mapped reads db; see
-               find_candidate_mappings.c:1028
-            */
-            write_nonmapping_read_to_fastq( rd,
-                    rdb->non_mapping_single_end_reads,
-                    rdb->non_mapping_paired_end_1_reads,
-                    rdb->non_mapping_paired_end_2_reads );
+                   Nonmapping reads are added to the mapped reads db; see
+                   find_candidate_mappings.c:1028
+                */
+                write_nonmapping_read_to_fastq( rd,
+                        rdb->non_mapping_single_end_reads,
+                        rdb->non_mapping_paired_end_1_reads,
+                        rdb->non_mapping_paired_end_2_reads );
+            }
         }
 
         /* if we need to get the next mapped read */

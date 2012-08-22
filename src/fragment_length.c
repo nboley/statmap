@@ -120,7 +120,7 @@ get_frag_len( mapped_read_t* rd )
     MPD_RD_ID_T i;
     for( i = 1; i < rd_index->num_mappings; i++ )
     {
-        mapped_read_location* current_loc = rd_index->mappings + i;
+        mapped_read_location* current_loc = rd_index->mappings[i];
 
         /* reads should never be a mixture of paired and unpaired reads 
          XXX IS THIS ACTUALLY TRUE? WE COULD JUST CONTINUE... */

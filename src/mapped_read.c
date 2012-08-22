@@ -817,12 +817,12 @@ build_mapped_read_from_candidate_mappings(
        for instance, only one pair maps ) free the read and return */
     if( 0 == prob_sum )
     {
-        free_mapped_read( *mpd_rd );
         *mpd_rd = NULL;
         return;
     }
 
     int read_ids[] = { read_id };
+
     build_mapped_read( mpd_rd, read_ids, 1, mapped_locs );
     
     free_mapped_read_locations_container( mapped_locs );

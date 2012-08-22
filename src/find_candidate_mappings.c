@@ -1230,7 +1230,7 @@ add_mapped_reads_from_candidate_mappings(
         readkey_t readkey
     )
 {
-    mapped_read_t* mpd_rd;
+    mapped_read_t* mpd_rd = NULL;
 
     /* The paired end reads joining code in build_mapped_read_from_candidate_mappings
      * requires the candidate_mappings to be sorted */
