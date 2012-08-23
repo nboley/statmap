@@ -325,6 +325,9 @@ join_candidate_mappings( candidate_mappings* mappings,
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
+        if( mappings->mappings[i].recheck != VALID )
+            continue;
+
         *joined_mappings_len += 1;
 
         /* add new joined mapping to the joined_mappings
@@ -567,9 +570,6 @@ build_mapped_read_from_candidate_mappings(
      *      mapped eads structure
      *
      */
-
-    /* DEBUG */
-    fprintf( stderr, "READ_ID %u has %i candidate mappings\n", read_id, mappings->length );
 
     /* Build a list of joined candidate mappings */
     int joined_mappings_len = 0;
