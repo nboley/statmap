@@ -103,9 +103,8 @@ ML_PRB_TYPE_from_float( float value  )
  *
  * We assume that each mapped_read_t has at least
  * 1) 1 read_id_node (for now, it has *exactly* 1 read_id_node)
- * 2) 0 mapped_read_location's ( we use a byte flag to indicate if there are
- *    any mapped read locations )
- * 3) 1 subread
+ * 2) 1 mapped_read_location, which has at least
+ *    a) 1 subread
  *
  * Note that we use signed bitfields for except single-fit fields. Signed
  * bitfields are much better for debugging, but signed 1-bit fields don't make
@@ -146,9 +145,9 @@ mapped_read_t {
             unsigned length     :SUBTEMPLATE_LENGTH_BITS; ( 15 )
 
             unsigned rev_comp                 :1;
-            unsigned is_full_contig           :1;
-            unsigned next_subread_is_gapped   :1;
-            unsigned next_subread_is_ungapped :1;
+            unsigned is_full_contig           :1; // unused for now
+            unsigned next_subread_is_gapped   :1; // next subread is paired end
+            unsigned next_subread_is_ungapped :1; // next subread is junction
         }
         // potentially more sublocations
     }
@@ -161,19 +160,10 @@ mapped_read_t {
 typedef void mapped_read_t;
 typedef void mapped_read_location;
 
-#define MRL_FLAG_TYPE unsigned char
 #define MRL_CHR_TYPE unsigned short
 #define MRL_START_POS_TYPE unsigned int
 #define MRL_STOP_POS_TYPE unsigned int
 #define MRL_FL_TYPE unsigned short
-
-/* Set if the read that contribute to this mapped location are paired */
-#define IS_PAIRED 1
-/* Set if the first read ( ie read_name/1 ) in the pair was rev 
-   complemented to map */
-#define FIRST_READ_WAS_REV_COMPLEMENTED 2
-/* Set if the first read ( ie read_name/1 ) maps to start_pos */
-#define FIRST_PAIR_IS_FIRST_IN_GENOME 4
 
 #define SUBTEMPLATE_LENGTH_BITS 15
 #define MAX_SUBTEMPLATE_LENGTH 32767 // 2**15 - 1
@@ -200,7 +190,8 @@ typedef struct {
     unsigned chr      :CHR_BITS;
     unsigned strand   :1;
     unsigned are_more :1;
-    // For now, we assume that there is only 1 readid
+    /* For now, we assume that there is only 1 readid and therefore only
+     * 1 corresponding seq_error */
     ML_PRB_TYPE seq_error;      
 } mapped_read_location_prologue;
 
@@ -215,18 +206,6 @@ typedef struct {
     unsigned next_subread_is_ungapped :1;
 } mapped_read_sublocation;
 
-/* Temporary container for stashing mapped read sublocations while we're
- * building a mapped read location */
-typedef struct {
-    mapped_read_sublocation* container;
-    int length;
-} mapped_read_sublocations_container;
-
-typedef struct {
-    mapped_read_location** container;
-    int length;
-} mapped_read_locations_container;
-
 /* 
  * small, inline functions for setting and accessing the items
  * in mapped_read_location. These are how elements should be 
@@ -237,35 +216,8 @@ typedef struct {
  *
  */
 
-void
-init_mapped_read_location( mapped_read_location** loc,
-                           MRL_CHR_TYPE chr,
-                           MRL_FLAG_TYPE flag,
-                           ML_PRB_TYPE seq_error,
-                           enum bool are_more );
-
-void
-free_mapped_read_location( mapped_read_location* loc );
-
-/** FLAG **/
-
-static inline MRL_FLAG_TYPE
-get_flag_from_mapped_read_location( const mapped_read_location* loc )
-{
-    /* cast loc to mapped_read_location_prologue to access the flag */
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
-    return (MRL_FLAG_TYPE) prologue->flag;
-}
-
-static inline void
-set_flag_in_mapped_read_location( mapped_read_location* loc, MRL_FLAG_TYPE flag )
-{
-    assert( flag < MAX_FLAG_LENGTH );
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
-    prologue->flag = flag;
-}
+enum bool
+first_sublocation_is_rev_complemented( mapped_read_location* loc );
 
 /** CHR **/
 
@@ -327,7 +279,7 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
     /* TODO for now, just return the stop of the first subtemplate location */
     mapped_read_sublocation* st_loc
         = get_start_of_sublocations( loc );
-    return (MRL_FLAG_TYPE) st_loc->length;
+    return (MRL_FL_TYPE) st_loc->length;
 }
 
 static inline void

@@ -22,7 +22,6 @@ fprintf_nonpaired_mapped_read_as_sam(
     char* phred_qualities
 )
 {
-    const MRL_FLAG_TYPE loc_flag = get_flag_from_mapped_read_location( loc  );
     const int chr_index = get_chr_from_mapped_read_location( loc  );
     const unsigned int start = get_start_from_mapped_read_location( loc  );
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
@@ -38,7 +37,7 @@ fprintf_nonpaired_mapped_read_as_sam(
 
     /* build and print the flag */
     unsigned short flag = 0;    
-    if( 0 < (loc_flag&FIRST_READ_WAS_REV_COMPLEMENTED)  )
+    if( first_sublocation_is_rev_complemented( loc ) )
         flag |= BAM_FREVERSE;
     fprintf( sam_fp, "%hu\t", flag );
     
@@ -93,6 +92,7 @@ fprintf_nonpaired_mapped_read_as_sam(
     return;
 }
 
+#if 0
 void
 fprintf_paired_mapped_read_as_sam( 
     FILE* sam_fp,
@@ -112,12 +112,10 @@ fprintf_paired_mapped_read_as_sam(
     int r2_len
 )
 {
-    const unsigned char mrl_flag = get_flag_from_mapped_read_location( loc  );
     const int chr_index = get_chr_from_mapped_read_location( loc  );
     const unsigned int start = get_start_from_mapped_read_location( loc  );
     const unsigned int stop = get_stop_from_mapped_read_location( loc  );
     const float seq_error = get_seq_error_from_mapped_read_location( loc  );
-
 
     if( cond_prob > 1.0 )
     {
@@ -324,6 +322,7 @@ fprintf_paired_mapped_read_as_sam(
     return;
 }
 
+#endif
 
 void
 fprintf_mapped_read_to_sam( 
@@ -360,6 +359,9 @@ fprintf_mapped_read_to_sam(
             assert( r1->pos_in_template.pos == POS_PAIRED_END_1 );
             assert( r2->pos_in_template.pos == POS_PAIRED_END_2 );
 
+            assert( false );
+
+#if 0
             fprintf_paired_mapped_read_as_sam( 
                 sam_fp,
                 mpd_rd_index->mappings[i],
@@ -377,6 +379,7 @@ fprintf_mapped_read_to_sam(
                 r2->error_str,
                 r2->length
             );
+#endif
         } else {
             // reference to first read subtemplate
             struct read_subtemplate* r1 = &(r->subtemplates[0]);
