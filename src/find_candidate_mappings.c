@@ -803,19 +803,14 @@ find_matching_mapped_locations(
 }
 
 void
-build_candidate_mapping_from_matched_mapped_locations(
+build_candidate_mappings_for_ungapped_assay_type(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         mapped_locations_container* matches,
         candidate_mappings* rst_mappings,
-        float min_match_penalty
-    )
+        float min_match_penalty,
+        enum assay_type_t assay )
 {
-    /* for now, build a candidate mapping from the first mapped_location in
-     * the first mapped_locations in the matches */
-
-    /* for now, bulid a candidate mapping from all the mapped_locations
-     * in the first set */
     assert( matches->length > 0 );
     mapped_locations* locs = matches->container[0];
 
@@ -837,11 +832,58 @@ build_candidate_mapping_from_matched_mapped_locations(
     }
 }
 
+void
+build_candidate_mappings_for_gapped_assay_type(
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+        mapped_locations_container* matches,
+        candidate_mappings* rst_mappings,
+        float min_match_penalty,
+        enum assay_type_t assay )
+{
+    /* STUB */
+    fprintf("FATAL       :  Gapped assay types are not implemented yet.\n");
+    assert( false );
+    exit(-1);
+}
+
+void
+build_candidate_mappings_from_matched_mapped_locations(
+        struct genome_data* genome,
+        struct read_subtemplate* rst,
+        mapped_locations_container* matches,
+        candidate_mappings* rst_mappings,
+        float min_match_penalty,
+        enum assay_type_t assay )
+{
+    /* The way candidate mappings are built here depends on the assay.
+     *
+     * If it is a non-gapped assay, then we just want to build 1 candidate
+     * mapping from each matched set of candidate mappings.
+     *
+     * If it is a gapped assay, then we want to build candidate mappings from
+     * each mapped location in the matched set
+     */
+
+    if( assay == STRANDED_RNASEQ )
+    {
+        /* Gapped assay */
+        build_candidate_mappings_for_gapped_assay_type(
+                genome, rst, matches, rst_mappings,
+                min_match_penalty, assay );
+    } else {
+        /* Non-gapped assay */
+        build_candidate_mappings_for_ungapped_assay_type(
+                genome, rst, matches, rst_mappings,
+                min_match_penalty, assay );
+    }
+}
+
 mapped_locations*
 mapped_locations_template( struct indexable_subtemplate* indexable_probe )
 {
-    /* construct an empty set of mapped_locations with the metadata from
-     * template */
+    /* construct an empty set of mapped_locations with the metadata
+     * (original indexable_subtemplate) from template */
     mapped_locations* locs = NULL;
     init_mapped_locations( &locs, indexable_probe );
 
@@ -972,8 +1014,8 @@ build_candidate_mappings_from_base_mapped_location(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         candidate_mappings* rst_mappings,
-        float min_match_penalty
-    )
+        float min_match_penalty,
+        enum assay_type_t assay )
 {
     /*
      * Takes in a base location, which necessarily corresponds to a single 
@@ -1035,12 +1077,13 @@ build_candidate_mappings_from_base_mapped_location(
      * is a valid match for base */
     if( matches->length == search_results->length )
     {
-        build_candidate_mapping_from_matched_mapped_locations(
+        build_candidate_mappings_from_matched_mapped_locations(
                 genome,
                 rst,
                 matches,
                 rst_mappings,
-                min_match_penalty
+                min_match_penalty,
+                assay
             );
     }
     
@@ -1053,8 +1096,8 @@ build_candidate_mappings_from_search_results(
         mapped_locations_container* search_results,
         struct read_subtemplate* rst,
         struct genome_data* genome,
-        float min_match_penalty
-    )
+        float min_match_penalty,
+        enum assay_type_t assay )
 {
     /* sort each mapped_locations in order to binary search later */
     sort_mapped_locations_in_container( search_results );
@@ -1090,8 +1133,8 @@ build_candidate_mappings_from_search_results(
                     genome,
                     rst,
                     rst_mappings,
-                    min_match_penalty
-                );
+                    min_match_penalty,
+                    assay );
         }
 
         free_mapped_locations( expanded_base );
@@ -1110,7 +1153,9 @@ find_candidate_mappings_for_read_subtemplate(
         float min_match_penalty,
         float max_penalty_spread,
         
-        enum bool only_collect_error_data
+        enum bool only_collect_error_data,
+
+        enum assay_type_t assay
     )
 {
     /* build the penalty arrays for this read subtemplate */
@@ -1150,13 +1195,8 @@ find_candidate_mappings_for_read_subtemplate(
     /* build candidate mappings from matching subsets of the mapped_locations
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
-            rst_mappings,
-            ml_container,
-            rst,
-
-            genome,
-
-            min_match_penalty
+            rst_mappings, ml_container, rst,
+            genome, min_match_penalty, assay
         );
 
     /* Note - mapped_locations_container contains references to memory
@@ -1204,8 +1244,9 @@ find_candidate_mappings_for_read(
         float min_match_penalty,
         float max_penalty_spread,
 
-        enum bool only_collect_error_data
-    )
+        enum bool only_collect_error_data,
+
+        enum assay_type_t assay )
 {
     // for each subtemplate in the read
     int rst_index;
@@ -1230,7 +1271,9 @@ find_candidate_mappings_for_read(
                 min_match_penalty,
                 max_penalty_spread,
                 
-                only_collect_error_data
+                only_collect_error_data,
+
+                assay
             );
 
         /* append the candidate mappings from this read subtemplate to the set
@@ -1366,7 +1409,9 @@ find_candidate_mappings( void* params )
                 min_match_penalty,
                 max_penalty_spread,
 
-                only_collect_error_data
+                only_collect_error_data,
+
+                rdb->assay
             );
 
         // Free the read
