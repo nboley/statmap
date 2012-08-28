@@ -229,6 +229,20 @@ add_candidate_mapping( candidate_mappings* mappings,
 }
 
 void
+add_null_separator_to_candidate_mappings( candidate_mappings* mappings )
+{
+    /* Add a NULL pointer as a sublist seperator to the end of mappings */
+    mappings->allocated_length += 1;
+
+    mappings->mappings = realloc( mappings->mappings,
+            sizeof( candidate_mapping*) * mappings->allocated_length );
+
+    mappings->mappings[mappings->allocated_length-1] = NULL;
+
+    return;
+}
+
+void
 free_candidate_mappings( candidate_mappings* mappings, enum bool free_mappings )
 {
     if( free_mappings )

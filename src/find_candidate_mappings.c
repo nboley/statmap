@@ -283,7 +283,11 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        recheck_location( genome, rst, mappings->mappings[k], fwd_pa, rev_pa );
+        candidate_mapping* loc = mappings->mappings[k];
+        if( loc == NULL )
+            continue; // skip subset marker
+
+        recheck_location( genome, rst, loc, fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
         if( (mappings->mappings[k])->penalty > max_penalty ) {
@@ -296,6 +300,8 @@ recheck_locations(
     {
         /* this should be optimized out */
         candidate_mapping* loc = mappings->mappings[k];
+        if( loc == NULL )
+            continue; // skip subset marker
 
         /* 
          * We always need to do this because of the way the search queue
@@ -405,7 +411,7 @@ can_be_used_to_update_error_data(
     if( mappings->length < 1 || mappings->length > 2 ) {
         return false;
     }
-    
+
     /* we know that the length is at least 1 from directly above */
     assert( mappings->length >= 1 );
     
@@ -469,9 +475,7 @@ update_error_data_record_from_candidate_mappings(
     if( mappings->length == 0 )
         return;
     
-    // emphasize the array aspect with the + 0
-    // but, since aal of the sequence is identical,
-    // we only need to deal with this read
+    // since all of the sequence is identical, only need to deal with this read
     candidate_mapping* loc = mappings->mappings[0];         
     int mapped_length = rst->length;
     
@@ -811,20 +815,20 @@ build_candidate_mappings_for_ungapped_assay_type(
         enum assay_type_t assay )
 {
     assert( matches->length > 0 );
+
+    /* For ungapped assay types, we want to build a single candidate mapping
+     * from each set of matching mapped_locations. We arbitrarily build them
+     * from the mapped_locations in the first set */
     mapped_locations* locs = matches->container[0];
 
     int i;
     for( i = 0; i < locs->length; i++ )
     {
-        mapped_location* loc = locs->locations;
+        mapped_location* loc = locs->locations + i;
 
         build_candidate_mapping_from_mapped_location(
-                genome,
-                rst,
-
-                loc,
-                locs,
-
+                genome, rst,
+                loc, locs->probe,
                 rst_mappings,
                 min_match_penalty
             );
@@ -840,10 +844,31 @@ build_candidate_mappings_for_gapped_assay_type(
         float min_match_penalty,
         enum assay_type_t assay )
 {
-    /* STUB */
-    fprintf(stderr, "FATAL       :  Gapped assay types are not implemented yet.\n");
-    assert( false );
-    exit(-1);
+    fprintf(stderr, "WARNING     :  Gapped assay types are not fully implemented yet.\n");
+
+    /* For gapped assay types, we build a candidate mapping for each of the 
+     * mapped_locations in each set of matches. */
+    int i, j;
+    for( i = 0; i < matches->length; i++ )
+    {
+        mapped_locations* current_locs = matches->container[i];
+
+        for( j = 0; j < current_locs; j++ )
+        {
+            mapped_location* current_loc = current_locs->locations + j;
+
+            build_candidate_mapping_from_mapped_location(
+                    genome, rst,
+                    current_loc, current_locs->probe,
+                    rst_mappings,
+                    min_match_penalty
+                );
+        }
+
+        /* Add a NULL seperator to the list of candidate mappings after each
+         * matched subset of candidate mappings */
+        add_null_separator_to_candidate_mappings( rst_mappings );
+    }
 }
 
 void
@@ -1133,7 +1158,8 @@ build_candidate_mappings_from_search_results(
                     rst,
                     rst_mappings,
                     min_match_penalty,
-                    assay );
+                    assay 
+                );
         }
 
         free_mapped_locations( expanded_base );
