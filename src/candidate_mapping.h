@@ -36,6 +36,13 @@ modify_mapped_read_location_for_index_probe_offset(
  *
  */
 
+/* Not implement yet
+struct {
+    enum bool follows_ref_gap;
+    int pos;
+} READ_TYPE;
+*/
+
 typedef struct __attribute__((packed))__{
     /* 
      * Whether or not we need to go to the genome to update this 
@@ -96,11 +103,12 @@ typedef struct __attribute__((packed))__{
 } candidate_mapping;
 
 
-#define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
+/* This is a list of pointers to candidate_mapping, where sets of pointers may
+ * be separated by NULL pointers to indicate subsets of candidate mappings. */
 typedef struct {
     int allocated_length;
     int length;
-    candidate_mapping* mappings;
+    candidate_mapping** mappings;
 } candidate_mappings;
 
 /* Deal with candidate mappings arrays */
@@ -109,20 +117,18 @@ typedef struct {
 void
 init_candidate_mappings( candidate_mappings** mappings );
 
-candidate_mapping
-init_candidate_mapping_from_template(
-        struct read_subtemplate* rst,
-        float max_penalty_spread
-    );
-
-/* add a copy of a candidate mapping */
 void
 add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     );
 
 void
-free_candidate_mappings( candidate_mappings* mappings );
+free_candidate_mappings( candidate_mappings* mappings,
+                         enum bool free_mappings );
 
+candidate_mapping*
+init_candidate_mapping_from_template(
+        struct read_subtemplate* rst,
+        float max_penalty_spread );
 
 void
 print_candidate_mapping( candidate_mapping* mapping );

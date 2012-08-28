@@ -283,11 +283,11 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        recheck_location( genome, rst, mappings->mappings + k, fwd_pa, rev_pa );
+        recheck_location( genome, rst, mappings->mappings[k], fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
-        if( (mappings->mappings + k)->penalty > max_penalty ) {
-            max_penalty = (mappings->mappings + k)->penalty;
+        if( (mappings->mappings[k])->penalty > max_penalty ) {
+            max_penalty = (mappings->mappings[k])->penalty;
         }
     }
 
@@ -295,7 +295,7 @@ recheck_locations(
     for( k = 0; k < mappings->length; k++ )
     {
         /* this should be optimized out */
-        candidate_mapping* loc = mappings->mappings + k;
+        candidate_mapping* loc = mappings->mappings[k];
 
         /* 
          * We always need to do this because of the way the search queue
@@ -347,7 +347,7 @@ build_candidate_mapping_from_mapped_location(
     int subseq_len = results->probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
-    candidate_mapping cm 
+    candidate_mapping* cm 
         = init_candidate_mapping_from_template( 
             rst, max_penalty_spread 
         );
@@ -357,14 +357,14 @@ build_candidate_mapping_from_mapped_location(
 
     /* set the strand */
     assert( result->strnd == FWD || result->strnd == BKWD );
-    cm.rd_strnd = result->strnd;
+    cm->rd_strnd = result->strnd;
 
     /* set metadata */
-    cm.penalty = result->penalty;
-    cm.subseq_offset = results->probe->subseq_offset;
+    cm->penalty = result->penalty;
+    cm->subseq_offset = results->probe->subseq_offset;
 
     /* set location information */
-    cm.chr = result->chr;
+    cm->chr = result->chr;
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
@@ -381,9 +381,9 @@ build_candidate_mapping_from_mapped_location(
     if( read_location < 0 ) // the read location was invalid; skip this mapped_locations_container
         return;
 
-    cm.start_bp = read_location;
+    cm->start_bp = read_location;
 
-    add_candidate_mapping( mappings, &cm );
+    add_candidate_mapping( mappings, cm );
 }
 
 /* 
@@ -410,7 +410,7 @@ can_be_used_to_update_error_data(
     /* we know that the length is at least 1 from directly above */
     assert( mappings->length >= 1 );
     
-    candidate_mapping* loc = mappings->mappings + 0; 
+    candidate_mapping* loc = mappings->mappings[0]; 
     int mapped_length = rst->length;
     
     if( loc->recheck != VALID ) {
@@ -433,7 +433,7 @@ can_be_used_to_update_error_data(
     */
     if( mappings->length > 1 )
     {
-        if( mappings->mappings[1].recheck != VALID ) {
+        if( mappings->mappings[1]->recheck != VALID ) {
             return false;
         }
         
@@ -441,8 +441,8 @@ can_be_used_to_update_error_data(
         assert( mappings->length == 2 );
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
-            mappings->mappings[1].chr, 
-            mappings->mappings[1].start_bp, 
+            mappings->mappings[1]->chr, 
+            mappings->mappings[1]->start_bp, 
             rst->length
         );
         
@@ -473,7 +473,7 @@ update_error_data_record_from_candidate_mappings(
     // emphasize the array aspect with the + 0
     // but, since aal of the sequence is identical,
     // we only need to deal with this read
-    candidate_mapping* loc = mappings->mappings + 0;         
+    candidate_mapping* loc = mappings->mappings[0];         
     int mapped_length = rst->length;
     
     char* genome_seq = find_seq_ptr( 
@@ -1280,7 +1280,7 @@ find_candidate_mappings_for_read(
          * of candidate mappings for this read */
         append_candidate_mappings( read_mappings, rst_mappings );
 
-        free_candidate_mappings( rst_mappings );
+        free_candidate_mappings( rst_mappings, false );
     }
 }
 
@@ -1292,10 +1292,6 @@ add_mapped_reads_from_candidate_mappings(
     )
 {
     mapped_read_t* mpd_rd = NULL;
-
-    /* The paired end reads joining code in build_mapped_read_from_candidate_mappings
-     * requires the candidate_mappings to be sorted */
-    sort_candidate_mappings( mappings );
 
     build_mapped_read_from_candidate_mappings(
             &mpd_rd,
@@ -1426,7 +1422,7 @@ find_candidate_mappings( void* params )
             int i;
             for( i = 0; i < mappings->length; i++ )
             {
-                if( (mappings->mappings + i)->recheck == VALID )
+                if( (mappings->mappings[i])->recheck == VALID )
                     num_valid_mappings += 1;
             }
 
@@ -1450,7 +1446,7 @@ find_candidate_mappings( void* params )
         curr_read_index += 1;
 
         /* cleanup memory */
-        free_candidate_mappings( mappings );
+        free_candidate_mappings( mappings, true );
     }
 
     /********* update the global error data *********/

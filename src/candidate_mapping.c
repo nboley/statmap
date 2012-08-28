@@ -193,30 +193,74 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
  *
  *********************************************************************************/
 
+/*
+ * TODO - this is no longer a dynamic array, which will degrade performance.
+ * Can we still make this a dynamic array? Right now
+ *      length := # of candidate mappings
+ *      allocated_length := # of allocated pointers (including NULL's)
+ * might still be able to make this a dynamic array, or maybe an even smarter
+ * data structure (linked list, etc.)
+ */
 void
 init_candidate_mappings( candidate_mappings** mappings )
 {
     *mappings = malloc( sizeof(candidate_mappings) );
-    (*mappings)->mappings =
-        malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
+    (*mappings)->mappings = NULL;
     (*mappings)->length = 0;
-    (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;
+    (*mappings)->allocated_length = 0;
     return;
 }
 
-candidate_mapping
+void
+add_candidate_mapping( candidate_mappings* mappings,
+                       candidate_mapping* mapping     )
+{
+    /* Update the list metadata */
+    mappings->length += 1;
+    mappings->allocated_length += 1;
+
+    /* Reallocate memory for the new pointer */
+    mappings->mappings = realloc( mappings->mappings,
+            sizeof(candidate_mapping*) * mappings->allocated_length );
+
+    mappings->mappings[mappings->allocated_length-1] = mapping;
+    
+    return;
+}
+
+void
+free_candidate_mappings( candidate_mappings* mappings, enum bool free_mappings )
+{
+    if( free_mappings )
+    {
+        /* free the individual candidate mappings */
+        int i;
+        for( i = 0; i < mappings->allocated_length; i++ )
+        {
+            /* Don't try to free NULL pointers (subset markers) */
+            if( mappings->mappings[i] == NULL )
+                continue;
+
+            free( mappings->mappings[i] );
+        }
+    }
+
+    /* free the array of pointers to candidate mappings */
+    free( mappings->mappings );
+    free( mappings );
+}
+
+candidate_mapping*
 init_candidate_mapping_from_template(
         struct read_subtemplate* rst,
         float max_penalty_spread
     )
 {
     /****** initialize the mapped_location info that we know  ******/
-    /* copy the candidate map location template */
-    candidate_mapping cand_map;
-    memset( &cand_map, 0, sizeof(cand_map) );
+    candidate_mapping* cand_map = calloc( 1, sizeof( candidate_mapping ));
 
     /* Set the read length */
-    cand_map.rd_len = rst->length;
+    cand_map->rd_len = rst->length;
 
     /** Set the length of the subsequence. 
      * This is the length of the sequence that we go to the index for. If it
@@ -230,9 +274,9 @@ init_candidate_mapping_from_template(
 
     /* if read length <= seq_length, then a recheck is unnecessary */
     if( max_penalty_spread > -0.1 ) {
-        cand_map.recheck = RECHECK_PENALTY;
+        cand_map->recheck = RECHECK_PENALTY;
     } else {
-        cand_map.recheck = VALID;
+        cand_map->recheck = VALID;
     }
     
     /* set which type of read this is */
@@ -243,7 +287,7 @@ init_candidate_mapping_from_template(
     if( rst->pos_in_template.number_of_reads_in_template == 1 )
     {
         assert( rst->pos_in_template.pos == POS_SINGLE_END );
-        cand_map.rd_type = SINGLE_END;
+        cand_map->rd_type = SINGLE_END;
     }
     else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
     {
@@ -255,52 +299,14 @@ init_candidate_mapping_from_template(
 
         if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
         {
-            cand_map.rd_type = PAIRED_END_1;
+            cand_map->rd_type = PAIRED_END_1;
         } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
         {
-            cand_map.rd_type = PAIRED_END_2;
+            cand_map->rd_type = PAIRED_END_2;
         }
     }
 
     return cand_map;
-}
-
-void
-add_candidate_mapping( candidate_mappings* mappings,
-                       candidate_mapping* mapping     )
-{
-    /* 
-     * test to see if there is enough allocated memory in results
-     * if there isn't then realloc
-     */
-    if( mappings->length == mappings->allocated_length )
-    {
-        mappings->allocated_length += CAND_MAPPING_RESULTS_GROWTH_FACTOR;
-        mappings->mappings = realloc(
-            mappings->mappings,
-            mappings->allocated_length*sizeof(candidate_mapping)
-        );
-        
-        if( mappings->mappings == NULL )
-        {
-            fprintf(stderr, "Failed realloc in add_candidate_mapping\n");
-            exit(1);
-        }
-    }
-
-    /* add the new results to the end of the results set */
-    /* Note that this copies the mapping */
-    (mappings->mappings)[mappings->length] = (*mapping);
-    mappings->length++;
-    
-    return;
-}
-
-void
-free_candidate_mappings( candidate_mappings* mappings )
-{
-    free( mappings->mappings );
-    free( mappings );
 }
 
 void
@@ -325,7 +331,7 @@ print_candidate_mappings( candidate_mappings* mappings )
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        print_candidate_mapping( mappings->mappings + i );
+        print_candidate_mapping( mappings->mappings[i] );
     }
 }
 
@@ -387,7 +393,7 @@ append_candidate_mappings(
     int i;
     for( i = 0; i < src->length; i++ )
     {
-        add_candidate_mapping( dest, &(src->mappings[i]) );
+        add_candidate_mapping( dest, src->mappings[i] );
     }
 }
 
