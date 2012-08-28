@@ -842,7 +842,7 @@ build_candidate_mappings_for_gapped_assay_type(
         enum assay_type_t assay )
 {
     /* STUB */
-    fprintf("FATAL       :  Gapped assay types are not implemented yet.\n");
+    fprintf(stderr, "FATAL       :  Gapped assay types are not implemented yet.\n");
     assert( false );
     exit(-1);
 }
