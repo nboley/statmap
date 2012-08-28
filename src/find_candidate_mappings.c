@@ -338,13 +338,13 @@ build_candidate_mapping_from_mapped_location(
         struct read_subtemplate* rst,
 
         mapped_location* result, 
-        mapped_locations* results,
+        struct indexable_subtemplate* probe,
 
         candidate_mappings* mappings,
         float max_penalty_spread
     )
 {
-    int subseq_len = results->probe->subseq_length;
+    int subseq_len = probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping* cm 
@@ -361,7 +361,6 @@ build_candidate_mapping_from_mapped_location(
 
     /* set metadata */
     cm->penalty = result->penalty;
-    cm->subseq_offset = results->probe->subseq_offset;
 
     /* set location information */
     cm->chr = result->chr;
@@ -373,8 +372,8 @@ build_candidate_mapping_from_mapped_location(
             result->loc,
             result->chr,
             result->strnd,
-            results->probe->subseq_offset,
-            results->probe->subseq_length,
+            probe->subseq_offset,
+            probe->subseq_length,
             rst->length,
             genome
         );

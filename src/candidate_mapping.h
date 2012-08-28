@@ -84,22 +84,6 @@ typedef struct __attribute__((packed))__{
      */
     float penalty;
 
-    /*** Info relating to properties of the subseq loc ***/
-    /* 
-     * The offset of the partial match. When we map junction reads
-     * we are mapping the beggining k basepairs and the final N-k
-     * bp's and then joining them together into a junction read if
-     * the associated meta data suggests that this is possible. Thus,
-     * subseq offset tells us where, in relation to the underling full 
-     * read, that this junction read comes from. 
-     *
-     * For now, it should be 0 or N-k, but in the future if reads get 
-     * much longer and could cross multiple junctions, this need not 
-     * be the case 
-     */
-    READ_POSITION subseq_offset;
-    /* The length of the underlying sub match */
-    // READ_POSITION subseq_len;     
 } candidate_mapping;
 
 

@@ -262,16 +262,6 @@ init_candidate_mapping_from_template(
     /* Set the read length */
     cand_map->rd_len = rst->length;
 
-    /** Set the length of the subsequence. 
-     * This is the length of the sequence that we go to the index for. If it
-     * is not equal to read length, then we need to do a recheck.
-     */
-    /* TODO - allow for subsequences */        
-    /*
-    cand_map.subseq_len = indexed_seq_len;
-    cand_map.subseq_offset = rp->subseq_offset;
-    */
-
     /* if read length <= seq_length, then a recheck is unnecessary */
     if( max_penalty_spread > -0.1 ) {
         cand_map->recheck = RECHECK_PENALTY;
@@ -319,8 +309,6 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
-    // printf("Subseq Off:   %u\n", mapping->subseq_offset);
-    // printf("Subseq Len:   %u\n", mapping->subseq_len);
     printf("\n");
     return;
 }
@@ -336,7 +324,9 @@ print_candidate_mappings( candidate_mappings* mappings )
 }
 
 
- int
+/* these won't work with the new implementation of candidate_mappings */
+#if 0
+int
 cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2 )
 {
 
@@ -382,6 +372,7 @@ sort_candidate_mappings( candidate_mappings* mappings )
            (int(*)(const void*, const void*))cmp_candidate_mappings
     );
 }
+#endif
 
 /* Append the candidate mappings from src onto dest */
 void
