@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <assert.h>
 
@@ -8,6 +9,7 @@
 #include "rawread.h"
 #include "mapped_read.h"
 #include "pseudo_location.h"
+#include "dna_sequence.h"
 
 void
 fprintf_sam_headers_from_genome(
@@ -67,7 +69,7 @@ fprintf_seq(
         MRL_FLAG_TYPE flag
     )
 {
-    if( (0 < flag&FIRST_READ_WAS_REV_COMPLEMENTED) )
+    if( 0 < (flag&FIRST_READ_WAS_REV_COMPLEMENTED) )
     {
         /* print the reverse complemented sequence for reads that map to the
          * reverse strand */

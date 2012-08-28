@@ -288,7 +288,7 @@ close_rawread_db( struct rawread_db_t* rdb )
     
     pthread_spin_destroy( rdb->lock );
     // this free used to cause a segfault - seems fine now
-    free( rdb->lock );
+    free( (void *) rdb->lock );
     
     free( rdb );
     return;
