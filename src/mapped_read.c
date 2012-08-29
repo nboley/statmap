@@ -325,9 +325,7 @@ join_candidate_mappings( candidate_mappings* mappings,
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        candidate_mapping* cm = mappings->mappings[i];
-
-        if( cm == NULL || cm->recheck != VALID )
+        if( mappings->mappings[i].recheck != VALID )
             continue;
 
         *joined_mappings_len += 1;
@@ -339,7 +337,7 @@ join_candidate_mappings( candidate_mappings* mappings,
 
         /* second to last pointer is the pointer to the current candidate
          * mapping */
-        (*joined_mappings)[(*joined_mappings_len*2) - 2] = cm;
+        (*joined_mappings)[(*joined_mappings_len*2) - 2] = mappings->mappings + i;
         /* last pointer is NULL pointer indicating the end of this set of
          * joined candidate mappings */
         (*joined_mappings)[(*joined_mappings_len*2) - 1] = NULL;
@@ -347,7 +345,7 @@ join_candidate_mappings( candidate_mappings* mappings,
         /* add the penalty for this new joined_mapping */
         *penalty = realloc( *penalty,
                 sizeof(float) * *joined_mappings_len );
-        (*penalty)[*joined_mappings_len - 1] = cm->penalty;
+        (*penalty)[*joined_mappings_len - 1] = mappings->mappings[i].penalty;
     }
 
     return;

@@ -283,15 +283,11 @@ recheck_locations(
     int k;
     for( k = 0; k < mappings->length; k++ )
     {
-        candidate_mapping* loc = mappings->mappings[k];
-        if( loc == NULL )
-            continue; // skip subset marker
-
-        recheck_location( genome, rst, loc, fwd_pa, rev_pa );
+        recheck_location( genome, rst, mappings->mappings + k, fwd_pa, rev_pa );
                     
         /* we may need to update the max penalty */
-        if( (mappings->mappings[k])->penalty > max_penalty ) {
-            max_penalty = (mappings->mappings[k])->penalty;
+        if( (mappings->mappings + k)->penalty > max_penalty ) {
+            max_penalty = (mappings->mappings + k)->penalty;
         }
     }
 
@@ -299,9 +295,7 @@ recheck_locations(
     for( k = 0; k < mappings->length; k++ )
     {
         /* this should be optimized out */
-        candidate_mapping* loc = mappings->mappings[k];
-        if( loc == NULL )
-            continue; // skip subset marker
+        candidate_mapping* loc = mappings->mappings + k;
 
         /* 
          * We always need to do this because of the way the search queue
@@ -344,17 +338,17 @@ build_candidate_mapping_from_mapped_location(
         struct read_subtemplate* rst,
 
         mapped_location* result, 
-        struct indexable_subtemplate* probe,
+        mapped_locations* results,
 
         candidate_mappings* mappings,
         float max_penalty_spread
     )
 {
-    int subseq_len = probe->subseq_length;
+    int subseq_len = results->probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
-    candidate_mapping* cm 
-        = init_candidate_mapping_from_read_subtemplate( 
+    candidate_mapping cm 
+        = init_candidate_mapping_from_template( 
             rst, max_penalty_spread 
         );
 
@@ -363,13 +357,14 @@ build_candidate_mapping_from_mapped_location(
 
     /* set the strand */
     assert( result->strnd == FWD || result->strnd == BKWD );
-    cm->rd_strnd = result->strnd;
+    cm.rd_strnd = result->strnd;
 
     /* set metadata */
-    cm->penalty = result->penalty;
+    cm.penalty = result->penalty;
+    cm.subseq_offset = results->probe->subseq_offset;
 
     /* set location information */
-    cm->chr = result->chr;
+    cm.chr = result->chr;
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
@@ -378,17 +373,17 @@ build_candidate_mapping_from_mapped_location(
             result->loc,
             result->chr,
             result->strnd,
-            probe->subseq_offset,
-            probe->subseq_length,
+            results->probe->subseq_offset,
+            results->probe->subseq_length,
             rst->length,
             genome
         );
     if( read_location < 0 ) // the read location was invalid; skip this mapped_locations_container
         return;
 
-    cm->start_bp = read_location;
+    cm.start_bp = read_location;
 
-    add_candidate_mapping( mappings, cm );
+    add_candidate_mapping( mappings, &cm );
 }
 
 /* 
@@ -408,14 +403,14 @@ can_be_used_to_update_error_data(
         
     /*** we only want unique mappers for the error estiamte updates */        
     // We allow lengths of 2 because we may have diploid locations
-    if( mappings->num_candidate_mappings < 1 ||
-        mappings->num_candidate_mappings > 2 )
-    {
+    if( mappings->length < 1 || mappings->length > 2 ) {
         return false;
     }
-
+    
     /* we know that the length is at least 1 from directly above */
-    candidate_mapping* loc = mappings->mappings[0]; 
+    assert( mappings->length >= 1 );
+    
+    candidate_mapping* loc = mappings->mappings + 0; 
     int mapped_length = rst->length;
     
     if( loc->recheck != VALID ) {
@@ -436,19 +431,18 @@ can_be_used_to_update_error_data(
        competing sequence, we really don't care because the mutation rates 
        should still be fine.
     */
-    // TODO make this work for all cases BROKEN
-    if( mappings->num_candidate_mappings > 1 )
+    if( mappings->length > 1 )
     {
-        if( mappings->mappings[2]->recheck != VALID ) {
+        if( mappings->mappings[1].recheck != VALID ) {
             return false;
         }
         
         /* this is guaranteed at the start of the function */
-        assert( mappings->num_candidate_mappings == 2 );
+        assert( mappings->length == 2 );
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
-            mappings->mappings[2]->chr, 
-            mappings->mappings[2]->start_bp, 
+            mappings->mappings[1].chr, 
+            mappings->mappings[1].start_bp, 
             rst->length
         );
         
@@ -476,8 +470,10 @@ update_error_data_record_from_candidate_mappings(
     if( mappings->length == 0 )
         return;
     
-    // since all of the sequence is identical, only need to deal with this read
-    candidate_mapping* loc = mappings->mappings[0];         
+    // emphasize the array aspect with the + 0
+    // but, since aal of the sequence is identical,
+    // we only need to deal with this read
+    candidate_mapping* loc = mappings->mappings + 0;         
     int mapped_length = rst->length;
     
     char* genome_seq = find_seq_ptr( 
@@ -816,27 +812,23 @@ build_candidate_mappings_for_ungapped_assay_type(
         enum assay_type_t assay )
 {
     assert( matches->length > 0 );
-
-    /* For ungapped assay types, we want to build a single candidate mapping
-     * from each set of matching mapped_locations. We arbitrarily build them
-     * from the mapped_locations in the first set */
     mapped_locations* locs = matches->container[0];
 
     int i;
     for( i = 0; i < locs->length; i++ )
     {
-        mapped_location* loc = locs->locations + i;
+        mapped_location* loc = locs->locations;
 
         build_candidate_mapping_from_mapped_location(
-                genome, rst,
-                loc, locs->probe,
+                genome,
+                rst,
+
+                loc,
+                locs,
+
                 rst_mappings,
                 min_match_penalty
             );
-
-        /* Add null separator after each candidate mapping, since each subset
-         * only contains 1 */
-        add_null_separator_to_candidate_mappings( rst_mappings );
     }
 }
 
@@ -849,31 +841,10 @@ build_candidate_mappings_for_gapped_assay_type(
         float min_match_penalty,
         enum assay_type_t assay )
 {
-    fprintf(stderr, "WARNING     :  Gapped assay types are not fully implemented yet.\n");
-
-    /* For gapped assay types, we build a candidate mapping for each of the 
-     * mapped_locations in each set of matches. */
-    int i, j;
-    for( i = 0; i < matches->length; i++ )
-    {
-        mapped_locations* current_locs = matches->container[i];
-
-        for( j = 0; j < current_locs->length; j++ )
-        {
-            mapped_location* current_loc = current_locs->locations + j;
-
-            build_candidate_mapping_from_mapped_location(
-                    genome, rst,
-                    current_loc, current_locs->probe,
-                    rst_mappings,
-                    min_match_penalty
-                );
-        }
-
-        /* Add a NULL seperator to the list of candidate mappings after each
-         * matched subset of candidate mappings */
-        add_null_separator_to_candidate_mappings( rst_mappings );
-    }
+    /* STUB */
+    fprintf(stderr, "FATAL       :  Gapped assay types are not implemented yet.\n");
+    assert( false );
+    exit(-1);
 }
 
 void
@@ -1163,8 +1134,7 @@ build_candidate_mappings_from_search_results(
                     rst,
                     rst_mappings,
                     min_match_penalty,
-                    assay 
-                );
+                    assay );
         }
 
         free_mapped_locations( expanded_base );
@@ -1263,40 +1233,6 @@ find_candidate_mappings_for_read_subtemplate(
 }
 
 void
-update_read_type( candidate_mappings* mappings )
-{
-    if( mappings->length < 1 )
-        return; // is this exceptional?
-
-    /* On the first candidate mapping in the full set for this read
-     * subtemplate, set the follows_ref_gap flag */
-    mappings->mappings[0]->rd_type.follows_ref_gap = true;
-
-    /* update the pos on each mapping in mappings */
-    /* This algorithm starts at the first candidate mapping, and updates
-     * pos_in_current_subset as it counts more candidate mappings in the same
-     * contiguous subset. When it encounters a NULL pointer,
-     * pos_in_current_subset is reset */
-    int pos_in_current_subset = 0;
-
-    int i;
-    for( i = 0; i < mappings->length; i++ )
-    {
-        candidate_mapping* cm = mappings->mappings[i];
-
-        if( cm == NULL ) {
-            /* reset pos to 0 for the next subset */
-            pos_in_current_subset = 0;
-            continue;
-        }
-
-        cm->rd_type.pos = pos_in_current_subset++;
-    }
-
-    return;
-}
-
-void
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1340,14 +1276,11 @@ find_candidate_mappings_for_read(
                 assay
             );
 
-        // Update the read position metadata in each of the candidate mappings
-        update_read_type( rst_mappings );
-
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
         append_candidate_mappings( read_mappings, rst_mappings );
 
-        free_candidate_mappings( rst_mappings, false );
+        free_candidate_mappings( rst_mappings );
     }
 }
 
@@ -1359,6 +1292,10 @@ add_mapped_reads_from_candidate_mappings(
     )
 {
     mapped_read_t* mpd_rd = NULL;
+
+    /* The paired end reads joining code in build_mapped_read_from_candidate_mappings
+     * requires the candidate_mappings to be sorted */
+    sort_candidate_mappings( mappings );
 
     build_mapped_read_from_candidate_mappings(
             &mpd_rd,
@@ -1489,12 +1426,8 @@ find_candidate_mappings( void* params )
             int i;
             for( i = 0; i < mappings->length; i++ )
             {
-                candidate_mapping* cm = mappings->mappings[i];
-                if( cm == NULL )
-                    continue;
-
-                if( cm->recheck == VALID )
-                    num_valid_mappings++;
+                if( (mappings->mappings + i)->recheck == VALID )
+                    num_valid_mappings += 1;
             }
 
             /* update the mapped_cnt */
@@ -1517,7 +1450,7 @@ find_candidate_mappings( void* params )
         curr_read_index += 1;
 
         /* cleanup memory */
-        free_candidate_mappings( mappings, true );
+        free_candidate_mappings( mappings );
     }
 
     /********* update the global error data *********/

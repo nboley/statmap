@@ -36,14 +36,6 @@ modify_mapped_read_location_for_index_probe_offset(
  *
  */
 
-struct READ_TYPE {
-    /* whether this immediately follows a gap between read subtemplates */
-    enum bool follows_ref_gap;
-    /* pos of this candidate mapping relative to the subset of candidate
-     * mappings it belongs to, which is derived from one subtemplate */
-    int pos;
-};
-
 typedef struct __attribute__((packed))__{
     /* 
      * Whether or not we need to go to the genome to update this 
@@ -67,7 +59,7 @@ typedef struct __attribute__((packed))__{
 
     /*** Info related to the read ***/
     /* If this is a normal, or paired end read */
-    struct READ_TYPE rd_type;
+    enum READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
     
@@ -85,18 +77,30 @@ typedef struct __attribute__((packed))__{
      */
     float penalty;
 
+    /*** Info relating to properties of the subseq loc ***/
+    /* 
+     * The offset of the partial match. When we map junction reads
+     * we are mapping the beggining k basepairs and the final N-k
+     * bp's and then joining them together into a junction read if
+     * the associated meta data suggests that this is possible. Thus,
+     * subseq offset tells us where, in relation to the underling full 
+     * read, that this junction read comes from. 
+     *
+     * For now, it should be 0 or N-k, but in the future if reads get 
+     * much longer and could cross multiple junctions, this need not 
+     * be the case 
+     */
+    READ_POSITION subseq_offset;
+    /* The length of the underlying sub match */
+    // READ_POSITION subseq_len;     
 } candidate_mapping;
 
 
-/* This is a list of pointers to candidate_mapping, where sets of pointers may
- * be separated by NULL pointers to indicate subsets of candidate mappings. */
+#define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
 typedef struct {
-    /* the number of allocated pointers, including NULL pointers */
+    int allocated_length;
     int length;
-    /* the number of candidate mappings */
-    int num_candidate_mappings;
-
-    candidate_mapping** mappings;
+    candidate_mapping* mappings;
 } candidate_mappings;
 
 /* Deal with candidate mappings arrays */
@@ -105,21 +109,20 @@ typedef struct {
 void
 init_candidate_mappings( candidate_mappings** mappings );
 
+candidate_mapping
+init_candidate_mapping_from_template(
+        struct read_subtemplate* rst,
+        float max_penalty_spread
+    );
+
+/* add a copy of a candidate mapping */
 void
 add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     );
 
 void
-add_null_separator_to_candidate_mappings( candidate_mappings* mappings );
+free_candidate_mappings( candidate_mappings* mappings );
 
-void
-free_candidate_mappings( candidate_mappings* mappings,
-                         enum bool free_mappings );
-
-candidate_mapping*
-init_candidate_mapping_from_read_subtemplate(
-        struct read_subtemplate* rst,
-        float max_penalty_spread );
 
 void
 print_candidate_mapping( candidate_mapping* mapping );

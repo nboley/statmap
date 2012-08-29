@@ -193,98 +193,114 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
  *
  *********************************************************************************/
 
-/*
- * TODO - this is no longer a dynamic array, which will degrade performance.
- * Should be able to make this a dynamic array (add allocated_length back in)
- */
 void
 init_candidate_mappings( candidate_mappings** mappings )
 {
     *mappings = malloc( sizeof(candidate_mappings) );
-    (*mappings)->mappings = NULL;
+    (*mappings)->mappings =
+        malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
     (*mappings)->length = 0;
-    (*mappings)->num_candidate_mappings = 0;
+    (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;
     return;
+}
+
+candidate_mapping
+init_candidate_mapping_from_template(
+        struct read_subtemplate* rst,
+        float max_penalty_spread
+    )
+{
+    /****** initialize the mapped_location info that we know  ******/
+    /* copy the candidate map location template */
+    candidate_mapping cand_map;
+    memset( &cand_map, 0, sizeof(cand_map) );
+
+    /* Set the read length */
+    cand_map.rd_len = rst->length;
+
+    /** Set the length of the subsequence. 
+     * This is the length of the sequence that we go to the index for. If it
+     * is not equal to read length, then we need to do a recheck.
+     */
+    /* TODO - allow for subsequences */        
+    /*
+    cand_map.subseq_len = indexed_seq_len;
+    cand_map.subseq_offset = rp->subseq_offset;
+    */
+
+    /* if read length <= seq_length, then a recheck is unnecessary */
+    if( max_penalty_spread > -0.1 ) {
+        cand_map.recheck = RECHECK_PENALTY;
+    } else {
+        cand_map.recheck = VALID;
+    }
+    
+    /* set which type of read this is */
+    assert( rst->pos_in_template.number_of_reads_in_template == 1 ||
+            rst->pos_in_template.number_of_reads_in_template == 2 );
+    /* The number of reads in the tempate tells us whether this read
+     * subtemplate is from a single or paired end read */
+    if( rst->pos_in_template.number_of_reads_in_template == 1 )
+    {
+        assert( rst->pos_in_template.pos == POS_SINGLE_END );
+        cand_map.rd_type = SINGLE_END;
+    }
+    else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
+    {
+        /* The position in the template tells us which end of the paired end
+         * read this subtemplate represents */
+
+        assert( rst->pos_in_template.pos == POS_PAIRED_END_1 ||
+                rst->pos_in_template.pos == POS_PAIRED_END_2 );
+
+        if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
+        {
+            cand_map.rd_type = PAIRED_END_1;
+        } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
+        {
+            cand_map.rd_type = PAIRED_END_2;
+        }
+    }
+
+    return cand_map;
 }
 
 void
 add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     )
 {
-    /* Update the list metadata */
-    mappings->length += 1;
-    mappings->num_candidate_mappings += 1;
-
-    /* Reallocate memory for the new pointer */
-    mappings->mappings = realloc( mappings->mappings,
-            sizeof(candidate_mapping*) * mappings->length );
-
-    mappings->mappings[mappings->length-1] = mapping;
-    
-    return;
-}
-
-void
-add_null_separator_to_candidate_mappings( candidate_mappings* mappings )
-{
-    /* Add a NULL pointer as a sublist seperator to the end of mappings */
-    mappings->length += 1;
-
-    mappings->mappings = realloc( mappings->mappings,
-            sizeof( candidate_mapping*) * mappings->length );
-
-    mappings->mappings[mappings->length-1] = NULL;
-
-    return;
-}
-
-void
-free_candidate_mappings( candidate_mappings* mappings, enum bool free_mappings )
-{
-    if( free_mappings )
+    /* 
+     * test to see if there is enough allocated memory in results
+     * if there isn't then realloc
+     */
+    if( mappings->length == mappings->allocated_length )
     {
-        /* free the individual candidate mappings */
-        int i;
-        for( i = 0; i < mappings->length; i++ )
+        mappings->allocated_length += CAND_MAPPING_RESULTS_GROWTH_FACTOR;
+        mappings->mappings = realloc(
+            mappings->mappings,
+            mappings->allocated_length*sizeof(candidate_mapping)
+        );
+        
+        if( mappings->mappings == NULL )
         {
-            /* Don't try to free NULL pointers (subset markers) */
-            if( mappings->mappings[i] == NULL )
-                continue;
-
-            free( mappings->mappings[i] );
+            fprintf(stderr, "Failed realloc in add_candidate_mapping\n");
+            exit(1);
         }
     }
 
-    /* free the array of pointers to candidate mappings */
-    free( mappings->mappings );
-    free( mappings );
+    /* add the new results to the end of the results set */
+    /* Note that this copies the mapping */
+    (mappings->mappings)[mappings->length] = (*mapping);
+    mappings->length++;
+    
+    return;
 }
 
-candidate_mapping*
-init_candidate_mapping_from_read_subtemplate(
-        struct read_subtemplate* rst,
-        float max_penalty_spread
-    )
+void
+free_candidate_mappings( candidate_mappings* mappings )
 {
-    /****** initialize the mapped_location info that we know  ******/
-    candidate_mapping* cand_map = calloc( 1, sizeof( candidate_mapping ));
-
-    /* Set the read length */
-    cand_map->rd_len = rst->length;
-
-    /* if read length <= seq_length, then a recheck is unnecessary */
-    /* TODO what happened to this check? */
-    if( max_penalty_spread > -0.1 ) {
-        cand_map->recheck = RECHECK_PENALTY;
-    } else {
-        cand_map->recheck = VALID;
-    }
-
-    /* Initialize values for READ_TYPE */
-    cand_map->rd_type.follows_ref_gap = false;
-    cand_map->rd_type.pos = -1;
-    
-    return cand_map;
+    free( mappings->mappings );
+    free( mappings );
 }
 
 void
@@ -293,10 +309,12 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Recheck:      %u\n", mapping->recheck);
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
-    //printf("Read_type:    %u\n", mapping->rd_type);
+    printf("Read_type:    %u\n", mapping->rd_type);
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
+    // printf("Subseq Off:   %u\n", mapping->subseq_offset);
+    // printf("Subseq Len:   %u\n", mapping->subseq_len);
     printf("\n");
     return;
 }
@@ -307,14 +325,12 @@ print_candidate_mappings( candidate_mappings* mappings )
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        print_candidate_mapping( mappings->mappings[i] );
+        print_candidate_mapping( mappings->mappings + i );
     }
 }
 
 
-/* these won't work with the new implementation of candidate_mappings */
-#if 0
-int
+ int
 cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2 )
 {
 
@@ -360,7 +376,6 @@ sort_candidate_mappings( candidate_mappings* mappings )
            (int(*)(const void*, const void*))cmp_candidate_mappings
     );
 }
-#endif
 
 /* Append the candidate mappings from src onto dest */
 void
@@ -372,7 +387,7 @@ append_candidate_mappings(
     int i;
     for( i = 0; i < src->length; i++ )
     {
-        add_candidate_mapping( dest, src->mappings[i] );
+        add_candidate_mapping( dest, &(src->mappings[i]) );
     }
 }
 
