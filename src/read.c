@@ -317,8 +317,12 @@ get_next_read_from_rawread_db(
         free_rawread( r2 );
     }
 
+    /***** Set the prior_read_information *****/
+    /* TODO Set the max lengths from config.h, for now */
+    (*r)->prior.max_ref_insert_length = REFERENCE_INSERT_LENGTH_MAX;
+    (*r)->prior.max_fragment_length = FRAGMENT_LENGTH_MAX;
     /* Set the assay type on the read from the rawread db */
-    (*r)->assay = rdb->assay;
+    (*r)->prior.assay = rdb->assay;
 
     /* increment the read counter */
     *readkey = rdb->readkey;

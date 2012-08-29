@@ -26,9 +26,15 @@ struct read_subtemplate {
     struct pos_in_template pos_in_template;
 };
 
+struct prior_read_information {
+    int max_ref_insert_length;
+    int max_fragment_length;
+    enum assay_type_t assay;
+};
+
 struct read {
     char* name;
-    enum assay_type_t assay;
+    struct prior_read_information prior;
 
     struct read_subtemplate* subtemplates;
     int num_subtemplates;

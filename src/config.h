@@ -235,6 +235,9 @@ enum RECHECK
 #define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
 #define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
 
+/* TODO this is an arbitrary default (doesn't matter for now) */
+#define REFERENCE_INSERT_LENGTH_MAX 50000
+
 /* this needs to always be able to store up to LOCATION_MAX */
 #define SIGNED_LOC int
 
