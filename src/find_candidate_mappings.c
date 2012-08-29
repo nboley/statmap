@@ -1447,14 +1447,15 @@ find_candidate_mappings( void* params )
             for( i = 0; i < mappings->length; i++ )
             {
                 if( (mappings->mappings + i)->recheck == VALID )
-                    num_valid_mappings += 1;
+                    num_valid_mappings++;
             }
 
-            /* update the mapped_cnt */
+            /* mapped count is the number of reads that successfully mapped
+             * (not the number of mappings) */
             if( num_valid_mappings > 0 )
             {
                 pthread_spin_lock( mapped_cnt_lock );
-                *mapped_cnt += num_valid_mappings;
+                *mapped_cnt += 1;
                 pthread_spin_unlock( mapped_cnt_lock );
             }
 
