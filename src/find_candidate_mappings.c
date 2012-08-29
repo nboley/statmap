@@ -354,7 +354,7 @@ build_candidate_mapping_from_mapped_location(
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping* cm 
-        = init_candidate_mapping_from_template( 
+        = init_candidate_mapping_from_read_subtemplate( 
             rst, max_penalty_spread 
         );
 
@@ -408,13 +408,13 @@ can_be_used_to_update_error_data(
         
     /*** we only want unique mappers for the error estiamte updates */        
     // We allow lengths of 2 because we may have diploid locations
-    if( mappings->length < 1 || mappings->length > 2 ) {
+    if( mappings->num_candidate_mappings < 1 ||
+        mappings->num_candidate_mappings > 2 )
+    {
         return false;
     }
 
     /* we know that the length is at least 1 from directly above */
-    assert( mappings->length >= 1 );
-    
     candidate_mapping* loc = mappings->mappings[0]; 
     int mapped_length = rst->length;
     
@@ -436,18 +436,19 @@ can_be_used_to_update_error_data(
        competing sequence, we really don't care because the mutation rates 
        should still be fine.
     */
-    if( mappings->length > 1 )
+    // TODO make this work for all cases BROKEN
+    if( mappings->num_candidate_mappings > 1 )
     {
-        if( mappings->mappings[1]->recheck != VALID ) {
+        if( mappings->mappings[2]->recheck != VALID ) {
             return false;
         }
         
         /* this is guaranteed at the start of the function */
-        assert( mappings->length == 2 );
+        assert( mappings->num_candidate_mappings == 2 );
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
-            mappings->mappings[1]->chr, 
-            mappings->mappings[1]->start_bp, 
+            mappings->mappings[2]->chr, 
+            mappings->mappings[2]->start_bp, 
             rst->length
         );
         
@@ -832,6 +833,10 @@ build_candidate_mappings_for_ungapped_assay_type(
                 rst_mappings,
                 min_match_penalty
             );
+
+        /* Add null separator after each candidate mapping, since each subset
+         * only contains 1 */
+        add_null_separator_to_candidate_mappings( rst_mappings );
     }
 }
 
@@ -853,7 +858,7 @@ build_candidate_mappings_for_gapped_assay_type(
     {
         mapped_locations* current_locs = matches->container[i];
 
-        for( j = 0; j < current_locs; j++ )
+        for( j = 0; j < current_locs->length; j++ )
         {
             mapped_location* current_loc = current_locs->locations + j;
 
@@ -1258,6 +1263,40 @@ find_candidate_mappings_for_read_subtemplate(
 }
 
 void
+update_read_type( candidate_mappings* mappings )
+{
+    if( mappings->length < 1 )
+        return; // is this exceptional?
+
+    /* On the first candidate mapping in the full set for this read
+     * subtemplate, set the follows_ref_gap flag */
+    mappings->mappings[0]->rd_type.follows_ref_gap = true;
+
+    /* update the pos on each mapping in mappings */
+    /* This algorithm starts at the first candidate mapping, and updates
+     * pos_in_current_subset as it counts more candidate mappings in the same
+     * contiguous subset. When it encounters a NULL pointer,
+     * pos_in_current_subset is reset */
+    int pos_in_current_subset = 0;
+
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* cm = mappings->mappings[i];
+
+        if( cm == NULL ) {
+            /* reset pos to 0 for the next subset */
+            pos_in_current_subset = 0;
+            continue;
+        }
+
+        cm->rd_type.pos = pos_in_current_subset++;
+    }
+
+    return;
+}
+
+void
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1300,6 +1339,9 @@ find_candidate_mappings_for_read(
 
                 assay
             );
+
+        // Update the read position metadata in each of the candidate mappings
+        update_read_type( rst_mappings );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
@@ -1447,8 +1489,12 @@ find_candidate_mappings( void* params )
             int i;
             for( i = 0; i < mappings->length; i++ )
             {
-                if( (mappings->mappings[i])->recheck == VALID )
-                    num_valid_mappings += 1;
+                candidate_mapping* cm = mappings->mappings[i];
+                if( cm == NULL )
+                    continue;
+
+                if( cm->recheck == VALID )
+                    num_valid_mappings++;
             }
 
             /* update the mapped_cnt */

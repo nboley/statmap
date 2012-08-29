@@ -195,11 +195,7 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
 
 /*
  * TODO - this is no longer a dynamic array, which will degrade performance.
- * Can we still make this a dynamic array? Right now
- *      length := # of candidate mappings
- *      allocated_length := # of allocated pointers (including NULL's)
- * might still be able to make this a dynamic array, or maybe an even smarter
- * data structure (linked list, etc.)
+ * Should be able to make this a dynamic array (add allocated_length back in)
  */
 void
 init_candidate_mappings( candidate_mappings** mappings )
@@ -207,7 +203,7 @@ init_candidate_mappings( candidate_mappings** mappings )
     *mappings = malloc( sizeof(candidate_mappings) );
     (*mappings)->mappings = NULL;
     (*mappings)->length = 0;
-    (*mappings)->allocated_length = 0;
+    (*mappings)->num_candidate_mappings = 0;
     return;
 }
 
@@ -217,13 +213,13 @@ add_candidate_mapping( candidate_mappings* mappings,
 {
     /* Update the list metadata */
     mappings->length += 1;
-    mappings->allocated_length += 1;
+    mappings->num_candidate_mappings += 1;
 
     /* Reallocate memory for the new pointer */
     mappings->mappings = realloc( mappings->mappings,
-            sizeof(candidate_mapping*) * mappings->allocated_length );
+            sizeof(candidate_mapping*) * mappings->length );
 
-    mappings->mappings[mappings->allocated_length-1] = mapping;
+    mappings->mappings[mappings->length-1] = mapping;
     
     return;
 }
@@ -232,12 +228,12 @@ void
 add_null_separator_to_candidate_mappings( candidate_mappings* mappings )
 {
     /* Add a NULL pointer as a sublist seperator to the end of mappings */
-    mappings->allocated_length += 1;
+    mappings->length += 1;
 
     mappings->mappings = realloc( mappings->mappings,
-            sizeof( candidate_mapping*) * mappings->allocated_length );
+            sizeof( candidate_mapping*) * mappings->length );
 
-    mappings->mappings[mappings->allocated_length-1] = NULL;
+    mappings->mappings[mappings->length-1] = NULL;
 
     return;
 }
@@ -249,7 +245,7 @@ free_candidate_mappings( candidate_mappings* mappings, enum bool free_mappings )
     {
         /* free the individual candidate mappings */
         int i;
-        for( i = 0; i < mappings->allocated_length; i++ )
+        for( i = 0; i < mappings->length; i++ )
         {
             /* Don't try to free NULL pointers (subset markers) */
             if( mappings->mappings[i] == NULL )
@@ -265,7 +261,7 @@ free_candidate_mappings( candidate_mappings* mappings, enum bool free_mappings )
 }
 
 candidate_mapping*
-init_candidate_mapping_from_template(
+init_candidate_mapping_from_read_subtemplate(
         struct read_subtemplate* rst,
         float max_penalty_spread
     )
@@ -277,39 +273,17 @@ init_candidate_mapping_from_template(
     cand_map->rd_len = rst->length;
 
     /* if read length <= seq_length, then a recheck is unnecessary */
+    /* TODO what happened to this check? */
     if( max_penalty_spread > -0.1 ) {
         cand_map->recheck = RECHECK_PENALTY;
     } else {
         cand_map->recheck = VALID;
     }
+
+    /* Initialize values for READ_TYPE */
+    cand_map->rd_type.follows_ref_gap = false;
+    cand_map->rd_type.pos = -1;
     
-    /* set which type of read this is */
-    assert( rst->pos_in_template.number_of_reads_in_template == 1 ||
-            rst->pos_in_template.number_of_reads_in_template == 2 );
-    /* The number of reads in the tempate tells us whether this read
-     * subtemplate is from a single or paired end read */
-    if( rst->pos_in_template.number_of_reads_in_template == 1 )
-    {
-        assert( rst->pos_in_template.pos == POS_SINGLE_END );
-        cand_map->rd_type = SINGLE_END;
-    }
-    else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
-    {
-        /* The position in the template tells us which end of the paired end
-         * read this subtemplate represents */
-
-        assert( rst->pos_in_template.pos == POS_PAIRED_END_1 ||
-                rst->pos_in_template.pos == POS_PAIRED_END_2 );
-
-        if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
-        {
-            cand_map->rd_type = PAIRED_END_1;
-        } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
-        {
-            cand_map->rd_type = PAIRED_END_2;
-        }
-    }
-
     return cand_map;
 }
 
@@ -319,7 +293,7 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Recheck:      %u\n", mapping->recheck);
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
-    printf("Read_type:    %u\n", mapping->rd_type);
+    //printf("Read_type:    %u\n", mapping->rd_type);
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);

@@ -173,18 +173,6 @@ enum JUNCTION_TYPE
     NON_CANONICAL = 3
 };
 
-enum READ_TYPE
-{
-    /*  0 = 'Not Set' - it should be the initial setting */
-    SINGLE_END = 1,
-    /* Paired end, with an indeterminate end */
-    PAIRED_END = 2,
-    /* Paired end, but this is end 1 ( ie, KEY/1 in the read name ) */
-    PAIRED_END_1 = 3,
-    /* Paired end, but this is end 2 ( ie, KEY/2 in the read name ) */
-    PAIRED_END_2 = 4
-};
-
 enum RECHECK
 {
     /* the default, it needs a full recheck */

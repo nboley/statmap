@@ -36,12 +36,13 @@ modify_mapped_read_location_for_index_probe_offset(
  *
  */
 
-/* Not implement yet
-struct {
+struct READ_TYPE {
+    /* whether this immediately follows a gap between read subtemplates */
     enum bool follows_ref_gap;
+    /* pos of this candidate mapping relative to the subset of candidate
+     * mappings it belongs to, which is derived from one subtemplate */
     int pos;
-} READ_TYPE;
-*/
+};
 
 typedef struct __attribute__((packed))__{
     /* 
@@ -66,7 +67,7 @@ typedef struct __attribute__((packed))__{
 
     /*** Info related to the read ***/
     /* If this is a normal, or paired end read */
-    enum READ_TYPE rd_type;
+    struct READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
     
@@ -90,8 +91,11 @@ typedef struct __attribute__((packed))__{
 /* This is a list of pointers to candidate_mapping, where sets of pointers may
  * be separated by NULL pointers to indicate subsets of candidate mappings. */
 typedef struct {
-    int allocated_length;
+    /* the number of allocated pointers, including NULL pointers */
     int length;
+    /* the number of candidate mappings */
+    int num_candidate_mappings;
+
     candidate_mapping** mappings;
 } candidate_mappings;
 
@@ -106,11 +110,14 @@ add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     );
 
 void
+add_null_separator_to_candidate_mappings( candidate_mappings* mappings );
+
+void
 free_candidate_mappings( candidate_mappings* mappings,
                          enum bool free_mappings );
 
 candidate_mapping*
-init_candidate_mapping_from_template(
+init_candidate_mapping_from_read_subtemplate(
         struct read_subtemplate* rst,
         float max_penalty_spread );
 
