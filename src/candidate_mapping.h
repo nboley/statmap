@@ -36,6 +36,15 @@ modify_mapped_read_location_for_index_probe_offset(
  *
  */
 
+struct READ_TYPE {
+    /* Whether this candidate mapping follows a gap in the reference genome
+     * (such as an intron) */
+    enum bool follows_ref_gap;
+    /* Position of this candidate mapping in the underlying template.
+     * This is equal to the index of the underlying read subtemplate */
+    int pos;
+};
+
 typedef struct __attribute__((packed))__{
     /* 
      * Whether or not we need to go to the genome to update this 
@@ -59,7 +68,7 @@ typedef struct __attribute__((packed))__{
 
     /*** Info related to the read ***/
     /* If this is a normal, or paired end read */
-    enum READ_TYPE rd_type;
+    struct READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
     READ_POSITION rd_len;
     

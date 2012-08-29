@@ -235,32 +235,10 @@ init_candidate_mapping_from_template(
         cand_map.recheck = VALID;
     }
     
-    /* set which type of read this is */
-    assert( rst->pos_in_template.number_of_reads_in_template == 1 ||
-            rst->pos_in_template.number_of_reads_in_template == 2 );
-    /* The number of reads in the tempate tells us whether this read
-     * subtemplate is from a single or paired end read */
-    if( rst->pos_in_template.number_of_reads_in_template == 1 )
-    {
-        assert( rst->pos_in_template.pos == POS_SINGLE_END );
-        cand_map.rd_type = SINGLE_END;
-    }
-    else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
-    {
-        /* The position in the template tells us which end of the paired end
-         * read this subtemplate represents */
-
-        assert( rst->pos_in_template.pos == POS_PAIRED_END_1 ||
-                rst->pos_in_template.pos == POS_PAIRED_END_2 );
-
-        if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
-        {
-            cand_map.rd_type = PAIRED_END_1;
-        } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
-        {
-            cand_map.rd_type = PAIRED_END_2;
-        }
-    }
+    /* Initialize the values in READ_TYPE.
+     * These will be updated to be correct in update_read_type */
+    cand_map.rd_type.follows_ref_gap = false;
+    cand_map.rd_type.pos = -1;
 
     return cand_map;
 }
@@ -309,7 +287,7 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Recheck:      %u\n", mapping->recheck);
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
-    printf("Read_type:    %u\n", mapping->rd_type);
+    //printf("Read_type:    %u\n", mapping->rd_type);
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
@@ -348,8 +326,8 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
      */ 
 
     /* first, sort by read type */
-    if( m1->rd_type != m2->rd_type )
-        return m1->rd_type - m2->rd_type;
+    if( m1->rd_type.pos != m2->rd_type.pos )
+        return m1->rd_type.pos - m2->rd_type.pos;
 
     /* next, sort by strand */
     if( m1->rd_strnd != m2->rd_strnd )

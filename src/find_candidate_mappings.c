@@ -338,13 +338,13 @@ build_candidate_mapping_from_mapped_location(
         struct read_subtemplate* rst,
 
         mapped_location* result, 
-        mapped_locations* results,
+        struct indexable_subtemplate* probe,
 
         candidate_mappings* mappings,
         float max_penalty_spread
     )
 {
-    int subseq_len = results->probe->subseq_length;
+    int subseq_len = probe->subseq_length;
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping cm 
@@ -361,7 +361,7 @@ build_candidate_mapping_from_mapped_location(
 
     /* set metadata */
     cm.penalty = result->penalty;
-    cm.subseq_offset = results->probe->subseq_offset;
+    cm.subseq_offset = probe->subseq_offset;
 
     /* set location information */
     cm.chr = result->chr;
@@ -373,8 +373,8 @@ build_candidate_mapping_from_mapped_location(
             result->loc,
             result->chr,
             result->strnd,
-            results->probe->subseq_offset,
-            results->probe->subseq_length,
+            probe->subseq_offset,
+            probe->subseq_length,
             rst->length,
             genome
         );
@@ -824,7 +824,7 @@ build_candidate_mappings_for_ungapped_assay_type(
                 rst,
 
                 loc,
-                locs,
+                locs->probe,
 
                 rst_mappings,
                 min_match_penalty
@@ -841,6 +841,10 @@ build_candidate_mappings_for_gapped_assay_type(
         float min_match_penalty,
         enum assay_type_t assay )
 {
+    /* Note - will have to set follows_ref_gap on the candidate mappings at
+     * this point (we can distinguish groups of candidate_mapping's because
+     * the first candidate_mapping in the group has follows_ref_gap = false). */
+
     /* STUB */
     fprintf(stderr, "FATAL       :  Gapped assay types are not implemented yet.\n");
     assert( false );
@@ -1233,6 +1237,18 @@ find_candidate_mappings_for_read_subtemplate(
 }
 
 void
+update_read_type(
+        candidate_mappings* mappings,
+        int rst_index )
+{
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        mappings->mappings[i].rd_type.pos = rst_index;
+    }
+}
+
+void
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1275,6 +1291,10 @@ find_candidate_mappings_for_read(
 
                 assay
             );
+
+        /* Update pos in READ_TYPE with the index of the underlying read
+         * subtemplate for these candidate mappings */
+        update_read_type( rst_mappings, rst_index );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
