@@ -308,6 +308,8 @@ free_mapped_read_index( mapped_read_index* index )
     return;
 }
 
+/* Longstanding TODO -- expand joined_mappings dynamically for performance */
+
 void
 join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
                                         candidate_mapping*** joined_mappings, 
@@ -558,7 +560,7 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         rd_ptr += sizeof( mapped_read_location_prologue );
 
         /* Sum the penalties of the candidate mappings ( since the penalties,
-         * are log probabilites, we can just multiply them, and do the
+         * are log probabilites, we can just add (multiply) them, and do the
          * conversion back to [0,1] probability space once at the end */
         float cum_penalty = 0;
 
@@ -588,14 +590,20 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
             /* look ahead to figure out if the next subread is gapped or not.
              * TODO: how to distinguish gapped vs. ungapped (probably metadata
              * on the cm) */
+            candidate_mapping* next_mapping = *(current_mapping + 1);
             if( *(current_mapping + 1) == NULL )
             {
+                /* there is no next subread */
                 subloc->next_subread_is_gapped = 0;
                 subloc->next_subread_is_ungapped = 0;
             } else {
-                /* TODO - for now, only handle paired end case. */
-                subloc->next_subread_is_gapped = 1;
-                subloc->next_subread_is_ungapped = 0;
+                if( next_mapping->rd_type.follows_ref_gap ) {
+                    subloc->next_subread_is_gapped = 1;
+                    subloc->next_subread_is_ungapped = 0;
+                } else {
+                    subloc->next_subread_is_gapped = 0;
+                    subloc->next_subread_is_ungapped = 1;
+                }
             }
 
             /* Add the penalty to the total */
