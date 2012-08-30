@@ -814,8 +814,7 @@ build_candidate_mappings_from_match(
         struct read_subtemplate* rst,
         mapped_locations_container* matches,
         candidate_mappings* rst_mappings,
-        float max_penalty_spread,
-        enum assay_type_t assay )
+        float max_penalty_spread )
 {
     /* For each mapped_location in the matched set, ask -
      * do I build a candidate mapping with this, or not?
@@ -1007,8 +1006,7 @@ build_candidate_mappings_from_base_mapped_location(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         candidate_mappings* rst_mappings,
-        float max_penalty_spread,
-        enum assay_type_t assay )
+        float max_penalty_spread )
 {
     /*
      * Takes in a base location, which necessarily corresponds to a single 
@@ -1078,8 +1076,7 @@ build_candidate_mappings_from_base_mapped_location(
             rst,
             matches,
             rst_mappings,
-            max_penalty_spread,
-            assay
+            max_penalty_spread
         );
     
 cleanup:
@@ -1092,8 +1089,7 @@ build_candidate_mappings_from_search_results(
         mapped_locations_container* search_results,
         struct read_subtemplate* rst,
         struct genome_data* genome,
-        float max_penalty_spread,
-        enum assay_type_t assay )
+        float max_penalty_spread )
 {
     /* sort each mapped_locations in order to binary search later */
     sort_mapped_locations_in_container( search_results );
@@ -1129,8 +1125,7 @@ build_candidate_mappings_from_search_results(
                     genome,
                     rst,
                     rst_mappings,
-                    max_penalty_spread,
-                    assay );
+                    max_penalty_spread );
         }
 
         free_mapped_locations( expanded_base );
@@ -1149,10 +1144,7 @@ find_candidate_mappings_for_read_subtemplate(
         float min_match_penalty,
         float max_penalty_spread,
         
-        enum bool only_collect_error_data,
-
-        enum assay_type_t assay
-    )
+        enum bool only_collect_error_data )
 {
     /* build the penalty arrays for this read subtemplate */
     struct penalty_array_t fwd_penalty_array, rev_penalty_array;
@@ -1192,7 +1184,7 @@ find_candidate_mappings_for_read_subtemplate(
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
             rst_mappings, ml_container, rst,
-            genome, max_penalty_spread, assay
+            genome, max_penalty_spread
         );
 
     /* Note - mapped_locations_container contains references to memory
@@ -1252,9 +1244,7 @@ find_candidate_mappings_for_read(
         float min_match_penalty,
         float max_penalty_spread,
 
-        enum bool only_collect_error_data,
-
-        enum assay_type_t assay )
+        enum bool only_collect_error_data )
 {
     // for each subtemplate in the read
     int rst_index;
@@ -1279,9 +1269,7 @@ find_candidate_mappings_for_read(
                 min_match_penalty,
                 max_penalty_spread,
                 
-                only_collect_error_data,
-
-                assay
+                only_collect_error_data
             );
 
         /* Update pos in READ_TYPE with the index of the underlying read
@@ -1421,9 +1409,7 @@ find_candidate_mappings( void* params )
                 min_match_penalty,
                 max_penalty_spread,
 
-                only_collect_error_data,
-
-                rdb->assay
+                only_collect_error_data
             );
 
         // Free the read
