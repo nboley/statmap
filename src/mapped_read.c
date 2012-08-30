@@ -309,19 +309,13 @@ free_mapped_read_index( mapped_read_index* index )
 }
 
 void
-join_candidate_mappings( candidate_mappings* mappings, 
-                         candidate_mapping*** joined_mappings, 
-                         float** penalty,
-                         int* joined_mappings_len
-    )
+join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
+                                        candidate_mapping*** joined_mappings, 
+                                        float** penalty,
+                                        int* joined_mappings_len )
 {
-    /* joined_mappings is a list of pointers to candidate_mappings. Each
-     * "joined mapping" is a list of pointers to candidate_mappings separated
-     * by NULL poiners */
-
-    /* TODO just handle single end reads for now */
-    /* just loop through the mappings and add everything up */
-
+    /* for single end reads, just copy the candidate mappings over, adding
+     * NULL delimiters */
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
@@ -346,6 +340,111 @@ join_candidate_mappings( candidate_mappings* mappings,
         *penalty = realloc( *penalty,
                 sizeof(float) * *joined_mappings_len );
         (*penalty)[*joined_mappings_len - 1] = mappings->mappings[i].penalty;
+    }
+
+    return;
+}
+
+void
+join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
+                                        candidate_mapping*** joined_mappings, 
+                                        float** penalty,
+                                        int* joined_mappings_len )
+{
+    int pair_1_start = 0;
+    int pair_2_start = -1;
+
+    /* find the start of the second pair candidate mappings */
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* mapping = mappings->mappings + i;
+
+        if( mapping->rd_type.pos == 1 )
+        {
+            pair_2_start = i;
+            break;
+        }
+    }
+    assert( pair_2_start > 0 );
+
+    /* sanity check */
+    assert( pair_2_start > pair_1_start );
+
+    int j;
+    for( i = pair_1_start; i < pair_2_start; i++ )
+    {
+        for( j = pair_2_start; j < mappings->length; j++ )
+        {
+            *joined_mappings_len += 1;
+
+            /* allocate memory for new set of joined candidate mappings
+             * multiply by 3 for 2 candidate mappings and 1 NULL pointer
+             * separating the entries */
+            *joined_mappings = realloc( *joined_mappings,
+                    sizeof(candidate_mapping*) * (*joined_mappings_len * 3));
+
+            /* third to last pointer is 1st candidate mapping */
+            (*joined_mappings)[(*joined_mappings_len*3) - 3]
+                    = mappings->mappings + i;
+
+            /* second to last pointer is 2nd candidate mapping */
+            (*joined_mappings)[(*joined_mappings_len*3) - 2]
+                    = mappings->mappings + j;
+
+            /* last pointer is NULL pointer indicating the end of this set of
+             * joined candidate mappings */
+            (*joined_mappings)[(*joined_mappings_len*3) - 1] = NULL;
+
+            /* add the penalty for this (joined) candidate mapping. Simply
+             * add the penalties from both candidate mappings (since these are
+             * log probabilities, adding is equivalent to the product of the
+             * marginal probabilities) */
+            *penalty = realloc( *penalty,
+                    sizeof(float) * *joined_mappings_len );
+            (*penalty)[*joined_mappings_len - 1]
+                = mappings->mappings[i].penalty + 
+                  mappings->mappings[j].penalty;
+        }
+    }
+}
+
+void
+join_candidate_mappings( candidate_mappings* mappings, 
+                         candidate_mapping*** joined_mappings, 
+                         float** penalty,
+                         int* joined_mappings_len )
+{
+    /* joined_mappings is a list of pointers to candidate_mappings. Each
+     * "joined mapping" is a list of pointers to candidate_mappings separated
+     * by NULL poiners */
+
+    /* TODO special case single end and paired end reads joining, for now */
+
+    enum bool paired_end = false;
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* mapping = mappings->mappings + i;
+
+        if( mapping->rd_type.pos == 1 )
+        {
+            paired_end = true;
+            break;
+        }
+    }
+
+    if( paired_end )
+    {
+        join_candidate_mappings_for_paired_end( mappings,
+                                                joined_mappings,
+                                                penalty,
+                                                joined_mappings_len );
+    } else {
+        join_candidate_mappings_for_single_end( mappings,
+                                                joined_mappings,
+                                                penalty,
+                                                joined_mappings_len );
     }
 
     return;
