@@ -341,7 +341,9 @@ build_candidate_mapping_from_mapped_location(
         struct indexable_subtemplate* probe,
 
         candidate_mappings* mappings,
-        float max_penalty_spread
+        float max_penalty_spread,
+
+        enum bool follows_ref_gap
     )
 {
     int subseq_len = probe->subseq_length;
@@ -365,6 +367,10 @@ build_candidate_mapping_from_mapped_location(
 
     /* set location information */
     cm.chr = result->chr;
+
+    /* set (partial) READ_TYPE information
+     * (rd_type.pos is set in update_read_type_pos) */
+    cm.rd_type.follows_ref_gap = follows_ref_gap;
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
@@ -803,83 +809,66 @@ find_matching_mapped_locations(
 }
 
 void
-build_candidate_mappings_for_ungapped_assay_type(
+build_candidate_mappings_from_match(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         mapped_locations_container* matches,
         candidate_mappings* rst_mappings,
-        float min_match_penalty,
+        float max_penalty_spread,
         enum assay_type_t assay )
 {
+    /* For each mapped_location in the matched set, ask -
+     * do I build a candidate mapping with this, or not?
+     *
+     * To answer this question, compare the mapped_location with the first
+     * (base) mapped location in the set. If
+     * 
+     * current_pos - current_offset == base_pos - base_offset
+     *
+     * then there is no need to build a candidate mapping (there is no gap in 
+     * the reference genome between these two mapped locations ).
+     * 
+     * O.w., build one. */
+
+    /* TODO figure out the lengths on the candidate_mappings */
+
+    /* Always build a candidate mapping for the base location */
     assert( matches->length > 0 );
-    mapped_locations* locs = matches->container[0];
+    mapped_locations* base_locs = matches->container[0];
+    assert( base_locs->length == 1 );
+    mapped_location* base_loc = base_locs->locations + 0;
+
+    /* The first candidate mapping never follows a reference gap */
+    build_candidate_mapping_from_mapped_location(
+            genome, rst, base_loc, base_locs->probe,
+            rst_mappings, max_penalty_spread, false );
+
+    int base_pos = base_loc->loc;
+    int base_offset = base_locs->probe->subseq_offset;
 
     int i;
-    for( i = 0; i < locs->length; i++ )
+    /* Skip the base location, we already built a candidate mapping for it */
+    for( i = 1; i < matches->length; i++ )
     {
-        mapped_location* loc = locs->locations;
+        mapped_locations* curr_locs = matches->container[i];
+        assert( curr_locs->length == 1 ); // for now
+        mapped_location* curr_loc = curr_locs->locations + 0;
 
-        build_candidate_mapping_from_mapped_location(
-                genome,
-                rst,
+        int curr_pos = curr_loc->loc;
+        int curr_offset = curr_locs->probe->subseq_offset;
 
-                loc,
-                locs->probe,
+        if( curr_pos - curr_offset !=
+            base_pos - base_offset )
+        {
+            /* this implies there is some gap in the reference genome, and we
+             * need to build a candidate mapping for this location.
+             *
+             * We also set follows_ref_gap to acknowledge this. */
 
-                rst_mappings,
-                min_match_penalty
-            );
-    }
-}
-
-void
-build_candidate_mappings_for_gapped_assay_type(
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        mapped_locations_container* matches,
-        candidate_mappings* rst_mappings,
-        float min_match_penalty,
-        enum assay_type_t assay )
-{
-    /* Note - will have to set follows_ref_gap on the candidate mappings at
-     * this point (we can distinguish groups of candidate_mapping's because
-     * the first candidate_mapping in the group has follows_ref_gap = false). */
-
-    /* STUB */
-    fprintf(stderr, "FATAL       :  Gapped assay types are not implemented yet.\n");
-    assert( false );
-    exit(-1);
-}
-
-void
-build_candidate_mappings_from_matched_mapped_locations(
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        mapped_locations_container* matches,
-        candidate_mappings* rst_mappings,
-        float min_match_penalty,
-        enum assay_type_t assay )
-{
-    /* The way candidate mappings are built here depends on the assay.
-     *
-     * If it is a non-gapped assay, then we just want to build 1 candidate
-     * mapping from each matched set of candidate mappings.
-     *
-     * If it is a gapped assay, then we want to build candidate mappings from
-     * each mapped location in the matched set
-     */
-
-    if( assay == STRANDED_RNASEQ )
-    {
-        /* Gapped assay */
-        build_candidate_mappings_for_gapped_assay_type(
-                genome, rst, matches, rst_mappings,
-                min_match_penalty, assay );
-    } else {
-        /* Non-gapped assay */
-        build_candidate_mappings_for_ungapped_assay_type(
-                genome, rst, matches, rst_mappings,
-                min_match_penalty, assay );
+            build_candidate_mapping_from_mapped_location(
+                    genome, rst, curr_loc, curr_locs->probe,
+                    rst_mappings, max_penalty_spread, true );
+        }
     }
 }
 
@@ -1018,7 +1007,7 @@ build_candidate_mappings_from_base_mapped_location(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         candidate_mappings* rst_mappings,
-        float min_match_penalty,
+        float max_penalty_spread,
         enum assay_type_t assay )
 {
     /*
@@ -1039,10 +1028,9 @@ build_candidate_mappings_from_base_mapped_location(
     init_mapped_locations_container( &matches );
     
     /* build a mapped_locations container for the current base location */
-    mapped_locations* base_container = mapped_locations_template( base_probe );
-    add_mapped_location( base, base_container );
-    add_mapped_locations_to_mapped_locations_container(
-            base_container, matches );
+    mapped_locations* base_set = mapped_locations_template( base_probe );
+    add_mapped_location( base, base_set );
+    add_mapped_locations_to_mapped_locations_container( base_set, matches );
 
     /* search the other mapped_locations for matches to base */
     int i;
@@ -1067,30 +1055,34 @@ build_candidate_mappings_from_base_mapped_location(
 
         /* if we found matches, add the subset to the set of matches.
          * Otherwise, optimize by terminating early */
-        if( matching_subset->length > 0 )
-        {
-            add_mapped_locations_to_mapped_locations_container(
-                    matching_subset, matches );
-        } else {
+        if( matching_subset->length == 0 ) {
             free_mapped_locations( matching_subset );
-            break;
+            goto cleanup;
         }
+
+        /* For now, we expect there will only be 1 match for every mapped 
+         * location. We've used a mapped_locations, however, in the expectation
+         * that there could be more in the future */
+        assert( matching_subset->length == 1 );
+
+        add_mapped_locations_to_mapped_locations_container(
+                matching_subset, matches );
     }
 
     /* if we were able to match across all of the indexable subtemplates, this
-     * is a valid match for base */
-    if( matches->length == search_results->length )
-    {
-        build_candidate_mappings_from_matched_mapped_locations(
-                genome,
-                rst,
-                matches,
-                rst_mappings,
-                min_match_penalty,
-                assay
-            );
-    }
+     * is a valid match to the base location */
+    assert( matches->length == search_results->length );
+
+    build_candidate_mappings_from_match(
+            genome,
+            rst,
+            matches,
+            rst_mappings,
+            max_penalty_spread,
+            assay
+        );
     
+cleanup:
     free_mapped_locations_container( matches );
 }
 
@@ -1100,7 +1092,7 @@ build_candidate_mappings_from_search_results(
         mapped_locations_container* search_results,
         struct read_subtemplate* rst,
         struct genome_data* genome,
-        float min_match_penalty,
+        float max_penalty_spread,
         enum assay_type_t assay )
 {
     /* sort each mapped_locations in order to binary search later */
@@ -1137,7 +1129,7 @@ build_candidate_mappings_from_search_results(
                     genome,
                     rst,
                     rst_mappings,
-                    min_match_penalty,
+                    max_penalty_spread,
                     assay );
         }
 
@@ -1200,7 +1192,7 @@ find_candidate_mappings_for_read_subtemplate(
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
             rst_mappings, ml_container, rst,
-            genome, min_match_penalty, assay
+            genome, max_penalty_spread, assay
         );
 
     /* Note - mapped_locations_container contains references to memory
@@ -1237,7 +1229,7 @@ find_candidate_mappings_for_read_subtemplate(
 }
 
 void
-update_read_type(
+update_read_type_pos(
         candidate_mappings* mappings,
         int rst_index )
 {
@@ -1294,7 +1286,7 @@ find_candidate_mappings_for_read(
 
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
-        update_read_type( rst_mappings, rst_index );
+        update_read_type_pos( rst_mappings, rst_index );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */

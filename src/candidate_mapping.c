@@ -229,6 +229,7 @@ init_candidate_mapping_from_template(
     */
 
     /* if read length <= seq_length, then a recheck is unnecessary */
+    /* TODO what happened to this check? */
     if( max_penalty_spread > -0.1 ) {
         cand_map.recheck = RECHECK_PENALTY;
     } else {
