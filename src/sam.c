@@ -323,7 +323,7 @@ fprintf_paired_mapped_read_as_sam(
     flag |= BAM_FPROPER_PAIR;
 
     /* Since this is the first read */
-    flag |= BAM_FREAD1;
+    flag |= BAM_FREAD2;
 
     if( (flag&FIRST_READ_WAS_REV_COMPLEMENTED) == 0  )
         flag |= BAM_FREVERSE;
