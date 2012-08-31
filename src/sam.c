@@ -330,13 +330,9 @@ fprintf_mapped_read_to_sam(
     mapped_read_t* mpd_rd,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
-    struct read* r,
-    enum bool expand_pseudo_locations
+    struct read* r
 )
 {
-    // TODO remove this (should be have a flag for this earlier?)
-    assert( expand_pseudo_locations == false );
-
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
@@ -419,14 +415,8 @@ write_mapped_reads_to_sam(
     struct cond_prbs_db_t* cond_prbs_db,
     struct genome_data* genome,
     enum bool reset_cond_read_prbs,
-    /* whether or not to print out pseudo locations
-       as real locations, or to print out each real loc
-       that makes ups the pseudo location */
-    enum bool expand_pseudo_locations,
     FILE* sam_ofp )
 {
-    assert( expand_pseudo_locations == false );
-
     int error;
 
     readkey_t readkey;
@@ -486,8 +476,7 @@ write_mapped_reads_to_sam(
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
 
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, cond_prbs_db, 
-                genome, rd, expand_pseudo_locations );
+                sam_ofp, mapped_rd, cond_prbs_db, genome, rd );
         }
         
         free_mapped_read_index( mapped_rd_index );
