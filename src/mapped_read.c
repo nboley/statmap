@@ -378,6 +378,17 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     {
         for( j = pair_2_start; j < mappings->length; j++ )
         {
+            candidate_mapping* pair_1_mapping = mappings->mappings + i;
+            candidate_mapping* pair_2_mapping = mappings->mappings + j;
+
+            /* If the chrs mismatch, since these are sorted we know there is no 
+             * need to continue. */
+            if( pair_2_mapping->chr > pair_1_mapping->chr )
+                break;
+
+            if( pair_2_mapping->chr != pair_1_mapping->chr )
+                continue;
+
             *joined_mappings_len += 1;
 
             /* allocate memory for new set of joined candidate mappings
@@ -387,12 +398,10 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
                     sizeof(candidate_mapping*) * (*joined_mappings_len * 3));
 
             /* third to last pointer is 1st candidate mapping */
-            (*joined_mappings)[(*joined_mappings_len*3) - 3]
-                    = mappings->mappings + i;
+            (*joined_mappings)[(*joined_mappings_len*3) - 3] = pair_1_mapping;
 
             /* second to last pointer is 2nd candidate mapping */
-            (*joined_mappings)[(*joined_mappings_len*3) - 2]
-                    = mappings->mappings + j;
+            (*joined_mappings)[(*joined_mappings_len*3) - 2] = pair_2_mapping;
 
             /* last pointer is NULL pointer indicating the end of this set of
              * joined candidate mappings */
