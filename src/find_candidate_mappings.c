@@ -750,16 +750,104 @@ search_for_matches_in_pseudo_locations(
     }
 }
 
+/* generic search, so we can use it for both the pseudo locations
+ * and the regular locations */
+
+/* Our criteria for matching are
+ * 1) strand
+ * 2) chromosome
+ * 3) location
+ *
+ * The true start of a mapped_location is
+ *
+ *     mapped_location->loc - mapped_locations->probe->subseq_offset
+ *  
+ *
+ */
+
+int
+search_for_matching_mapped_locations(
+        int base_pos,
+        int base_offset,
+        mapped_locations* match_candidates )
+{
+    /* Search for a location with a start equal to base_pos - base_offset
+     * (the true start of the base location ) */
+    int base_start = base_pos - base_offset;
+
+    /* Binary search */
+    int low = 0;
+    int high = match_candidates->length;
+    while( low < high ) {
+        int mid = low + ((high-low) / 2);
+
+        /* Compute the true start of the location currently being considered
+         * by the search */
+        int current_loc_start = match_candidates->locations[mid].loc 
+                              - match_candidates->probe->subseq_offset;
+
+        if( current_loc_start < base_start ) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+
+    /* make sure the binary search is working */
+    assert( low <= high );
+    assert( low <= match_candidates->length );
+    assert( low >= 0 );
+
+    /* This is the "deferred detection of equality" variant of the binary
+     * search algorithm (http://en.wikipedia.org/wiki/Binary_search_algorithm).
+     *
+     * It has the useful property that if there are multiple matching keys, it
+     * returns the index of the first matching key in the region of matching
+     * keys. */
+
+    /* Check for a match */
+    int found_loc_start = match_candidates->locations[low].loc 
+                        - match_candidates->probe->subseq_offset;
+    if( (low == high) && found_loc_start == base_start )
+    {
+        /* the index of the matching location in match_candidates */
+        return low;
+    }
+
+    /* Otherwise, we did not find a perfect match. However, we now have a
+     * idea of the "closest" location in the match_candidates from the
+     * failed binary search.
+     *
+     * Starting with low, do a linear search until we get to the first value
+     * that is greater than the base_start (it could be within the range of
+     * base_start + REFERENCE_INSERT_LENGTH_MAX) */
+
+    int i;
+    for( i = low; i < match_candidates->length; i++ )
+    {
+        int current_loc_start = match_candidates->locations[low].loc 
+                              - match_candidates->probe->subseq_offset;
+
+        if( current_loc_start > base_start )
+        {
+            /* the index of the first "greater" location in match_candidates */
+            return i;
+        }
+    }
+
+    /* Otherwise, no potential matches were found for base. Return -1 to indicate
+     * no index of a potential match */
+    return -1;
+}
+
 void
 find_matching_mapped_locations(
-        mapped_locations* matching_subset,
-        mapped_locations* potential_matches,
-        
         mapped_location* base,
         int base_loc_subseq_offset,
+        mapped_locations* potential_matches,
 
-        struct genome_data* genome
-    )
+        mapped_locations* matching_subset,
+        struct genome_data* genome )
 {
     /* any base location should have been expanded into real locations */
     assert( base->chr != PSEUDO_LOC_CHR_INDEX );
@@ -1038,15 +1126,15 @@ build_candidate_mappings_from_base_mapped_location(
         if( i == base_locs_index )
             continue;
 
-        mapped_locations* current_locs = search_results->container[i];
+        mapped_locations* match_candidates = search_results->container[i];
         mapped_locations* matching_subset =
-            mapped_locations_template( current_locs->probe );
+            mapped_locations_template( match_candidates->probe );
 
         find_matching_mapped_locations(
-                matching_subset,
-                current_locs,
                 base, 
                 base_probe->subseq_offset,
+                match_candidates,
+                matching_subset,
                 genome
             );
 
