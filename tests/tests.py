@@ -1338,9 +1338,12 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     total_num_reads = sum( 1 for line in sam_fp )/2
     sam_fp.seek(0)
 
-    # each paired end read should map n_dups**2*2 times
-    # when you duplicate the genome for paired end reads, number of matches grows exponentially
-    # * 2 for diploid
+    # Every fragment will map twice in a perfect diploid genome (since the
+    # paternal and maternal chromosomes are identical). Since we are simulating
+    # duplicated reads by repeatedly copying the genome, each fragment will
+    # also map an exponential number of times across each chromosome -
+    # each first pair will map to all of the following second pairs for that
+    # fragment, and so on.
     if len(fragments)*(n_dups**2)*2 != total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
                 % ( len(fragments)*(n_dups**2)*2, total_num_reads )

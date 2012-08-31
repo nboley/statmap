@@ -253,9 +253,7 @@ recheck_locations(
     float max_penalty_spread,
     
     struct penalty_array_t* fwd_pa,
-    struct penalty_array_t* rev_pa 
-
-)
+    struct penalty_array_t* rev_pa )
 {
     /* 
      * Currently, everything should be set *except* the gene strand. 
@@ -278,7 +276,7 @@ recheck_locations(
      *  header for details )
      */
     float max_penalty = min_match_penalty;
-            
+
     /* first, if necessary, recheck the locations */
     int k;
     for( k = 0; k < mappings->length; k++ )
@@ -598,7 +596,7 @@ build_indexable_subtemplates_from_read_subtemplate(
 void
 search_index_for_indexable_subtemplates(
         struct indexable_subtemplates* ists,
-        mapped_locations_container* ml_container,
+        mapped_locations_container* search_results,
 
         struct genome_data* genome,
 
@@ -613,10 +611,11 @@ search_index_for_indexable_subtemplates(
     for( ist_index = 0; ist_index < ists->length; ist_index++ )
     {
         // reference to current indexable subtemplate
-        struct indexable_subtemplate* ist = &(ists->container[ist_index]);
+        struct indexable_subtemplate* ist = ists->container + ist_index;
 
         /**** go to the index for mapping locations */
         mapped_locations *results = NULL;
+
         search_index(
                 genome,
                 ist,
@@ -631,7 +630,7 @@ search_index_for_indexable_subtemplates(
 
         // add these mapped locations to the mapped locations container
         add_mapped_locations_to_mapped_locations_container(
-                results, ml_container );
+                results, search_results );
     }
 }
 
@@ -803,7 +802,7 @@ find_matching_mapped_locations(
             (int(*)(const void*, const void*))cmp_mapped_locations_by_location
         );
 
-    // TODO ? handle potential for multiple matches
+    // TODO handle multiple matches
     if( match != NULL )
         add_mapped_location( match, matching_subset );
 }
@@ -1125,7 +1124,8 @@ build_candidate_mappings_from_search_results(
                     genome,
                     rst,
                     rst_mappings,
-                    max_penalty_spread );
+                    max_penalty_spread
+                );
         }
 
         free_mapped_locations( expanded_base );
@@ -1164,13 +1164,14 @@ find_candidate_mappings_for_read_subtemplate(
             &fwd_penalty_array, &rev_penalty_array
         );
 
-    // store all of the mapped_locations for this read subtemplate
-    mapped_locations_container* ml_container = NULL;
-    init_mapped_locations_container( &ml_container );
+    /* save the results of the index search for each indexable subtemplate in 
+     * a mapped_locations */
+    mapped_locations_container* search_results = NULL;
+    init_mapped_locations_container( &search_results );
 
     search_index_for_indexable_subtemplates(
             ists,
-            ml_container,
+            search_results,
 
             genome,
 
@@ -1183,7 +1184,7 @@ find_candidate_mappings_for_read_subtemplate(
     /* build candidate mappings from matching subsets of the mapped_locations
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
-            rst_mappings, ml_container, rst,
+            rst_mappings, search_results, rst,
             genome, max_penalty_spread
         );
 
@@ -1191,7 +1192,7 @@ find_candidate_mappings_for_read_subtemplate(
      * allocated in the indexable_subtemplates, so they must always be freed
      * simultaneously */
     free_indexable_subtemplates( ists );
-    free_mapped_locations_container( ml_container );
+    free_mapped_locations_container( search_results );
 
     /****** Do the recheck ******/
     recheck_locations(
@@ -1251,7 +1252,7 @@ find_candidate_mappings_for_read(
     for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
     {
         // reference to current read subtemplate
-        struct read_subtemplate* rst = &( r->subtemplates[rst_index] );
+        struct read_subtemplate* rst = r->subtemplates + rst_index;
 
         /* initialize the candidate mappings container for this read
          * subtemplate */
