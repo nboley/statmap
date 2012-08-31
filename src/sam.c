@@ -11,318 +11,11 @@
 #include "pseudo_location.h"
 #include "error_correction.h"
 
-void
-fprintf_nonpaired_mapped_read_as_sam( 
-    FILE* sam_fp,
-    mapped_read_location* loc,
-    float cond_prob,
-    struct genome_data* genome,
-    char* key, 
-    char* seq,
-    char* phred_qualities
-)
-{
-    const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
-    const float seq_error = get_seq_error_from_mapped_read_location( loc  );
-
-    assert( cond_prob <= 1.0 );
-    
-    int rd_len = MAX( start, stop )
-                  - MIN( start, stop );
-
-    /* print the query name */
-    fprintf( sam_fp, "%s\t", key );
-
-    /* build and print the flag */
-    unsigned short flag = 0;    
-    if( first_sublocation_is_rev_complemented( loc ) )
-        flag |= BAM_FREVERSE;
-    fprintf( sam_fp, "%hu\t", flag );
-    
-    /* print the reference seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
-    
-    /* print the genome location */
-    /* note that sam expects this in the 5' genome, but we 
-       keep it relative to the read strand */
-    fprintf( sam_fp, "%u\t", MIN( start, stop ) );
-    
-    /* print the phred quality score */
-    /* this is the ( quoting samtools ) 
-         'phred scaled posterior probability that the mapping position of this
-          read is incorrect'
-    */
-    fprintf( sam_fp, "%u\t", 
-             (unsigned int) MIN( 254, (-10*log10( 1 - cond_prob)) ) );
-    
-    /* print the cigar string ( we dont handle indels ) */
-    fprintf( sam_fp, "%uM\t", rd_len );
-
-    /* print the mate information - empty since this is not paired */
-    fprintf( sam_fp, "0\t0\t*\t" );
-
-    /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", rd_len, seq );
-    
-    /* print the quality string */
-    fprintf( sam_fp, "%.*s\t", rd_len, phred_qualities );
-
-    /* Print the optional fields */
-    /* For single end reads, we use 
-       MQ - Phred likelihood of the read, conditional on 
-            the mapping locations being correct 
-       
-       I take this to mean the phred scaled probabilites of 
-       observing the sequence, given that they came from the 
-       location in the genome that this mapping refers to.
-       
-       I also use 
-       XQ - which is just the probability of observing this
-            sequence, given that they came from this location
-       
-       XP - the probability that the read came from this location,
-            given that it came from somewhere on the genome
-    */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) MIN(254, (-10*log10(1-seq_error))));
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
-
-    return;
-}
-
-#if 0
-void
-fprintf_paired_mapped_read_as_sam( 
-    FILE* sam_fp,
-    mapped_read_location* loc,
-    const float cond_prob,
-
-    struct genome_data* genome,
-    
-    char* r1_key, 
-    char* r1_seq,
-    char* r1_phred_qualities,
-    int r1_len,
-
-    char* r2_key, 
-    char* r2_seq,
-    char* r2_phred_qualities,
-    int r2_len
-)
-{
-    const int chr_index = get_chr_from_mapped_read_location( loc  );
-    const unsigned int start = get_start_from_mapped_read_location( loc  );
-    const unsigned int stop = get_stop_from_mapped_read_location( loc  );
-    const float seq_error = get_seq_error_from_mapped_read_location( loc  );
-
-    if( cond_prob > 1.0 )
-    {
-        printf( "ERROR: %e\t%e\n", cond_prob, seq_error );
-    }
-    assert( cond_prob <= 1.0 );
-    
-    assert( start < stop );
-
-    /* Print out the read 1 sam line */
-    
-    int r1_start, r2_start;
-    if( (mrl_flag&FIRST_PAIR_IS_FIRST_IN_GENOME) > 0 ) 
-    {
-        r1_start = start;
-        r2_start = stop - r2_len;
-    } else {
-        r1_start = stop - r1_len;
-        r2_start = start;
-    }
-
-    /* print the query name */
-    fprintf( sam_fp, "%s\t", r1_key );
-
-    /* build and print the flag */
-    unsigned short flag = 0; 
-    flag |= BAM_FPAIRED;
-    flag |= BAM_FPROPER_PAIR;
-
-    /* Since this is the first read */
-    flag |= BAM_FREAD1;
-
-    if( (flag&FIRST_READ_WAS_REV_COMPLEMENTED) > 0  )
-        flag |= BAM_FREVERSE;
-    fprintf( sam_fp, "%hu\t", flag );
-    
-    /* print the refernce seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
-    
-    /* print the genome location */
-    /* note that sam expects this in the 5' genome, but we 
-       keep it relative to the read strand */
-    fprintf( sam_fp, "%u\t", r1_start );
-    
-    /* print the phred quality score */
-    /* this is the ( quoting samtools ) 
-         'phred scaled posterior probability that the mapping position of this
-          read is incorrect'
-    */
-    fprintf( sam_fp, "%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1 - cond_prob))) );
-    
-    /* print the cigar string ( we dont handle indels ) */
-    fprintf( sam_fp, "%uM\t", r1_len );
-
-    /* print the mate reference name */
-    fprintf( sam_fp, "%s\t", r2_key );
-
-    /* print the mate start position */
-    fprintf( sam_fp, "%u\t", r2_start );
-
-    /* print the inferred insert size */
-    /* This is stupid and screwed up, but quoting from the standard...
-    
-      If the two reads in a pair are mapped to the same reference, ISIZE 
-      equals the difference between the coordinate of the 5ʼ-end of the 
-      mate and of the 5ʼ-end of the current read; otherwise ISIZE equals 
-      0 (by the “5ʼ-end” we mean the 5ʼ-end of the original read, so for 
-      Illumina short-insert paired end reads this calculates the difference 
-      in mapping coordinates of the outer edges of the original sequenced 
-      fragment). ISIZE is negative if the mate is mapped to a smaller 
-      coordinate than the current read.
-    
-      So I guess this means that I should be aiming for the fragment length, 
-      subject of course to the correct sign conventions 
-    */
-    fprintf( sam_fp, "%i\t", r2_start - r1_start - r1_len + r1_len + r2_len );
-
-    /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", r1_len, r1_seq );
-
-    /* print the quality string */
-    fprintf( sam_fp, "%.*s\t", r1_len, r1_phred_qualities );
-
-    /* Print the optional fields */
-    /* For paired end reads, we use 
-       PQ - Phred likelihood of the read pair, conditional on both 
-            the mapping locations being correct 
-       
-       I take this to mean the phred scaled probabilites of 
-       observing the sequences, given that they came from the 
-       location in the genome that this mapping refers to.
-       
-       I also use 
-       XQ - which is just the probability of observing these 
-            sequences, given that they came from this location
-       
-       XP - the probability that the read came from this location,
-            given that it came from somewhere on the genome
-    */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1-seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
-   
-    /*************************************************************/
-    /*************************************************************/
-    /*************************************************************/
-    /** Print the read's second SAM line */
-    
-    if( (mrl_flag&FIRST_PAIR_IS_FIRST_IN_GENOME) == 0 ) 
-    {
-        r1_start = start;
-        r2_start = stop - r2_len;
-    } else {
-        r1_start = stop - r1_len;
-        r2_start = start;
-    }
-
-    /* print the query name */
-    fprintf( sam_fp, "%s\t", r2_key );
-
-    /* build and print the flag */
-    flag = 0; 
-    flag |= BAM_FPAIRED;
-    flag |= BAM_FPROPER_PAIR;
-
-    /* Since this is the first read */
-    flag |= BAM_FREAD1;
-
-    if( (flag&FIRST_READ_WAS_REV_COMPLEMENTED) == 0  )
-        flag |= BAM_FREVERSE;
-    fprintf( sam_fp, "%hu\t", flag );
-    
-    /* print the refernce seq ( chr ) name */
-    fprintf( sam_fp, "%s\t", genome->chr_names[chr_index] );
-    
-    /* print the genome location */
-    /* note that sam expects this in the 5' genome, but we 
-       keep it relative to the read strand */
-    fprintf( sam_fp, "%u\t", r1_start );
-    
-    /* print the phred quality score */
-    /* this is the ( quoting samtools ) 
-         'phred scaled posterior probability that the mapping position of this
-          read is incorrect'
-    */
-    fprintf( sam_fp, "%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(1 - cond_prob))) );
-    
-    /* print the cigar string ( we dont handle indels ) */
-    fprintf( sam_fp, "%uM\t", r2_len );
-
-    /* print the mate reference name */
-    fprintf( sam_fp, "%s\t", r1_key );
-
-    /* print the mate start position */
-    fprintf( sam_fp, "%u\t", r2_start );
-
-    /* print the inferred insert size */
-    /* This is stupid and screwed up, but quoting from the standard... */
-    /*
-      If the two reads in a pair are mapped to the same reference, ISIZE 
-      equals the difference between the coordinate of the 5ʼ-end of the 
-      mate and of the 5ʼ-end of the current read; otherwise ISIZE equals 
-      0 (by the “5ʼ-end” we mean the 5ʼ-end of the original read, so for 
-      Illumina short-insert paired end reads this calculates the difference 
-      in mapping coordinates of the outer edges of the original sequenced 
-      fragment). ISIZE is negative if the mate is mapped to a smaller 
-      coordinate than the current read.
-    */
-    /* So I guess this means that I should be aiming for the fragment length, 
-       subject of course to the correct sign conventions 
-    */
-    fprintf( sam_fp, "%i\t", r2_start - r1_start + r2_len - r1_len - r2_len );
-
-    /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", r2_len, r2_seq );
-
-    /* print the quality string */
-    fprintf( sam_fp, "%.*s\t", r2_len, r2_phred_qualities );
-
-    /* Print the optional fields */
-    /* For paired end reads, we use 
-       PQ - Phred likelihood of the read pair, conditional on both 
-            the mapping locations being correct 
-       
-       I take this to mean the phred scaled probabilites of 
-       observing the sequences, given that they came from the 
-       location in the genome that this mapping refers to.
-      
-       I also use 
-       XQ - which is just the probability of observing these 
-            sequences, given that they came from this location
-       
-       XP - the probability that the read came from this location,
-            given that it came from somewhere on the genome
-    */
-    fprintf( sam_fp, "PQ:i:%u\t", (unsigned int) 
-             MIN( 254, (-10*log10(seq_error))) );
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
-
-    return;
-}
-
-#endif
+/*************************************************************************
+ *
+ *  Write mapped reads to SAM
+ * 
+ */
 
 enum bool
 last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub )
@@ -719,7 +412,127 @@ fprintf_mapped_read_to_sam(
     return;
 }
 
-/**
+void
+write_mapped_reads_to_sam( 
+    struct rawread_db_t* rdb,
+    struct mapped_reads_db* mappings_db,
+    struct cond_prbs_db_t* cond_prbs_db,
+    struct genome_data* genome,
+    enum bool reset_cond_read_prbs,
+    /* whether or not to print out pseudo locations
+       as real locations, or to print out each real loc
+       that makes ups the pseudo location */
+    enum bool expand_pseudo_locations,
+    FILE* sam_ofp )
+{
+    assert( expand_pseudo_locations == false );
+
+    int error;
+
+    readkey_t readkey;
+
+    /* Join all candidate mappings */
+    /* get the cursor to iterate through the reads */
+    rewind_rawread_db( rdb );
+    rewind_mapped_reads_db( mappings_db );
+
+    struct read* rd;
+    mapped_read_t* mapped_rd;
+
+    error = get_next_read_from_mapped_reads_db( 
+        mappings_db, 
+        &mapped_rd
+    );
+    assert( error == 0 );
+
+    get_next_read_from_rawread_db( 
+        rdb, &readkey, &rd, -1 );
+
+    /* iterate through rawreads until we get to the rawread that matches the
+     * first mapped read. This sets up the following while loop */
+    while( NULL != rd 
+           && NULL != mapped_rd
+           && readkey < get_read_id_from_mapped_read( mapped_rd ) )
+    {
+        free_read( rd );
+        
+        get_next_read_from_rawread_db( 
+            rdb, &readkey, &rd, -1 );
+    }
+
+    while( rd != NULL
+           && mapped_rd != NULL ) 
+    {
+        mapped_read_index* mapped_rd_index;
+        init_mapped_read_index( &mapped_rd_index, mapped_rd );
+
+        if( readkey != mapped_rd_index->read_id )
+        {
+            fprintf( stderr, "readkey: %d\n", readkey );
+            fprintf( stderr, "mapped_rd->read_id: %d\n",
+                     mapped_rd_index->read_id );
+        }
+        assert( readkey == mapped_rd_index->read_id );
+        
+        if( readkey > 0 && readkey%1000000 == 0 )
+            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", readkey );
+        
+        /* We test for mapped read NULL in case the last read was unmappable */
+        if( mapped_rd != NULL 
+            && mapped_rd_index->num_mappings > 0 )
+        {
+            /* sometimes we want the marginal distribution */
+            if( reset_cond_read_prbs )
+                reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
+
+            fprintf_mapped_read_to_sam( 
+                sam_ofp, mapped_rd, cond_prbs_db, 
+                genome, rd, expand_pseudo_locations );
+        }
+        
+        free_mapped_read_index( mapped_rd_index );
+        
+        /* Free the read */
+        free_read( rd );
+
+        error = get_next_read_from_mapped_reads_db( 
+            mappings_db, 
+            &mapped_rd
+        );
+
+        get_next_read_from_rawread_db( 
+            rdb, &readkey, &rd, -1 );
+        
+        while( NULL != rd 
+               && NULL != mapped_rd
+               && readkey < get_read_id_from_mapped_read( mapped_rd ) )
+        {
+            free_read( rd );
+            
+            get_next_read_from_rawread_db( 
+                rdb, &readkey, &rd, -1 );
+        }
+        
+    }
+    
+    goto cleanup;
+
+cleanup:
+
+    /* Free the read */
+    if( rd != NULL )
+        free_read( rd );
+        
+    return;
+}
+
+/*************************************************************************
+ *
+ *  Write nonmapping/unmappable reads to FASTQ
+ * 
+ */
+
+/*
  * Writes a single (single or paired end) read out to the correct file pointer(s)
  */
 void
@@ -866,116 +679,4 @@ cleanup:
     return;
 }
 
-void
-write_mapped_reads_to_sam( 
-    struct rawread_db_t* rdb,
-    struct mapped_reads_db* mappings_db,
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct genome_data* genome,
-    enum bool reset_cond_read_prbs,
-    /* whether or not to print out pseudo locations
-       as real locations, or to print out each real loc
-       that makes ups the pseudo location */
-    enum bool expand_pseudo_locations,
-    FILE* sam_ofp )
-{
-    assert( expand_pseudo_locations == false );
 
-    int error;
-
-    readkey_t readkey;
-
-    /* Join all candidate mappings */
-    /* get the cursor to iterate through the reads */
-    rewind_rawread_db( rdb );
-    rewind_mapped_reads_db( mappings_db );
-
-    struct read* rd;
-    mapped_read_t* mapped_rd;
-
-    error = get_next_read_from_mapped_reads_db( 
-        mappings_db, 
-        &mapped_rd
-    );
-    assert( error == 0 );
-
-    get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd, -1 );
-
-    /* iterate through rawreads until we get to the rawread that matches the
-     * first mapped read. This sets up the following while loop */
-    while( NULL != rd 
-           && NULL != mapped_rd
-           && readkey < get_read_id_from_mapped_read( mapped_rd ) )
-    {
-        free_read( rd );
-        
-        get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd, -1 );
-    }
-
-    while( rd != NULL
-           && mapped_rd != NULL ) 
-    {
-        mapped_read_index* mapped_rd_index;
-        init_mapped_read_index( &mapped_rd_index, mapped_rd );
-
-        if( readkey != mapped_rd_index->read_id )
-        {
-            fprintf( stderr, "readkey: %d\n", readkey );
-            fprintf( stderr, "mapped_rd->read_id: %d\n",
-                     mapped_rd_index->read_id );
-        }
-        assert( readkey == mapped_rd_index->read_id );
-        
-        if( readkey > 0 && readkey%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", readkey );
-        
-        /* We test for mapped read NULL in case the last read was unmappable */
-        if( mapped_rd != NULL 
-            && mapped_rd_index->num_mappings > 0 )
-        {
-            /* sometimes we want the marginal distribution */
-            if( reset_cond_read_prbs )
-                reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
-
-            fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, cond_prbs_db, 
-                genome, rd, expand_pseudo_locations );
-        }
-        
-        free_mapped_read_index( mapped_rd_index );
-        
-        /* Free the read */
-        free_read( rd );
-
-        error = get_next_read_from_mapped_reads_db( 
-            mappings_db, 
-            &mapped_rd
-        );
-
-        get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd, -1 );
-        
-        while( NULL != rd 
-               && NULL != mapped_rd
-               && readkey < get_read_id_from_mapped_read( mapped_rd ) )
-        {
-            free_read( rd );
-            
-            get_next_read_from_rawread_db( 
-                rdb, &readkey, &rd, -1 );
-        }
-        
-    }
-    
-    goto cleanup;
-
-cleanup:
-
-    /* Free the read */
-    if( rd != NULL )
-        free_read( rd );
-        
-    return;
-}

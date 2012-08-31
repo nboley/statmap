@@ -216,11 +216,8 @@ typedef struct {
  *
  */
 
-// TODO get rid of this
-enum bool
-first_sublocation_is_rev_complemented( mapped_read_location* loc );
-
-// TODO get rid of these
+// TODO get rid of these getters/setters (they are hacks for single end assay
+// types, and are incorrect for paired end/gapped assays)
 
 /** CHR **/
 
