@@ -216,8 +216,11 @@ typedef struct {
  *
  */
 
+// TODO get rid of this
 enum bool
 first_sublocation_is_rev_complemented( mapped_read_location* loc );
+
+// TODO get rid of these
 
 /** CHR **/
 
