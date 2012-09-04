@@ -90,6 +90,7 @@
 #define EXPAND_PAIRED_PSEUDO_LOCATIONS true
 
 typedef unsigned char LEVEL_TYPE;
+/* TODO this probably isn't big enough - max read len of 255? */
 typedef unsigned char READ_POSITION;
 
 // the length of each index letter, in bps 

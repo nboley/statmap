@@ -361,7 +361,6 @@ build_candidate_mapping_from_mapped_location(
 
     /* set metadata */
     cm.penalty = result->penalty;
-    cm.subseq_offset = probe->subseq_offset;
 
     /* set location information */
     cm.chr = result->chr;
