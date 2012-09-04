@@ -9,9 +9,9 @@
 
 //struct penalty_array_t; // fwd declaration (?)
 
-#define POS_SINGLE_END 1
-#define POS_PAIRED_END_1 1
-#define POS_PAIRED_END_2 -1
+#define POS_SINGLE_END 0
+#define POS_PAIRED_END_1 0
+#define POS_PAIRED_END_2 1
 
 struct pos_in_template {
     int pos;

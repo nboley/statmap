@@ -201,7 +201,7 @@ build_read_from_rawreads(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                1,
+                POS_SINGLE_END,
                 num_reads_in_template
             );
     }
@@ -221,7 +221,7 @@ build_read_from_rawreads(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                1,
+                POS_PAIRED_END_1,
                 num_reads_in_template
             );
 
@@ -229,7 +229,7 @@ build_read_from_rawreads(
                 *r,
                 r2->char_seq, r2->error_str,
                 r2->length,
-                -1,
+                POS_PAIRED_END_2,
                 num_reads_in_template
             );
     }
