@@ -325,16 +325,13 @@ void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
     mapped_read_t* mpd_rd,
+    mapped_read_index* mpd_rd_index,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
-    struct read* r
-)
+    struct read* r )
 {
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
-
-    mapped_read_index* mpd_rd_index;
-    init_mapped_read_index( &mpd_rd_index, mpd_rd );
 
     MPD_RD_ID_T i = 0; // TODO why MPD_RD_ID_T? it is confusing
     for( i = 0; i < mpd_rd_index->num_mappings; i++ )
@@ -399,8 +396,6 @@ fprintf_mapped_read_to_sam(
             ptr += sizeof( mapped_read_sublocation );
         }
     }
-
-    free_mapped_read_index( mpd_rd_index );
 
     return;
 }
@@ -473,7 +468,8 @@ write_mapped_reads_to_sam(
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
 
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, cond_prbs_db, genome, rd );
+                sam_ofp, mapped_rd, mapped_rd_index,
+                cond_prbs_db, genome, rd );
         }
         
         free_mapped_read_index( mapped_rd_index );

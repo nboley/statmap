@@ -37,11 +37,12 @@ struct genome_data;
 
 void
 fprintf_mapped_read_to_sam( 
-    FILE* sam_fp,
-    mapped_read_t* mpd_rd,
-    struct cond_prbs_db_t* cond_prbs_db,    
-    struct genome_data* genome,
-    struct read* r );
+        FILE* sam_fp,
+        mapped_read_t* mpd_rd,
+        mapped_read_index* mpd_rd_index,
+        struct cond_prbs_db_t* cond_prbs_db,    
+        struct genome_data* genome,
+        struct read* r );
 
 void
 write_nonmapping_reads_to_fastq( 
