@@ -639,23 +639,11 @@ choose_mapped_locations_base_index(
         mapped_locations** search_results,
         int search_results_length )
 {
-    /* TODO for now, use the shortest set of mapped locations */
-    int min_so_far = INT_MAX;
-    int min_index = 0;
+    assert( search_results_length > 0 );
 
-    int i;
-    for( i = 0; i < search_results_length; i++ )
-    {
-        mapped_locations* current = search_results[i];
-
-        if( current->length < min_so_far )
-        {
-            min_so_far = current->length;
-            min_index = i;
-        }
-    }
-
-    return min_index;
+    /* TODO for now, use the first set of mapped locations, which corresponds
+     * to the search results for the first (5'-most) indexable subtemplate */
+    return 0;
 }
 
 int
@@ -980,7 +968,6 @@ add_pseudo_loc_to_mapped_locations(
     tmp_loc.chr = gen_loc->chr;
     tmp_loc.loc = gen_loc->loc;
 
-    // add_and_expand (diploid) ?
     add_mapped_location( &tmp_loc, results );
 
     return;
