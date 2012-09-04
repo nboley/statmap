@@ -896,10 +896,10 @@ find_matching_mapped_locations(
 }
 
 void
-build_candidate_mappings_from_match(
+build_candidate_mappings_from_matched_mapped_locations(
         struct genome_data* genome,
         struct read_subtemplate* rst,
-        mapped_locations_container* matches,
+        struct matched_mapped_locations* matches,
         candidate_mappings* rst_mappings,
         float max_penalty_spread )
 {
@@ -919,29 +919,27 @@ build_candidate_mappings_from_match(
     /* TODO figure out the lengths on the candidate_mappings */
 
     /* Always build a candidate mapping for the base location */
-    assert( matches->length > 0 );
-    mapped_locations* base_locs = matches->container[0];
-    assert( base_locs->length == 1 );
-    mapped_location* base_loc = base_locs->locations + 0;
-
-    /* The first candidate mapping never follows a reference gap */
     build_candidate_mapping_from_mapped_location(
-            genome, rst, base_loc, base_locs->probe,
+            genome, rst, matches->base, matches->base_probe,
             rst_mappings, max_penalty_spread, false );
 
-    int base_pos = base_loc->loc;
-    int base_offset = base_locs->probe->subseq_offset;
+    int base_pos = matches->base->loc;
+    int base_offset = matches->base_probe->subseq_offset;
 
     int i;
-    /* Skip the base location, we already built a candidate mapping for it */
-    for( i = 1; i < matches->length; i++ )
+    for( i = 0; i < matches->num_match_containers; i++ )
     {
-        mapped_locations* curr_locs = matches->container[i];
-        assert( curr_locs->length == 1 ); // for now
-        mapped_location* curr_loc = curr_locs->locations + 0;
+        mapped_locations* curr_matches = matches->match_containers[i];
 
-        int curr_pos = curr_loc->loc;
-        int curr_offset = curr_locs->probe->subseq_offset;
+        /* If the current match container is null, skip it */
+        if( curr_matches == NULL )
+            continue;
+
+        assert( curr_matches->length == 1 ); // for now
+        mapped_location* curr_match = curr_matches->locations + 0;
+
+        int curr_pos = curr_match->loc;
+        int curr_offset = curr_matches->probe->subseq_offset;
 
         if( curr_pos - curr_offset !=
             base_pos - base_offset )
@@ -952,7 +950,7 @@ build_candidate_mappings_from_match(
              * We also set follows_ref_gap to acknowledge this. */
 
             build_candidate_mapping_from_mapped_location(
-                    genome, rst, curr_loc, curr_locs->probe,
+                    genome, rst, curr_match, curr_matches->probe,
                     rst_mappings, max_penalty_spread, true );
         }
     }
@@ -1070,16 +1068,12 @@ build_candidate_mappings_from_base_mapped_location(
           - we need the meta data associated with the indexable subtemplate
      */
 
-    /* initialize the container of matching mapped_locations */
-    mapped_locations_container* matches = NULL;
-    init_mapped_locations_container( &matches );
+    /* initialize a container for the matches */
+    struct matched_mapped_locations* matches = NULL;
+    init_matched_mapped_locations( &matches,
+            base, base_probe, search_results_length );
     
-    /* build a mapped_locations container for the current base location */
-    mapped_locations* base_set = mapped_locations_template( base_probe );
-    add_mapped_location( base, base_set );
-    add_mapped_locations_to_mapped_locations_container( base_set, matches );
-
-    /* search the other mapped_locations for matches to base */
+    /* search the results from the other indexable subtemplates for matches */
     int i;
     for( i = 0; i < search_results_length; i++ )
     {
@@ -1107,20 +1101,11 @@ build_candidate_mappings_from_base_mapped_location(
             goto cleanup;
         }
 
-        /* For now, we expect there will only be 1 match for every mapped 
-         * location. We've used a mapped_locations, however, in the expectation
-         * that there could be more in the future */
-        assert( matching_subset->length == 1 );
-
-        add_mapped_locations_to_mapped_locations_container(
-                matching_subset, matches );
+        add_matches_to_matched_mapped_locations(
+                matching_subset, i, matches );
     }
 
-    /* if we were able to match across all of the indexable subtemplates, this
-     * is a valid match to the base location */
-    assert( matches->length == search_results_length );
-
-    build_candidate_mappings_from_match(
+    build_candidate_mappings_from_matched_mapped_locations(
             genome,
             rst,
             matches,
@@ -1129,7 +1114,7 @@ build_candidate_mappings_from_base_mapped_location(
         );
     
 cleanup:
-    free_mapped_locations_container( matches );
+    free_matched_mapped_locations( matches );
 }
 
 void

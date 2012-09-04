@@ -100,28 +100,31 @@ print_mapped_locations( mapped_locations* results );
  *
  **************************************************************************/
 
-/*** mapped_locations_container ***/
+struct matched_mapped_locations {
+    mapped_location* base;
+    struct indexable_subtemplate* base_probe;
 
-typedef struct {
-    /* container of pointers to mapped_locations */
-    mapped_locations** container;
-    int length;
-} mapped_locations_container;
-
-void
-init_mapped_locations_container(
-        mapped_locations_container** mlc
-    );
+    /* There is one match container for every indexable subtemplate, storing
+     * the mapped_locations that match base from that indexable_subtemplate */
+    int num_match_containers;
+    mapped_locations** match_containers;
+};
 
 void
-free_mapped_locations_container(
-        mapped_locations_container* mlc
-    );
+init_matched_mapped_locations(
+        struct matched_mapped_locations **m,
+        mapped_location* base,
+        struct indexable_subtemplate* base_probe,
+        int num_match_containers );
 
 void
-add_mapped_locations_to_mapped_locations_container(
-        mapped_locations* ml,
-        mapped_locations_container* mlc
-    );
+free_matched_mapped_locations(
+        struct matched_mapped_locations *m );
+
+void
+add_matches_to_matched_mapped_locations(
+        mapped_locations* matching_subset,
+        int originating_ist_index,
+        struct matched_mapped_locations* all_matches );
 
 #endif /* define MAPPED_LOCATION */

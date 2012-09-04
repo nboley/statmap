@@ -258,47 +258,53 @@ print_mapped_locations( mapped_locations* results )
  *
  **************************************************************************/
 
-
-/*** Mapped locations container ***/
 void
-init_mapped_locations_container(
-        mapped_locations_container** mlc
-    )
+init_matched_mapped_locations(
+        struct matched_mapped_locations **m,
+        mapped_location* base,
+        struct indexable_subtemplate* base_probe,
+        int num_match_containers )
 {
-    *mlc = malloc( sizeof( mapped_locations_container ) );
+    (*m) = malloc( sizeof( struct matched_mapped_locations ));
 
-    (*mlc)->container = NULL;
-    (*mlc)->length = 0;
+    (*m)->base = base;
+    (*m)->base_probe = base_probe;
+
+    (*m)->num_match_containers = num_match_containers;
+    /* We calloc here so every pointer is initialized to NULL. We will leave the
+     * pointer for the base's indexable_subtemplate NULL */
+    (*m)->match_containers = calloc( num_match_containers,
+            sizeof( mapped_locations* ));
+
+    return;
 }
 
 void
-free_mapped_locations_container(
-        mapped_locations_container* mlc
-    )
+free_matched_mapped_locations(
+        struct matched_mapped_locations *m )
 {
-    if( mlc == NULL ) return;
-
-    // free the mapped locations stored in this container
+    /* free the mapped_locations */
     int i;
-    for( i = 0; i < mlc->length; i++ )
+    for( i = 0; i < m->num_match_containers; i++ )
     {
-        free_mapped_locations( mlc->container[i] );
+        free_mapped_locations( m->match_containers[i] );
     }
 
-    free( mlc->container );
+    /* free the array of pointers to mapped locations */
+    free( m->match_containers );
 
-    free( mlc );
+    /* free the whole structure */
+    free( m );
+
+    return;
 }
 
 void
-add_mapped_locations_to_mapped_locations_container(
-        mapped_locations* ml,
-        mapped_locations_container* mlc
-    )
+add_matches_to_matched_mapped_locations(
+        mapped_locations* matching_subset,
+        int originating_ist_index,
+        struct matched_mapped_locations* all_matches )
 {
-    mlc->length += 1;
-    mlc->container = realloc( mlc->container,
-            sizeof( mapped_locations* ) * mlc->length );
-
-    mlc->container[ mlc->length-1 ] = ml;
+    all_matches->match_containers[originating_ist_index] = matching_subset;
+    return;
 }
