@@ -348,7 +348,7 @@ build_candidate_mapping_from_mapped_location(
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping cm 
-        = init_candidate_mapping_from_template( 
+        = init_candidate_mapping_from_read_subtemplate( 
             rst, max_penalty_spread 
         );
 
@@ -882,6 +882,110 @@ find_matching_mapped_locations(
         add_mapped_location( match, matching_subset );
 }
 
+char*
+build_cigar_string_from_mapped_locations(
+        mapped_location** locs,
+        int* subseq_lens,
+        int* subseq_offsets,
+        int num_locs )
+{
+    /* This function allocates memory for a string. Freeing it is the caller's
+     * responsibility */
+
+    char buf[512];
+    char* buf_pos = buf;
+
+    int i;
+    for( i = 0; i < num_locs; i++ )
+    {
+        /* For each location, add an M op for the region of aligned sequence */
+        buf_pos += sprintf( buf_pos, "%iM", subseq_lens[i] );
+
+        /* If there is a gap in the reference, represent it with an N op. 
+         * We check the value of i because obviously there cannot be an intron
+         * before the first mapped location.*/
+        if( i == 0 ) continue;
+
+        int ref_gap = (locs[i]->loc - subseq_offsets[i])
+                    - (locs[0]->loc - subseq_offsets[0]);
+
+        assert( ref_gap >= 0 );
+        if( ref_gap > 0 )
+        {
+            buf_pos += sprintf( buf_pos, "%iN", ref_gap );
+        }
+    }
+
+    /* append terminating null byte */
+    *buf_pos = '\0';
+
+    /* dynamically allocate memory to return the final string */
+    char* cigar_string = calloc( buf_pos - buf, sizeof( char ));
+    strcpy( cigar_string, buf );
+
+    return cigar_string;
+}
+
+void
+build_candidate_mapping_from_mapped_locations(
+        mapped_location** locs,
+        int* subseq_lens,
+        int* subseq_offsets,
+        int num_locs,
+        candidate_mappings* mappings,
+        struct read_subtemplate* rst,
+        float max_penalty_spread,
+        struct genome_data* genome )
+{
+    /* build a candidate mapping from the base location, then build a cigar
+     * string from all of the mappings */
+
+    candidate_mapping cm
+        = init_candidate_mapping_from_read_subtemplate(
+                rst, max_penalty_spread );
+
+    assert( num_locs > 0 );
+    mapped_location* base = locs[0];
+
+    /* set the strand */
+    assert( base->strnd == FWD || base->strnd == BKWD ); // XXX correct?
+    cm.rd_strnd = base->strnd;
+
+    /* set metadata */
+    /* TODO multiply marginal prbs of all the mapped_locations? */
+    cm.penalty = base->penalty;
+
+    /* set location information */
+    cm.chr = base->chr;
+
+    /* set (partial) READ_TYPE information
+     * (rd_type.pos is set in update_read_type_pos) */
+    /* TODO this is unnecessary if we follow through with this
+     * reworking on candidate_mapping */
+    //cm.rd_type.follows_ref_gap = follows_ref_gap;
+
+    /* We need to play with this a bit to account for index probes that are
+     * shorter than the read length */
+    int read_location = 
+        modify_mapped_read_location_for_index_probe_offset(
+                base->loc, base->chr, base->strnd,
+                subseq_offsets[0], subseq_lens[0],
+                rst->length, genome );
+    if( read_location < 0 ) // the read location was invalid; skip this matched set
+        return;
+
+    cm.start_bp = read_location;
+
+    /* build the cigar string from the mapped_locations */
+    char* cigar_string = build_cigar_string_from_mapped_locations(
+            locs, subseq_lens, subseq_offsets, num_locs );
+    assert( strlen(cigar_string) < 255 );
+    strcpy( cm.cigar, cigar_string );
+    free( cigar_string );
+
+    add_candidate_mapping( mappings, &cm );
+}
+
 void
 build_candidate_mappings_from_matched_mapped_locations(
         struct genome_data* genome,
@@ -903,44 +1007,56 @@ build_candidate_mappings_from_matched_mapped_locations(
      * 
      * O.w., build one. */
 
-    /* TODO figure out the lengths on the candidate_mappings */
+    /* Build a candidate mapping for each possible combination of the matched
+     * mapped locations */
 
-    /* Always build a candidate mapping for the base location */
-    build_candidate_mapping_from_mapped_location(
-            genome, rst, matches->base, matches->base_probe,
-            rst_mappings, max_penalty_spread, false );
+    /* TODO - for now, just build the default set of matchings */
+    int match_len = matches->num_match_containers;
 
-    int base_pos = matches->base->loc;
-    int base_offset = matches->base_probe->subseq_offset;
+    mapped_location** current_match
+        = malloc( match_len * sizeof( mapped_location* ));
+    int* current_subseq_lens
+        = malloc( match_len * sizeof( int ));
+    int* current_subseq_offsets
+        = malloc( match_len * sizeof( int ));
 
+    /* The base match should always correspond to the first set of
+     * mapped_locations */
+    assert( matches->match_containers[0] == NULL );
+
+    /* TODO In the future this code will be inside a loop that generates all
+     * possible combinations of matching mapped locations */
     int i;
     for( i = 0; i < matches->num_match_containers; i++ )
     {
-        mapped_locations* curr_matches = matches->match_containers[i];
-
-        /* If the current match container is null, skip it */
-        if( curr_matches == NULL )
-            continue;
-
-        assert( curr_matches->length == 1 ); // for now
-        mapped_location* curr_match = curr_matches->locations + 0;
-
-        int curr_pos = curr_match->loc;
-        int curr_offset = curr_matches->probe->subseq_offset;
-
-        if( curr_pos - curr_offset !=
-            base_pos - base_offset )
+        /* TODO - if we're doing it like this, it might be easier to revert to
+         * an array of mapped_locations, with the assumption that the first
+         * mapped_locations in the array corresponds to the first
+         * indexable_subtemplate */
+        if( i == 0 )
         {
-            /* this implies there is some gap in the reference genome, and we
-             * need to build a candidate mapping for this location.
-             *
-             * We also set follows_ref_gap to acknowledge this. */
-
-            build_candidate_mapping_from_mapped_location(
-                    genome, rst, curr_match, curr_matches->probe,
-                    rst_mappings, max_penalty_spread, true );
+            /* Specifically add entries for the base location */
+            current_match[i] = matches->base;
+            current_subseq_lens[i] = matches->base_probe->subseq_length;
+            current_subseq_offsets[i] = matches->base_probe->subseq_offset;
+        } else {
+            /* Add entries for the first mapped_location in this set */
+            current_match[i] = matches->match_containers[i]->locations + 0;
+            current_subseq_lens[i]
+                = matches->match_containers[i]->probe->subseq_length;
+            current_subseq_offsets[i]
+                = matches->match_containers[i]->probe->subseq_offset;
         }
     }
+
+    build_candidate_mapping_from_mapped_locations(
+            current_match, current_subseq_lens, current_subseq_offsets,
+            match_len, rst_mappings,
+            rst, max_penalty_spread, genome );
+
+    free( current_match );
+    free( current_subseq_lens );
+    free( current_subseq_offsets );
 }
 
 mapped_locations*

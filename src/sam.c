@@ -83,9 +83,7 @@ build_cigar_string_for_sublocations_group(
         }
 
         /* Write the region of aligned sequence with M */
-        int num_written = sprintf( buf_pos, "%iM",
-                current_sublocation->length );
-        buf_pos += num_written;
+        buf_pos += sprintf( buf_pos, "%iM", current_sublocation->length );
 
         /* Save prev_stop for the next iteration */
         prev_stop = current_sublocation->start_pos + current_sublocation->length;
@@ -197,8 +195,7 @@ build_mate_info_for_sublocations_group(
     if( read->num_subtemplates == 1 )
     {
         /* empty since this is not paired */
-        int num_written = sprintf( buf_pos, "*\t0\t0\t" );
-        buf_pos += num_written;
+        buf_pos += sprintf( buf_pos, "*\t0\t0\t" );
     } else { // read->num_subtemplates == 2
 
         /* append the mate reference name */

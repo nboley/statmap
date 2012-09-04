@@ -85,6 +85,17 @@ typedef struct __attribute__((packed))__{
      * from this genomic location given the sequenced sequence.
      */
     float penalty;
+
+    /* cigar string */
+    /* TODO storing the cigar string explicitly as a string allows us to
+     * avoid changing the rest of the candidate mappings code, because we can
+     * avoid having to handle dynamically allocated memory in the candidate_mapping
+     * structure.
+     *
+     * However, it might be annoying, and it is worth keeping another strategy
+     * ( an array of CIGAR_ENTRY structs) in mind */
+    char cigar[255];
+
 } candidate_mapping;
 
 
@@ -102,10 +113,9 @@ void
 init_candidate_mappings( candidate_mappings** mappings );
 
 candidate_mapping
-init_candidate_mapping_from_template(
+init_candidate_mapping_from_read_subtemplate(
         struct read_subtemplate* rst,
-        float max_penalty_spread
-    );
+        float max_penalty_spread );
 
 /* add a copy of a candidate mapping */
 void
