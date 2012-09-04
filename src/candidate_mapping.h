@@ -45,6 +45,11 @@ struct READ_TYPE {
     int pos;
 };
 
+struct CIGAR_ENTRY {
+    char op;
+    int len;
+};
+
 typedef struct __attribute__((packed))__{
     /* 
      * Whether or not we need to go to the genome to update this 
@@ -87,14 +92,9 @@ typedef struct __attribute__((packed))__{
     float penalty;
 
     /* cigar string */
-    /* TODO storing the cigar string explicitly as a string allows us to
-     * avoid changing the rest of the candidate mappings code, because we can
-     * avoid having to handle dynamically allocated memory in the candidate_mapping
-     * structure.
-     *
-     * However, it might be annoying, and it is worth keeping another strategy
-     * ( an array of CIGAR_ENTRY structs) in mind */
-    char cigar[255];
+    /* TODO - for ungapped assays, there will always be just one entry in the
+     * cigar string */
+    struct CIGAR_ENTRY cigar[1];
 
 } candidate_mapping;
 

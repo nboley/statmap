@@ -882,24 +882,25 @@ find_matching_mapped_locations(
         add_mapped_location( match, matching_subset );
 }
 
-char*
-build_cigar_string_from_mapped_locations(
+void
+build_candidate_mapping_cigar_string_from_mapped_locations(
+        candidate_mapping* cm,
         mapped_location** locs,
         int* subseq_lens,
         int* subseq_offsets,
         int num_locs )
 {
-    /* This function allocates memory for a string. Freeing it is the caller's
-     * responsibility */
-
-    char buf[512];
-    char* buf_pos = buf;
+    /* Index of the current entry in the cigar string to update. This is
+     * incremented every time there is a sequence with a reference gap */
+    int cigar_index = 0;
 
     int i;
     for( i = 0; i < num_locs; i++ )
     {
         /* For each location, add an M op for the region of aligned sequence */
-        buf_pos += sprintf( buf_pos, "%iM", subseq_lens[i] );
+        cm->cigar[cigar_index].op = 'M';
+        /* This was initialized to zero */
+        cm->cigar[cigar_index].len += subseq_lens[i];
 
         /* If there is a gap in the reference, represent it with an N op. 
          * We check the value of i because obviously there cannot be an intron
@@ -909,21 +910,19 @@ build_cigar_string_from_mapped_locations(
         int ref_gap = (locs[i]->loc - subseq_offsets[i])
                     - (locs[0]->loc - subseq_offsets[0]);
 
-        assert( ref_gap >= 0 );
+        /* TODO for now, we only want to make sure we're supporting ungapped
+         * assays. */
+        assert( ref_gap == 0 );
+        //assert( ref_gap >= 0 );
         if( ref_gap > 0 )
         {
-            buf_pos += sprintf( buf_pos, "%iN", ref_gap );
+            cm->cigar[cigar_index+1].op = 'N';
+            cm->cigar[cigar_index+1].len = ref_gap;
+            cigar_index += 2;
         }
     }
 
-    /* append terminating null byte */
-    *buf_pos = '\0';
-
-    /* dynamically allocate memory to return the final string */
-    char* cigar_string = calloc( buf_pos - buf, sizeof( char ));
-    strcpy( cigar_string, buf );
-
-    return cigar_string;
+    return;
 }
 
 void
@@ -977,11 +976,8 @@ build_candidate_mapping_from_mapped_locations(
     cm.start_bp = read_location;
 
     /* build the cigar string from the mapped_locations */
-    char* cigar_string = build_cigar_string_from_mapped_locations(
-            locs, subseq_lens, subseq_offsets, num_locs );
-    assert( strlen(cigar_string) < 255 );
-    strcpy( cm.cigar, cigar_string );
-    free( cigar_string );
+    build_candidate_mapping_cigar_string_from_mapped_locations(
+            &cm, locs, subseq_lens, subseq_offsets, num_locs );
 
     add_candidate_mapping( mappings, &cm );
 }

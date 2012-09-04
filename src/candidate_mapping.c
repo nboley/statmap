@@ -230,9 +230,7 @@ init_candidate_mapping_from_read_subtemplate(
     cand_map.rd_type.follows_ref_gap = false;
     cand_map.rd_type.pos = -1;
 
-    /* Initialize the cigar string (handled by memset) */
-    /* The cigar string char array is already initialized to all 0's by
-     * the original memset, as is the cigar_len value. */
+    /* The cigar string is initialized by the initial call to memset */
 
     return cand_map;
 }
