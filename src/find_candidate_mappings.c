@@ -596,7 +596,7 @@ build_indexable_subtemplates_from_read_subtemplate(
 void
 search_index_for_indexable_subtemplates(
         struct indexable_subtemplates* ists,
-        mapped_locations_container* search_results,
+        mapped_locations** search_results,
 
         struct genome_data* genome,
 
@@ -628,25 +628,25 @@ search_index_for_indexable_subtemplates(
                 only_collect_error_data
             );
 
-        // add these mapped locations to the mapped locations container
-        add_mapped_locations_to_mapped_locations_container(
-                results, search_results );
+        /* add the results for this indexable subtemplate to the array of
+         * all the search results */
+        search_results[ist_index] = results;
     }
 }
 
 int
-choose_base_mapped_locations_index(
-        mapped_locations_container* mls_container
-    )
+choose_mapped_locations_base_index(
+        mapped_locations** search_results,
+        int search_results_length )
 {
-    /* TODO for now, take the shortest set of mapped locations */
+    /* TODO for now, use the shortest set of mapped locations */
     int min_so_far = INT_MAX;
     int min_index = 0;
 
     int i;
-    for( i = 0; i < mls_container->length; i++ )
+    for( i = 0; i < search_results_length; i++ )
     {
-        mapped_locations* current = mls_container->container[i];
+        mapped_locations* current = search_results[i];
 
         if( current->length < min_so_far )
         {
@@ -1018,47 +1018,6 @@ expand_pseudo_location_into_mapped_locations(
 }
 
 void
-sort_mapped_locations_in_container(
-        mapped_locations_container* mls_container
-    )
-{
-    int i;
-    for( i = 0; i < mls_container->length; i++ )
-    {
-        sort_mapped_locations_by_location( mls_container->container[i] );
-    }
-
-    return;
-}
-
-enum bool
-matching_mapped_locations_containers(
-        mapped_locations_container* search_results,
-        mapped_locations_container* matches
-    )
-{
-    /* all of the indexable subtemplates should have matches */
-    if( search_results->length != matches->length )
-        return false;
-
-    /* each set of mapped_locations in the matches should have the same length.
-     * There is a correspondence across the rows of the mapped_locations for a
-     * match for a specific indexable_subtemplate */
-
-    int i;
-    assert( matches->length > 0 );
-    for( i = 1; i < matches->length; i++ )
-    {
-        /* just compare everything mapped_location's length to the first
-         * mapped_locations */
-        if( matches->container[0]->length != matches->container[i]->length )
-            return false;
-    }
-
-    return true;
-}
-
-void
 expand_base_mapped_locations(
         mapped_location* base_loc,
         mapped_locations* expanded_locs,
@@ -1089,7 +1048,10 @@ build_candidate_mappings_from_base_mapped_location(
         mapped_location* base,
         int base_locs_index,
         struct indexable_subtemplate* base_probe,
-        mapped_locations_container* search_results,
+
+        mapped_locations** search_results,
+        int search_results_length,
+
         struct genome_data* genome,
         struct read_subtemplate* rst,
         candidate_mappings* rst_mappings,
@@ -1119,14 +1081,14 @@ build_candidate_mappings_from_base_mapped_location(
 
     /* search the other mapped_locations for matches to base */
     int i;
-    for( i = 0; i < search_results->length; i++ )
+    for( i = 0; i < search_results_length; i++ )
     {
         /* skip locations that came from the same indexable subtemplate 
            as base */
         if( i == base_locs_index )
             continue;
 
-        mapped_locations* match_candidates = search_results->container[i];
+        mapped_locations* match_candidates = search_results[i];
         mapped_locations* matching_subset =
             mapped_locations_template( match_candidates->probe );
 
@@ -1156,7 +1118,7 @@ build_candidate_mappings_from_base_mapped_location(
 
     /* if we were able to match across all of the indexable subtemplates, this
      * is a valid match to the base location */
-    assert( matches->length == search_results->length );
+    assert( matches->length == search_results_length );
 
     build_candidate_mappings_from_match(
             genome,
@@ -1171,19 +1133,35 @@ cleanup:
 }
 
 void
+sort_search_results(
+        mapped_locations** search_results,
+        int search_results_length )
+{
+    int i;
+    for(i = 0; i < search_results_length; i++ )
+    {
+        sort_mapped_locations_by_location( search_results[i] );
+    }
+
+    return;
+}
+
+void
 build_candidate_mappings_from_search_results(
         candidate_mappings* rst_mappings,
-        mapped_locations_container* search_results,
+        mapped_locations** search_results,
+        int search_results_length,
         struct read_subtemplate* rst,
         struct genome_data* genome,
         float max_penalty_spread )
 {
     /* sort each mapped_locations in order to binary search later */
-    sort_mapped_locations_in_container( search_results );
+    sort_search_results( search_results, search_results_length );
 
     /* pick a mapped_locations to use as the basis for matching */
-    int base_locs_index = choose_base_mapped_locations_index( search_results );
-    mapped_locations* base_locs = search_results->container[base_locs_index];
+    int base_locs_index = choose_mapped_locations_base_index(
+            search_results, search_results_length );
+    mapped_locations* base_locs = search_results[base_locs_index];
     
     /* consider each base location */
     int i, j;
@@ -1191,15 +1169,13 @@ build_candidate_mappings_from_search_results(
     {
         mapped_location* base_loc = base_locs->locations + i;
 
-        /*** if the base_loc is a pseudo location, expand it to consider all
-         *** the possible locations */
-        
-        /* initialize the expanded set of locations with the base's metadata */
+        /* If the base_loc is a diploid or pseudo location, build a set of all
+         * possible expansions to consider for matching */
         mapped_locations* expanded_base =
             mapped_locations_template( base_locs->probe );
         expand_base_mapped_locations( base_loc, expanded_base, genome );
 
-        /* match across each of the expanded locations from the base */
+        /* match across each of the expanded locations */
         for( j = 0; j < expanded_base->length; j++ )
         {
             mapped_location* base = expanded_base->locations + j;
@@ -1209,6 +1185,7 @@ build_candidate_mappings_from_search_results(
                     base_locs_index,
                     base_locs->probe,
                     search_results,
+                    search_results_length,
                     genome,
                     rst,
                     rst_mappings,
@@ -1218,6 +1195,25 @@ build_candidate_mappings_from_search_results(
 
         free_mapped_locations( expanded_base );
     }
+}
+
+void
+free_search_results(
+        mapped_locations** search_results,
+        int search_results_length
+    )
+{
+    /* free each of the mapped_locations stored in the array */
+    int i;
+    for( i = 0; i < search_results_length; i++ )
+    {
+        free_mapped_locations( search_results[i] );
+    }
+
+    /* free the array of pointers */
+    free( search_results );
+
+    return;
 }
 
 void
@@ -1252,10 +1248,10 @@ find_candidate_mappings_for_read_subtemplate(
             &fwd_penalty_array, &rev_penalty_array
         );
 
-    /* save the results of the index search for each indexable subtemplate in 
-     * a mapped_locations */
-    mapped_locations_container* search_results = NULL;
-    init_mapped_locations_container( &search_results );
+    /* Stores the results of the index search for each indexable subtemplate */
+    int search_results_length = ists->length;
+    mapped_locations** search_results = malloc(
+            sizeof(mapped_locations*) * search_results_length );
 
     search_index_for_indexable_subtemplates(
             ists,
@@ -1272,15 +1268,14 @@ find_candidate_mappings_for_read_subtemplate(
     /* build candidate mappings from matching subsets of the mapped_locations
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
-            rst_mappings, search_results, rst,
-            genome, max_penalty_spread
+            rst_mappings, search_results, search_results_length,
+            rst, genome, max_penalty_spread
         );
 
-    /* Note - mapped_locations_container contains references to memory
-     * allocated in the indexable_subtemplates, so they must always be freed
-     * simultaneously */
+    /* Note - search_results contains references to memory allocated in the
+     * indexable_subtemplates, so they must be freed together */
+    free_search_results( search_results, search_results_length );
     free_indexable_subtemplates( ists );
-    free_mapped_locations_container( search_results );
 
     /****** Do the recheck ******/
     recheck_locations(
