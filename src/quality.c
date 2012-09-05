@@ -138,7 +138,7 @@ void
 init_penalty_array( struct penalty_array_t* pa, int length )
 {
     /* Set dimensions of array */
-    pa->len = length;
+    pa->length = length;
 
     /* Allocate memory for array of len penalty_t structs */
     pa->array = malloc( length * sizeof(struct penalty_t) );
@@ -156,7 +156,7 @@ void
 fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 {
     int i;
-    for( i = 0; i < pa->len; i++ )
+    for( i = 0; i < pa->length; i++ )
     {
         fprintf(fp, "%i: ", i); // index
         int x, y;
@@ -177,13 +177,15 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 void
 build_penalty_array(
         struct penalty_array_t* pa,
+        int length,
         struct error_model_t* error_model,
-        char* error_str
-    )
+        char* error_str )
 {
+    init_penalty_array( pa, length );
+
     int pos, ref_bp, seq_bp;
     /* for each position in the rawread */
-    for( pos = 0; pos < pa->len; pos++ )
+    for( pos = 0; pos < pa->length; pos++ )
     {
         /* for each possible basepair (A,C,G,T) in the reference sequence */
         for( ref_bp = 0; ref_bp < 4; ref_bp++ )
@@ -209,17 +211,19 @@ build_penalty_array(
 /* simply reverses the forward penalty array */
 void
 build_reverse_penalty_array(
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa
+        struct penalty_array_t* rev_pa,
+        struct penalty_array_t* fwd_pa
     )
 {
+    init_penalty_array( rev_pa, fwd_pa->length );
+
     // the underlying penalty arrays must be the same length
-    assert( fwd_pa->len == rev_pa->len );
+    assert( fwd_pa->length == rev_pa->length );
 
     int i;
-    for( i = 0; i < fwd_pa->len; i++ )
+    for( i = 0; i < fwd_pa->length; i++ )
     {
-        rev_pa->array[rev_pa->len-1-i] = fwd_pa->array[i];
+        rev_pa->array[rev_pa->length-1-i] = fwd_pa->array[i];
     }
 }
 

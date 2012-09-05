@@ -52,8 +52,7 @@ struct penalty_t {
  */
 struct penalty_array_t {
     /* length of read */
-    int len;
-
+    int length;
     /* array of penalty structs, for each position in the read */
     struct penalty_t* array;
 };
@@ -67,9 +66,9 @@ free_penalty_array( struct penalty_array_t* pa );
 void
 build_penalty_array(
         struct penalty_array_t* pa,
+        int length,
         struct error_model_t* error_model,
-        char* error_str
-    );
+        char* error_str );
 
 void
 build_reverse_penalty_array(
