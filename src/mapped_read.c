@@ -313,7 +313,7 @@ free_mapped_read_index( mapped_read_index* index )
 void
 join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
                                         candidate_mapping*** joined_mappings, 
-                                        float** penalty,
+                                        float** penalties,
                                         int* joined_mappings_len )
 {
     /* for single end reads, just copy the candidate mappings over, adding
@@ -336,9 +336,9 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
         (*joined_mappings)[(*joined_mappings_len*2) - 1] = NULL;
 
         /* add the penalty for this new joined_mapping */
-        *penalty = realloc( *penalty,
+        *penalties = realloc( *penalties,
                 sizeof(float) * *joined_mappings_len );
-        (*penalty)[*joined_mappings_len - 1] = mappings->mappings[i].penalty;
+        (*penalties)[*joined_mappings_len - 1] = mappings->mappings[i].penalty;
     }
 
     return;
@@ -347,7 +347,7 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
 void
 join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
                                         candidate_mapping*** joined_mappings, 
-                                        float** penalty,
+                                        float** penalties,
                                         int* joined_mappings_len )
 {
     int pair_1_start = 0;
@@ -408,11 +408,11 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
              * add the penalties from both candidate mappings (since these are
              * log probabilities, adding is equivalent to the product of the
              * marginal probabilities) */
-            *penalty = realloc( *penalty,
+            *penalties = realloc( *penalties,
                     sizeof(float) * *joined_mappings_len );
-            (*penalty)[*joined_mappings_len - 1]
-                = mappings->mappings[i].penalty + 
-                  mappings->mappings[j].penalty;
+            (*penalties)[*joined_mappings_len - 1]
+                = pair_1_mapping->penalty
+                + pair_2_mapping->penalty;
         }
     }
 }
@@ -420,12 +420,15 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
 void
 join_candidate_mappings( candidate_mappings* mappings, 
                          candidate_mapping*** joined_mappings, 
-                         float** penalty,
+                         float** penalties,
                          int* joined_mappings_len )
 {
     /* joined_mappings is a list of pointers to candidate_mappings. Each
      * "joined mapping" is a list of pointers to candidate_mappings separated
      * by NULL poiners */
+
+    /* sort the candidate_mappings for efficiency */
+    sort_candidate_mappings( mappings );
 
     /* TODO special case single end and paired end reads joining, for now */
 
@@ -446,12 +449,12 @@ join_candidate_mappings( candidate_mappings* mappings,
     {
         join_candidate_mappings_for_paired_end( mappings,
                                                 joined_mappings,
-                                                penalty,
+                                                penalties,
                                                 joined_mappings_len );
     } else {
         join_candidate_mappings_for_single_end( mappings,
                                                 joined_mappings,
-                                                penalty,
+                                                penalties,
                                                 joined_mappings_len );
     }
 
@@ -459,12 +462,215 @@ join_candidate_mappings( candidate_mappings* mappings,
 }
 
 void
-filter_joined_candidate_mappings( candidate_mappings* mappings, 
-                                  candidate_mapping*** joined_mappings, 
-                                  int* joined_mappings_len
-    )
+recheck_candidate_mapping(
+        candidate_mapping* mapping,
+
+        struct read_subtemplate* rst,
+        struct genome_data* genome,
+
+        struct error_model_t* error_model )
 {
-    /* For now, just don't filter */
+    /* find a pointer to the sequence at this genomic location */
+    int mapped_length = rst->length;
+
+    char* genome_seq = find_seq_ptr(
+            genome, mapping->chr, mapping->start_bp, mapped_length );
+    
+    /* if the genome_seq pointer is null, the sequence isn't valid
+       for some reason ( ie, it falls off the end of the chromosome). 
+       In this case, mark the location as invalid and continue TODO how? */
+    if( NULL == genome_seq )
+    {
+        // TODO signal invalid
+        return;
+    }
+
+    /* build penalty arrays from the underlying read subtemplate */
+    struct penalty_array_t fwd_pa, rev_pa;
+    build_penalty_array( &fwd_pa, rst->length,
+            error_model, rst->error_str );
+    build_reverse_penalty_array( &rev_pa, &fwd_pa );
+
+    /* Build the full sequence and pick a penalty array depending on the
+     * mapping's strand */
+    char* real_seq = calloc( rst->length+1, sizeof(char) );
+    assert( real_seq != NULL );
+    struct penalty_array_t* penalty_array;
+
+    if( BKWD == mapping->rd_strnd )
+    {
+        rev_complement_read( genome_seq, real_seq, rst->length );
+        penalty_array = &rev_pa;
+    } else {
+        memcpy( real_seq, genome_seq, sizeof(char)*rst->length );
+        penalty_array = &fwd_pa;
+    }
+
+    float rechecked_penalty = recheck_penalty(
+            real_seq,
+            rst->char_seq,
+            mapped_length,
+            penalty_array
+        );
+
+    mapping->penalty = rechecked_penalty; // XXX + marginal_log_prb ?
+
+    /* cleanup memory */
+    free_penalty_array( &fwd_pa );
+    free_penalty_array( &rev_pa );
+    free( real_seq );
+
+    return;
+}
+
+void
+recheck_joined_candidate_mappings(
+        candidate_mapping** current_mapping,
+        float* penalty,
+        
+        struct genome_data* genome,
+        struct read* r,
+        struct error_model_t* error_model )
+{
+    float rechecked_group_penalty = 0;
+
+    while( (*current_mapping) != NULL )
+    {
+        /* each candidate_mapping in a joined group corresponds to a read
+         * subtemplate. Get a reference to this cm's read subtemplate */
+        struct read_subtemplate* rst
+            = r->subtemplates + (*current_mapping)->rd_type.pos;
+
+        recheck_candidate_mapping( *current_mapping, rst, genome, error_model );
+
+        /* Add the log probability (equivalent to product) */
+        rechecked_group_penalty += (*current_mapping)->penalty;
+
+        /* Move pointer to the next candidate mapping in the group */
+        current_mapping++;
+    }
+
+    /* Save the rechecked group penalty in penalty */
+    *penalty = rechecked_group_penalty;
+}
+
+void
+remove_candidate_mapping_group(
+        candidate_mapping** current_mapping )
+{
+    /* loop over the candidate mappings in this group (delimited by a NULL
+     * pointer), and setting their pointers to NULL to remove them from the list
+     * of joined candidate_mappings */
+
+    while( *current_mapping != NULL )
+    {
+        /* remove the reference to the invalid candidate_mapping */
+        *current_mapping = NULL;
+        /* advance the pointer to the next candidate mapping pointer */
+        current_mapping++;
+    }
+}
+
+void
+filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
+                                  float** penalties,
+                                  int* joined_mappings_len,
+                                  
+                                  struct genome_data* genome,
+                                  struct read* r,
+                                  struct error_model_t* error_model,
+
+                                  float min_match_penalty,
+                                  float max_penalty_spread )
+{
+    float max_penalty = min_match_penalty;
+
+    /* Pointer to the start of the current set of joined candidate_mappings */
+    candidate_mapping** current_mapping = *joined_mappings;
+
+    int i;
+    /* recheck the locations, updating penalties, and find the max penalty */
+    for( i = 0; i < *joined_mappings_len; i++ )
+    {
+        recheck_joined_candidate_mappings( current_mapping, (*penalties) + i,
+                genome, r, error_model );
+
+        /* we may need to update the max penalty */
+        if( (*penalties)[i] > max_penalty ) {
+            max_penalty = (*penalties)[i];
+        }
+
+        /* advance pointer to start of the next set of joined candidate
+         * mappings */
+
+        /* skip the rest of the candidate_mappings in the current group */
+        while( *current_mapping != NULL )
+            current_mapping++;
+
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( *current_mapping == NULL )
+            current_mapping++;
+    }
+
+    /* Reset the pointer to the start of the joined mappings */
+    current_mapping = (*joined_mappings);
+
+    /* To filter mappings, we simply replace their pointers with NULL pointers
+     * and update the joined_mappings_len appropriately */
+    int filtered_mappings_len = *joined_mappings_len;
+
+    // int i declared earlier
+    for( i = 0; i < *joined_mappings_len; i++ )
+    {
+        enum bool filter_current_group = false;
+
+        /* 
+         * We always need to do this because of the way the search queue
+         * handles poor branches. If our branch prediction fails we could
+         * add a low probability read, and then go back and find a very 
+         * good read which would invalidate the previous. Then, the read
+         * may not belong, but it isn't removed in the index searching method.
+         */
+
+        /* we check max_penalty_spread > -0.00001 to make sure that the
+           likelihood ratio threshold is actually active */
+
+        /* I set the safe bit to 1e-6, which is correct for most floats */
+        if( max_penalty_spread > 1e-6 )
+        {
+            assert( max_penalty_spread >= 0.0 ); // ?
+            if( (*penalties)[i] < ( max_penalty - max_penalty_spread ) )
+            {
+                filter_current_group = true;
+            }
+        }
+
+        /* Make sure that the penalty isn't too low */
+        if( (*penalties)[i] < min_match_penalty )
+        {
+            filter_current_group = true;
+        }
+
+        /* if either test failed, filter the current group */
+        if( filter_current_group )
+        {
+            remove_candidate_mapping_group( current_mapping );
+            filtered_mappings_len -= 1;
+        }
+
+        /* skip the rest of the candidate_mappings in the current group */
+        while( *current_mapping != NULL )
+            current_mapping++;
+
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( *current_mapping == NULL )
+            current_mapping++;
+    }
+
+    *joined_mappings_len = filtered_mappings_len;
+
     return;
 }
 
@@ -496,9 +702,10 @@ calculate_mapped_read_space_from_joined_candidate_mappings(
             current_mapping++;
         }
 
-        /* advance beyond the NULL marker to the start of the next set of
-         * joined candidate mappings */
-        current_mapping++;
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( *current_mapping == NULL )
+            current_mapping++;
     }
 
     return size;
@@ -532,6 +739,11 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
     char* rd_ptr = skip_read_id_nodes_in_mapped_read( (char*) *rd );
 
     candidate_mapping** current_mapping = joined_mappings;
+
+    /* move the current_mapping pointer to the start of the first set of joined
+     * candidate_mappings */
+    while( *current_mapping == NULL )
+        current_mapping++;
 
     int i;
     for( i = 0; i < joined_mappings_len; i++ )
@@ -593,11 +805,9 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
             /* TODO unused for now */
             subloc->is_full_contig = 0;
 
-            /* look ahead to figure out if the next subread is gapped or not.
-             * TODO: how to distinguish gapped vs. ungapped (probably metadata
-             * on the cm) */
+            // look ahead to figure out if the next subread is gapped or not.
             candidate_mapping* next_mapping = *(current_mapping + 1);
-            if( *(current_mapping + 1) == NULL )
+            if( next_mapping == NULL )
             {
                 /* there is no next subread */
                 subloc->next_subread_is_gapped = 0;
@@ -625,9 +835,10 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         prologue->seq_error = pow( 10, cum_penalty );
         assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
 
-        /* advance beyond the NULL marker to the start of the next set of
-         * joined candidate mappings */
-        current_mapping++;
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( *current_mapping == NULL )
+            current_mapping++;
     }
 }
 
@@ -649,67 +860,6 @@ build_mapped_read_from_joined_candidate_mappings(
     populate_mapped_read_locations_from_joined_candidate_mappings(
             rd, joined_mappings, joined_mappings_len );
 }
-
-void
-build_mapped_read_from_candidate_mappings( 
-        mapped_read_t** mpd_rd,
-        candidate_mappings* mappings, 
-        MPD_RD_ID_T read_id
-    )
-{
-    /* 
-     * 1) Join candidate mappings ( read subtemplates ) from the same 
-     *    read template
-     *    - join_candidate_mappings
-     *      produces a list of pointers into 'mappings', where mappings
-     *      that shouldn't be joined are seperated by NULL pointers
-     *    - filter_joined_candidate_mappings
-     *      calculate error estiamtes, and filter bad joins
-     * 2) For each joined candidate mapping
-     *    - Init a mapped read ( and allocate memory )
-     *      - calculate_mapped_read_space_from_joined_candidate_mappings
-     *      - init_new_mapped_read_from_single_read_id
-     *          ( init the new mapped read, and add in the read id )
-     *    - Populate the new mapped read
-     *         FOR EACH set_of_joined_candidate_mappings in joined_mappings
-     *             - build_mapped_read_location_prologue
-     *             ( add this into mapped_read_t )
-     *             FOR EACH candidate mapping in set_of_joined_candidate_mappings
-     *                 - build_mapped_read_sublocation_from_candidate_mapping
-     *                 ( add this into mapped_read_t )
-     *               
-     * 3) Fix the SAM code
-     *    - almost trivial, because all of the information is inside of the 
-     *      mapped eads structure
-     *
-     */
-
-    /* Build a list of joined candidate mappings */
-    int joined_mappings_len = 0;
-    candidate_mapping** joined_mappings = NULL;
-    float* penalties = NULL;
-
-    join_candidate_mappings( mappings,
-                             &joined_mappings,
-                             &penalties,
-                             &joined_mappings_len );
-
-    /* TODO stub */
-    filter_joined_candidate_mappings( mappings,
-                                      &joined_mappings,
-                                      &joined_mappings_len );
-
-    build_mapped_read_from_joined_candidate_mappings( mpd_rd,
-                                                      read_id,
-                                                      joined_mappings,
-                                                      joined_mappings_len );
-
-    free( joined_mappings );
-    free( penalties );
-
-    return;
-}
-
 
 /*****************************************************************************
  *

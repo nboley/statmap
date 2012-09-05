@@ -340,10 +340,29 @@ void
 fprintf_mapped_read( FILE* fp, mapped_read_t* r );
 
 void
-build_mapped_read_from_candidate_mappings( 
-        mapped_read_t** mpd_rd,
-        candidate_mappings* mappings, 
-        MPD_RD_ID_T read_id );
+join_candidate_mappings( candidate_mappings* mappings, 
+                         candidate_mapping*** joined_mappings, 
+                         float** penalties,
+                         int* joined_mappings_len );
+
+void
+filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
+                                  float** penalties,
+                                  int* joined_mappings_len,
+                                  
+                                  struct genome_data* genome,
+                                  struct read* r,
+                                  struct error_model_t* error_model,
+
+                                  float min_match_penalty,
+                                  float max_penalty_spread );
+
+void
+build_mapped_read_from_joined_candidate_mappings(
+        mapped_read_t** rd,
+        MPD_RD_ID_T read_id,
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len );
 
 size_t 
 write_mapped_read_to_file( mapped_read_t* read, FILE* of  );

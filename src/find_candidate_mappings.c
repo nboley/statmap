@@ -179,155 +179,6 @@ search_index(
     return;
 };
 
-static inline void 
-recheck_location(
-        struct genome_data* genome, 
-        struct read_subtemplate* rst,
-        candidate_mapping* loc,
-
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa
-    )
-{
-    if( PSEUDO_LOC_CHR_INDEX == loc->chr ) {
-        return;
-    }
-    
-    float marginal_log_prb = 0;
-    
-    /* find a pointer to the sequence at this genomic location */
-    int mapped_length = rst->length;
-    
-    char* genome_seq = find_seq_ptr( 
-        genome, 
-        loc->chr, 
-        loc->start_bp,
-        mapped_length
-    );    
-    
-    /* if the genome_seq pointer is null, the sequence isn't valid
-       for some reason ( ie, it falls off the end of the chromosome). 
-       In such cases, mark the location as invalid and continue */
-    if( NULL == genome_seq )
-    {
-        //loc->recheck = INVALID;
-        return;
-    }
-                    
-    char* mut_genome_seq = NULL;
-    mut_genome_seq = malloc(sizeof(char)*(rst->length+1));
-    assert( mut_genome_seq != NULL ); 
-
-    struct penalty_array_t* penalty_array;
-                    
-    if( BKWD == loc->rd_strnd )
-    {
-        rev_complement_read( genome_seq, mut_genome_seq, rst->length );
-        penalty_array = rev_pa;
-    } else {
-        memcpy( mut_genome_seq, genome_seq, sizeof(char)*rst->length );
-        mut_genome_seq[rst->length] = '\0';
-        penalty_array = fwd_pa;
-    }
-    
-    float rechecked_penalty = recheck_penalty( 
-            mut_genome_seq, 
-            rst->char_seq,
-            mapped_length,
-            penalty_array 
-        );
-
-    loc->penalty = rechecked_penalty + marginal_log_prb;
-    
-    free( mut_genome_seq );
-}
-
-static inline void
-recheck_locations(
-    struct genome_data* genome, 
-
-    struct read_subtemplate* rst,
-    candidate_mappings* mappings,
-    
-    float min_match_penalty,
-    float max_penalty_spread,
-    
-    struct penalty_array_t* fwd_pa,
-    struct penalty_array_t* rev_pa )
-{
-    /* 
-     * Currently, everything should be set *except* the gene strand. 
-     * This is because we dont know what it is. Therefore, we will 
-     * add these to the db with that bit unset, and then during the 
-     * merging stage add to the penalty and say that it was equally 
-     * likely to have come from either gene strand. This corresponds
-     * with us being equally certain that the read is from either gene.
-     *
-     * Also, we need to check that we dont have any low quality reads.
-     * ( This is possible if the path search went awry, and we found 
-     *   a low quality read before a high quality read )
-     */
-
-    /* 
-     * We keep track of the max observed penalty so that we can filter
-     * out penalties that are too low. The index will never return 
-     * results that are strictly below the minimum penalty, but it may 
-     * return  results below the relative penalty. ( Read the indexing
-     *  header for details )
-     */
-    float max_penalty = min_match_penalty;
-
-    /* first, if necessary, recheck the locations */
-    int k;
-    for( k = 0; k < mappings->length; k++ )
-    {
-        recheck_location( genome, rst, mappings->mappings + k, fwd_pa, rev_pa );
-                    
-        /* we may need to update the max penalty */
-        if( (mappings->mappings + k)->penalty > max_penalty ) {
-            max_penalty = (mappings->mappings + k)->penalty;
-        }
-    }
-
-    // int k declared earlier 
-    for( k = 0; k < mappings->length; k++ )
-    {
-        /* this should be optimized out */
-        candidate_mapping* loc = mappings->mappings + k;
-
-        /* 
-         * We always need to do this because of the way the search queue
-         * handles poor branches. If our brnach prediction fails we could
-         * add a low probability read, and then go back and find a very 
-         * good read which would invalidate the previous. Then, the read
-         * may not belong, but it isnt removed in the index searching method.
-         */
-                                
-        /* we check max_penalty_spread > -0.00001 to make sure that the
-           likelihood ratio threshold is actually active */
-
-        /* I set the safe bit to 1e-6, which is correct for most floats */
-        if(  max_penalty_spread > -0.00001  ) 
-        {
-            assert( max_penalty_spread >= 0.0 );
-            if(   loc->penalty < ( max_penalty - max_penalty_spread ) )
-            {
-                /* TODO - remove this candidate mapping from consideration */
-                ;
-            } 
-        }
-                
-        /* make sure that the penalty isn't too low */
-        if( loc->penalty < min_match_penalty  )
-        {
-            /* TODO - remove this candidate mapping from consideration */
-            ;
-        } 
-    }
-
-    return;
-}
-
 static inline void
 build_candidate_mapping_from_mapped_location(
         struct genome_data* genome,
@@ -337,7 +188,6 @@ build_candidate_mapping_from_mapped_location(
         struct indexable_subtemplate* probe,
 
         candidate_mappings* mappings,
-        float max_penalty_spread,
 
         enum bool follows_ref_gap
     )
@@ -346,9 +196,7 @@ build_candidate_mapping_from_mapped_location(
 
     /****** Prepare the template candidate_mapping objects ***********/
     candidate_mapping cm 
-        = init_candidate_mapping_from_read_subtemplate( 
-            rst, max_penalty_spread 
-        );
+        = init_candidate_mapping_from_read_subtemplate( rst );
 
     /* Make sure the "subseq" is acutally shorter than the read */
     assert( subseq_len <= rst->length );
@@ -923,15 +771,13 @@ build_candidate_mapping_from_mapped_locations(
         int num_locs,
         candidate_mappings* mappings,
         struct read_subtemplate* rst,
-        float max_penalty_spread,
         struct genome_data* genome )
 {
     /* build a candidate mapping from the base location, then build a cigar
      * string from all of the mappings */
 
     candidate_mapping cm
-        = init_candidate_mapping_from_read_subtemplate(
-                rst, max_penalty_spread );
+        = init_candidate_mapping_from_read_subtemplate( rst );
 
     assert( num_locs > 0 );
     mapped_location* base = locs[0];
@@ -977,8 +823,7 @@ build_candidate_mappings_from_matched_mapped_locations(
         struct genome_data* genome,
         struct read_subtemplate* rst,
         struct matched_mapped_locations* matches,
-        candidate_mappings* rst_mappings,
-        float max_penalty_spread )
+        candidate_mappings* rst_mappings )
 {
     /* For each mapped_location in the matched set, ask -
      * do I build a candidate mapping with this, or not?
@@ -1037,8 +882,7 @@ build_candidate_mappings_from_matched_mapped_locations(
 
     build_candidate_mapping_from_mapped_locations(
             current_match, current_subseq_lens, current_subseq_offsets,
-            match_len, rst_mappings,
-            rst, max_penalty_spread, genome );
+            match_len, rst_mappings, rst, genome );
 
     free( current_match );
     free( current_subseq_lens );
@@ -1140,8 +984,7 @@ build_candidate_mappings_from_base_mapped_location(
 
         struct genome_data* genome,
         struct read_subtemplate* rst,
-        candidate_mappings* rst_mappings,
-        float max_penalty_spread )
+        candidate_mappings* rst_mappings )
 {
     /*
      * Takes in a base location, which necessarily corresponds to a single 
@@ -1197,8 +1040,7 @@ build_candidate_mappings_from_base_mapped_location(
             genome,
             rst,
             matches,
-            rst_mappings,
-            max_penalty_spread
+            rst_mappings
         );
     
 cleanup:
@@ -1225,8 +1067,7 @@ build_candidate_mappings_from_search_results(
         mapped_locations** search_results,
         int search_results_length,
         struct read_subtemplate* rst,
-        struct genome_data* genome,
-        float max_penalty_spread )
+        struct genome_data* genome )
 {
     /* sort each mapped_locations in order to binary search later */
     sort_search_results( search_results, search_results_length );
@@ -1261,8 +1102,7 @@ build_candidate_mappings_from_search_results(
                     search_results_length,
                     genome,
                     rst,
-                    rst_mappings,
-                    max_penalty_spread
+                    rst_mappings
                 );
         }
 
@@ -1304,21 +1144,16 @@ find_candidate_mappings_for_read_subtemplate(
         enum bool only_collect_error_data )
 {
     /* build the penalty arrays for this read subtemplate */
-    struct penalty_array_t fwd_penalty_array, rev_penalty_array;
-    init_penalty_array( &fwd_penalty_array, rst->length );
-    init_penalty_array( &rev_penalty_array, rst->length );
-
-    build_penalty_array( &fwd_penalty_array,
-            error_model, rst->error_str );
-    build_reverse_penalty_array( &fwd_penalty_array,
-            &rev_penalty_array );
+    struct penalty_array_t fwd_pa, rev_pa;
+    build_penalty_array( &fwd_pa, rst->length, error_model, rst->error_str );
+    build_reverse_penalty_array( &rev_pa, &fwd_pa );
 
     // build a set of indexable subtemplates from this read subtemplate
     struct indexable_subtemplates* ists = NULL;
     init_indexable_subtemplates( &ists );
     build_indexable_subtemplates_from_read_subtemplate(
             ists, rst, genome->index,
-            &fwd_penalty_array, &rev_penalty_array
+            &fwd_pa, &rev_pa
         );
 
     /* Stores the results of the index search for each indexable subtemplate */
@@ -1342,8 +1177,7 @@ find_candidate_mappings_for_read_subtemplate(
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
             rst_mappings, search_results, search_results_length,
-            rst, genome, max_penalty_spread
-        );
+            rst, genome );
 
     /* Note - search_results contains references to memory allocated in the
      * indexable_subtemplates, so they must be freed together */
@@ -1360,8 +1194,8 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     /* cleanup memory */
-    free_penalty_array( &fwd_penalty_array );
-    free_penalty_array( &rev_penalty_array );
+    free_penalty_array( &fwd_pa );
+    free_penalty_array( &rev_pa );
 }
 
 void
@@ -1429,29 +1263,29 @@ find_candidate_mappings_for_read(
 }
 
 void
-add_mapped_reads_from_candidate_mappings(
+add_mapped_read_from_joined_candidate_mappings(
         struct mapped_reads_db* mpd_rds_db,
-        candidate_mappings* mappings,
-        readkey_t readkey
+        readkey_t read_id,
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len
     )
 {
     mapped_read_t* mpd_rd = NULL;
 
-    /* The paired end reads joining code in build_mapped_read_from_candidate_mappings
-     * requires the candidate_mappings to be sorted */
-    sort_candidate_mappings( mappings );
-
-    build_mapped_read_from_candidate_mappings(
+    build_mapped_read_from_joined_candidate_mappings(
             &mpd_rd,
-            mappings,
-            readkey
+            read_id,
+            joined_mappings,
+            joined_mappings_len
         );
 
-    /* if we were actually able to build a mapped read with > 0 prb */
-    if( NULL != mpd_rd ) {
+    if( mpd_rd != NULL )
+    {
         add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
         free_mapped_read( mpd_rd );
     }
+
+    return;
 }
 
 /* TODO - revisit the read length vs seq length distinction */
@@ -1556,25 +1390,86 @@ find_candidate_mappings( void* params )
                 only_collect_error_data
             );
 
-        // build mapped reads from the set of candidate mappings for this read
+        /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
-            /* mapped count is the number of reads that successfully mapped
-             * (not the number of mappings) */
-            if( mappings->length > 0 )
+            /* 
+             * 1) Join candidate mappings ( read subtemplates ) from the same 
+             *    read template
+             *    - join_candidate_mappings
+             *      produces a list of pointers into 'mappings', where mappings
+             *      that shouldn't be joined are seperated by NULL pointers
+             *    - filter_joined_candidate_mappings
+             *      calculate error estiamtes, and filter bad joins
+             * 2) For each joined candidate mapping
+             *    - Init a mapped read ( and allocate memory )
+             *      - calculate_mapped_read_space_from_joined_candidate_mappings
+             *      - init_new_mapped_read_from_single_read_id
+             *          ( init the new mapped read, and add in the read id )
+             *    - Populate the new mapped read
+             *         FOR EACH set_of_joined_candidate_mappings in joined_mappings
+             *             - build_mapped_read_location_prologue
+             *             ( add this into mapped_read_t )
+             *             FOR EACH candidate mapping in set_of_joined_candidate_mappings
+             *                 - build_mapped_read_sublocation_from_candidate_mapping
+             *                 ( add this into mapped_read_t )
+             *
+             * 3) Fix the SAM code
+             *    - almost trivial, because all of the information is inside of the
+             *      mapped reads structure
+             */
+
+            int joined_mappings_len = 0;
+            candidate_mapping** joined_mappings = NULL;
+            float* penalties = NULL;
+
+            join_candidate_mappings( mappings,
+                                     &joined_mappings,
+                                     &penalties,
+                                     &joined_mappings_len );
+
+            filter_joined_candidate_mappings( &joined_mappings,
+                                              &penalties,
+                                              &joined_mappings_len,
+
+                                              genome,
+                                              r,
+                                              error_model,
+
+                                              min_match_penalty,
+                                              max_penalty_spread );
+
+            /* If there is at least one pair of successfully joined candidate
+             * mappings, this read mapped successfully.
+             *
+             * XXX this may break the unmappable/nonmapping printing code (at
+             * least make it incorrect), since we are no longer storing mapped
+             * reads with 0 mappings in the database. We *cannot* do this,
+             * since the new mapped_read_t assumes there is at least one for
+             * mapping. And it is wasteful anyway.
+             *
+             * TODO A better solution would be to explictly store the
+             * unmappable/nonmapping reads */
+            if( joined_mappings_len > 0 )
             {
                 pthread_spin_lock( mapped_cnt_lock );
+                /* mapped count is the number of reads that successfully mapped
+                 * (not the number of mappings) */
                 *mapped_cnt += 1;
                 pthread_spin_unlock( mapped_cnt_lock );
+
+                /* build mapped reads from the returned candidate mappings and add
+                 * to the mapped reads db */
+                add_mapped_read_from_joined_candidate_mappings(
+                        mpd_rds_db,
+                        readkey,
+                        joined_mappings,
+                        joined_mappings_len
+                    );
             }
 
-            /* build mapped reads from the returned candidate mappings and add
-             * to the mapped reads db */
-            add_mapped_reads_from_candidate_mappings(
-                    mpd_rds_db,
-                    mappings,
-                    readkey
-                );
+            free( joined_mappings );
+            free( penalties );
         }
 
         curr_read_index += 1;

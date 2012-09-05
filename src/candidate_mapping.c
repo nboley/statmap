@@ -206,8 +206,7 @@ init_candidate_mappings( candidate_mappings** mappings )
 
 candidate_mapping
 init_candidate_mapping_from_read_subtemplate(
-        struct read_subtemplate* rst,
-        float max_penalty_spread )
+        struct read_subtemplate* rst )
 {
     /****** initialize the mapped_location info that we know  ******/
     /* copy the candidate map location template */
