@@ -411,8 +411,6 @@ write_mapped_reads_to_sam(
 {
     int error;
 
-    readkey_t readkey;
-
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
     rewind_rawread_db( rdb );
@@ -428,36 +426,39 @@ write_mapped_reads_to_sam(
     assert( error == 0 );
 
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd, -1 );
+        rdb, &rd, -1 );
 
     /* iterate through rawreads until we get to the rawread that matches the
      * first mapped read. This sets up the following while loop */
     while( NULL != rd 
            && NULL != mapped_rd
-           && readkey < get_read_id_from_mapped_read( mapped_rd ) )
+           && rd->read_id < get_read_id_from_mapped_read( mapped_rd ) )
     {
         free_read( rd );
         
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd, -1 );
+            rdb, &rd, -1 );
     }
-
+    /* since the rawread db has every read, we should be guaranteed of having a 
+       match at this point */
+    
+    
     while( rd != NULL
            && mapped_rd != NULL ) 
     {
         mapped_read_index* mapped_rd_index;
         init_mapped_read_index( &mapped_rd_index, mapped_rd );
 
-        if( readkey != mapped_rd_index->read_id )
+        if( rd->read_id != mapped_rd_index->read_id )
         {
-            fprintf( stderr, "readkey: %d\n", readkey );
+            fprintf( stderr, "read_id: %d\n", rd->read_id );
             fprintf( stderr, "mapped_rd->read_id: %d\n",
                      mapped_rd_index->read_id );
         }
-        assert( readkey == mapped_rd_index->read_id );
+        assert( rd->read_id == mapped_rd_index->read_id );
         
-        if( readkey > 0 && readkey%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", readkey );
+        if( rd->read_id > 0 && rd->read_id%1000000 == 0 )
+            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", rd->read_id );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 
@@ -483,16 +484,16 @@ write_mapped_reads_to_sam(
         );
 
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd, -1 );
+            rdb, &rd, -1 );
         
         while( NULL != rd 
                && NULL != mapped_rd
-               && readkey < get_read_id_from_mapped_read( mapped_rd ) )
+               && rd->read_id < get_read_id_from_mapped_read( mapped_rd ) )
         {
             free_read( rd );
             
             get_next_read_from_rawread_db( 
-                rdb, &readkey, &rd, -1 );
+                rdb, &rd, -1 );
         }
         
     }
@@ -561,8 +562,6 @@ write_nonmapping_reads_to_fastq(
 )
 {
     int error;
-
-    readkey_t readkey;
     
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
@@ -579,7 +578,7 @@ write_nonmapping_reads_to_fastq(
     assert( error == 0 );
     
     get_next_read_from_rawread_db( 
-        rdb, &readkey, &rd, -1 );
+        rdb,  &rd, -1 );
 
     while( rd != NULL )
     {
@@ -597,7 +596,7 @@ write_nonmapping_reads_to_fastq(
             init_mapped_read_index( &mapped_rd_index, mapped_rd );
 
             /* if this rawread doesn't have an associated mapped reads */
-            if( readkey < mapped_rd_index->read_id )
+            if( rd->read_id < mapped_rd_index->read_id )
             {
                 /* then it was unmappable, and was never added to the mpd rd db */
                 write_nonmapping_read_to_fastq( rd,
@@ -606,7 +605,7 @@ write_nonmapping_reads_to_fastq(
                         rdb->unmappable_paired_end_2_reads );
             }
             /* if the read has an associated mapped reads */
-            else if( readkey == mapped_rd_index->read_id &&
+            else if( rd->read_id == mapped_rd_index->read_id &&
                      mapped_rd_index->num_mappings == 0 )
             {
                 /*
@@ -626,7 +625,7 @@ write_nonmapping_reads_to_fastq(
         /* if we need to get the next mapped read */
         /* if mapped_rd is null, we are out of mapped reads */
         if( mapped_rd != NULL
-            && readkey == mapped_rd_index->read_id )
+            && rd->read_id == mapped_rd_index->read_id )
         {
             error = get_next_read_from_mapped_reads_db( 
                 mappings_db, 
@@ -641,7 +640,7 @@ write_nonmapping_reads_to_fastq(
         
         /* we always get the next read */
         get_next_read_from_rawread_db( 
-            rdb, &readkey, &rd, -1 );
+            rdb, &rd, -1 );
 
     }
 

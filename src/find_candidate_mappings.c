@@ -1262,30 +1262,46 @@ find_candidate_mappings_for_read(
     }
 }
 
-void
-add_mapped_read_from_joined_candidate_mappings(
-        struct mapped_reads_db* mpd_rds_db,
-        readkey_t read_id,
-        candidate_mapping** joined_mappings,
-        int joined_mappings_len
-    )
-{
-    mapped_read_t* mpd_rd = NULL;
 
-    build_mapped_read_from_joined_candidate_mappings(
-            &mpd_rd,
-            read_id,
-            joined_mappings,
-            joined_mappings_len
-        );
-
-    if( mpd_rd != NULL )
-    {
-        add_read_to_mapped_reads_db( mpd_rds_db, mpd_rd );
-        free_mapped_read( mpd_rd );
-    }
-
-    return;
+mapped_read_t*
+build_mapped_read_from_candidate_mappings(
+    candidate_mappings* mappings,
+    struct genome_data* genome,
+    struct read* r,
+    struct error_model_t* error_model,
+    float min_match_penalty,
+    float max_penalty_spread
+)
+{            
+    int joined_mappings_len = 0;
+    candidate_mapping** joined_mappings = NULL;
+    float* penalties = NULL;
+    mapped_read_t* rd = NULL;
+    
+    join_candidate_mappings( mappings,
+                             &joined_mappings,
+                             &penalties,
+                             &joined_mappings_len );
+            
+    filter_joined_candidate_mappings( &joined_mappings,
+                                      &penalties,
+                                      &joined_mappings_len,
+                                              
+                                      genome,
+                                      r,
+                                      error_model,
+                                              
+                                      min_match_penalty,
+                                      max_penalty_spread );
+            
+    rd =  build_mapped_read_from_joined_candidate_mappings(
+        r->read_id, joined_mappings, joined_mappings_len
+    );
+    
+    free( joined_mappings );
+    free( penalties );
+    
+    return rd;
 }
 
 /* TODO - revisit the read length vs seq length distinction */
@@ -1303,9 +1319,7 @@ find_candidate_mappings( void* params )
      */
 
     struct single_map_thread_data* td = params;
-
-    //int thread_id = td->thread_id;
-
+    
     struct genome_data* genome = td->genome;
     
     unsigned int* mapped_cnt = td->mapped_cnt;
@@ -1315,38 +1329,34 @@ find_candidate_mappings( void* params )
     
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
 
-    /* The minimum absolute penalty
-       that a valid read can have */
+    /* The minimum absolute penalty that a valid read can have */
     float min_match_penalty = td->min_match_penalty;
     /* The minimum difference between the lowest penalty read and a
        valid read, set <= -1 to disable */
     float max_penalty_spread = td->max_penalty_spread;
-
-    /* Store observed error data from the current thread's execution in scratch */
+    
+    /* Store observed error data from the current thread's 
+       execution in scratch */
     struct error_model_t* error_model = td->error_model;
     
     /* store statistics about mapping quality here  */
     struct error_data_t* error_data = td->error_data;
     
     /* if we only want error data, then there is not reason to find antyhing 
-       except unqiue reads. */
+       except unique reads. */
     enum bool only_collect_error_data = td->only_collect_error_data;
     
     /* END parameter 'recreation' */
 
     assert( genome->index != NULL );
-
-    /* how often we print out the mapping status */
-    #define MAPPING_STATUS_GRANULARITY 100000
-
+    
     /* create a thread local copy of the error data to avoid excess locking */
     struct error_data_record_t* scratch_error_data_record;
     init_error_data_record( &scratch_error_data_record, 
                             error_data->max_read_length, 
                             error_data->max_qual_score );
-
+    
     /* The current read of interest */
-    readkey_t readkey;
     struct read* r;
     int curr_read_index = 0;
     /* 
@@ -1354,28 +1364,29 @@ find_candidate_mappings( void* params )
      * in the get next read functions. 
      */
     while( EOF != get_next_read_from_rawread_db(
-               rdb, &readkey, &r, td->max_readkey )  
+               rdb, &r, td->max_readkey )  
          ) 
     {
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
-        if( readkey > 0 && 0 == readkey%MAPPING_STATUS_GRANULARITY )
+        if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
             fprintf(stderr, "DEBUG       :  Mapped %u reads, %i successfully\n", 
-                    readkey, *mapped_cnt);
+                    r->read_id, *mapped_cnt);
         }
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, error_model ) )
         {
+            // TODO - write out the readid to an unmappable readids file
             continue; // skip the unmappable read
         }
         
         /* Initialize container for candidate mappings for this read */
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
-
+        
         find_candidate_mappings_for_read(
                 r,
                 mappings,
@@ -1393,83 +1404,24 @@ find_candidate_mappings( void* params )
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
-            /* 
-             * 1) Join candidate mappings ( read subtemplates ) from the same 
-             *    read template
-             *    - join_candidate_mappings
-             *      produces a list of pointers into 'mappings', where mappings
-             *      that shouldn't be joined are seperated by NULL pointers
-             *    - filter_joined_candidate_mappings
-             *      calculate error estiamtes, and filter bad joins
-             * 2) For each joined candidate mapping
-             *    - Init a mapped read ( and allocate memory )
-             *      - calculate_mapped_read_space_from_joined_candidate_mappings
-             *      - init_new_mapped_read_from_single_read_id
-             *          ( init the new mapped read, and add in the read id )
-             *    - Populate the new mapped read
-             *         FOR EACH set_of_joined_candidate_mappings in joined_mappings
-             *             - build_mapped_read_location_prologue
-             *             ( add this into mapped_read_t )
-             *             FOR EACH candidate mapping in set_of_joined_candidate_mappings
-             *                 - build_mapped_read_sublocation_from_candidate_mapping
-             *                 ( add this into mapped_read_t )
-             *
-             * 3) Fix the SAM code
-             *    - almost trivial, because all of the information is inside of the
-             *      mapped reads structure
-             */
-
-            int joined_mappings_len = 0;
-            candidate_mapping** joined_mappings = NULL;
-            float* penalties = NULL;
-
-            join_candidate_mappings( mappings,
-                                     &joined_mappings,
-                                     &penalties,
-                                     &joined_mappings_len );
-
-            filter_joined_candidate_mappings( &joined_mappings,
-                                              &penalties,
-                                              &joined_mappings_len,
-
-                                              genome,
-                                              r,
-                                              error_model,
-
-                                              min_match_penalty,
-                                              max_penalty_spread );
-
-            /* If there is at least one pair of successfully joined candidate
-             * mappings, this read mapped successfully.
-             *
-             * XXX this may break the unmappable/nonmapping printing code (at
-             * least make it incorrect), since we are no longer storing mapped
-             * reads with 0 mappings in the database. We *cannot* do this,
-             * since the new mapped_read_t assumes there is at least one for
-             * mapping. And it is wasteful anyway.
-             *
-             * TODO A better solution would be to explictly store the
-             * unmappable/nonmapping reads */
-            if( joined_mappings_len > 0 )
-            {
-                pthread_spin_lock( mapped_cnt_lock );
-                /* mapped count is the number of reads that successfully mapped
-                 * (not the number of mappings) */
-                *mapped_cnt += 1;
-                pthread_spin_unlock( mapped_cnt_lock );
-
-                /* build mapped reads from the returned candidate mappings and add
-                 * to the mapped reads db */
-                add_mapped_read_from_joined_candidate_mappings(
-                        mpd_rds_db,
-                        readkey,
-                        joined_mappings,
-                        joined_mappings_len
-                    );
-            }
-
-            free( joined_mappings );
-            free( penalties );
+            mapped_read_t* mapped_read = 
+                build_mapped_read_from_candidate_mappings(
+                    mappings,
+                    genome,
+                    r,
+                    error_model,
+                    min_match_penalty,
+                    max_penalty_spread
+                );
+            
+            add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
+            free_mapped_read( mapped_read );
+            
+            /* mapped count is the number of reads that successfully mapped
+             * (not the number of mappings) */
+            pthread_spin_lock( mapped_cnt_lock );
+            (mapped_read != NULL) ? *mapped_cnt += 1: 0;
+            pthread_spin_unlock( mapped_cnt_lock );            
         }
 
         curr_read_index += 1;
@@ -1492,7 +1444,7 @@ find_candidate_mappings( void* params )
 }
 
 void
-spawn_threads( struct single_map_thread_data* td_template )
+spawn_find_candidate_mappings_threads( struct single_map_thread_data* td_template )
 {
     if( num_threads == 1 )
     {
@@ -1534,7 +1486,7 @@ spawn_threads( struct single_map_thread_data* td_template )
     }
     
     /* Free attribute and wait for the other threads */    
-    size_t num_reads2 = 0;
+    size_t num_reads = 0;
     for(t=0; t < num_threads; t++) {
         rc = pthread_join(thread[t], &status);
         pthread_attr_destroy(attrs+t);
@@ -1545,7 +1497,7 @@ spawn_threads( struct single_map_thread_data* td_template )
             );
             exit(-1);
         }
-        num_reads2 += (size_t) status;
+        num_reads += (size_t) status;
     }
 }
 
@@ -1661,7 +1613,7 @@ bootstrap_estimated_error_model(
     // Add a new row to store error data in
     add_new_error_data_record( error_data, 0, td_template.max_readkey );
 
-    spawn_threads( &td_template );
+    spawn_find_candidate_mappings_threads( &td_template );
         
     clock_t stop = clock();
     fprintf(stderr, "PERFORMANCE :  Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )\n",
@@ -1719,9 +1671,10 @@ find_all_candidate_mappings(
             td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
 
         // update the maximum allowable readkey
+        // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
         
-        spawn_threads( &td_template );
+        spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */
         update_error_model_from_error_data(error_model, td_template.error_data);

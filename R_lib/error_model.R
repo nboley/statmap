@@ -63,7 +63,7 @@ build.mo = function( mm_cnts, cnts, pos, qual ) {
         eqn = formula( response ~ s(pos) );
         predictors = data.frame( pos=pos );
     }
-    else if( length( obs.quals ) < 6 ) {
+    else if( 1 || length( obs.quals ) < 6 ) {
         eqn = formula( response ~ s(pos) + qual*pos );
         predictors = data.frame( pos=pos );
     } else {

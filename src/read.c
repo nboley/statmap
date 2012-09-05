@@ -238,7 +238,6 @@ build_read_from_rawreads(
 int
 get_next_read_from_rawread_db( 
         struct rawread_db_t* rdb,
-        readkey_t* readkey,
         struct read** r,
         long max_readkey
     )
@@ -325,7 +324,7 @@ get_next_read_from_rawread_db(
     (*r)->prior.assay = rdb->assay;
 
     /* increment the read counter */
-    *readkey = rdb->readkey;
+    (*r)->read_id = rdb->readkey;
     rdb->readkey += 1;
 
     unlock_rawread_db( rdb );

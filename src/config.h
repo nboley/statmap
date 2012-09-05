@@ -3,6 +3,11 @@
 #ifndef CONFIG
 #define CONFIG
 
+/****** verbosity options                       ******/
+/* how often we print out the mapping status */
+#define MAPPING_STATUS_GRANULARITY 100000
+
+
 /****** configuration options                   ******/
 
 #define N_DEBUG

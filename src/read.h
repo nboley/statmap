@@ -33,6 +33,7 @@ struct prior_read_information {
 };
 
 struct read {
+    readkey_t read_id;
     char* name;
     struct prior_read_information prior;
 
@@ -77,7 +78,6 @@ filter_read(
 int
 get_next_read_from_rawread_db( 
         struct rawread_db_t* rdb,
-        readkey_t* readkey,
         struct read** r,
         long max_readkey
     );

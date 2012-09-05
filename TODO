@@ -1,3 +1,9 @@
+Nathan:
+  implement provided error model
+   - use the provided error estimates as the predictor
+  use a dynamic step size
+     in find cand mappings, we now use global param to update read error models         
+
 fix bug
 finish human indexing fix
 make sample mapping take multiple samples

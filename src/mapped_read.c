@@ -184,6 +184,9 @@ get_size_of_mapped_read( mapped_read_t* rd )
 void
 free_mapped_read( mapped_read_t* rd )
 {
+    if( rd == NULL )
+        return;
+    
     free( rd );
     return;
 }
@@ -842,23 +845,29 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
     }
 }
 
-void
+mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(
-        mapped_read_t** rd,
         MPD_RD_ID_T read_id,
         candidate_mapping** joined_mappings,
         int joined_mappings_len )
 {
+    if( joined_mappings_len == 0 )
+        return NULL;
+    
+    mapped_read_t* rd = NULL;
+    
     /* TODO for now, assume there is only one read_id_node */
     size_t mapped_read_size = sizeof( read_id_node );
     mapped_read_size +=
         calculate_mapped_read_space_from_joined_candidate_mappings(
                 joined_mappings, joined_mappings_len );
-
-    init_new_mapped_read_from_single_read_id( rd, read_id, mapped_read_size );
-
+    
+    init_new_mapped_read_from_single_read_id( &rd, read_id, mapped_read_size );
+    
     populate_mapped_read_locations_from_joined_candidate_mappings(
-            rd, joined_mappings, joined_mappings_len );
+            &rd, joined_mappings, joined_mappings_len );
+    
+    return rd;
 }
 
 /*****************************************************************************
@@ -1032,6 +1041,9 @@ add_read_to_mapped_reads_db(
     struct mapped_reads_db* rdb,
     mapped_read_t* rd)
 {
+    if( NULL == rd )
+        return;
+    
     if ( rdb->mode == 'r' )
     {
         fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");

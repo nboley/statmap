@@ -357,9 +357,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   float min_match_penalty,
                                   float max_penalty_spread );
 
-void
+mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(
-        mapped_read_t** rd,
         MPD_RD_ID_T read_id,
         candidate_mapping** joined_mappings,
         int joined_mappings_len );
