@@ -217,14 +217,6 @@ init_candidate_mapping_from_read_subtemplate(
     /* Set the read length */
     cand_map.rd_len = rst->length;
 
-    /* if read length <= seq_length, then a recheck is unnecessary */
-    /* TODO what happened to this check? */
-    if( max_penalty_spread > -0.1 ) {
-        cand_map.recheck = RECHECK_PENALTY;
-    } else {
-        cand_map.recheck = VALID;
-    }
-    
     /* Initialize the values in READ_TYPE.
      * These will be updated to be correct in update_read_type */
     cand_map.rd_type.follows_ref_gap = false;
@@ -276,7 +268,6 @@ free_candidate_mappings( candidate_mappings* mappings )
 void
 print_candidate_mapping( candidate_mapping* mapping )
 {
-    printf("Recheck:      %u\n", mapping->recheck);
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
     printf("Read Len:     %u\n", mapping->rd_len);

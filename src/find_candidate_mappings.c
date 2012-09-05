@@ -210,7 +210,7 @@ recheck_location(
        In such cases, mark the location as invalid and continue */
     if( NULL == genome_seq )
     {
-        loc->recheck = INVALID;
+        //loc->recheck = INVALID;
         return;
     }
                     
@@ -312,19 +312,17 @@ recheck_locations(
             assert( max_penalty_spread >= 0.0 );
             if(   loc->penalty < ( max_penalty - max_penalty_spread ) )
             {
-                loc->recheck = INVALID;
+                /* TODO - remove this candidate mapping from consideration */
+                ;
             } 
         }
                 
         /* make sure that the penalty isn't too low */
         if( loc->penalty < min_match_penalty  )
         {
-            loc->recheck = INVALID;
+            /* TODO - remove this candidate mapping from consideration */
+            ;
         } 
-
-        /* if it's passed all of the tests, it must be valid */
-        if( loc->recheck != INVALID )
-            loc->recheck = VALID;                
     }
 
     return;
@@ -416,10 +414,6 @@ can_be_used_to_update_error_data(
     candidate_mapping* loc = mappings->mappings + 0; 
     int mapped_length = rst->length;
     
-    if( loc->recheck != VALID ) {
-        return false;
-    }
-    
     char* genome_seq = find_seq_ptr( 
         genome, 
         loc->chr, 
@@ -436,10 +430,6 @@ can_be_used_to_update_error_data(
     */
     if( mappings->length > 1 )
     {
-        if( mappings->mappings[1].recheck != VALID ) {
-            return false;
-        }
-        
         /* this is guaranteed at the start of the function */
         assert( mappings->length == 2 );
         char* genome_seq_2 = find_seq_ptr( 
@@ -1360,19 +1350,6 @@ find_candidate_mappings_for_read_subtemplate(
     free_search_results( search_results, search_results_length );
     free_indexable_subtemplates( ists );
 
-    /****** Do the recheck ******/
-    recheck_locations(
-            genome, 
-
-            rst, rst_mappings,
-
-            min_match_penalty,
-            max_penalty_spread,
-
-            &fwd_penalty_array,
-            &rev_penalty_array
-        );
-
     /* update the thread local copy of error data (need the error data
      * and the subtemplate to do this) */
     update_error_data_record_from_candidate_mappings(
@@ -1579,25 +1556,12 @@ find_candidate_mappings( void* params )
                 only_collect_error_data
             );
 
-        // Free the read
-        free_read( r );
-
         // build mapped reads from the set of candidate mappings for this read
         if( !only_collect_error_data )
         {
-            // count the number of valid candidate mappings in order to update
-            // the mapped read count
-            int num_valid_mappings = 0;
-            int i;
-            for( i = 0; i < mappings->length; i++ )
-            {
-                if( (mappings->mappings + i)->recheck == VALID )
-                    num_valid_mappings++;
-            }
-
             /* mapped count is the number of reads that successfully mapped
              * (not the number of mappings) */
-            if( num_valid_mappings > 0 )
+            if( mappings->length > 0 )
             {
                 pthread_spin_lock( mapped_cnt_lock );
                 *mapped_cnt += 1;
@@ -1617,6 +1581,8 @@ find_candidate_mappings( void* params )
 
         /* cleanup memory */
         free_candidate_mappings( mappings );
+        free_read( r );
+
     }
 
     /********* update the global error data *********/

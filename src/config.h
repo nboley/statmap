@@ -174,21 +174,6 @@ enum JUNCTION_TYPE
     NON_CANONICAL = 3
 };
 
-enum RECHECK
-{
-    /* the default, it needs a full recheck */
-    RECHECK_FULL = 0,
-    /* recheck to make sure the penalties are above the min */
-    RECHECK_PENALTY = 1,
-    /* recheck against chr to make sure the penalty is correct */
-    RECHECK_LOCATION = 2,
-    /* all rechecks have been performed, and the loc is valid */
-    VALID = 3,
-    /* one or more rechecks failed */
-    INVALID = 4
-};
-
-
 /*
  * THIS SECTION IS OBSOLETE *************************************
  

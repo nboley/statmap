@@ -321,9 +321,6 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        if( mappings->mappings[i].recheck != VALID )
-            continue;
-
         *joined_mappings_len += 1;
 
         /* add new joined mapping to the joined_mappings

@@ -51,20 +51,6 @@ struct CIGAR_ENTRY {
 };
 
 typedef struct __attribute__((packed))__{
-    /* 
-     * Whether or not we need to go to the genome to update this 
-     * information. 
-     *
-     * If this is set to NO, then the chr, start_bp,
-     * and penalty are all assumed correct and subseq_offset = 0
-     * and subseq_len = rd_len. ( which is not checked w/o asserts )
-     * 
-     * If this is YES, then we go back to chr in the genome at loc
-     * start_bp. Then we recalculate the penalty from the genome
-     * directly and, update the penalty for that location. 
-     */
-    enum RECHECK recheck;
-
     /*** Info relating to the location ***/
     /* the chromosome code */
     short chr;
