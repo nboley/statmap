@@ -22,38 +22,6 @@
 
 /*************************************************************************
  *
- *  Mapped Read Locations
- *
- */
-
-enum bool
-first_sublocation_is_rev_complemented( mapped_read_location* loc )
-{
-    char* ptr = (char*) loc;
-
-    /* Skip the prologue */
-    ptr += sizeof( mapped_read_location_prologue );
-
-    /* Get the first mapped_read_sublocation (assumes there's at least one) */
-    mapped_read_sublocation* first_sublocation =
-        (mapped_read_sublocation *) ptr;
-
-    /* enum bool and single bit flags use the same encoding, so we can return
-     * the value of the flag directly */
-    return first_sublocation->rev_comp;
-}
-
-void
-free_mapped_read_location( mapped_read_location* loc )
-{
-    if( loc == NULL ) return;
-
-    free( loc );
-    return;
-}
-
-/*************************************************************************
- *
  *  Mapped Reads
  * 
  *  Reads that have been joined, but unlike mapped reads proper have not
