@@ -448,8 +448,17 @@ close_mapped_reads_db( struct mapped_reads_db** rdb );
 void
 add_read_to_mapped_reads_db( 
     struct mapped_reads_db* rdb,
-    mapped_read_t* rd
-);
+    mapped_read_t* rd );
+
+void
+add_unmappable_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db );
+
+void
+add_nonmapping_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db );
 
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb );

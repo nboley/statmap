@@ -10,6 +10,7 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 #include "error_correction.h"
+#include "util.h"
 
 /*************************************************************************
  *
@@ -556,108 +557,85 @@ write_nonmapping_read_to_fastq(
 }
 
 void
+write_reads_from_read_id_list_to_fastq(
+        FILE* read_ids_fp,
+        struct rawread_db_t* rdb,
+
+        FILE* single_end_fp,
+        FILE* paired_end_1_fp,
+        FILE* paired_end_2_fp )
+{
+    /* If the file with the list of read is empty, do nothing */
+    if( file_is_empty(read_ids_fp) )
+        return;
+
+    int rv;
+
+    struct read* rd;
+
+    /* start by getting the first raw read */
+    rewind_rawread_db( rdb );
+    get_next_read_from_rawread_db( 
+        rdb,  &rd, -1 );
+
+    /* loop through the read id's in the list */
+    while( !feof( read_ids_fp ))
+    {
+        int read_id = -1;
+        rv = fscanf( read_ids_fp, "%i\n", &read_id );
+
+        /* If nothing was read, we've encountered the end of the file */
+        if( rv != 1 )
+            break;
+
+        while( rd->read_id != read_id )
+        {
+            free_read( rd );
+            get_next_read_from_rawread_db( 
+                rdb,  &rd, -1 );
+        }
+
+        write_nonmapping_read_to_fastq( rd,
+                single_end_fp,
+                paired_end_1_fp,
+                paired_end_2_fp );
+    }
+
+    /* rewind the fp, in case we need it again later */
+    rewind( read_ids_fp );
+
+    /* cleanup */
+    free_read( rd );
+
+    /* flush the fastq output file pointers */
+    fflush( single_end_fp );
+    fflush( paired_end_1_fp );
+    fflush( paired_end_2_fp );
+
+    return;
+}
+
+void
 write_nonmapping_reads_to_fastq( 
     struct rawread_db_t* rdb,
     struct mapped_reads_db* mappings_db
 )
 {
-    int error;
-    
-    /* Join all candidate mappings */
-    /* get the cursor to iterate through the reads */
-    rewind_rawread_db( rdb );
-    rewind_mapped_reads_db( mappings_db );
-    
-    struct read* rd;
-    mapped_read_t* mapped_rd;
-    
-    error = get_next_read_from_mapped_reads_db( 
-        mappings_db, 
-        &mapped_rd
-    );
-    assert( error == 0 );
-    
-    get_next_read_from_rawread_db( 
-        rdb,  &rd, -1 );
+    /* Write the unmappable reads out */
+    write_reads_from_read_id_list_to_fastq(
+            mappings_db->unmappable_fp,
+            rdb,
+            rdb->unmappable_single_end_reads,
+            rdb->unmappable_paired_end_1_reads,
+            rdb->unmappable_paired_end_2_reads );
 
-    while( rd != NULL )
-    {
-        mapped_read_index* mapped_rd_index = NULL;
+    /* Write the nonmapping reads out */
+    write_reads_from_read_id_list_to_fastq(
+            mappings_db->nonmapping_fp,
+            rdb,
+            rdb->non_mapping_single_end_reads,
+            rdb->non_mapping_paired_end_1_reads,
+            rdb->non_mapping_paired_end_2_reads );
 
-        /* if the mapped reads db is empty and there are still rawreads, these
-         * rawreads were nonmapping */
-        if( mapped_rd == NULL )
-        {
-            write_nonmapping_read_to_fastq( rd,
-                    rdb->unmappable_single_end_reads,
-                    rdb->unmappable_paired_end_1_reads,
-                    rdb->unmappable_paired_end_2_reads );
-        } else {
-            init_mapped_read_index( &mapped_rd_index, mapped_rd );
-
-            /* if this rawread doesn't have an associated mapped reads */
-            if( rd->read_id < mapped_rd_index->read_id )
-            {
-                /* then it was unmappable, and was never added to the mpd rd db */
-                write_nonmapping_read_to_fastq( rd,
-                        rdb->unmappable_single_end_reads,
-                        rdb->unmappable_paired_end_1_reads,
-                        rdb->unmappable_paired_end_2_reads );
-            }
-            /* if the read has an associated mapped reads */
-            else if( rd->read_id == mapped_rd_index->read_id &&
-                     mapped_rd_index->num_mappings == 0 )
-            {
-                /*
-                   If the read has an associated mapped read, but the mapped read
-                   has no mappings, it was declared mappable but did not map.
-
-                   Nonmapping reads are added to the mapped reads db; see
-                   find_candidate_mappings.c:1028
-                */
-                write_nonmapping_read_to_fastq( rd,
-                        rdb->non_mapping_single_end_reads,
-                        rdb->non_mapping_paired_end_1_reads,
-                        rdb->non_mapping_paired_end_2_reads );
-            }
-        }
-
-        /* if we need to get the next mapped read */
-        /* if mapped_rd is null, we are out of mapped reads */
-        if( mapped_rd != NULL
-            && rd->read_id == mapped_rd_index->read_id )
-        {
-            error = get_next_read_from_mapped_reads_db( 
-                mappings_db, 
-                &mapped_rd
-            );
-        }
-
-        free_mapped_read_index( mapped_rd_index );
-
-        /* Free the read */
-        free_read( rd );
-        
-        /* we always get the next read */
-        get_next_read_from_rawread_db( 
-            rdb, &rd, -1 );
-
-    }
-
-    goto cleanup;
-
-cleanup:
-    /* Free the read */
-    free_read( rd );
-
-    fflush( rdb->unmappable_single_end_reads );
-    fflush( rdb->non_mapping_single_end_reads );
-    fflush( rdb->unmappable_paired_end_1_reads );
-    fflush( rdb->unmappable_paired_end_2_reads );
-    fflush( rdb->non_mapping_paired_end_1_reads );
-    fflush( rdb->non_mapping_paired_end_2_reads );
-    
     return;
 }
-
-
