@@ -3,6 +3,7 @@
 #include <string.h>
 #include <limits.h>
 #include <math.h>
+#include <float.h>
 #include <assert.h>
 
 #include "fragment_length.h"
@@ -42,6 +43,8 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
 void
 free_fl_dist( struct fragment_length_dist_t** fl_dist )
 {
+    if( *fl_dist == NULL ) return;
+
     free( (*fl_dist)->density );
     (*fl_dist)->density = NULL;
     
@@ -96,6 +99,18 @@ init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp )
     return;
 }
 
+void
+build_fl_dist_from_filename( struct fragment_length_dist_t** fl_dist, char* filename )
+{
+    FILE* fl_fp = fopen( filename, "r" );
+    if( fl_fp == NULL )
+    {
+        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename);
+        exit(-1);
+    }
+    init_fl_dist_from_file( fl_dist, fl_fp );
+    fclose( fl_fp );
+}
 
 int 
 get_frag_len( mapped_read_t* rd )
@@ -350,6 +365,20 @@ get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl )
         return 0;
     
     return fl_dist->density[ fl - fl_dist->min_fl ];
+}
+
+float
+get_fl_log_prb( struct fragment_length_dist_t* fl_dist, int fl )
+{
+    float fl_prb = get_fl_prb( fl_dist, fl );
+
+    if( fl_prb <= 0 )
+    {
+        /* avoid log errors */
+        return -FLT_MAX;
+    }
+
+    return log10( fl_prb );
 }
 
 void

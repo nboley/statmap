@@ -760,6 +760,8 @@ build_candidate_mapping_cigar_string_from_mapped_locations(
         }
     }
 
+    cm->cigar_len = cigar_index + 1;
+
     return;
 }
 
@@ -1265,13 +1267,13 @@ find_candidate_mappings_for_read(
 
 mapped_read_t*
 build_mapped_read_from_candidate_mappings(
-    candidate_mappings* mappings,
-    struct genome_data* genome,
-    struct read* r,
-    struct error_model_t* error_model,
-    float min_match_penalty,
-    float max_penalty_spread
-)
+        candidate_mappings* mappings,
+        struct genome_data* genome,
+        struct read* r,
+        struct error_model_t* error_model,
+        struct fragment_length_dist_t* fl_dist,
+        float min_match_penalty,
+        float max_penalty_spread )
 {            
     int joined_mappings_len = 0;
     candidate_mapping** joined_mappings = NULL;
@@ -1290,6 +1292,7 @@ build_mapped_read_from_candidate_mappings(
                                       genome,
                                       r,
                                       error_model,
+                                      fl_dist,
                                               
                                       min_match_penalty,
                                       max_penalty_spread );
@@ -1410,6 +1413,7 @@ find_candidate_mappings( void* params )
                     genome,
                     r,
                     error_model,
+                    mpd_rds_db->fl_dist,
                     min_match_penalty,
                     max_penalty_spread
                 );

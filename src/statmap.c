@@ -153,6 +153,13 @@ map_marginal( struct args_t* args,
     } else {
         open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
     }
+
+    /* if a fragment length distribution was provided, load it into the mapped
+     * reads db. This has to happen before mapping, so we can use the fl_dist
+     * to compute the penalties of joined candidate mappings. */
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
+    }
     
     fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
 
@@ -278,12 +285,6 @@ map_generic_data(  struct args_t* args )
     iterative_mapping( args, genome, mpd_rds_db );
 #endif
     
-    if( args->frag_len_fp != NULL ) {
-        build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
-    } else {
-        build_fl_dist( args, mpd_rds_db );
-    }
-
     close_mapped_reads_db( &mpd_rds_db );
     
     free_genome( genome );
@@ -315,12 +316,6 @@ map_chipseq_data(  struct args_t* args )
     struct mapped_reads_db* chip_mpd_rds_db = NULL;    
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
     
-    if( args->frag_len_fp != NULL ) {
-        build_fl_dist_from_file( chip_mpd_rds_db, args->frag_len_fp );
-    } else {
-        build_fl_dist( args, chip_mpd_rds_db );
-    }
-    
     /* 
        this is a bit hacky - for single end chipseq we need to 
        do a bit of work in advance to speed up the fragment 
@@ -334,12 +329,6 @@ map_chipseq_data(  struct args_t* args )
     {        
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
-        if( args->frag_len_fp != NULL ) {
-            build_fl_dist_from_file( NC_mpd_rds_db, args->frag_len_fp );
-        } else {
-            build_fl_dist( args, NC_mpd_rds_db );
-        }
-
         /* 
            this is a bit messy - for single end chipseq we need to 
            do a bit of work in advance to speed up the fragment 

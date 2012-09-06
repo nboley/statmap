@@ -353,6 +353,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   struct genome_data* genome,
                                   struct read* r,
                                   struct error_model_t* error_model,
+                                  struct fragment_length_dist_t* fl_dist,
 
                                   float min_match_penalty,
                                   float max_penalty_spread );
@@ -429,12 +430,6 @@ open_mapped_reads_db_for_reading( struct mapped_reads_db** rdb, char* fname );
 
 void
 open_mapped_reads_db_for_writing( struct mapped_reads_db** rdb, char* fname );
-
-void
-build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
-
-void
-build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename );
 
 void
 close_mapped_reads_db( struct mapped_reads_db** rdb );

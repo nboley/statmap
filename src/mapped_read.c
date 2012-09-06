@@ -526,17 +526,56 @@ recheck_candidate_mapping(
     return;
 }
 
+int
+get_fl_for_joined_candidate_mappings(
+        candidate_mapping** group_start )
+{
+    /* There must be at least one candidate mapping in the joined group */
+    assert( (*group_start) != NULL );
+
+    /* Loop over the candidate mappings in the group until we get to the last
+     * one */
+    candidate_mapping** current_mapping = group_start;
+    while( *(current_mapping + 1) != NULL )
+        current_mapping++;
+
+    /* The fragment length for the joined candidate mappings is the difference
+     * between the start of the first cm and the start of the last cm, plus the
+     * length given by the cigar string of the last candidate mapping. The
+     * difference between the starts of the first and last cm's also includes
+     * any gaps represented by the cigar strings of intervening
+     * candidate_mapping's */
+
+    /* Assumes the first candidate mapping in the group is the 5'-most.
+     * We can do this because the cm's were sorted before being joined */
+
+    assert( (*current_mapping)->start_bp >= (*group_start)->start_bp );
+    int frag_len = (*current_mapping)->start_bp - (*group_start)->start_bp;
+
+    /* loop through the final candidate mapping's cigar string, adding the
+     * distances to the fragment length */
+    int i;
+    for( i = 0; i < (*current_mapping)->cigar_len; i++ )
+    {
+        frag_len += (*current_mapping)->cigar[i].len;
+    }
+
+    return frag_len;
+}
+
 void
 recheck_joined_candidate_mappings(
-        candidate_mapping** current_mapping,
+        candidate_mapping** group_start,
         float* penalty,
         
         struct genome_data* genome,
         struct read* r,
-        struct error_model_t* error_model )
+        struct error_model_t* error_model,
+        struct fragment_length_dist_t* fl_dist )
 {
     float rechecked_group_penalty = 0;
 
+    candidate_mapping** current_mapping = group_start;
     while( (*current_mapping) != NULL )
     {
         /* each candidate_mapping in a joined group corresponds to a read
@@ -553,8 +592,13 @@ recheck_joined_candidate_mappings(
         current_mapping++;
     }
 
+    /* Get the probability of the given fragment length from the fragment
+     * length distribution */
+    int fl = get_fl_for_joined_candidate_mappings( group_start );
+    float fl_penalty = get_fl_log_prb( fl_dist, fl );
+
     /* Save the rechecked group penalty in penalty */
-    *penalty = rechecked_group_penalty;
+    *penalty = rechecked_group_penalty + fl_penalty;
 }
 
 void
@@ -582,6 +626,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   struct genome_data* genome,
                                   struct read* r,
                                   struct error_model_t* error_model,
+                                  struct fragment_length_dist_t* fl_dist,
 
                                   float min_match_penalty,
                                   float max_penalty_spread )
@@ -596,7 +641,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     for( i = 0; i < *joined_mappings_len; i++ )
     {
         recheck_joined_candidate_mappings( current_mapping, (*penalties) + i,
-                genome, r, error_model );
+                genome, r, error_model, fl_dist );
 
         /* we may need to update the max penalty */
         if( (*penalties)[i] > max_penalty ) {
@@ -960,34 +1005,9 @@ open_mapped_reads_db_for_writing(
 }
 
 void
-build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
-{
-    init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
-    return;
-}
-
-void
-build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
-{
-    FILE* fl_fp = fopen( filename, "r" );
-    if( fl_fp == NULL )
-    {
-        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename);
-        exit(-1);
-    }
-    init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
-    fclose( fl_fp );
-}
-
-void
 close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb)
 {
     munmap_mapped_reads_db( rdb );
-
-    if( rdb->fl_dist != NULL ) {
-        free_fl_dist( &(rdb->fl_dist) );
-        rdb->fl_dist = NULL;
-    }
 
     if( rdb->index != NULL ) {
         free( rdb->index );

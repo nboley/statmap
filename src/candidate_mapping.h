@@ -50,6 +50,10 @@ struct CIGAR_ENTRY {
     int len;
 };
 
+/* TODO - for ungapped assays, there will always be just one entry in the
+ * cigar string */
+#define MAX_CIGAR_STRING_ENTRIES 1
+
 typedef struct __attribute__((packed))__{
     /*** Info relating to the location ***/
     /* the chromosome code */
@@ -78,9 +82,8 @@ typedef struct __attribute__((packed))__{
     float penalty;
 
     /* cigar string */
-    /* TODO - for ungapped assays, there will always be just one entry in the
-     * cigar string */
-    struct CIGAR_ENTRY cigar[1];
+    struct CIGAR_ENTRY cigar[MAX_CIGAR_STRING_ENTRIES];
+    int cigar_len;
 
 } candidate_mapping;
 

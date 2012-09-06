@@ -222,6 +222,7 @@ init_candidate_mapping_from_read_subtemplate(
     cand_map.rd_type.pos = -1;
 
     /* The cigar string is initialized by the initial call to memset */
+    cand_map.cigar_len = 0;
 
     return cand_map;
 }
