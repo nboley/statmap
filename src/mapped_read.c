@@ -356,7 +356,7 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
             if( pair_2_mapping->chr > pair_1_mapping->chr )
                 break;
 
-            if( pair_2_mapping->chr != pair_1_mapping->chr )
+            if( pair_2_mapping->chr < pair_1_mapping->chr )
                 continue;
 
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
@@ -909,8 +909,17 @@ init_mapped_reads_db(
     struct mapped_reads_db** rdb, char* fname, const char* mode )
 {
     *rdb = malloc(sizeof(struct mapped_reads_db));
-    (*rdb)->fp = fopen( fname, mode );
-    if( (*rdb)->fp == NULL )
+
+    /* Generic mutex attributes - used for all mutexes */
+    /* we use a mutex because these operations are IO bound, plus it eliminates
+     * the spurious helgrind warnings that we got when using a spinlock */
+    pthread_mutexattr_t mta;
+    pthread_mutexattr_init(&mta);
+
+    /***** Mapped reads *****/
+
+    (*rdb)->mapped_fp = fopen( fname, mode );
+    if( (*rdb)->mapped_fp == NULL )
     {
         perror("FATAL       :  Could not open mapped reads file");
         assert( false );
@@ -920,17 +929,47 @@ init_mapped_reads_db(
     /* number of mapped reads in the DB */
     (*rdb)->num_mapped_reads = 0;
     
+    (*rdb)->mapped_mutex = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->mapped_mutex, &mta );
+
+    /***** Unmappable reads *****/
+
+    char fname_buffer[255];
+
+    sprintf( fname_buffer, "%s.unmappable", fname );
+    (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
+    if( (*rdb)->unmappable_fp == NULL )
+    {
+        perror("FATAL       :  Could not open unmappable reads file");
+        assert(false);
+        exit(-1);
+    }
+
+    (*rdb)->num_unmappable_reads = 0;
+
+    (*rdb)->unmappable_mutex = malloc( sizeof( pthread_mutex_t ) );
+    pthread_mutex_init( (*rdb)->unmappable_mutex, &mta );
+
+    /***** Nonmapping reads *****/
+
+    sprintf( fname_buffer, "%s.nonmapping", fname );
+    (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
+    if( (*rdb)->nonmapping_fp == NULL )
+    {
+        perror("FATAL       :  Could not open nonmapping reads file");
+        assert(false);
+        exit(-1);
+    }
+
+    (*rdb)->num_nonmapping_reads = 0;
+
+    (*rdb)->nonmapping_mutex = malloc( sizeof( pthread_mutex_t ));
+    pthread_mutex_init( (*rdb)->nonmapping_mutex, &mta );
+    
     /* Initialize the mode to 0, this will be set by
        the mode specific init function */
     (*rdb)->mode = 0;
 
-    /* use a mutex to eliminate the spurious helgrind warnings that we got
-       when using a spinlock */
-    pthread_mutexattr_t mta;
-    pthread_mutexattr_init(&mta);
-    (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
-    pthread_mutex_init( (*rdb)->mutex, &mta );
-    
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
     (*rdb)->mmapped_data_size = 0;
@@ -979,10 +1018,10 @@ open_mapped_reads_db_for_writing(
 {
     init_mapped_reads_db( rdb, fname, "w+" );
 
-    /* write placeholder for size of mapped reads db, this 
-       will be updated when we close the mapped read db*/
+    /* write placeholder for the number of mapped reads in the mapped reads db,
+     * this will be updated when we close the mapped read db. */
     MPD_RD_ID_T placeholder = 0;
-    fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->fp );
+    fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->mapped_fp );
     
     (*rdb)->mode = 'w';
 }
@@ -1005,10 +1044,13 @@ close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
 {
     /* update the number of reads that we have written since the 
        file was opened. */
-    fseek( rdb->fp, 0, SEEK_SET );
-    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->fp );
+    fseek( rdb->mapped_fp, 0, SEEK_SET );
+    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->mapped_fp );
     
-    fclose( rdb->fp );
+    /* close the file pointers */
+    fclose( rdb->mapped_fp );
+    fclose( rdb->unmappable_fp );
+    fclose( rdb->nonmapping_fp );
 
     return;
 }
@@ -1025,13 +1067,22 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
-        perror( "Unrecognized mode for open mapped read db." );
+        fprintf( stderr,
+                "FATAL       :  Unrecognized mode '%c' for open mapped reads db.\n",
+                (*rdb)->mode );
         assert( false );
         exit( -1 );
     }
     
-    pthread_mutex_destroy( (*rdb)->mutex );
-    free( (*rdb)->mutex );
+    /* clean up the mutexes */
+    pthread_mutex_destroy( (*rdb)->mapped_mutex );
+    free( (*rdb)->mapped_mutex );
+
+    pthread_mutex_destroy( (*rdb)->unmappable_mutex);
+    free( (*rdb)->unmappable_mutex );
+
+    pthread_mutex_destroy( (*rdb)->nonmapping_mutex );
+    free( (*rdb)->nonmapping_mutex );
     
     free( *rdb );
     *rdb = NULL;
@@ -1044,9 +1095,6 @@ add_read_to_mapped_reads_db(
     struct mapped_reads_db* rdb,
     mapped_read_t* rd)
 {
-    if( NULL == rd )
-        return;
-    
     if ( rdb->mode == 'r' )
     {
         fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");
@@ -1056,10 +1104,10 @@ add_read_to_mapped_reads_db(
 
     int error;
 
-    pthread_mutex_lock( rdb->mutex );
-    error = write_mapped_read_to_file( rd, rdb->fp );
+    pthread_mutex_lock( rdb->mapped_mutex );
+    error = write_mapped_read_to_file( rd, rdb->mapped_fp );
     rdb->num_mapped_reads += 1;
-    pthread_mutex_unlock( rdb->mutex );
+    pthread_mutex_unlock( rdb->mapped_mutex );
 
     if( error < 0 )
     {
@@ -1069,6 +1117,36 @@ add_read_to_mapped_reads_db(
     }
     
     return;
+}
+
+void
+add_unmappable_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db )
+{
+    /* lock the mutex for the corresponding file pointer */
+    pthread_mutex_lock( db->unmappable_mutex );
+
+    /* just write out the read id on one line */
+    fprintf( db->unmappable_fp, "%d\n", r->read_id );
+    db->num_unmappable_reads += 1;
+
+    pthread_mutex_unlock( db->unmappable_mutex );
+}
+
+void
+add_nonmapping_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db )
+{
+    /* lock the mutex for the corresponding file pointer */
+    pthread_mutex_lock( db->nonmapping_mutex );
+
+    /* just write out the read id on one line */
+    fprintf( db->nonmapping_fp, "%d\n", r->read_id );
+    db->num_nonmapping_reads += 1;
+
+    pthread_mutex_unlock( db->nonmapping_mutex );
 }
 
 void
@@ -1102,18 +1180,18 @@ get_next_read_from_mapped_reads_db(
     }
 
     /** Get the next read **/
-    pthread_mutex_lock( rdb->mutex );
+    pthread_mutex_lock( rdb->mapped_mutex );
     /* if we have read every read */
     if( rdb->current_read == rdb->num_mapped_reads )
     {
-        pthread_mutex_unlock( rdb->mutex );
+        pthread_mutex_unlock( rdb->mapped_mutex );
         *rd = NULL;
         return EOF;
     }
     
     MPD_RD_ID_T current_read_id = rdb->current_read;
     rdb->current_read += 1;
-    pthread_mutex_unlock( rdb->mutex );
+    pthread_mutex_unlock( rdb->mapped_mutex );
 
     /* Set mapped_read_t to be a pointer into the mmapped mapped reads db */
     *rd = rdb->index[current_read_id].ptr;
@@ -1239,21 +1317,21 @@ void
 mmap_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     /* get the file descriptor for the file we wish to mmap */
-    int fdin = fileno( rdb->fp );
+    int fdin = fileno( rdb->mapped_fp );
     
     /* make sure the entire file has been written to disk */
-    fflush( rdb->fp );
+    fflush( rdb->mapped_fp );
 
     /* check that the file is not empty before trying to mmap */
-    fseek(rdb->fp, 0L, SEEK_END);   // seek to end
-    long fp_size = ftell(rdb->fp);  // tell() to get size
+    fseek(rdb->mapped_fp, 0L, SEEK_END);   // seek to end
+    long fp_size = ftell(rdb->mapped_fp);  // tell() to get size
     if( fp_size == 0 )
     {
         fprintf( stderr,
                  "FATAL       :  Cannot mmap empty mapped reads db.\n" );
         exit( 1 );
     }
-    rewind( rdb->fp ); // reset fp
+    rewind( rdb->mapped_fp ); // reset fp
 
     /* find the size of the opened file */
     struct stat buf;
@@ -1261,7 +1339,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     rdb->mmapped_data_size = buf.st_size;
     
     #ifdef MALLOC_READS_DB
-    fseek( rdb->fp, 0, SEEK_SET );
+    fseek( rdb->mapped_fp, 0, SEEK_SET );
 
     fprintf( stderr, 
              "NOTICE        : Allocating %zu bytes for the mapped reads db.", 
@@ -1275,7 +1353,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
         exit( 1 );
     }
     
-    fread( rdb->mmapped_data, buf.st_size, 1, rdb->fp );
+    fread( rdb->mmapped_data, buf.st_size, 1, rdb->mapped_fp );
            
     #else
     /* mmap the file */

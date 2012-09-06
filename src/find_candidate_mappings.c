@@ -1297,7 +1297,7 @@ build_mapped_read_from_candidate_mappings(
                                       min_match_penalty,
                                       max_penalty_spread );
             
-    rd =  build_mapped_read_from_joined_candidate_mappings(
+    rd = build_mapped_read_from_joined_candidate_mappings(
         r->read_id, joined_mappings, joined_mappings_len
     );
     
@@ -1382,7 +1382,7 @@ find_candidate_mappings( void* params )
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, error_model ) )
         {
-            // TODO - write out the readid to an unmappable readids file
+            add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             continue; // skip the unmappable read
         }
         
@@ -1418,14 +1418,22 @@ find_candidate_mappings( void* params )
                     max_penalty_spread
                 );
             
-            add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
-            free_mapped_read( mapped_read );
-            
-            /* mapped count is the number of reads that successfully mapped
-             * (not the number of mappings) */
-            pthread_spin_lock( mapped_cnt_lock );
-            (mapped_read != NULL) ? *mapped_cnt += 1: 0;
-            pthread_spin_unlock( mapped_cnt_lock );            
+            if( mapped_read != NULL )
+            {
+                /* mapped count is the number of reads that successfully mapped
+                 * (not the number of mappings) */
+                pthread_spin_lock( mapped_cnt_lock );
+                *mapped_cnt += 1;
+                pthread_spin_unlock( mapped_cnt_lock );            
+
+                /* the read has at least one mapping - add it to the mapped
+                 * reads database */
+                add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
+                free_mapped_read( mapped_read );
+            } else {
+                /* the read was declared mappable, but did not map */
+                add_nonmapping_read_to_mapped_reads_db( r, mpd_rds_db );
+            }
         }
 
         curr_read_index += 1;

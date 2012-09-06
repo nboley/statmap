@@ -401,12 +401,23 @@ struct mapped_reads_db_index_t {
 };
 
 struct mapped_reads_db {
-    FILE* fp;
+
+    /* A read may map, be considered unmappable, or be considered mappable but
+     * fail to map (nonmapping). These files store data about each type of
+     * read. */
+    FILE* mapped_fp;
+    MPD_RD_ID_T num_mapped_reads;
+    pthread_mutex_t* mapped_mutex;
+
+    FILE* unmappable_fp;
+    MPD_RD_ID_T num_unmappable_reads;
+    pthread_mutex_t* unmappable_mutex;
+
+    FILE* nonmapping_fp;
+    MPD_RD_ID_T num_nonmapping_reads;
+    pthread_mutex_t* nonmapping_mutex;
 
     char mode; // 'r' or 'w'
-    MPD_RD_ID_T num_mapped_reads;
-
-    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
