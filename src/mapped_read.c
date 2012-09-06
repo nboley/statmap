@@ -336,6 +336,8 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
             break;
         }
     }
+    /* TODO instead of asserting, just don't build a mapped read if there are
+     * no paired end 2 reads */
     assert( pair_2_start > 0 );
 
     /* sanity check */
@@ -356,6 +358,8 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
 
             if( pair_2_mapping->chr != pair_1_mapping->chr )
                 continue;
+
+            assert( pair_1_mapping->chr == pair_2_mapping->chr );
 
             *joined_mappings_len += 1;
 
@@ -514,18 +518,29 @@ get_fl_for_joined_candidate_mappings(
      * any gaps represented by the cigar strings of intervening
      * candidate_mapping's */
 
-    /* Assumes the first candidate mapping in the group is the 5'-most.
-     * We can do this because the cm's were sorted before being joined */
+    /* TODO this might not be valid for all assay types. Verify */
+    candidate_mapping* first_read = *group_start;
+    candidate_mapping* last_read = *current_mapping;
 
-    assert( (*current_mapping)->start_bp >= (*group_start)->start_bp );
-    int frag_len = (*current_mapping)->start_bp - (*group_start)->start_bp;
-
-    /* loop through the final candidate mapping's cigar string, adding the
-     * distances to the fragment length */
+    int frag_len = 0;
     int i;
-    for( i = 0; i < (*current_mapping)->cigar_len; i++ )
+    if( first_read->start_bp < last_read->start_bp )
     {
-        frag_len += (*current_mapping)->cigar[i].len;
+        frag_len = last_read->start_bp - first_read->start_bp;
+
+        /* Add the length encoded in the last candidate mapping's cigar string */
+        for( i = 0; i < last_read->cigar_len; i++ )
+        {
+            frag_len += last_read->cigar[i].len;
+        }
+    } else {
+        frag_len = first_read->start_bp - last_read->start_bp;
+
+        /* Add the length encoded in the first candidate mapping's cigar string */
+        for( i = 0; i < first_read->cigar_len; i++ )
+        {
+            frag_len += first_read->cigar[i].len;
+        }
     }
 
     return frag_len;

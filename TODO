@@ -4,10 +4,6 @@ Nathan:
   use a dynamic step size
      in find cand mappings, we now use global param to update read error models         
 
-fix bug
-finish human indexing fix
-make sample mapping take multiple samples
-
 -44) Clean up candidate_mapping struct.
      a) maybe get rid of RECHECK. Since reads are often longer than the index
         probes, it's probably a good idea to always recheck them. Instead of
@@ -187,3 +183,10 @@ X 16) Allow reference genomes from multiple files
 X 17) Write config file parser, and use it
 18) Add optimization to filter impossible paired end reads 
     ( by FL ) when we dont have to estimate the dist
+
+# Longstanding
+
+0) Determine what types of mappings are possible for specific assay types.
+   This would affect, for example, our consideration of what a valid mapping is
+   (considering strand and position for paired end, for example ).
+
