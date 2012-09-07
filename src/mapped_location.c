@@ -258,53 +258,187 @@ print_mapped_locations( mapped_locations* results )
  *
  **************************************************************************/
 
+/***** ml_match *****/
+
 void
-init_matched_mapped_locations(
-        struct matched_mapped_locations **m,
-        mapped_location* base,
-        struct indexable_subtemplate* base_probe,
-        int num_match_containers )
+init_ml_match( struct ml_match** match, int match_len )
 {
-    (*m) = malloc( sizeof( struct matched_mapped_locations ));
+    *match = malloc( sizeof( struct ml_match ));
 
-    (*m)->base = base;
-    (*m)->base_probe = base_probe;
+    /* Note - the length of the arrays will always be equal to the number of
+     * indexable subtemplates, since we must be able to match across all of the
+     * indexable subtemplates for a valid match. */
+    (*match)->len = match_len;
 
-    (*m)->num_match_containers = num_match_containers;
-    /* We calloc here so every pointer is initialized to NULL. We will leave the
-     * pointer for the base's indexable_subtemplate NULL */
-    (*m)->match_containers = calloc( num_match_containers,
-            sizeof( mapped_locations* ));
+    (*match)->locations = calloc( match_len, sizeof( mapped_location* ));
+    (*match)->subseq_lengths = calloc( match_len, sizeof( int ));
+    (*match)->subseq_offsets = calloc( match_len, sizeof( int ));
+
+    (*match)->cum_ref_gap = 0;
 
     return;
 }
 
 void
-free_matched_mapped_locations(
-        struct matched_mapped_locations *m )
+free_ml_match( struct ml_match* match )
 {
-    /* free the mapped_locations */
+    if( match == NULL ) return;
+
+    free( match->locations );
+    free( match->subseq_lengths );
+    free( match->subseq_offsets );
+
+    free( match );
+
+    return;
+}
+
+void
+add_location_to_ml_match(
+        mapped_location* location,
+        struct ml_match* match, 
+        int subseq_length,
+        int subseq_offset,
+        int location_index,
+        int cum_ref_gap )
+{
+    assert( location_index < match->len );
+
+    match->locations[location_index] = location;
+    match->subseq_lengths[location_index] = subseq_length;
+    match->subseq_offsets[location_index] = subseq_offset;
+
+    match->cum_ref_gap = cum_ref_gap;
+
+    return;
+}
+
+enum bool
+ml_match_is_valid( struct ml_match* match )
+{
+    /* A match is valid if we have a mapped_location from each index probe */
+    enum bool is_valid = true;
+
     int i;
-    for( i = 0; i < m->num_match_containers; i++ )
+    for( i = 0; i < match->len; i++ )
     {
-        free_mapped_locations( m->match_containers[i] );
+        if( match->locations[i] == NULL )
+        {
+            is_valid = false;
+            break;
+        }
     }
 
-    /* free the array of pointers to mapped locations */
-    free( m->match_containers );
+    return is_valid;
+}
 
-    /* free the whole structure */
-    free( m );
+/***** ml_matches *****/
+
+void
+init_ml_matches( struct ml_matches** matches )
+{
+    *matches = malloc( sizeof( struct ml_matches ));
+
+    (*matches)->matches =
+        malloc( ML_MATCHES_GROWTH_FACTOR*sizeof(struct ml_match) );
+    (*matches)->length = 0;
+    (*matches)->allocated_length = ML_MATCHES_GROWTH_FACTOR;
 
     return;
 }
 
 void
-add_matches_to_matched_mapped_locations(
-        mapped_locations* matching_subset,
-        int originating_ist_index,
-        struct matched_mapped_locations* all_matches )
+free_ml_matches( struct ml_matches* matches )
 {
-    all_matches->match_containers[originating_ist_index] = matching_subset;
+    free( matches->matches );
+    free( matches );
     return;
+}
+
+void
+add_ml_match(
+        struct ml_matches* matches,
+        struct ml_match* match )
+{
+    /* 
+     * test to see if there is enough allocated memory in results
+     * if there isn't then realloc
+     */
+    if( matches->length == matches->allocated_length )
+    {
+        matches->allocated_length *= ML_MATCHES_GROWTH_FACTOR;
+        matches->matches = realloc(
+                matches->matches,
+                matches->allocated_length*sizeof(struct ml_match)
+            );
+
+        if( matches->matches == NULL )
+        {
+            fprintf( stderr, "FATAL       :  Failed realloc in add_ml_match\n");
+            assert(false);
+            exit(1);
+        }
+    }
+
+    /* add the new ml_match */
+    (matches->matches)[matches->length] = *match;
+    matches->length++;
+
+    return;
+}
+
+/***** ml_match_stack *****/
+
+void
+init_ml_match_stack(
+        struct ml_match_stack** stack )
+{
+    *stack = malloc( sizeof( struct ml_match_stack ));
+    (*stack)->top = -1; // empty
+    return;
+}
+
+void
+free_ml_match_stack(
+        struct ml_match_stack* stack )
+{
+    free( stack );
+    return;
+}
+
+enum bool
+ml_match_stack_is_empty(
+        struct ml_match_stack* stack )
+{
+    if( stack->top == -1 )
+        return true;
+
+    return false;
+}
+
+void
+ml_match_stack_push(
+        struct ml_match_stack* stack,
+        struct ml_match* match )
+{
+    /* Make sure we won't exceed the maximum size of the stack */
+    assert( (stack->top + 1) < MAX_ML_MATCH_STACK_LEN );
+
+    stack->top += 1;
+    /* Hmm - do we want to use an array of pointers to the match structures here
+     * or an array of the structures themselves? */
+    stack->stack[stack->top] = *match;
+
+    return;
+}
+
+struct ml_match
+ml_match_stack_pop(
+        struct ml_match_stack* stack )
+{
+    /* Make sure we don't try to pop off an empty stack */
+    assert( !ml_match_stack_is_empty( stack ));
+
+    stack->top -= 1;
+    return stack->stack[stack->top + 1];
 }

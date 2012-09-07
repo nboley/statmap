@@ -100,31 +100,85 @@ print_mapped_locations( mapped_locations* results );
  *
  **************************************************************************/
 
-struct matched_mapped_locations {
-    mapped_location* base;
-    struct indexable_subtemplate* base_probe;
+/***** ml_match *****/
 
-    /* There is one match container for every indexable subtemplate, storing
-     * the mapped_locations that match base from that indexable_subtemplate */
-    int num_match_containers;
-    mapped_locations** match_containers;
+/* Stores a matching set of mapped_locations */
+struct ml_match {
+    mapped_location** locations;
+    int* subseq_lengths;
+    int* subseq_offsets;
+    int len;
+
+    /* The cumulative length of gaps in the reference genome for this set of
+     * matched mapped_locations */
+    int cum_ref_gap;
 };
 
 void
-init_matched_mapped_locations(
-        struct matched_mapped_locations **m,
-        mapped_location* base,
-        struct indexable_subtemplate* base_probe,
-        int num_match_containers );
+init_ml_match( struct ml_match** match, int match_len );
 
 void
-free_matched_mapped_locations(
-        struct matched_mapped_locations *m );
+free_ml_match( struct ml_match* match );
 
 void
-add_matches_to_matched_mapped_locations(
-        mapped_locations* matching_subset,
-        int originating_ist_index,
-        struct matched_mapped_locations* all_matches );
+add_location_to_ml_match(
+        mapped_location* location,
+        struct ml_match* match, 
+        int subseq_length,
+        int subseq_offset,
+        int location_index,
+        int cum_ref_gap );
+
+enum bool
+ml_match_is_valid( struct ml_match* match );
+
+/***** ml_matches ******/
+
+#define ML_MATCHES_GROWTH_FACTOR 10
+struct ml_matches {
+    int allocated_length;
+    int length;
+    struct ml_match* matches;
+};
+
+void
+init_ml_matches( struct ml_matches** matches );
+
+void
+free_ml_matches( struct ml_matches* matches );
+
+void
+add_ml_match(
+        struct ml_matches* matches,
+        struct ml_match* match );
+
+/***** ml_match_stack *****/
+
+#define MAX_ML_MATCH_STACK_LEN 200
+struct ml_match_stack {
+    struct ml_match stack[MAX_ML_MATCH_STACK_LEN];
+    int top;
+};
+
+void
+init_ml_match_stack(
+        struct ml_match_stack** stack );
+
+void
+free_ml_match_stack(
+        struct ml_match_stack* stack );
+
+enum bool
+ml_match_stack_is_empty(
+        struct ml_match_stack* stack );
+
+void
+ml_match_stack_push(
+        struct ml_match_stack* stack,
+        struct ml_match* match );
+
+struct ml_match
+ml_match_stack_pop(
+        struct ml_match_stack* stack );
 
 #endif /* define MAPPED_LOCATION */
