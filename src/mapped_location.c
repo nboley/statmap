@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h> // memcpy()
 
 #include "mapped_location.h"
 #include "diploid_map_data.h"
@@ -279,6 +280,27 @@ init_ml_match( struct ml_match** match, int match_len )
     return;
 }
 
+struct ml_match*
+copy_ml_match( struct ml_match* match )
+{
+    /* Return a copy of match */
+    struct ml_match* match_copy;
+    init_ml_match( &match_copy, match->len );
+
+    /* copy the arrays */
+    memcpy( match_copy->locations, match->locations,
+            sizeof( mapped_location* )*match->len );
+    memcpy( match_copy->subseq_lengths, match->subseq_lengths,
+            sizeof( int )*match->len );
+    memcpy( match_copy->subseq_offsets, match->subseq_offsets,
+            sizeof( int )*match->len );
+
+    /* copy the cumulative reference gap */
+    match_copy->cum_ref_gap = match->cum_ref_gap;
+
+    return match_copy;
+}
+
 void
 free_ml_match( struct ml_match* match )
 {
@@ -425,8 +447,8 @@ ml_match_stack_push(
     assert( (stack->top + 1) < MAX_ML_MATCH_STACK_LEN );
 
     stack->top += 1;
-    /* Hmm - do we want to use an array of pointers to the match structures here
-     * or an array of the structures themselves? */
+    /* TODO Hmm - do we want to use an array of pointers to the match structures
+     * here or an array of the structures themselves? */
     stack->stack[stack->top] = *match;
 
     return;

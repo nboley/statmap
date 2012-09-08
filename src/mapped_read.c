@@ -445,55 +445,85 @@ recheck_candidate_mapping(
 
         struct error_model_t* error_model )
 {
-    /* find a pointer to the sequence at this genomic location */
-    int mapped_length = rst->length;
-
-    char* genome_seq = find_seq_ptr(
-            genome, mapping->chr, mapping->start_bp, mapped_length );
-    
-    /* if the genome_seq pointer is null, the sequence isn't valid
-       for some reason ( ie, it falls off the end of the chromosome). 
-       In this case, mark the location as invalid and continue TODO how? */
-    if( NULL == genome_seq )
-    {
-        // TODO signal invalid
-        return;
-    }
-
     /* build penalty arrays from the underlying read subtemplate */
     struct penalty_array_t fwd_pa, rev_pa;
     build_penalty_array( &fwd_pa, rst->length,
             error_model, rst->error_str );
     build_reverse_penalty_array( &rev_pa, &fwd_pa );
 
-    /* Build the full sequence and pick a penalty array depending on the
-     * mapping's strand */
-    char* real_seq = calloc( rst->length+1, sizeof(char) );
-    assert( real_seq != NULL );
-    struct penalty_array_t* penalty_array;
+    float rechecked_penalty = 0;
 
-    if( BKWD == mapping->rd_strnd )
+    int seq_pos = 0;
+    int genome_pos = mapping->start_bp;
+
+    /* loop over the entries in this candidate mapping's cigar string */
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
     {
-        rev_complement_read( genome_seq, real_seq, rst->length );
-        penalty_array = &rev_pa;
-    } else {
-        memcpy( real_seq, genome_seq, sizeof(char)*rst->length );
-        penalty_array = &fwd_pa;
+        struct CIGAR_ENTRY current_entry = mapping->cigar[i];
+
+        if( current_entry.op == 'M' )
+        {
+            /* This indicates a portion of matched sequence. Compare it to the
+             * genome to recompute the penalty across the entire sequence */
+            char* genome_seq = find_seq_ptr(
+                    genome, mapping->chr, genome_pos, current_entry.len );
+
+            /* if the genome_seq pointer is null, the sequence isn't valid
+               for some reason ( ie, it falls off the end of the chromosome). 
+               In this case, mark the location as invalid and continue TODO how? */
+            if( NULL == genome_seq )
+            {
+                // TODO signal invalid
+                return;
+            }
+
+            /* Build the sequence to compare and pick a penalty array depending
+             * on the strand of the mapping
+             *
+             * TODO is this necesarily correct? Is it possible/logical for
+             * different indexable subtemplates to have different strands? If
+             * that were the case, we would just take the strand of the base
+             * location for the cm's strand, and this would end up being incorrect. 
+             */
+
+            // TODO do we need the +1 here, since we know the length?
+            char* real_seq = calloc( current_entry.len+1, sizeof(char) );
+            assert( real_seq != NULL );
+            struct penalty_array_t* penalty_array;
+
+            if( BKWD == mapping->rd_strnd )
+            {
+                rev_complement_read( genome_seq, real_seq, current_entry.len );
+                penalty_array = &rev_pa;
+            } else {
+                memcpy( real_seq, genome_seq, sizeof(char)*current_entry.len );
+                penalty_array = &rev_pa;
+            }
+
+            rechecked_penalty += recheck_penalty(
+                    real_seq,
+                    rst->char_seq + seq_pos,
+                    current_entry.len,
+                    penalty_array
+                );
+
+            seq_pos += current_entry.len;
+
+        } else if ( current_entry.op == 'N' ) {
+            /* Move the genome_pos pointer forward to skip the intron indicated
+             * by this cigar string entry */
+            genome_pos += current_entry.len;
+        } else {
+            assert( false );
+        }
     }
 
-    float rechecked_penalty = recheck_penalty(
-            real_seq,
-            rst->char_seq,
-            mapped_length,
-            penalty_array
-        );
-
-    mapping->penalty = rechecked_penalty; // XXX + marginal_log_prb ?
+    mapping->penalty = rechecked_penalty;
 
     /* cleanup memory */
     free_penalty_array( &fwd_pa );
     free_penalty_array( &rev_pa );
-    free( real_seq );
 
     return;
 }

@@ -52,7 +52,7 @@ struct CIGAR_ENTRY {
 
 /* TODO - for ungapped assays, there will always be just one entry in the
  * cigar string */
-#define MAX_CIGAR_STRING_ENTRIES 1
+#define MAX_CIGAR_STRING_ENTRIES 5
 
 typedef struct __attribute__((packed))__{
     /*** Info relating to the location ***/

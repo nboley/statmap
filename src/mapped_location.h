@@ -117,6 +117,9 @@ struct ml_match {
 void
 init_ml_match( struct ml_match** match, int match_len );
 
+struct ml_match*
+copy_ml_match( struct ml_match* match );
+
 void
 free_ml_match( struct ml_match* match );
 
@@ -154,7 +157,7 @@ add_ml_match(
 
 /***** ml_match_stack *****/
 
-#define MAX_ML_MATCH_STACK_LEN 200
+#define MAX_ML_MATCH_STACK_LEN 500
 struct ml_match_stack {
     struct ml_match stack[MAX_ML_MATCH_STACK_LEN];
     int top;

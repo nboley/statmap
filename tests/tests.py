@@ -511,26 +511,26 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
-            raise ValueError, "Mapping returned too many results (read has %i mappings, expected 1)." \
-                    % len(reads_data)
+            raise ValueError, "Mapping for readid %s returned too many results (read has %i mappings, expected 1)." \
+                    % ( reads_data[0][0], len(reads_data) )
         
         locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
         
         # make sure the chr and start locations are identical
         # first, check that all chromosomes are the same *and*
         # that the correct loc exists
-        if any( loc != truth[0] for loc in locs[0] ) \
-           or truth[1] not in locs[1]:
-            # we need to special case an untemplated g that happens to correspond to a genomic g. 
-            # in such cases, we really can't tell what is correct.
-            if untemplated_gs_perc == 0.0:
-               print reads_data
-               print truth
-               print reads_data[0][9][0]
-               print r_genome[truth[0]][truth[1]-1]
-               raise ValueError, \
-                    "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
+        for loc in locs[0]:
+            if loc != truth[0] or truth[1] not in locs[1]:
+                # we need to special case an untemplated g that happens to correspond to a genomic g. 
+                # in such cases, we really can't tell what is correct.
+                if untemplated_gs_perc == 0.0:
+                   print reads_data
+                   print truth
+                   print reads_data[0][9][0]
+                   print r_genome[truth[0]][truth[1]-1]
+                   raise ValueError, \
+                        "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
+                        % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
     sam_fp.close()
     
     ###### Cleanup the created files ###############################################
@@ -1408,6 +1408,14 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
+    print "Start test_multiple_indexable_subtemplates()"
+    test_multiple_indexable_subtemplates()
+    print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
+    test_multiple_indexable_subtemplates_for_repeat_sequences()
+    print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
+    test_multiple_indexable_subtemplates_for_diploid_mapping()
+    sys.exit(1)
+
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"

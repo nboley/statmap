@@ -605,34 +605,46 @@ build_candidate_mapping_cigar_string_from_match(
     int i;
     for( i = 0; i < match->len; i++ )
     {
+        /* If there is a gap in the reference, represent it with an N op. 
+         * We check the value of i because obviously there cannot be an intron
+         * before the first mapped location.*/
+        if( i > 0 )
+        {
+            int ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
+                        - (match->locations[i-1]->loc - match->subseq_offsets[i-1]);
+
+            if( ref_gap > 0 )
+            {
+                cm->cigar[cigar_index+1].op = 'N';
+                cm->cigar[cigar_index+1].len = ref_gap;
+                cigar_index += 2;
+            }
+        }
+
         /* For each location, add an M op for the region of aligned sequence */
         cm->cigar[cigar_index].op = 'M';
         /* This was initialized to zero */
         cm->cigar[cigar_index].len += match->subseq_lengths[i];
-
-        /* If there is a gap in the reference, represent it with an N op. 
-         * We check the value of i because obviously there cannot be an intron
-         * before the first mapped location.*/
-        if( i == 0 ) continue;
-
-        int ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
-                    - (match->locations[i]->loc - match->subseq_offsets[i]);
-
-        /* TODO for now, we only want to make sure we're supporting ungapped
-         * assays. */
-        assert( ref_gap == 0 );
-        //assert( ref_gap >= 0 );
-        if( ref_gap > 0 )
-        {
-            cm->cigar[cigar_index+1].op = 'N';
-            cm->cigar[cigar_index+1].len = ref_gap;
-            cigar_index += 2;
-        }
     }
 
     cm->cigar_len = cigar_index + 1;
 
     return;
+}
+
+float
+compute_candidate_mapping_penalty_from_match(
+        struct ml_match* match )
+{
+    float cum_penalty = 0;
+
+    int i;
+    for( i = 0; i < match->len; i++ ) {
+        /* the product of the marginal (log) probabilites */
+        cum_penalty += match->locations[i]->penalty;
+    }
+
+    return cum_penalty;
 }
 
 void
@@ -657,7 +669,7 @@ build_candidate_mapping_from_match(
 
     /* set metadata */
     /* TODO multiply marginal prbs of all the mapped_locations? */
-    cm.penalty = base->penalty;
+    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
 
     /* set location information */
     cm.chr = base->chr;
@@ -842,8 +854,11 @@ add_matches_from_pseudo_locations_to_stack(
                                   - candidate_locs->probe->subseq_offset
                                   - prev_start;
 
-            if( match->cum_ref_gap + candidate_ref_gap 
-                    < REFERENCE_INSERT_LENGTH_MAX )
+            int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
+
+            if( candidate_cum_ref_gap < 0 ) continue;
+
+            if( candidate_cum_ref_gap < REFERENCE_INSERT_LENGTH_MAX )
             {
                 /* construct a mapped location */
                 mapped_location tmp;
@@ -851,15 +866,15 @@ add_matches_from_pseudo_locations_to_stack(
                 tmp.chr = iloc->chr;
                 tmp.loc = iloc->loc;
 
-                struct ml_match new_match = *match;
+                struct ml_match* new_match = copy_ml_match( match );
                 add_location_to_ml_match( &tmp,
-                        &new_match,
+                        new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset,
                         results_index,
-                        match->cum_ref_gap + candidate_ref_gap );
+                        candidate_cum_ref_gap );
 
-                ml_match_stack_push( stack, &new_match );
+                ml_match_stack_push( stack, new_match );
             } else {
                 break;
             }
@@ -901,23 +916,24 @@ add_matches_from_locations_to_stack(
 
         /* Consider the cumulative reference gap that would be created if this
          * candidate location were added to the match */
-        if( match->cum_ref_gap + candidate_ref_gap
-                < REFERENCE_INSERT_LENGTH_MAX )
+        int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
+
+        if( candidate_cum_ref_gap < 0 ) continue;
+
+        if( candidate_cum_ref_gap < REFERENCE_INSERT_LENGTH_MAX )
         {
             /* build a new match with the current location, and push it onto
              * the stack */
-            // TODO - figure out how to handle memory, this isn't going to work
-            struct ml_match new_match = *match;
-
+            struct ml_match* new_match = copy_ml_match( match );
             add_location_to_ml_match( match_candidate,
-                    &new_match,
+                    new_match,
                     candidate_locs->probe->subseq_length,
                     candidate_locs->probe->subseq_offset,
                     results_index,
-                    match->cum_ref_gap + candidate_ref_gap
+                    candidate_cum_ref_gap
                 );
 
-            ml_match_stack_push( stack, &new_match );
+            ml_match_stack_push( stack, new_match );
 
         } else {
             /* adding this mapped_location to the match would cause it to have
@@ -933,21 +949,17 @@ add_matches_from_locations_to_stack(
     return;
 }
 
-void
-add_potential_matches_to_stack(
-        struct ml_match* match,
-        struct ml_match_stack* stack,
-        mapped_locations** search_results,
-        struct genome_data* genome )
+int
+find_index_of_next_indexable_subtemplate_to_match(
+        struct ml_match* match )
 {
-    int i;
-
+    int results_index = 0;
     /*
      * find the index of the next set of index subtemplate search results
      * to consider. Since match is a partially built set of matched locations,
      * the index is the first entry in it's mapped_locations array that is NULL.
      */
-    int results_index = 0;
+    int i;
     for( i = 0; i < match->len; i++ )
     {
         if( match->locations[i] == NULL )
@@ -959,6 +971,19 @@ add_potential_matches_to_stack(
     /* Since we initialize match with the base matched location, this index
      * should always be greater than zero */
     assert( results_index > 0 );
+
+    return results_index;
+}
+
+void
+add_potential_matches_to_stack(
+        struct ml_match* match,
+        struct ml_match_stack* stack,
+        mapped_locations** search_results,
+        struct genome_data* genome )
+{
+    int results_index =
+        find_index_of_next_indexable_subtemplate_to_match( match );
 
     mapped_locations* candidate_locs = search_results[results_index];
 
@@ -1024,6 +1049,8 @@ find_matching_mapped_locations(
                 search_results,
                 genome
             );
+
+        //free_ml_match( curr_match );
     }
 }
 
