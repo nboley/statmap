@@ -861,13 +861,14 @@ add_matches_from_pseudo_locations_to_stack(
             if( candidate_cum_ref_gap < REFERENCE_INSERT_LENGTH_MAX )
             {
                 /* construct a mapped location */
-                mapped_location tmp;
-                copy_mapped_location( &tmp, candidate_loc );
-                tmp.chr = iloc->chr;
-                tmp.loc = iloc->loc;
+                /* TODO - more elegant memory allocation scheme. */
+                mapped_location* tmp = malloc( sizeof( mapped_location ));
+                copy_mapped_location( tmp, candidate_loc );
+                tmp->chr = iloc->chr;
+                tmp->loc = iloc->loc;
 
                 struct ml_match* new_match = copy_ml_match( match );
-                add_location_to_ml_match( &tmp,
+                add_location_to_ml_match( tmp,
                         new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset,
@@ -1052,6 +1053,8 @@ find_matching_mapped_locations(
 
         //free_ml_match( curr_match );
     }
+
+    free_ml_match_stack( stack );
 }
 
 void
@@ -1452,6 +1455,8 @@ find_candidate_mappings( void* params )
         /* Initialize container for candidate mappings for this read */
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
+
+        //fprintf( stderr, "DEBUG       :  Finding cm's for read_id %i\n", r->read_id );
         
         find_candidate_mappings_for_read(
                 r,
@@ -1466,6 +1471,8 @@ find_candidate_mappings( void* params )
 
                 only_collect_error_data
             );
+
+        //fprintf( stderr, "DEBUG       :  Found %i cm's for read_id %i\n", mappings->length, r->read_id );
 
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )

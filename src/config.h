@@ -227,7 +227,7 @@ enum JUNCTION_TYPE
 #define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
 
 /* TODO this is an arbitrary default (doesn't matter for now) */
-#define REFERENCE_INSERT_LENGTH_MAX 50000
+#define REFERENCE_INSERT_LENGTH_MAX 500
 
 /* this needs to always be able to store up to LOCATION_MAX */
 #define SIGNED_LOC int

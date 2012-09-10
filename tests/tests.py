@@ -1363,16 +1363,20 @@ def test_multiple_indexable_subtemplates():
         test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
         print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
 
+# note - for repeat sequence tests, n_dups must be greater than
+# PSEUDO_LOC_MIN_SIZE in config.h to trigger the use of pseudo locations to store
+# the locations
+
 def test_multiple_indexable_subtemplates_for_repeat_sequences():
     rls = [ 50, 75 ]
     for rl in rls:
         test_duplicated_reads( read_len=rl,
-                n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100,
+                n_chrs=1, n_dups=100, gen_len=100, n_threads=-1, n_reads=100,
                 indexed_seq_len = rl / 2  ) 
         print "PASS: Multiple indexable subtemplates in a highly repeated genome %i BP test" % rl
 
 def test_multiple_indexable_subtemplates_for_diploid_mapping():
-    n_dups = 4000
+    n_dups = 100
     genome_len=100
 
     rls = [ 50 ]
@@ -1408,14 +1412,6 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
-    print "Start test_multiple_indexable_subtemplates()"
-    test_multiple_indexable_subtemplates()
-    print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
-    test_multiple_indexable_subtemplates_for_repeat_sequences()
-    print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
-    test_multiple_indexable_subtemplates_for_diploid_mapping()
-    sys.exit(1)
-
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"
