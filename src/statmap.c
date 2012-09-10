@@ -43,12 +43,15 @@
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
 int min_num_hq_bps = -1;
+int max_reference_insert_len = -1;
 
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
 void set_num_threads(int n) { num_threads = n; }
 int get_min_num_hq_bps() { return min_num_hq_bps; }
 void set_min_num_hq_bps(int n) { min_num_hq_bps = n; }
+int get_max_reference_insert_len() { return max_reference_insert_len; }
+void set_max_reference_insert_len(int n) { max_reference_insert_len = n; }
 
 /*
  * Loads the binary genome file

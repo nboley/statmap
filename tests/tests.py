@@ -1371,12 +1371,12 @@ def test_multiple_indexable_subtemplates_for_repeat_sequences():
     rls = [ 50, 75 ]
     for rl in rls:
         test_duplicated_reads( read_len=rl,
-                n_chrs=1, n_dups=100, gen_len=100, n_threads=-1, n_reads=100,
+                n_chrs=1, n_dups=4000, gen_len=100, n_threads=-1, n_reads=100,
                 indexed_seq_len = rl / 2  ) 
         print "PASS: Multiple indexable subtemplates in a highly repeated genome %i BP test" % rl
 
 def test_multiple_indexable_subtemplates_for_diploid_mapping():
-    n_dups = 100
+    n_dups = 4000
     genome_len=100
 
     rls = [ 50 ]

@@ -573,7 +573,7 @@ search_for_matching_mapped_locations(
      *
      * Starting with low, do a linear search until we get to the first value
      * that is greater than the base_start (it could be within the range of
-     * base_start + REFERENCE_INSERT_LENGTH_MAX) */
+     * base_start + max_reference_insert_len) */
 
     int i;
     for( i = low; i < match_candidates->length; i++ )
@@ -863,7 +863,7 @@ add_matches_from_pseudo_locations_to_stack(
 
             if( candidate_cum_ref_gap < 0 ) continue;
 
-            if( candidate_cum_ref_gap < REFERENCE_INSERT_LENGTH_MAX )
+            if( candidate_cum_ref_gap <= max_reference_insert_len )
             {
                 /* construct a mapped location */
                 /* TODO - more elegant memory allocation scheme. */
@@ -926,7 +926,7 @@ add_matches_from_locations_to_stack(
 
         if( candidate_cum_ref_gap < 0 ) continue;
 
-        if( candidate_cum_ref_gap < REFERENCE_INSERT_LENGTH_MAX )
+        if( candidate_cum_ref_gap <= max_reference_insert_len )
         {
             /* build a new match with the current location, and push it onto
              * the stack */

@@ -42,6 +42,8 @@ struct args_t {
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
+
+    int max_reference_insert_len;
 };
     """
     _fields_ = [
@@ -77,6 +79,8 @@ struct args_t {
         
         ("input_file_type", c_uint),    # enum input_file_type_t
         ("assay_type", c_uint),         # enum assay_type_t
+
+        ("max_reference_insert_len", c_int),
     ]
 
 def load_config_from_file( fname ):

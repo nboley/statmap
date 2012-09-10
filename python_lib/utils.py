@@ -89,9 +89,15 @@ class StatmapOutput:
                 # if we can't determine the number of threads, set it to 1
                 num_threads = 1
             
+        # Set the number of threads used by the shared library code - allows us
+        # to specify the number of threads for a utility to use
         statmap_o.set_num_threads( num_threads )
+
+        # These values are saved in the configuration and should be changed
         statmap_o.set_min_num_hq_bps(
-            self.config.contents.min_num_hq_bps ) # stored in config
+            self.config.contents.min_num_hq_bps )
+        statmap_o.set_max_reference_insert_len(
+            self.config.contents.max_reference_insert_len )
 
         # load genome
         self.genome = load_genome_from_disk( GENOME_FNAME )
@@ -157,6 +163,7 @@ def test():
     print "==== GLOBALS ===="
     print "num_threads:", statmap_o.get_num_threads()
     print "min_num_hq_bps:", statmap_o.get_min_num_hq_bps()
+    print "max_reference_insert_len:", statmap_o.get_max_reference_insert_len()
 
     # did genome load properly?
     print "==== GENOME ===="

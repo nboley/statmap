@@ -9,6 +9,7 @@ struct genome_data;
 
 extern int num_threads;
 extern int min_num_hq_bps;
+extern int max_reference_insert_len;
 
 extern int num_trace_tracks;
 extern char** trace_track_names;

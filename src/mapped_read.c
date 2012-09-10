@@ -498,7 +498,7 @@ recheck_candidate_mapping(
                 penalty_array = &rev_pa;
             } else {
                 memcpy( real_seq, genome_seq, sizeof(char)*current_entry.len );
-                penalty_array = &rev_pa;
+                penalty_array = &fwd_pa;
             }
 
             rechecked_penalty += recheck_penalty(

@@ -40,6 +40,8 @@ struct args_t {
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
+
+    int max_reference_insert_len;
 };
 
 struct args_t

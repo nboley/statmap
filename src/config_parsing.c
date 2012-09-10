@@ -470,6 +470,8 @@ parse_arguments( int argc, char** argv )
     args.input_file_type = UNKNOWN;
     args.assay_type = UNKNOWN;
 
+    args.max_reference_insert_len = -1;
+
     /* parse arguments with argp */
     argp_parse( &argp, argc, argv, 0, 0, &args );
 
@@ -766,9 +768,20 @@ parse_arguments( int argc, char** argv )
                 args.min_num_hq_bps);
     }
 
+    /* Set the maximum allowed reference gap between indexable subtempaltes */
+    if( args.assay_type == STRANDED_RNASEQ )
+    {
+        /* For gapped assays, set this to the default in config.h */
+        args.max_reference_insert_len = REFERENCE_INSERT_LENGTH_MAX;
+    } else {
+        /* For ungapped assays, this should always be zero. */
+        args.max_reference_insert_len = 0;
+    }
+
     /* Set the global variables */
     num_threads = args.num_threads;
     min_num_hq_bps = args.min_num_hq_bps;
+    max_reference_insert_len = args.max_reference_insert_len;
 
     /* 
      * Dont allow penalty spreads greater than the min match penalty - 
@@ -842,6 +855,9 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
 
     fprintf( arg_fp, "input_file_type:\t%i\n", args->input_file_type );
     fprintf( arg_fp, "assay_type:\t%i\n", args->assay_type );
+
+    fprintf( arg_fp, "max_reference_insert_len:\t%i\n",
+             args->max_reference_insert_len );
 
     return;
 }
@@ -933,6 +949,9 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
             &( (*args)->input_file_type) );
     fscanf( arg_fp, "assay_type:\t%u\n", 
             &( (*args)->assay_type) );
+
+    fscanf( arg_fp, "max_reference_insert_len:\t%i\n",
+            &( (*args)->max_reference_insert_len ) );
 
     fclose( arg_fp  );
 
