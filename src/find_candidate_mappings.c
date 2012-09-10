@@ -821,6 +821,11 @@ add_matches_from_pseudo_locations_to_stack(
         find_start_of_pseudo_mapped_locations_for_strand(
             candidate_locs, base->strnd );
 
+    /* If there are no pseudo locations in the set of candidate locations for
+     * matching, nothing to do here. */
+    if( pslocs_start_in_sorted_mapped_locations < 0 )
+        return;
+
     int i;
     for( i = pslocs_start_in_sorted_mapped_locations;
          i < candidate_locs->length;
