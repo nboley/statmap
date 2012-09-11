@@ -510,6 +510,8 @@ recheck_candidate_mapping(
 
             seq_pos += current_entry.len;
 
+            free( real_seq );
+
         } else if ( current_entry.op == 'N' ) {
             /* Move the genome_pos pointer forward to skip the intron indicated
              * by this cigar string entry */
@@ -615,6 +617,28 @@ recheck_joined_candidate_mappings(
 }
 
 void
+advance_pointer_to_start_of_next_joined_candidate_mappings(
+        candidate_mapping*** current_mapping,
+        int current_set_index,
+        int num_sets )
+{
+    /* skip the rest of the candidate_mappings in the current group */
+    while( **current_mapping != NULL )
+        (*current_mapping)++;
+
+    /* unless we know we're in the last set of joined candidate mappings,
+     * move to the pointer to the start of the next set. This check avoids
+     * accessing uninitialized memory after the last set. */
+    if( current_set_index < num_sets - 1 )
+    {
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( **current_mapping == NULL )
+            (*current_mapping)++;
+    }
+}
+
+void
 remove_candidate_mapping_group(
         candidate_mapping** current_mapping )
 {
@@ -661,17 +685,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
             max_penalty = (*penalties)[i];
         }
 
-        /* advance pointer to start of the next set of joined candidate
-         * mappings */
-
-        /* skip the rest of the candidate_mappings in the current group */
-        while( *current_mapping != NULL )
-            current_mapping++;
-
-        /* skip any NULL markers until we get to the start of the next set of
-         * candidate_mappings */
-        while( *current_mapping == NULL )
-            current_mapping++;
+        advance_pointer_to_start_of_next_joined_candidate_mappings(
+                &current_mapping, i, *joined_mappings_len );
     }
 
     /* Reset the pointer to the start of the joined mappings */
@@ -720,14 +735,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
             filtered_mappings_len -= 1;
         }
 
-        /* skip the rest of the candidate_mappings in the current group */
-        while( *current_mapping != NULL )
-            current_mapping++;
-
-        /* skip any NULL markers until we get to the start of the next set of
-         * candidate_mappings */
-        while( *current_mapping == NULL )
-            current_mapping++;
+        advance_pointer_to_start_of_next_joined_candidate_mappings(
+                &current_mapping, i, *joined_mappings_len );
     }
 
     *joined_mappings_len = filtered_mappings_len;
@@ -763,10 +772,13 @@ calculate_mapped_read_space_from_joined_candidate_mappings(
             current_mapping++;
         }
 
-        /* skip any NULL markers until we get to the start of the next set of
-         * candidate_mappings */
-        while( *current_mapping == NULL )
-            current_mapping++;
+        if( i < joined_mappings_len - 1 )
+        {
+            /* skip any NULL markers until we get to the start of the next set of
+             * candidate_mappings */
+            while( *current_mapping == NULL )
+                current_mapping++;
+        }
     }
 
     return size;
@@ -778,7 +790,10 @@ init_new_mapped_read_from_single_read_id( mapped_read_t** rd,
                                           size_t mapped_read_size )
 {
     /* Allocate memory for the mapped read */
-    *rd = malloc( mapped_read_size );
+    //*rd = malloc( mapped_read_size );
+    /* Using calloc avoids an error in valgrind - 
+     * "Syscall param write(buf) points to uninitialised byte(s)" */
+    *rd = calloc( mapped_read_size, 1 );
 
     /* Add the read_id_node. For now, we assume there is only one */
     read_id_node* node = (read_id_node*) *rd;
@@ -896,10 +911,13 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         prologue->seq_error = pow( 10, cum_penalty );
         assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
 
-        /* skip any NULL markers until we get to the start of the next set of
-         * candidate_mappings */
-        while( *current_mapping == NULL )
-            current_mapping++;
+        if( i < joined_mappings_len - 1 )
+        {
+            /* skip any NULL markers until we get to the start of the next set of
+             * candidate_mappings */
+            while( *current_mapping == NULL )
+                current_mapping++;
+        }
     }
 }
 
