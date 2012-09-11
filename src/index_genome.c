@@ -989,12 +989,8 @@ void
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 
-              float min_match_penalty,
-              /* 
-               * the maximum spread between the highest penalty 
-               * match and any other valid match 
-               */
-              float max_penalty_spread,
+
+              struct search_params* search_params,
               mapped_locations* results,
 
               struct genome_data* genome,
@@ -1015,6 +1011,10 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     )
 {
     const int num_letters = calc_num_letters( seq_length );
+
+    /* Unpack the search parameters */
+    float min_match_penalty = search_params->min_match_penalty;
+    float max_penalty_spread = search_params->max_penalty_spread;
 
     /* initialize the stack */
     potential_match_stack* stack;
@@ -1067,8 +1067,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          * a match.
          */
            
-        
-        
         /* check to make sure that this branch is still valid */
         /* avoid rounding errors with the small number - it is your fault
            if you put in a negative number for the max penalty spread */
@@ -1301,8 +1299,7 @@ extern void
 find_matches_from_root(
         struct index_t* index,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct search_params* search_params,
         mapped_locations* results,
 
         struct genome_data* genome,
@@ -1328,8 +1325,9 @@ find_matches_from_root(
     return find_matches( (void*) root, 's', 0, 
                          index->seq_length,
                          
-                         0, min_match_penalty, 
-                         max_penalty_spread,
+                         0,
+                         
+                         search_params,
                          results,
 
                          genome,
@@ -1340,8 +1338,7 @@ find_matches_from_root(
                          fwd_penalties,
                          rev_penalties,
 
-                         only_find_unique_sequences
-    ); 
+                         only_find_unique_sequences ); 
 }
 
 size_t

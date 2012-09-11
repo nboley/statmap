@@ -100,8 +100,8 @@ search_index(
         struct genome_data* genome,
         struct indexable_subtemplate* ist,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct search_params* search_params,
+
         mapped_locations** results,
 
         enum bool only_find_unique_sequence
@@ -149,8 +149,7 @@ search_index(
     find_matches_from_root(
             index, 
 
-            min_match_penalty,
-            max_penalty_spread,
+            search_params,
             *results,
 
             genome,
@@ -437,8 +436,7 @@ search_index_for_indexable_subtemplates(
 
         struct genome_data* genome,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct search_params* search_params,
 
         enum bool only_collect_error_data
     )
@@ -457,8 +455,7 @@ search_index_for_indexable_subtemplates(
                 genome,
                 ist,
 
-                min_match_penalty,
-                max_penalty_spread,
+                search_params,
 
                 &results,
 
@@ -1216,9 +1213,8 @@ find_candidate_mappings_for_read_subtemplate(
         struct error_model_t* error_model,
         struct error_data_record_t* scratch_error_data_record,
 
-        float min_match_penalty,
-        float max_penalty_spread,
-        
+        struct search_params* search_params,
+
         enum bool only_collect_error_data )
 {
     /* build the penalty arrays for this read subtemplate */
@@ -1245,8 +1241,7 @@ find_candidate_mappings_for_read_subtemplate(
 
             genome,
 
-            min_match_penalty,
-            max_penalty_spread,
+            search_params,
 
             only_collect_error_data
         );
@@ -1297,8 +1292,7 @@ find_candidate_mappings_for_read(
         struct error_model_t* error_model,
         struct error_data_record_t* scratch_error_data_record,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct search_params* search_params,
 
         enum bool only_collect_error_data )
 {
@@ -1322,9 +1316,8 @@ find_candidate_mappings_for_read(
                 error_model,
                 scratch_error_data_record,
 
-                min_match_penalty,
-                max_penalty_spread,
-                
+                search_params,
+
                 only_collect_error_data
             );
 
@@ -1348,8 +1341,7 @@ build_mapped_read_from_candidate_mappings(
         struct read* r,
         struct error_model_t* error_model,
         struct fragment_length_dist_t* fl_dist,
-        float min_match_penalty,
-        float max_penalty_spread )
+        struct search_params* search_params )
 {            
     int joined_mappings_len = 0;
     candidate_mapping** joined_mappings = NULL;
@@ -1370,8 +1362,7 @@ build_mapped_read_from_candidate_mappings(
                                       error_model,
                                       fl_dist,
                                               
-                                      min_match_penalty,
-                                      max_penalty_spread );
+                                      search_params );
             
     rd = build_mapped_read_from_joined_candidate_mappings(
         r->read_id, joined_mappings, joined_mappings_len
@@ -1408,12 +1399,8 @@ find_candidate_mappings( void* params )
     
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
 
-    /* The minimum absolute penalty that a valid read can have */
-    float min_match_penalty = td->min_match_penalty;
-    /* The minimum difference between the lowest penalty read and a
-       valid read, set <= -1 to disable */
-    float max_penalty_spread = td->max_penalty_spread;
-    
+    struct search_params* search_params = td->search_params;
+
     /* Store observed error data from the current thread's 
        execution in scratch */
     struct error_model_t* error_model = td->error_model;
@@ -1473,12 +1460,8 @@ find_candidate_mappings( void* params )
                 mappings,
                 genome,
                 error_model,
-
                 scratch_error_data_record,
-
-                min_match_penalty,
-                max_penalty_spread,
-
+                search_params,
                 only_collect_error_data
             );
 
@@ -1494,8 +1477,7 @@ find_candidate_mappings( void* params )
                     r,
                     error_model,
                     mpd_rds_db->fl_dist,
-                    min_match_penalty,
-                    max_penalty_spread
+                    search_params
                 );
             
             if( mapped_read != NULL )
@@ -1607,7 +1589,7 @@ void init_td_template( struct single_map_thread_data* td_template,
                        struct error_model_t* error_model,
                        struct error_data_t* error_data,
                        
-                       float min_match_penalty, float max_penalty_spread )
+                       struct search_params* search_params )
 {
     int rc;
     pthread_mutexattr_t mta;
@@ -1630,8 +1612,7 @@ void init_td_template( struct single_map_thread_data* td_template,
     
     td_template->mpd_rds_db = mpd_rds_db;
     
-    td_template->min_match_penalty = min_match_penalty;
-    td_template->max_penalty_spread = max_penalty_spread;
+    td_template->search_params = search_params;
 
     td_template->error_data = error_data;
     
@@ -1684,12 +1665,17 @@ bootstrap_estimated_error_model(
     
     printf( "NOTICE      :  Setting bootstrap mismatch rates to %i and %i\n",
             max_num_mm, max_mm_spread );
+
+    /* Unify the search parameters in a structure */
+    struct search_params search_params;
+    search_params.min_match_penalty = max_num_mm;
+    search_params.max_penalty_spread = max_mm_spread;
     
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mpd_rds_db, 
                       bootstrap_error_model, error_data, 
-                      max_num_mm, max_mm_spread );
+                      &search_params );
     
     /* 
        only use unique mappers for the initial bootstrap. This is just a small
@@ -1739,8 +1725,7 @@ find_all_candidate_mappings(
 
         struct error_model_t* error_model,
 
-        float min_match_penalty,
-        float max_penalty_spread
+        struct search_params* search_parameters
     )
 {
     clock_t start = clock();
@@ -1751,7 +1736,7 @@ find_all_candidate_mappings(
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mpd_rds_db, error_model,
-                      error_data, min_match_penalty, max_penalty_spread );
+                      error_data, search_parameters );
     
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )

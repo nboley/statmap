@@ -4,8 +4,9 @@
 #define STATMAP_H
 
 #include "config.h"
-
-struct genome_data;
+#include "config_parsing.h"
+#include "rawread.h"
+#include "genome.h"
 
 extern int num_threads;
 extern int min_num_hq_bps;
@@ -14,37 +15,16 @@ extern int max_reference_insert_len;
 extern int num_trace_tracks;
 extern char** trace_track_names;
 
-
-/* fwd declarations */
-struct rawread_db_t;
-struct args_t;
-enum input_file_type_t;
-
-/*
- * Try and determine the file type. 
- *
- * In particular, we try and determine what the sequence mutation
- * string types are.
- *
- * The method is to scan the first 10000 reads and record the 
- * max and min untranslated scores. 
- *
- */
-
-enum input_file_type_t
-guess_input_file_type( struct args_t* args );
-
-/*
- * Guess the optimal indexed sequence length.
- *
- * To do this, we open up the first read file and then scan for a read. The 
- * seq length of the first read is what we set the index length to.
- *
- */
-int
-guess_optimal_indexed_seq_len( struct args_t* args);
-
+/* Fwd declarations */
 struct mapped_reads_db;
+
+/*
+   Store search parameters in a unified type
+*/
+struct search_params {
+    float min_match_penalty;
+    float max_penalty_spread;
+};
 
 void
 map_marginal( struct args_t* args, 
@@ -63,6 +43,5 @@ iterative_mapping( struct args_t* args,
 
 int 
 main( int argc, char** argv );
-
 
 #endif /* STATMAP_H */

@@ -21,8 +21,7 @@ struct single_map_thread_data {
     
     struct mapped_reads_db* mpd_rds_db;
 
-    float min_match_penalty;
-    float max_penalty_spread;
+    struct search_params* search_params;
     
     struct error_model_t* error_model;
     struct error_data_t* error_data;
@@ -53,6 +52,5 @@ find_all_candidate_mappings(
 
         struct error_model_t* error_model,
 
-        float min_match_penalty,
-        float max_penalty_spread
+        struct search_params* search_params
     );

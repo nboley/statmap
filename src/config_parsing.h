@@ -57,4 +57,28 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  );
 void
 read_config_file_from_disk( struct args_t** args  );
 
+/*
+ * Try and determine the file type. 
+ *
+ * In particular, we try and determine what the sequence mutation
+ * string types are.
+ *
+ * The method is to scan the first 10000 reads and record the 
+ * max and min untranslated scores. 
+ *
+ */
+
+enum input_file_type_t
+guess_input_file_type( struct args_t* args );
+
+/*
+ * Guess the optimal indexed sequence length.
+ *
+ * To do this, we open up the first read file and then scan for a read. The 
+ * seq length of the first read is what we set the index length to.
+ *
+ */
+int
+guess_optimal_indexed_seq_len( struct args_t* args);
+
 #endif // CONFIG_PARSING_H

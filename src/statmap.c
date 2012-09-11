@@ -116,14 +116,17 @@ map_marginal( struct args_t* args,
 {
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
+
+    /* store index search parameters in a struct */
+    struct search_params search_params;
+    search_params.min_match_penalty = args->min_match_penalty;
+    search_params.max_penalty_spread = args->max_penalty_spread;
     
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
        enough to estiamte the errors
     */
-    // bootstrap_error_data
-
     struct error_model_t* error_model = NULL;
     if( args->search_type == ESTIMATE_ERROR_MODEL )
     {
@@ -171,8 +174,7 @@ map_marginal( struct args_t* args,
         rdb,
         *mpd_rds_db,
         error_model,
-        args->min_match_penalty,
-        args->max_penalty_spread
+        &search_params
     );
     
     free_error_model( error_model );

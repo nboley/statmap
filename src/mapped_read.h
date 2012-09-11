@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "config.h"
+#include "statmap.h"
 #include "candidate_mapping.h"
 #include "rawread.h"
 
@@ -355,8 +356,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
-                                  float min_match_penalty,
-                                  float max_penalty_spread );
+                                  struct search_params* search_params );
 
 mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(

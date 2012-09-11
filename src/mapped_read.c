@@ -665,9 +665,13 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
-                                  float min_match_penalty,
-                                  float max_penalty_spread )
+                                  struct search_params* search_params )
 {
+    /* Unpack the search parameters */
+    float min_match_penalty = search_params->min_match_penalty;
+    float max_penalty_spread = search_params->max_penalty_spread;
+
+    /* Initialize the max penalty to the smallest allowable penalty */
     float max_penalty = min_match_penalty;
 
     /* Pointer to the start of the current set of joined candidate_mappings */
