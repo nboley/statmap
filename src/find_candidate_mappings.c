@@ -708,7 +708,7 @@ build_candidate_mappings_from_matches(
     int i;
     for( i = 0; i < matches->length; i++ )
     {
-        struct ml_match* match = matches->matches + i;
+        struct ml_match* match = matches->matches[i];
 
         build_candidate_mapping_from_match(
                 match, rst_mappings, rst, genome );
@@ -866,11 +866,17 @@ add_matches_from_pseudo_locations_to_stack(
             if( candidate_cum_ref_gap <= max_reference_insert_len )
             {
                 /* construct a mapped location */
-                /* TODO - more elegant memory allocation scheme. */
                 mapped_location* tmp = malloc( sizeof( mapped_location ));
                 copy_mapped_location( tmp, candidate_loc );
                 tmp->chr = iloc->chr;
                 tmp->loc = iloc->loc;
+
+                /* Since we're building this mapped_location dynamically to
+                 * represent a pseudo location, it won't be free with the rest
+                 * of the mapped_locations pointers from search_results.
+                 * For now, we set an explicit flag to distinguish these
+                 * different types of mapped locations. */
+                tmp->free_with_match = true;
 
                 struct ml_match* new_match = copy_ml_match( match );
                 add_location_to_ml_match( tmp,
@@ -931,6 +937,7 @@ add_matches_from_locations_to_stack(
             /* build a new match with the current location, and push it onto
              * the stack */
             struct ml_match* new_match = copy_ml_match( match );
+
             add_location_to_ml_match( match_candidate,
                     new_match,
                     candidate_locs->probe->subseq_length,
@@ -940,7 +947,6 @@ add_matches_from_locations_to_stack(
                 );
 
             ml_match_stack_push( stack, new_match );
-
         } else {
             /* adding this mapped_location to the match would cause it to have
              * total intron length greater than the maximum accepted size.
@@ -1036,27 +1042,27 @@ find_matching_mapped_locations(
     while( !ml_match_stack_is_empty(stack) )
     {
         /* pop a partially completed match object */
-        struct ml_match curr_match = ml_match_stack_pop( stack );
+        struct ml_match* curr_match = ml_match_stack_pop( stack );
 
         /* if this is a completed, valid match object (i.e. it contains a
          * matched mapped location from each indexable subtemplate */
-        if( ml_match_is_valid( &curr_match ) )
+        if( ml_match_is_valid( curr_match ) )
         {
             /* then add it to the list of found matches */
-            add_ml_match( matches, &curr_match );
-            continue;
+            copy_ml_match_into_matches( curr_match, matches );
+        } else {
+            /* if this match object is incomplete, build partial matches using
+             * the next set of indexable subtemplates, and add the new
+             * potential matches to the stack */
+            add_potential_matches_to_stack(
+                    curr_match,
+                    stack,
+                    search_results,
+                    genome
+                );
         }
 
-        /* if this match object is incomplete, build partial matches using the
-         * next set of indexable subtemplates, and add them to the stack */
-        add_potential_matches_to_stack(
-                &curr_match,
-                stack,
-                search_results,
-                genome
-            );
-
-        //free_ml_match( curr_match );
+        free_ml_match( curr_match, false );
     }
 
     free_ml_match_stack( stack );
@@ -1116,8 +1122,7 @@ build_candidate_mappings_from_base_mapped_location(
         );
     
     /* cleanup memory */
-    free_ml_matches( matches );
-    free_ml_match( base_match );
+    free_ml_matches( matches, true );
 }
 
 void

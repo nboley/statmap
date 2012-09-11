@@ -138,6 +138,9 @@ add_new_mapped_location( mapped_locations* results,
 
     /* set the penalty */
     new_loc->penalty = penalty;
+
+    /* set the free_with_match parameter - false unless explicitly set */
+    new_loc->free_with_match = false;
     
     /* add the new results to the end of the results set */
     results->length++;
@@ -302,9 +305,26 @@ copy_ml_match( struct ml_match* match )
 }
 
 void
-free_ml_match( struct ml_match* match )
+free_ml_match( struct ml_match* match, enum bool free_locations )
 {
     if( match == NULL ) return;
+
+    /* If any of the mapped locations were dynamically allocated (from a
+     * pseudo location, for example), free them here */
+    if( free_locations )
+    {
+        int i;
+        for( i = 0; i < match->len; i++ )
+        {
+            mapped_location* curr_loc = match->locations[i];
+            
+            if( curr_loc == NULL )
+                break;
+
+            if( curr_loc->free_with_match )
+                free( curr_loc );
+        }
+    }
 
     free( match->locations );
     free( match->subseq_lengths );
@@ -362,7 +382,7 @@ init_ml_matches( struct ml_matches** matches )
     *matches = malloc( sizeof( struct ml_matches ));
 
     (*matches)->matches =
-        malloc( ML_MATCHES_GROWTH_FACTOR*sizeof(struct ml_match) );
+        malloc( ML_MATCHES_GROWTH_FACTOR*sizeof(struct ml_match *) );
     (*matches)->length = 0;
     (*matches)->allocated_length = ML_MATCHES_GROWTH_FACTOR;
 
@@ -370,17 +390,24 @@ init_ml_matches( struct ml_matches** matches )
 }
 
 void
-free_ml_matches( struct ml_matches* matches )
+free_ml_matches( struct ml_matches* matches, enum bool free_locations )
 {
+    /* Free the individual ml_matches */
+    int i;
+    for( i = 0; i < matches->length; i++ )
+    {
+        free_ml_match( matches->matches[i], free_locations );
+    }
+
     free( matches->matches );
     free( matches );
     return;
 }
 
 void
-add_ml_match(
-        struct ml_matches* matches,
-        struct ml_match* match )
+copy_ml_match_into_matches(
+        struct ml_match* match,
+        struct ml_matches* matches )
 {
     /* 
      * test to see if there is enough allocated memory in results
@@ -391,7 +418,7 @@ add_ml_match(
         matches->allocated_length *= ML_MATCHES_GROWTH_FACTOR;
         matches->matches = realloc(
                 matches->matches,
-                matches->allocated_length*sizeof(struct ml_match)
+                matches->allocated_length*sizeof(struct ml_match*)
             );
 
         if( matches->matches == NULL )
@@ -402,8 +429,10 @@ add_ml_match(
         }
     }
 
-    /* add the new ml_match */
-    (matches->matches)[matches->length] = *match;
+    /* copy the ml_match */
+    (matches->matches)[matches->length] = copy_ml_match( match );
+
+    /* Update the number of matches */
     matches->length++;
 
     return;
@@ -447,14 +476,12 @@ ml_match_stack_push(
     assert( (stack->top + 1) < MAX_ML_MATCH_STACK_LEN );
 
     stack->top += 1;
-    /* TODO Hmm - do we want to use an array of pointers to the match structures
-     * here or an array of the structures themselves? */
-    stack->stack[stack->top] = *match;
+    stack->stack[stack->top] = match;
 
     return;
 }
 
-struct ml_match
+struct ml_match*
 ml_match_stack_pop(
         struct ml_match_stack* stack )
 {

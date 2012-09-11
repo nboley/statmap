@@ -31,6 +31,7 @@ typedef struct {
     unsigned int loc; // maybe put some unified types in config.h?
     enum STRAND strnd;
     float penalty;
+    enum bool free_with_match;
 } mapped_location;
 
 typedef struct {
@@ -121,7 +122,7 @@ struct ml_match*
 copy_ml_match( struct ml_match* match );
 
 void
-free_ml_match( struct ml_match* match );
+free_ml_match( struct ml_match* match, enum bool free_locations );
 
 void
 add_location_to_ml_match(
@@ -141,25 +142,25 @@ ml_match_is_valid( struct ml_match* match );
 struct ml_matches {
     int allocated_length;
     int length;
-    struct ml_match* matches;
+    struct ml_match** matches;
 };
 
 void
 init_ml_matches( struct ml_matches** matches );
 
 void
-free_ml_matches( struct ml_matches* matches );
+free_ml_matches( struct ml_matches* matches, enum bool free_locations );
 
 void
-add_ml_match(
-        struct ml_matches* matches,
-        struct ml_match* match );
+copy_ml_match_into_matches(
+        struct ml_match* match,
+        struct ml_matches* matches );
 
 /***** ml_match_stack *****/
 
 #define MAX_ML_MATCH_STACK_LEN 500
 struct ml_match_stack {
-    struct ml_match stack[MAX_ML_MATCH_STACK_LEN];
+    struct ml_match* stack[MAX_ML_MATCH_STACK_LEN];
     int top;
 };
 
@@ -180,7 +181,7 @@ ml_match_stack_push(
         struct ml_match_stack* stack,
         struct ml_match* match );
 
-struct ml_match
+struct ml_match*
 ml_match_stack_pop(
         struct ml_match_stack* stack );
 
