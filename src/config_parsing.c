@@ -458,7 +458,10 @@ parse_arguments( int argc, char** argv )
 
     args.sam_output_fname = NULL;
 
-    args.min_match_penalty = -1;
+    /* Since the min_match_penalty is a negative number, we use 1 as the
+     * "unset" value because -1 is a valid input */
+    args.min_match_penalty = 1;
+
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
@@ -566,7 +569,7 @@ parse_arguments( int argc, char** argv )
 
     /* Set defaults for numeric parameters */
 
-    if( args.min_match_penalty == -1 )
+    if( args.min_match_penalty == 1 )
     {
         args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
         fprintf(stderr,
