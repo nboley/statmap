@@ -755,6 +755,11 @@ calculate_mapped_read_space_from_joined_candidate_mappings(
      * mapped_read_location's, mapped_read_sublocation's, etc. */
     candidate_mapping** current_mapping = joined_mappings;
 
+    /* move the current_mapping pointer to the start of the first set of joined
+     * candidate_mappings */
+    while( *current_mapping == NULL )
+        current_mapping++;
+
     int i;
     for( i = 0; i < joined_mappings_len; i++ )
     {
