@@ -839,6 +839,12 @@ add_matches_from_pseudo_locations_to_stack(
         if( candidate_loc->chr != PSEUDO_LOC_CHR_INDEX )
             break;
 
+        /* check the cumulative penalty for the match. If it is less
+         * than the minimum, skip this match */
+        float cum_penalty = match->cum_penalty + candidate_loc->penalty;
+        if( cum_penalty < search_params->min_match_penalty )
+            continue;
+
         int ps_loc_index = candidate_loc->loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
@@ -866,13 +872,6 @@ add_matches_from_pseudo_locations_to_stack(
 
             if( candidate_cum_ref_gap <= max_reference_insert_len )
             {
-                /* check the cumulative penalty for the match. If it is less
-                 * than the minimum, skip this match */
-                float cum_penalty = match->cum_penalty + candidate_loc->penalty;
-                if( cum_penalty < search_params->min_match_penalty ) {
-                    continue;
-                }
-
                 /* construct a mapped location */
                 mapped_location* tmp = malloc( sizeof( mapped_location ));
                 copy_mapped_location( tmp, candidate_loc );
@@ -1103,19 +1102,6 @@ build_candidate_mappings_from_base_mapped_location(
         
         struct search_params* search_params )
 {
-    /*
-     * Takes in a base location, which necessarily corresponds to a single 
-     * indexable subtemplate. Then, we try and match this base location with
-     * a location in each other indexable subtemplate.
-     *
-     * base_locs stores the mapped_locations that come from the same indexable
-     * subtemplate as base_loc. We need 'base_locs' container because:
-          - we need to determine what indexable subtemplate base_loc came from, 
-            so that we dont try to join it to mapped locations that came from
-            the same indexable subtemplate
-          - we need the meta data associated with the indexable subtemplate
-     */
-
     /* For now, we assume that we always start building from 5' -> 3' */
     assert( base_locs_index == 0 );
 
