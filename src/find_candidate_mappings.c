@@ -803,7 +803,8 @@ add_matches_from_pseudo_locations_to_stack(
         int prev_start,
         struct ml_match* match,
         struct ml_match_stack* stack,
-        struct genome_data* genome )
+        struct genome_data* genome,
+        struct search_params* search_params )
 {
     mapped_location* base = match->locations[0];
 
@@ -858,10 +859,20 @@ add_matches_from_pseudo_locations_to_stack(
 
             int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
 
+            /* TODO could this happen legitimately? or will it be rendered
+             * impossible by the binary search, in which case we can assert
+             * here instead */
             if( candidate_cum_ref_gap < 0 ) continue;
 
             if( candidate_cum_ref_gap <= max_reference_insert_len )
             {
+                /* check the cumulative penalty for the match. If it is less
+                 * than the minimum, skip this match */
+                float cum_penalty = match->cum_penalty + candidate_loc->penalty;
+                if( cum_penalty < search_params->min_match_penalty ) {
+                    continue;
+                }
+
                 /* construct a mapped location */
                 mapped_location* tmp = malloc( sizeof( mapped_location ));
                 copy_mapped_location( tmp, candidate_loc );
@@ -899,7 +910,8 @@ add_matches_from_locations_to_stack(
         int results_index,
         int prev_start,
         struct ml_match* match,
-        struct ml_match_stack* stack )
+        struct ml_match_stack* stack,
+        struct search_params* search_params )
 {
     mapped_location* base = match->locations[0];
 
@@ -911,15 +923,15 @@ add_matches_from_locations_to_stack(
     for( i = 0; i < candidate_locs->length; i++ )
     {
         /* TODO use binary search */
-        mapped_location* match_candidate = candidate_locs->locations + i;
+        mapped_location* candidate_loc = candidate_locs->locations + i;
 
-        if( match_candidate->strnd != base->strnd ||
-            match_candidate->chr != base->chr )
+        if( candidate_loc->strnd != base->strnd ||
+            candidate_loc->chr != base->chr )
             continue;
 
         /* The gap in the reference genome between this mapped_location and
          * the previous mapped_location */
-        int candidate_ref_gap = match_candidate->loc
+        int candidate_ref_gap = candidate_loc->loc
                               - candidate_locs->probe->subseq_offset
                               - prev_start;
 
@@ -931,17 +943,23 @@ add_matches_from_locations_to_stack(
 
         if( candidate_cum_ref_gap <= max_reference_insert_len )
         {
+            /* check the cumulative penalty for the match. If it is less
+             * than the minimum, skip this match */
+            float cum_penalty = match->cum_penalty + candidate_loc->penalty;
+            if( cum_penalty < search_params->min_match_penalty ) {
+                continue;
+            }
+
             /* build a new match with the current location, and push it onto
              * the stack */
             struct ml_match* new_match = copy_ml_match( match );
 
-            add_location_to_ml_match( match_candidate,
+            add_location_to_ml_match( candidate_loc,
                     new_match,
                     candidate_locs->probe->subseq_length,
                     candidate_locs->probe->subseq_offset,
                     results_index,
-                    candidate_cum_ref_gap
-                );
+                    candidate_cum_ref_gap );
 
             ml_match_stack_push( stack, new_match );
         } else {
@@ -989,7 +1007,8 @@ add_potential_matches_to_stack(
         struct ml_match* match,
         struct ml_match_stack* stack,
         mapped_locations** search_results,
-        struct genome_data* genome )
+        struct genome_data* genome,
+        struct search_params* search_params )
 {
     int results_index =
         find_index_of_next_indexable_subtemplate_to_match( match );
@@ -1008,7 +1027,8 @@ add_potential_matches_to_stack(
             prev_start,
             match,
             stack,
-            genome
+            genome,
+            search_params
         );
 
     add_matches_from_locations_to_stack(
@@ -1016,7 +1036,8 @@ add_potential_matches_to_stack(
             results_index,
             prev_start,
             match,
-            stack
+            stack,
+            search_params
         );
 
     return;
@@ -1027,7 +1048,8 @@ find_matching_mapped_locations(
         struct ml_match* base_match, 
         struct ml_matches* matches,
         mapped_locations** search_results,
-        struct genome_data* genome )
+        struct genome_data* genome,
+        struct search_params* search_params )
 {
     /* Initialize the stack of partially completed matches */
     struct ml_match_stack* stack = NULL;
@@ -1055,7 +1077,8 @@ find_matching_mapped_locations(
                     curr_match,
                     stack,
                     search_results,
-                    genome
+                    genome,
+                    search_params
                 );
         }
 
@@ -1076,7 +1099,9 @@ build_candidate_mappings_from_base_mapped_location(
 
         struct genome_data* genome,
         struct read_subtemplate* rst,
-        candidate_mappings* rst_mappings )
+        candidate_mappings* rst_mappings,
+        
+        struct search_params* search_params )
 {
     /*
      * Takes in a base location, which necessarily corresponds to a single 
@@ -1109,7 +1134,8 @@ build_candidate_mappings_from_base_mapped_location(
             base_match, 
             matches,
             search_results,
-            genome );
+            genome,
+            search_params );
 
     build_candidate_mappings_from_matches(
             genome,
@@ -1142,7 +1168,8 @@ build_candidate_mappings_from_search_results(
         mapped_locations** search_results,
         int search_results_length,
         struct read_subtemplate* rst,
-        struct genome_data* genome )
+        struct genome_data* genome,
+        struct search_params* search_params )
 {
     /* sort each mapped_locations in order to binary search later */
     sort_search_results( search_results, search_results_length );
@@ -1170,14 +1197,11 @@ build_candidate_mappings_from_search_results(
             mapped_location* base = expanded_base->locations + j;
 
             build_candidate_mappings_from_base_mapped_location(
-                    base,
-                    base_locs_index,
-                    base_locs->probe,
-                    search_results,
-                    search_results_length,
+                    base, base_locs_index, base_locs->probe,
+                    search_results, search_results_length,
                     genome,
-                    rst,
-                    rst_mappings
+                    rst, rst_mappings,
+                    search_params
                 );
         }
 
@@ -1250,7 +1274,7 @@ find_candidate_mappings_for_read_subtemplate(
      * for each indexable_subtemplate returned by the index search */
     build_candidate_mappings_from_search_results(
             rst_mappings, search_results, search_results_length,
-            rst, genome );
+            rst, genome, search_params );
 
     /* Note - search_results contains references to memory allocated in the
      * indexable_subtemplates, so they must be freed together */
@@ -1737,7 +1761,7 @@ find_all_candidate_mappings(
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mpd_rds_db, error_model,
                       error_data, search_parameters );
-    
+
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {

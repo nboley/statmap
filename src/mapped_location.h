@@ -113,6 +113,14 @@ struct ml_match {
     /* The cumulative length of gaps in the reference genome for this set of
      * matched mapped_locations */
     int cum_ref_gap;
+
+    /* The cumulative penalty from the mapped locations in this match.
+     *
+     * Since we are taking the product of the marginal probabilities, we know
+     * that if a match is below the min match penalty, no joined set of
+     * mappings that it is a part will be able to pass, so we can optimize by
+     * ignoring such matches in the first place. */
+    int cum_penalty;
 };
 
 void
@@ -124,6 +132,7 @@ copy_ml_match( struct ml_match* match );
 void
 free_ml_match( struct ml_match* match, enum bool free_locations );
 
+/* TODO - compute the ref gap inside this function? */
 void
 add_location_to_ml_match(
         mapped_location* location,
