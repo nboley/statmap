@@ -1528,6 +1528,18 @@ find_candidate_mappings( void* params )
 
         //fprintf( stderr, "DEBUG       :  Found %i cm's for read_id %i\n", mappings->length, r->read_id );
 
+        /* We'll say we mapped the read if we found at least one candidate
+         * mapping. This does the right thing for both mapping and
+         * bootstrapping the error data. */
+        if( mappings->length > 0 )
+        {
+            /* mapped count is the number of reads that successfully mapped
+             * (not the number of mappings) */
+            pthread_spin_lock( mapped_cnt_lock );
+            *mapped_cnt += 1;
+            pthread_spin_unlock( mapped_cnt_lock );            
+        }
+
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
@@ -1543,12 +1555,6 @@ find_candidate_mappings( void* params )
             
             if( mapped_read != NULL )
             {
-                /* mapped count is the number of reads that successfully mapped
-                 * (not the number of mappings) */
-                pthread_spin_lock( mapped_cnt_lock );
-                *mapped_cnt += 1;
-                pthread_spin_unlock( mapped_cnt_lock );            
-
                 /* the read has at least one mapping - add it to the mapped
                  * reads database */
                 add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );

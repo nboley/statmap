@@ -126,5 +126,6 @@ file_is_empty( FILE* fp )
     if( ftell( fp ) == 0)
         return true;
 
+    rewind( fp );
     return false;
 }
