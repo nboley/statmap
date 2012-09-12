@@ -1363,6 +1363,12 @@ def test_multiple_indexable_subtemplates():
         test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
         print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
 
+def test_multiple_indexable_subtemplate_for_threep():
+    rls = [ 50, 75 ]
+    for rl in rls:
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2, rev_comp=True )
+        print "PASS: Multiple indexable subtemplates 3' %i BP test." % rl
+
 # note - for repeat sequence tests, n_dups must be greater than
 # PSEUDO_LOC_MIN_SIZE in config.h to trigger the use of pseudo locations to store
 # the locations
@@ -1437,6 +1443,8 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
+    print "Start test_multiple_indexable_subtemplate_for_threep()"
+    test_multiple_indexable_subtemplate_for_threep()
     print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
     test_multiple_indexable_subtemplates_for_repeat_sequences()
     print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
