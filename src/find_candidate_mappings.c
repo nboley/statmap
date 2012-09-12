@@ -593,7 +593,8 @@ search_for_matching_mapped_locations(
 void
 build_candidate_mapping_cigar_string_from_match(
         candidate_mapping* cm,
-        struct ml_match* match )
+        struct ml_match* match,
+        struct read_subtemplate* rst )
 {
     /* Index of the current entry in the cigar string to update. This is
      * incremented every time there is a sequence with a reference gap */
@@ -607,24 +608,50 @@ build_candidate_mapping_cigar_string_from_match(
          * before the first mapped location.*/
         if( i > 0 )
         {
-            int ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
+            /* The reference gap is computed differently based on whether the
+             * candidate mapping is fwd or rev stranded */
+            int ref_gap;
+
+            if( cm->rd_strnd == FWD )
+            {
+                ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
                         - (match->locations[i-1]->loc - match->subseq_offsets[i-1]);
+            } else {
+                ref_gap = (match->locations[i]->loc + match->subseq_offsets[i])
+                        - (match->locations[i-1]->loc + match->subseq_offsets[i-1]);
+            }
 
             if( ref_gap > 0 )
             {
-                cm->cigar[cigar_index+1].op = 'N';
-                cm->cigar[cigar_index+1].len = ref_gap;
+                cm->cigar[cigar_index+2].op = 'N';
+                cm->cigar[cigar_index+2].len = ref_gap;
                 cigar_index += 2;
             }
         }
 
         /* For each location, add an M op for the region of aligned sequence */
         cm->cigar[cigar_index].op = 'M';
-        /* This was initialized to zero */
+        /* if this is the first indexable subtemplate, we assume that this
+         * matches from the beginning of the read to the start of the indexable
+         * subtemplate, so we add the subsequence offset for the first ist. */
+        if( i == 0 ) {
+            cm->cigar[cigar_index].len += match->subseq_offsets[i];
+        }
+
+        /* cigar[cigar_index].len was initialized to zero in 
+         * init_candidate_mapping_from_read_subtemplate */
         cm->cigar[cigar_index].len += match->subseq_lengths[i];
     }
 
+    /* Finally, we assume the last indexable subtemplate in the match matches
+     * to the end of the read subtemplate. We add the additional length between
+     * the end of the last indexable subtemplate and the length of the entire
+     * read */
+    cm->cigar[cigar_index].len += rst->length
+        - (match->subseq_offsets[i-1] + match->subseq_lengths[i-1]);
+
     cm->cigar_len = cigar_index + 1;
+    assert( cm->cigar_len < MAX_CIGAR_STRING_ENTRIES );
 
     return;
 }
@@ -652,7 +679,7 @@ build_candidate_mapping_from_match(
         struct genome_data* genome )
 {
     /* build a candidate mapping from the base location, then build a cigar
-     * string from all of the mappings */
+     * string representing all the locations in the match */
 
     candidate_mapping cm
         = init_candidate_mapping_from_read_subtemplate( rst );
@@ -665,7 +692,6 @@ build_candidate_mapping_from_match(
     cm.rd_strnd = base->strnd;
 
     /* set metadata */
-    /* TODO multiply marginal prbs of all the mapped_locations? */
     cm.penalty = compute_candidate_mapping_penalty_from_match( match );
 
     /* set location information */
@@ -690,7 +716,7 @@ build_candidate_mapping_from_match(
     cm.start_bp = read_location;
 
     /* build the cigar string from the mapped_locations */
-    build_candidate_mapping_cigar_string_from_match( &cm, match);
+    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
     add_candidate_mapping( mappings, &cm );
 }
@@ -799,13 +825,14 @@ expand_base_mapped_locations(
 void
 add_matches_from_pseudo_locations_to_stack(
         mapped_locations* candidate_locs,
-        int results_index,
-        int prev_start,
         struct ml_match* match,
+        int match_index,
+        int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct genome_data* genome,
         struct search_params* search_params )
 {
+    /* Get a reference to the base mapped location for the strand */
     mapped_location* base = match->locations[0];
 
     /* Assume the pseudo chr is sorted to come before the rest of the chrs */
@@ -813,8 +840,8 @@ add_matches_from_pseudo_locations_to_stack(
 
     struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
 
-    /* Find the start of the set of pseudo mapped locations with strand
-     * matching the location we are matching to */
+    /* Find the start of the set of pseudo mapped locations with the same
+     * strand as the location we are matching to */
     int pslocs_start_in_sorted_mapped_locations =
         find_start_of_pseudo_mapped_locations_for_strand(
             candidate_locs, base->strnd );
@@ -824,6 +851,7 @@ add_matches_from_pseudo_locations_to_stack(
     if( pslocs_start_in_sorted_mapped_locations < 0 )
         return;
 
+    /* Iterate over the sets of pseduo locations */
     int i;
     for( i = pslocs_start_in_sorted_mapped_locations;
          i < candidate_locs->length;
@@ -836,7 +864,7 @@ add_matches_from_pseudo_locations_to_stack(
          * the rest of the chromosomes, we know that if the current location's
          * chromosome is not the pseudo chromosome, there aren't any more
          * pseudo locations and we are done. */
-        if( candidate_loc->chr != PSEUDO_LOC_CHR_INDEX )
+        if( candidate_loc->chr > PSEUDO_LOC_CHR_INDEX )
             break;
 
         /* check the cumulative penalty for the match. If it is less
@@ -848,27 +876,37 @@ add_matches_from_pseudo_locations_to_stack(
         int ps_loc_index = candidate_loc->loc;
         struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
 
-        /* TODO use binary search */
+        /* Consider each of the pseudo locations. This is a linear search, but
+         * the pseudo locations are sorted by location so we could use a binary
+         * search to make it faster */
         int j;
         for( j = 0; j < ps_loc->num; j++ )
         {
             /* get the location */
             INDEX_LOC_TYPE* iloc = ps_loc->locs + j;
 
-            /* compare chromsome and location, strand already checked */
+            /* check that the chromosome matches (strand already checked) */
             if( iloc->chr != base->chr )
                 continue;
 
-            int candidate_ref_gap = iloc->loc
-                                  - candidate_locs->probe->subseq_offset
-                                  - prev_start;
+            /* Get the gap between this candidate for the match and the rest of the
+             * partial match (depends on strand) */
+            int candidate_ref_gap;
+            if( base->strnd == FWD )
+            {
+                candidate_ref_gap = iloc->loc
+                    - candidate_locs->probe->subseq_offset
+                    - prev_matched_location_start;
+            } else {
+                candidate_ref_gap = iloc->loc
+                    + candidate_locs->probe->subseq_offset
+                    - prev_matched_location_start;
+            }
 
             int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
 
-            /* TODO could this happen legitimately? or will it be rendered
-             * impossible by the binary search, in which case we can assert
-             * here instead */
-            if( candidate_cum_ref_gap < 0 ) continue;
+            if( candidate_cum_ref_gap < 0 )
+                continue;
 
             if( candidate_cum_ref_gap <= max_reference_insert_len )
             {
@@ -890,7 +928,7 @@ add_matches_from_pseudo_locations_to_stack(
                         new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset,
-                        results_index,
+                        match_index,
                         candidate_cum_ref_gap );
 
                 ml_match_stack_push( stack, new_match );
@@ -906,9 +944,9 @@ add_matches_from_pseudo_locations_to_stack(
 void
 add_matches_from_locations_to_stack(
         mapped_locations* candidate_locs,
-        int results_index,
-        int prev_start,
         struct ml_match* match,
+        int match_index,
+        int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct search_params* search_params )
 {
@@ -921,24 +959,30 @@ add_matches_from_locations_to_stack(
     int i;
     for( i = 0; i < candidate_locs->length; i++ )
     {
-        /* TODO use binary search */
         mapped_location* candidate_loc = candidate_locs->locations + i;
 
         if( candidate_loc->strnd != base->strnd ||
             candidate_loc->chr != base->chr )
             continue;
 
-        /* The gap in the reference genome between this mapped_location and
-         * the previous mapped_location */
-        int candidate_ref_gap = candidate_loc->loc
-                              - candidate_locs->probe->subseq_offset
-                              - prev_start;
+        /* Get the gap between this candidate for the match and the rest of the
+         * partial match (depends on strand) */
+        int candidate_ref_gap;
+        if( base->strnd == FWD )
+        {
+            candidate_ref_gap = candidate_loc->loc
+                - candidate_locs->probe->subseq_offset
+                - prev_matched_location_start;
+        } else {
+            candidate_ref_gap = candidate_loc->loc
+                + candidate_locs->probe->subseq_offset
+                - prev_matched_location_start;
+        }
 
-        /* Consider the cumulative reference gap that would be created if this
-         * candidate location were added to the match */
         int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
 
-        if( candidate_cum_ref_gap < 0 ) continue;
+        if( candidate_cum_ref_gap < 0 )
+            continue;
 
         if( candidate_cum_ref_gap <= max_reference_insert_len )
         {
@@ -957,7 +1001,7 @@ add_matches_from_locations_to_stack(
                     new_match,
                     candidate_locs->probe->subseq_length,
                     candidate_locs->probe->subseq_offset,
-                    results_index,
+                    match_index,
                     candidate_cum_ref_gap );
 
             ml_match_stack_push( stack, new_match );
@@ -979,7 +1023,7 @@ int
 find_index_of_next_indexable_subtemplate_to_match(
         struct ml_match* match )
 {
-    int results_index = 0;
+    int match_index = 0;
     /*
      * find the index of the next set of index subtemplate search results
      * to consider. Since match is a partially built set of matched locations,
@@ -990,15 +1034,15 @@ find_index_of_next_indexable_subtemplate_to_match(
     {
         if( match->locations[i] == NULL )
         {
-            results_index = i;
+            match_index = i;
             break;
         }
     }
     /* Since we initialize match with the base matched location, this index
      * should always be greater than zero */
-    assert( results_index > 0 );
+    assert( match_index > 0 );
 
-    return results_index;
+    return match_index;
 }
 
 void
@@ -1009,22 +1053,29 @@ add_potential_matches_to_stack(
         struct genome_data* genome,
         struct search_params* search_params )
 {
-    int results_index =
+    int match_index =
         find_index_of_next_indexable_subtemplate_to_match( match );
 
-    mapped_locations* candidate_locs = search_results[results_index];
+    mapped_locations* candidate_locs = search_results[match_index];
 
-    /* We will compare each location in the set of candidate locations to the
-     * previous location in the match to compute the cumulative gap in the
-     * reference genome implied by their match */
-    int prev_start = match->locations[results_index-1]->loc
-                   - search_results[results_index-1]->probe->subseq_offset;
+    /* Compute the true start (loc - subseq_offset) of the last mapped
+     * location in the match */
+    int prev_matched_location_start;
+    mapped_location* base = match->locations[0];
+    if( base->strnd == FWD )
+    {
+        prev_matched_location_start = match->locations[match_index - 1]->loc
+                                    - match->subseq_offsets[match_index - 1];
+    } else {
+        prev_matched_location_start = match->locations[match_index - 1]->loc
+                                    + match->subseq_offsets[match_index - 1];
+    }
 
     add_matches_from_pseudo_locations_to_stack(
             candidate_locs,
-            results_index,
-            prev_start,
             match,
+            match_index,
+            prev_matched_location_start,
             stack,
             genome,
             search_params
@@ -1032,9 +1083,9 @@ add_potential_matches_to_stack(
 
     add_matches_from_locations_to_stack(
             candidate_locs,
-            results_index,
-            prev_start,
             match,
+            match_index,
+            prev_matched_location_start,
             stack,
             search_params
         );
