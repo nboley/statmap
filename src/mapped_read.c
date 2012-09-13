@@ -486,9 +486,11 @@ recheck_candidate_mapping(
             {
                 rev_complement_read( genome_seq, real_seq, current_entry.len );
                 penalty_array = &rev_pa;
+                genome_pos -= current_entry.len;
             } else {
                 memcpy( real_seq, genome_seq, sizeof(char)*current_entry.len );
                 penalty_array = &fwd_pa;
+                genome_pos += current_entry.len;
             }
 
             rechecked_penalty += recheck_penalty(
@@ -505,7 +507,12 @@ recheck_candidate_mapping(
         } else if ( current_entry.op == 'N' ) {
             /* Move the genome_pos pointer forward to skip the intron indicated
              * by this cigar string entry */
-            genome_pos += current_entry.len;
+            if( BKWD == mapping->rd_strnd )
+            {
+                genome_pos -= current_entry.len;
+            } else {
+                genome_pos += current_entry.len;
+            }
         } else {
             assert( false );
         }
