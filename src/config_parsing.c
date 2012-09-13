@@ -344,9 +344,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     args->assay_type = CHIP_SEQ;
                     break;
                 case 'r':
-                    //args->assay_type = STRANDED_RNASEQ;
-                    argp_failure( state, 1, 0,
-                            "FATAL       :  RNA-Seq assay type is not implemented yet." );
+                    args->assay_type = RNA_SEQ;
                     break;
                 default:
                     argp_failure( state, 1, 0, 
@@ -772,7 +770,7 @@ parse_arguments( int argc, char** argv )
     }
 
     /* Set the maximum allowed reference gap between indexable subtempaltes */
-    if( args.assay_type == STRANDED_RNASEQ )
+    if( args.assay_type == RNA_SEQ )
     {
         /* For gapped assays, set this to the default in config.h */
         args.max_reference_insert_len = REFERENCE_INSERT_LENGTH_MAX;

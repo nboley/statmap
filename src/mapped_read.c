@@ -471,23 +471,13 @@ recheck_candidate_mapping(
 
             /* if the genome_seq pointer is null, the sequence isn't valid
                for some reason ( ie, it falls off the end of the chromosome). 
-               In this case, mark the location as invalid and continue TODO how? */
+               In this case, mark as invalid (TODO how?) and continue */
             if( NULL == genome_seq )
-            {
-                // TODO signal invalid
-                return;
-            }
+                return; // TODO signal invalid
 
             /* Build the sequence to compare and pick a penalty array depending
-             * on the strand of the mapping
-             *
-             * TODO is this necesarily correct? Is it possible/logical for
-             * different indexable subtemplates to have different strands? If
-             * that were the case, we would just take the strand of the base
-             * location for the cm's strand, and this would end up being incorrect. 
-             */
+             * on the strand of the mapping */
 
-            // TODO do we need the +1 here, since we know the length?
             char* real_seq = calloc( current_entry.len+1, sizeof(char) );
             assert( real_seq != NULL );
             struct penalty_array_t* penalty_array;

@@ -266,6 +266,18 @@ free_candidate_mappings( candidate_mappings* mappings )
 }
 
 void
+print_candidate_mapping_cigar_string( candidate_mapping* mapping )
+{
+    printf("Cigar:        ");
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
+    {
+        printf("%c%i", mapping->cigar[i].op, mapping->cigar[i].len );
+    }
+    printf("\n");
+}
+
+void
 print_candidate_mapping( candidate_mapping* mapping )
 {
     printf("Chr:          %u\n", mapping->chr);
@@ -273,6 +285,9 @@ print_candidate_mapping( candidate_mapping* mapping )
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
+
+    print_candidate_mapping_cigar_string( mapping );
+
     printf("\n");
     return;
 }

@@ -623,9 +623,19 @@ build_candidate_mapping_cigar_string_from_match(
 
             if( ref_gap > 0 )
             {
+                /* If there is a reference gap, add an N op with the known
+                 * length of the intron, and then add two surrounding markers
+                 * to show that we don't (yet) know the final length of the
+                 * adjacent M ops. */
+                cm->cigar[cigar_index+1].op = 'U';
+                cm->cigar[cigar_index+1].len = 0;
+
                 cm->cigar[cigar_index+2].op = 'N';
                 cm->cigar[cigar_index+2].len = ref_gap;
-                cigar_index += 2;
+
+                cm->cigar[cigar_index+3].op = 'U';
+                cm->cigar[cigar_index+3].len = 0;
+                cigar_index += 4;
             }
         }
 
@@ -651,7 +661,7 @@ build_candidate_mapping_cigar_string_from_match(
         - (match->subseq_offsets[i-1] + match->subseq_lengths[i-1]);
 
     cm->cigar_len = cigar_index + 1;
-    assert( cm->cigar_len < MAX_CIGAR_STRING_ENTRIES );
+    assert( cm->cigar_len <= MAX_CIGAR_STRING_ENTRIES );
 
     return;
 }
@@ -717,6 +727,9 @@ build_candidate_mapping_from_match(
 
     /* build the cigar string from the mapped_locations */
     build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
+
+    // DEBUG
+    print_candidate_mapping( &cm );
 
     add_candidate_mapping( mappings, &cm );
 }
@@ -1265,6 +1278,115 @@ free_search_results(
     return;
 }
 
+int
+count_gaps_in_candidate_mapping(
+        candidate_mapping* cm )
+{
+    /* Count the number of gaps in a candidate mapping. Each gap is represented
+     * by the same sequence of characters in the cigar string -
+     * MUNUM. We can therefore count the number of M's - 1 to get the number of
+     * gaps. */
+    int num_m = 0;
+
+    int i;
+    for( i = 0; i < cm->cigar_len; i++ )
+    {
+        if( cm->cigar[i].op == 'M' )
+            num_m++;
+    }
+
+    assert( num_m > 0 );
+    return num_m - 1;
+}
+
+int
+count_length_of_indexable_subtemplates(
+        struct indexable_subtemplates* ists )
+{
+    int total_length = 0;
+
+    int i;
+    for( i = 0; i < ists->length; i++ )
+    {
+        total_length += ists->container[i].subseq_length;
+    }
+
+    return total_length;
+}
+
+void
+build_gapped_candidate_mappings(
+        candidate_mapping* cm,
+        candidate_mappings* mappings,
+        struct read_subtemplate* rst,
+        struct indexable_subtemplates* ists,
+        struct genome_data* genome,
+        struct error_model_t* error_model,
+        struct search_params* search_params )
+{
+    int num_gaps = count_gaps_in_candidate_mapping( cm );
+
+    /* If there is no gap in this candidate mapping, then it must not have
+     * spanned an intron. Skip it. */
+    if( num_gaps == 0 )
+        return;
+
+    /* for now, only allow one gap (one intron in the read subtemplate) */
+    assert( num_gaps == 1 );
+
+    /* Between two indexable subtemplates with a gap between them, the number
+     * of possible configurations for the rest of the read is equal to
+     *      rd_len - length of indexable subtemplates
+     */
+    int total_probe_len = count_length_of_indexable_subtemplates( ists );
+    int num_intron_configurations = rst->length - total_probe_len;
+
+    /* Allocate memory to store the potential gapped candidate mappings */
+    candidate_mappings* gapped_mappings;
+    init_candidate_mappings( &gapped_mappings );
+
+    /* Build each of the possible gapped candidate mappings */
+    int i;
+    for( i = 0; i < num_intron_configurations; i++ )
+    {
+    }
+
+    free_candidate_mappings( gapped_mappings );
+
+    return;
+}
+
+void
+build_gapped_candidate_mappings_for_read_subtemplate(
+        candidate_mappings* mappings,
+        struct read_subtemplate* rst,
+        struct indexable_subtemplates* ists,
+        struct genome_data* genome,
+        struct error_model_t* error_model,
+        struct search_params* search_params )
+{
+    /* TODO for now append the new cm's onto mappings.
+     * in the future, might be a good idea to generate a new set of mappings
+     * here and treat rst_mappings as tmp_rst_mappings or something */
+
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* cm = mappings->mappings + i;
+
+        build_gapped_candidate_mappings(
+                cm,
+                mappings,
+                rst,
+                genome,
+                error_model,
+                search_params
+            );
+    }
+
+    return;
+}
+
 void
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
@@ -1299,11 +1421,8 @@ find_candidate_mappings_for_read_subtemplate(
     search_index_for_indexable_subtemplates(
             ists,
             search_results,
-
             genome,
-
             search_params,
-
             only_collect_error_data
         );
     
@@ -1314,8 +1433,20 @@ find_candidate_mappings_for_read_subtemplate(
             rst, genome, search_params );
 
     /* Note - search_results contains references to memory allocated in the
-     * indexable_subtemplates, so they must be freed together */
+     * indexable_subtemplates. search_results must be freed before ists */
     free_search_results( search_results, search_results_length );
+
+    /* if this is a gapped assay, build candidate mappings with potential
+     * gaps */
+    build_gapped_candidate_mappings_for_read_subtemplate(
+            rst_mappings,
+            rst,
+            ists,
+            genome,
+            error_model,
+            search_params
+        );
+
     free_indexable_subtemplates( ists );
 
     /* update the thread local copy of error data (need the error data
@@ -1393,7 +1524,6 @@ find_candidate_mappings_for_read(
         free_candidate_mappings( rst_mappings );
     }
 }
-
 
 mapped_read_t*
 build_mapped_read_from_candidate_mappings(

@@ -138,7 +138,7 @@ enum assay_type_t {
     // UNKNOWN = 0,
     CAGE = 1,
     CHIP_SEQ = 2,
-    STRANDED_RNASEQ = 3
+    RNA_SEQ = 3
 };
 
 /* 

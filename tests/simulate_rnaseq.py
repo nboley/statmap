@@ -16,7 +16,10 @@ def splice_introns_from_sequence( sequence,
         introns.append( ( intron_start, intron_start + intron_len ) )
 
     exons = []
+    print "INTRONS:" # DEBUG
     for i, intron in enumerate(introns):
+        # DEBUG
+        print "(%d, %d)" % (intron[0], intron[1])
         if i == 0: # first intron
             exons.append( (0, intron[0]) )
         else:
@@ -33,8 +36,8 @@ def splice_introns_from_sequence( sequence,
 
 def splice_introns_from_genome( genome,
                                 n_introns = 1,
-                                min_intron_len = 5,
-                                max_intron_len = 20
+                                min_intron_len = 50,
+                                max_intron_len = 100
                               ):
     transcriptome = {}
     for chromosome, sequence in genome.items():
@@ -43,9 +46,6 @@ def splice_introns_from_genome( genome,
         transcriptome[chromosome] = spliced_sequence
 
     return transcriptome
-
-def map_with_statmap():
-    pass
 
 def main():
 
@@ -78,9 +78,11 @@ def main():
     # Map the data with Statmap
     read_fnames = [ "tmp.fastq", ]
     genome_fnames = [ "tmp.genome.fa" ]
-    # TODO revisit indexed_seq_len
     sc.map_with_statmap( read_fnames, output_directory,
+                         # change this to something less than half to test the 
+                         # moving intron code
                          indexed_seq_len=read_len/2,
+                         assay='r',
                          genome_fnames=genome_fnames )
 
     # test the sam file to make sure that each of the reads appears
