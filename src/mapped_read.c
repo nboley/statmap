@@ -774,7 +774,20 @@ calculate_mapped_read_space_from_joined_candidate_mappings(
          * we will add a sublocation. */
         while( *current_mapping != NULL )
         {
-            size += sizeof( mapped_read_sublocation );
+            /* add a sublocation for every M entry in a candidate mapping's
+             * cigar string. These correspond to alignments around a gap in
+             * a gapped assay. Since every candidate mapping has at least one
+             * M entry, this code is correct for both gapped and ungapped
+             * assays. */
+            int j;
+            for( j = 0; j < (*current_mapping)->cigar_len; j++ )
+            {
+                if( (*current_mapping)->cigar[j].op == 'M' )
+                {
+                    size += sizeof( mapped_read_sublocation );
+                }
+            }
+
             current_mapping++;
         }
 
@@ -808,10 +821,107 @@ init_new_mapped_read_from_single_read_id( mapped_read_t** rd,
 }
 
 void
+populate_mapped_read_sublocations_from_candidate_mappings(
+        candidate_mapping*** cm_ptr,
+        char** rd_ptr )
+{
+    /* Get a pointer to the current candidate mapping */
+    candidate_mapping* current_mapping = **cm_ptr;
+
+    while( current_mapping != NULL )
+    {
+        /* Keep track of the start position of each mapped location (including
+         * offsets from gaps/N ops */
+        int start_pos = current_mapping->start_bp;
+
+        /* Add a sublocation for each M region in each candidate mappings in
+         * the set of joined candidate mappings */
+        int j;
+        for( j = 0; j < current_mapping->cigar_len; j++ )
+        {
+            struct CIGAR_ENTRY cigar_entry = current_mapping->cigar[j];
+
+            if( cigar_entry.op == 'M' )
+            {
+                mapped_read_sublocation* subloc = 
+                    (mapped_read_sublocation*) *rd_ptr;
+
+                subloc->start_pos = start_pos;
+                subloc->length = cigar_entry.len;
+
+                /* TODO - does this rev_comp flag make sense? Haven't we
+                 * decided that these subreads must all have the same strand?
+                 * */
+                if( current_mapping->rd_strnd == FWD )
+                {
+                    subloc->rev_comp = 0;
+                } else if( current_mapping->rd_strnd == BKWD ) {
+                    subloc->rev_comp = 1;
+                } else {
+                    assert( current_mapping->rd_strnd == FWD ||
+                            current_mapping->rd_strnd == BKWD );
+                }
+
+                /* TODO unused for now */
+                subloc->is_full_contig = 0;
+
+                /* Look ahead in the cigar string to set the
+                 * next_subread_is_gapped is flag */
+                if( j == current_mapping->cigar_len - 1 )
+                {
+                    /* if there is no next entry in the cigar string */
+                    subloc->next_subread_is_gapped = 0;
+                } else if ( current_mapping->cigar[j+1].op == 'N' ) {
+                    /* if the next entry is a gap */
+                    subloc->next_subread_is_gapped = 1;
+                } else {
+                    assert( false );
+                }
+
+                /* Look ahead in the set of joined candidate mappings to set
+                 * the next_subread_is_ungapped flag */
+                candidate_mapping* next_mapping = *(*cm_ptr + 1);
+                if( next_mapping == NULL )
+                {
+                    subloc->next_subread_is_ungapped = 0;
+                } else {
+                    /* Only set this flag on the last subread in a set of
+                     * gapped subreads */
+                    if( j == current_mapping->cigar_len - 1 ) {
+                        subloc->next_subread_is_ungapped = 1;
+                    }
+                }
+
+                /* Advance pointer in mapped_read_t to the next sublocation to fill
+                 * in */
+                *rd_ptr += sizeof( mapped_read_sublocation );
+            }
+
+            /* Move the start position to the start of the next entry in the
+             * cigar string */
+            /* TODO - is this right for FWD/BKWD ? */
+            if( current_mapping->rd_strnd == FWD ) {
+                start_pos += cigar_entry.len;
+            } else {
+                start_pos -= cigar_entry.len;
+            }
+        }
+
+        /* Advance the candidate mapping pointers to the next candidate mapping
+         * in the set of joined candidate mappings */
+        (*cm_ptr)++;
+        current_mapping = **cm_ptr;
+    }
+
+    return;
+}
+
+void
 populate_mapped_read_locations_from_joined_candidate_mappings(
         mapped_read_t** rd,
         candidate_mapping** joined_mappings,
-        int joined_mappings_len )
+        int joined_mappings_len,
+        float* penalties )
 {
     /* loop over the joined candidate mappings, adding mapped locations as we
      * go */
@@ -834,8 +944,11 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         mapped_read_location_prologue* prologue = 
             (mapped_read_location_prologue*) rd_ptr;
 
-        /* TODO for now, take the chr and strand from the first candidate
-         * mapping arbitrarily */
+        /* The chromsome and strand must match across a joined set of candidate
+         * mappings (they match across gapped alignments and across paired
+         * end).
+         *
+         * TODO - do they have to match across paired end? */
         prologue->chr = (*current_mapping)->chr;
 
         if( (*current_mapping)->rd_strnd == FWD ) {
@@ -857,65 +970,15 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
             prologue->are_more = 1;
         }
 
-        rd_ptr += sizeof( mapped_read_location_prologue );
-
-        /* Sum the penalties of the candidate mappings ( since the penalties,
-         * are log probabilites, we can just add (multiply) them, and do the
-         * conversion back to [0,1] probability space once at the end */
-        float cum_penalty = 0;
-
-        while( *current_mapping != NULL )
-        {
-            /* Add a sublocation for each candidate mapping in the set of
-             * joined candidate mappings */
-            mapped_read_sublocation* subloc = 
-                (mapped_read_sublocation*) rd_ptr;
-
-            subloc->start_pos = (*current_mapping)->start_bp;
-            subloc->length = (*current_mapping)->rd_len;
-
-            if( (*current_mapping)->rd_strnd == FWD )
-            {
-                subloc->rev_comp = 0;
-            } else if( (*current_mapping)->rd_strnd == BKWD ) {
-                subloc->rev_comp = 1;
-            } else {
-                assert( (*current_mapping)->rd_strnd == FWD ||
-                        (*current_mapping)->rd_strnd == BKWD );
-            }
-
-            /* TODO unused for now */
-            subloc->is_full_contig = 0;
-
-            // look ahead to figure out if the next subread is gapped or not.
-            candidate_mapping* next_mapping = *(current_mapping + 1);
-            if( next_mapping == NULL )
-            {
-                /* there is no next subread */
-                subloc->next_subread_is_gapped = 0;
-                subloc->next_subread_is_ungapped = 0;
-            } else {
-                if( next_mapping->rd_type.follows_ref_gap ) {
-                    subloc->next_subread_is_gapped = 1;
-                    subloc->next_subread_is_ungapped = 0;
-                } else {
-                    subloc->next_subread_is_gapped = 0;
-                    subloc->next_subread_is_ungapped = 1;
-                }
-            }
-
-            /* Add the penalty to the total */
-            cum_penalty += (*current_mapping)->penalty;
-
-            /* Advance pointers */
-            rd_ptr += sizeof( mapped_read_sublocation );
-            current_mapping++;
-        }
-
         /* Convert the sum of the log penalties to a probability in standard
          * [0,1] probability space */
-        prologue->seq_error = pow( 10, cum_penalty );
+        prologue->seq_error = pow( 10, penalties[i] );
         assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
+
+        rd_ptr += sizeof( mapped_read_location_prologue );
+
+        populate_mapped_read_sublocations_from_candidate_mappings(
+                &current_mapping, &rd_ptr );
 
         if( i < joined_mappings_len - 1 )
         {
@@ -931,7 +994,8 @@ mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(
         MPD_RD_ID_T read_id,
         candidate_mapping** joined_mappings,
-        int joined_mappings_len )
+        int joined_mappings_len,
+        float* penalties )
 {
     if( joined_mappings_len == 0 )
         return NULL;
@@ -947,7 +1011,7 @@ build_mapped_read_from_joined_candidate_mappings(
     init_new_mapped_read_from_single_read_id( &rd, read_id, mapped_read_size );
     
     populate_mapped_read_locations_from_joined_candidate_mappings(
-            &rd, joined_mappings, joined_mappings_len );
+            &rd, joined_mappings, joined_mappings_len, penalties );
     
     return rd;
 }

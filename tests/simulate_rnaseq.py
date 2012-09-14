@@ -1,5 +1,6 @@
 import sys
 import random
+from itertools import izip
 
 import tests as sc # for genome building and sampling functions
 
@@ -96,7 +97,8 @@ def main():
 
         # DEBUG
         print "Nonmapping reads:"
-        with open( "./%s/mapped_reads.db.nonmapping" % output_directory ) as nonmapping_fp:
+        with open( "./%s/mapped_reads.db.nonmapping" % output_directory ) \
+                as nonmapping_fp:
             for i, line in enumerate(nonmapping_fp):
                 read_id = int(line.strip())
                 print "Read_id %i : " % read_id, fragments[read_id]
@@ -104,5 +106,9 @@ def main():
         raise ValueError, \
                 "Mapping returned the wrong number of reads ( %i vs expected %i )." \
                 % ( total_num_reads, len(fragments) )
+
+    # Check the mapped reads against the reference genome
+    for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
+        pass
 
 if __name__ == "__main__": main()

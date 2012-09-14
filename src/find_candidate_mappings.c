@@ -681,6 +681,14 @@ build_candidate_mapping_cigar_string_from_match(
     cm->cigar_len = cigar_index + 1;
     assert( cm->cigar_len <= MAX_CIGAR_STRING_ENTRIES );
 
+    /* If this wasn't a gapped candidate mapping, hard-code the full read
+     * length. TODO this is an ugly hack */
+    if( cm->cigar_len == 1 )
+    {
+        cm->cigar[0].op = 'M';
+        cm->cigar[0].len = cm->rd_len;
+    }
+
     return;
 }
 
@@ -1792,7 +1800,7 @@ build_mapped_read_from_candidate_mappings(
                                       search_params );
             
     rd = build_mapped_read_from_joined_candidate_mappings(
-        r->read_id, joined_mappings, joined_mappings_len
+        r->read_id, joined_mappings, joined_mappings_len, penalties
     );
     
     free( joined_mappings );

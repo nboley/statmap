@@ -334,7 +334,7 @@ fprintf_mapped_read_to_sam(
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
-    MPD_RD_ID_T i = 0; // TODO why MPD_RD_ID_T? it is confusing
+    MPD_RD_ID_T i = 0;
     for( i = 0; i < mpd_rd_index->num_mappings; i++ )
     {
         mapped_read_location* mapping = mpd_rd_index->mappings[i];
@@ -349,16 +349,19 @@ fprintf_mapped_read_to_sam(
 
         /* move pointer to the start of the first mapped_read_sublocation */
         ptr += sizeof( mapped_read_location_prologue );
-        enum bool are_more_sublocations = true;
 
-        /* Find groups of mapped_read_sublocations to pass to
-         * fprintf_sam_line. A group of sublocations is simply defined by
-         * a pointer to the start. It ends when next_subread_is_ungapped,
-         * indicating a gap in the template. */
+        /* Find groups of mapped_read_sublocations to pass to fprintf_sam_line.
+         *
+         * A group of sublocations corresponds to a candidate mapping, which
+         * corresponds to the mapping of a read subtemplate.
+         *
+         * A group of sublocations is simply defined by a pointer to the start.
+         * It ends when next_subread_is_ungapped, indicating a gap in the
+         * template. */
         int current_read_subtemplate_index = 0;
-        mapped_read_sublocation* current_subgroup
-            = (mapped_read_sublocation*) ptr;
+        mapped_read_sublocation* subgroup_start = (mapped_read_sublocation*)ptr;
 
+        enum bool are_more_sublocations = true;
         while( are_more_sublocations )
         {
             assert( current_read_subtemplate_index < r->num_subtemplates );
@@ -372,7 +375,7 @@ fprintf_mapped_read_to_sam(
                 fprintf_sam_line_from_sublocations_group(
                         sam_fp,
                         prologue,
-                        current_subgroup,
+                        subgroup_start,
                         r,
                         current_read_subtemplate_index,
                         genome,
@@ -387,9 +390,7 @@ fprintf_mapped_read_to_sam(
                     are_more_sublocations = false;
                 }
 
-                /* update the current_subgroup pointer to point to the next
-                 * sublocation, which is the start of the next subgroup */
-                current_subgroup = (mapped_read_sublocation*)
+                subgroup_start = (mapped_read_sublocation*)
                     (ptr + sizeof( mapped_read_sublocation ));
                 current_read_subtemplate_index++;
             }

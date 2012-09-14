@@ -362,7 +362,8 @@ mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(
         MPD_RD_ID_T read_id,
         candidate_mapping** joined_mappings,
-        int joined_mappings_len );
+        int joined_mappings_len,
+        float* penalties );
 
 size_t 
 write_mapped_read_to_file( mapped_read_t* read, FILE* of  );
