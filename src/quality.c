@@ -315,8 +315,8 @@ recheck_penalty(
         char* reference,
         char* observed,
         const int seq_length,
-
-        struct penalty_array_t* pa
+        /* Pointer into an array of penalty_t */
+        struct penalty_t* pa
     )
 {
     int i;
@@ -332,7 +332,7 @@ recheck_penalty(
         {
             penalty += N_penalty;
         } else {
-            penalty += pa->array[i].penalties[bp_code(ref)][bp_code(obs)];
+            penalty += pa[i].penalties[bp_code(ref)][bp_code(obs)];
         }
     }
 

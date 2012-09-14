@@ -117,8 +117,7 @@ recheck_penalty(
         char* reference,
         char* observed,
         const int seq_length,
-
-        struct penalty_array_t* pa
+        struct penalty_t* penalties
     );
 
 /* Compute the penalty form LETTER_TYPE sequences */

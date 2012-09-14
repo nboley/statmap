@@ -8,6 +8,8 @@ def splice_introns_from_sequence( sequence,
                                   min_intron_len,
                                   max_intron_len
                                 ):
+    # TODO revise intron sampling code - atm it's possible to pick introns
+    # beyond the boundary of the sequence
     introns = []
     intron_starts = sorted(random.sample( xrange(len(sequence)), n_introns ))
     for intron_start in intron_starts:
@@ -36,8 +38,8 @@ def splice_introns_from_sequence( sequence,
 
 def splice_introns_from_genome( genome,
                                 n_introns = 1,
-                                min_intron_len = 50,
-                                max_intron_len = 100
+                                min_intron_len = 10,
+                                max_intron_len = 50
                               ):
     transcriptome = {}
     for chromosome, sequence in genome.items():
@@ -51,7 +53,7 @@ def main():
 
     output_directory = "smo_rnaseq_sim"
 
-    read_len = 50
+    read_len = 100
     n_reads  = 100
     frag_len = 200
 
@@ -81,7 +83,7 @@ def main():
     sc.map_with_statmap( read_fnames, output_directory,
                          # change this to something less than half to test the 
                          # moving intron code
-                         indexed_seq_len=read_len/2,
+                         indexed_seq_len=20,
                          assay='r',
                          genome_fnames=genome_fnames )
 
@@ -91,6 +93,14 @@ def main():
     sam_fp.seek(0)
 
     if len(fragments) > total_num_reads:
+
+        # DEBUG
+        print "Nonmapping reads:"
+        with open( "./%s/mapped_reads.db.nonmapping" % output_directory ) as nonmapping_fp:
+            for i, line in enumerate(nonmapping_fp):
+                read_id = int(line.strip())
+                print "Read_id %i : " % read_id, fragments[read_id]
+
         raise ValueError, \
                 "Mapping returned the wrong number of reads ( %i vs expected %i )." \
                 % ( total_num_reads, len(fragments) )

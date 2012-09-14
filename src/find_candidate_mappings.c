@@ -362,6 +362,15 @@ build_indexable_subtemplate(
 {
     int subseq_length = index->seq_length;
 
+    /* Finding the optimal subsequence offset is desirable for ungapped assays,
+     * but is not best for gapped assays (where we want the ists to be as far
+     * apart as possible to avoid overlapping with potential introns).
+     *
+     * For now, we manually set the ists to the first and last subsequences of
+     * the read of length subseq_length, which will work well for both types of
+     * assays. */
+
+#if 0
     /* Find the optimal subsequence offset for this read subtemplate */
     int subseq_offset = find_optimal_subseq_offset(
             rst,
@@ -370,6 +379,15 @@ build_indexable_subtemplate(
             range_start,
             range_length
         );
+#endif
+
+    int subseq_offset;
+
+    if( range_start == 0 ) {
+        subseq_offset = 0;
+    } else {
+        subseq_offset = range_length - subseq_length;
+    }
 
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist,
@@ -729,9 +747,43 @@ build_candidate_mapping_from_match(
     build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
     // DEBUG
-    print_candidate_mapping( &cm );
+    //print_candidate_mapping( &cm );
 
     add_candidate_mapping( mappings, &cm );
+}
+
+void
+condense_candidate_mapping_cigar_string(
+        candidate_mapping* cm )
+{
+    /* Merge the final U lengths into their adjacent match counterparts and
+     * remove the U ops from the cigar string */
+
+    /* TODO for now, this is hard-coded */
+    assert( cm->cigar_len == 5 );
+    assert( cm->cigar[1].op == 'U' && cm->cigar[3].op == 'U' );
+
+    int first_match_len = cm->cigar[0].len + cm->cigar[1].len;
+    int gap_len = cm->cigar[2].len;
+    int second_match_len = cm->cigar[3].len + cm->cigar[4].len;
+
+    /* Clear the original cigar string array */
+    memset( cm->cigar, 0,
+            sizeof( struct CIGAR_ENTRY ) * MAX_CIGAR_STRING_ENTRIES );
+
+    /* Build the new, condensed cigar string array */
+    cm->cigar[0].op = 'M';
+    cm->cigar[0].len = first_match_len;
+
+    cm->cigar[1].op = 'N';
+    cm->cigar[1].len = gap_len;
+
+    cm->cigar[2].op = 'M';
+    cm->cigar[2].len = second_match_len;
+
+    cm->cigar_len = 3;
+
+    return;
 }
 
 void
@@ -1315,13 +1367,112 @@ count_length_of_indexable_subtemplates(
 }
 
 void
-build_gapped_candidate_mappings(
+build_gapped_candidate_mappings_for_candidate_mapping(
         candidate_mapping* cm,
-        candidate_mappings* mappings,
+        candidate_mappings* gapped_mappings,
+        int num_intron_configurations,
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
         struct genome_data* genome,
-        struct error_model_t* error_model,
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa )
+{
+    /* Build the initial proposed gapped candidate mapping and compute its
+     * penalty (all of the remaining sequence is appened to the first index
+     * probe) */
+    candidate_mapping gapped_cm = *cm;
+
+    /* Update the tmp mapping's cigar string with the proposed probe lengths */
+    assert( gapped_cm.cigar_len == 5 );
+    assert( gapped_cm.cigar[1].op == 'U' && gapped_cm.cigar[3].op == 'U' );
+    gapped_cm.cigar[1].len = num_intron_configurations;
+    gapped_cm.cigar[3].len = 0;
+
+    /* Build a copy of the sequence that was actually mapped to use in
+     * comparing to the genome */
+    char* mapped_seq = calloc( rst->length+1, sizeof(char) );
+    assert( mapped_seq != NULL );
+    struct penalty_array_t* penalty_array;
+
+    if( gapped_cm.rd_strnd == FWD ) {
+        memcpy( mapped_seq, rst->char_seq, sizeof(char)*rst->length );
+        penalty_array = fwd_pa;
+    } else {
+        rev_complement_read( rst->char_seq, mapped_seq, rst->length );
+        penalty_array = rev_pa;
+    }
+
+    /* Get a pointer to the genome sequence this read maps to */
+    char* genome_seq = find_seq_ptr( genome,
+            gapped_cm.chr,
+            gapped_cm.start_bp,
+            gapped_cm.rd_len + gapped_cm.cigar[2].len // XXX check this
+        );
+
+    /* Compute the additional penalty from this arrangement of sequence around
+     * the intron */
+    float probe1_penalty = recheck_penalty(
+            genome_seq + gapped_cm.cigar[0].len,
+            mapped_seq + gapped_cm.cigar[0].len,
+            gapped_cm.cigar[1].len,
+            penalty_array->array + gapped_cm.cigar[0].len
+        );
+
+    float probe2_penalty = 0;
+
+    /* Add the initial proposed candidate mapping */
+    /* TODO could optimize here by not adding anything below the minimum
+     * match penalty */
+    gapped_cm.penalty = cm->penalty + probe1_penalty + probe2_penalty;
+    add_candidate_mapping( gapped_mappings, &gapped_cm );
+
+    int i;
+    for( i = 1; i <= num_intron_configurations; i++ )
+    {
+        gapped_cm.cigar[1].len -= 1;
+        gapped_cm.cigar[3].len += 1;
+
+        /* Compute the penalty of the shifted bps */
+        float probe1_bp_penalty = recheck_penalty(
+                genome_seq + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len,
+                mapped_seq + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len,
+                1,
+                penalty_array->array + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len
+            );
+
+        float probe2_bp_penalty = recheck_penalty(
+                /* TODO - extremely hack. The start of the second index probe relative to
+                 * the genome is the subsequence offset from the read start + the known gap. */
+                genome_seq + ists->container[1].subseq_offset + gapped_cm.cigar[2].len - i,
+                mapped_seq + ists->container[1].subseq_offset - i,
+                1,
+                penalty_array->array + ists->container[1].subseq_offset - i
+            );
+
+        probe1_penalty -= probe1_bp_penalty;
+        probe2_penalty += probe2_bp_penalty;
+
+        /* Update the cm penalty, and add the candidate mapping to the list of
+         * gapped mappings */
+        gapped_cm.penalty = cm->penalty + probe1_penalty + probe2_penalty;
+        add_candidate_mapping( gapped_mappings, &gapped_cm );
+    }
+
+    free( mapped_seq );
+
+    return;
+}
+
+enum bool
+find_potential_gapped_candidate_mappings(
+        candidate_mapping* cm,
+        candidate_mappings* mappings,
+        candidate_mappings* gapped_mappings,
+        struct read_subtemplate* rst,
+        struct indexable_subtemplates* ists,
+        struct genome_data* genome,
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa,
         struct search_params* search_params )
 {
     int num_gaps = count_gaps_in_candidate_mapping( cm );
@@ -1329,59 +1480,126 @@ build_gapped_candidate_mappings(
     /* If there is no gap in this candidate mapping, then it must not have
      * spanned an intron. Skip it. */
     if( num_gaps == 0 )
-        return;
+        return false;
 
     /* for now, only allow one gap (one intron in the read subtemplate) */
     assert( num_gaps == 1 );
+    assert( ists->length == 2 );
 
     /* Between two indexable subtemplates with a gap between them, the number
      * of possible configurations for the rest of the read is equal to
-     *      rd_len - length of indexable subtemplates
-     */
+     *      rd_len - length of indexable subtemplates                       */
     int total_probe_len = count_length_of_indexable_subtemplates( ists );
     int num_intron_configurations = rst->length - total_probe_len;
 
     /* Allocate memory to store the potential gapped candidate mappings */
-    candidate_mappings* gapped_mappings;
-    init_candidate_mappings( &gapped_mappings );
+    candidate_mappings* potential_gapped_mappings;
+    init_candidate_mappings( &potential_gapped_mappings );
 
-    /* Build each of the possible gapped candidate mappings */
-    int i;
-    for( i = 0; i < num_intron_configurations; i++ )
+    build_gapped_candidate_mappings_for_candidate_mapping(
+            cm,
+            potential_gapped_mappings,
+            num_intron_configurations,
+            rst,
+            ists,
+            genome,
+            fwd_pa, rev_pa
+        );
+
+    // DEBUG
+    // print out the penalties of the potential gapped mappings so we can see
+    // if we're getting the kind of distribution we expect
+    fprintf(stderr, "===============================================\n");
+    int pi;
+    for( pi = 0; pi < potential_gapped_mappings->length; pi++ )
     {
+        fprintf( stderr, "%f\n", potential_gapped_mappings->mappings[pi].penalty );
     }
 
-    free_candidate_mappings( gapped_mappings );
+    /* Unpack the search parameters */
+    float min_match_penalty = search_params->min_match_penalty;
+    float max_penalty_spread = search_params->max_penalty_spread;
 
-    return;
+    /* Find the maximum penalty among the gapped candidate mappings */
+    float max_penalty = min_match_penalty;
+
+    int i;
+    for( i = 0; i < potential_gapped_mappings->length; i++ )
+    {
+        candidate_mapping* current_mapping
+            = potential_gapped_mappings->mappings + i;
+
+        if( current_mapping->penalty > max_penalty ) {
+            max_penalty = current_mapping->penalty;
+        }
+    }
+
+    /* If a gapped candidate mapping has a penalty about the minimum and within
+     * the penalty spread, add it to mappings */
+    for( i = 0; i < potential_gapped_mappings->length; i++ )
+    {
+        candidate_mapping* current_mapping
+            = potential_gapped_mappings->mappings + i;
+
+        enum bool add_current_mapping = true;
+
+        if( (max_penalty_spread > 1e-6 &&
+                current_mapping->penalty < (max_penalty - max_penalty_spread) ))
+        {
+            add_current_mapping = false;
+        }
+
+        if( current_mapping->penalty < min_match_penalty )
+        {
+            add_current_mapping = false;
+        }
+
+        if( add_current_mapping )
+        {
+            condense_candidate_mapping_cigar_string( current_mapping );
+            add_candidate_mapping( gapped_mappings, current_mapping );
+        }
+    }
+
+    free_candidate_mappings( potential_gapped_mappings );
+
+    return true;
 }
 
 void
 build_gapped_candidate_mappings_for_read_subtemplate(
         candidate_mappings* mappings,
+        candidate_mappings* gapped_mappings,
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
         struct genome_data* genome,
-        struct error_model_t* error_model,
+        struct penalty_array_t* fwd_pa,
+        struct penalty_array_t* rev_pa,
         struct search_params* search_params )
 {
-    /* TODO for now append the new cm's onto mappings.
-     * in the future, might be a good idea to generate a new set of mappings
-     * here and treat rst_mappings as tmp_rst_mappings or something */
-
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
         candidate_mapping* cm = mappings->mappings + i;
 
-        build_gapped_candidate_mappings(
+        enum bool found_gapped_mappings
+            = find_potential_gapped_candidate_mappings(
                 cm,
                 mappings,
+                gapped_mappings,
                 rst,
+                ists,
                 genome,
-                error_model,
+                fwd_pa, rev_pa,
                 search_params
             );
+
+        if( !found_gapped_mappings )
+        {
+            /* Then this candidate mapping did not have a gap, and should be
+             * added to the set of mappings to return as-is */
+            add_candidate_mapping( gapped_mappings, cm );
+        }
     }
 
     return;
@@ -1390,7 +1608,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
 void
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
-        candidate_mappings* rst_mappings,
+        candidate_mappings** rst_mappings,
 
         struct genome_data* genome,
         struct error_model_t* error_model,
@@ -1428,8 +1646,11 @@ find_candidate_mappings_for_read_subtemplate(
     
     /* build candidate mappings from matching subsets of the mapped_locations
      * for each indexable_subtemplate returned by the index search */
+    candidate_mappings* mappings = NULL;
+    init_candidate_mappings( &mappings );
+
     build_candidate_mappings_from_search_results(
-            rst_mappings, search_results, search_results_length,
+            mappings, search_results, search_results_length,
             rst, genome, search_params );
 
     /* Note - search_results contains references to memory allocated in the
@@ -1438,14 +1659,30 @@ find_candidate_mappings_for_read_subtemplate(
 
     /* if this is a gapped assay, build candidate mappings with potential
      * gaps */
+    candidate_mappings* gapped_mappings = NULL;
+    init_candidate_mappings( &gapped_mappings );
+
     build_gapped_candidate_mappings_for_read_subtemplate(
-            rst_mappings,
+            mappings,
+            gapped_mappings,
             rst,
             ists,
             genome,
-            error_model,
+            &fwd_pa, &rev_pa,
             search_params
         );
+
+    /* Select which set of candidate mappings to return - if we were able to
+     * successfully build gapped candidate mappings, return them; otherwise
+     * return the original set of (implicit non-gapped) mappings */
+    if( gapped_mappings->length > 0 )
+    {
+        *rst_mappings = gapped_mappings;
+        free( mappings );
+    } else {
+        *rst_mappings = mappings;
+        free( gapped_mappings );
+    }
 
     free_indexable_subtemplates( ists );
 
@@ -1453,7 +1690,7 @@ find_candidate_mappings_for_read_subtemplate(
      * and the subtemplate to do this) */
     update_error_data_record_from_candidate_mappings(
             genome,
-            rst_mappings,
+            *rst_mappings,
             rst,
             scratch_error_data_record
         );
@@ -1498,11 +1735,10 @@ find_candidate_mappings_for_read(
         /* initialize the candidate mappings container for this read
          * subtemplate */
         candidate_mappings* rst_mappings = NULL;
-        init_candidate_mappings( &rst_mappings );
 
         find_candidate_mappings_for_read_subtemplate(
                 rst,
-                rst_mappings,
+                &rst_mappings,
 
                 genome,
                 error_model,

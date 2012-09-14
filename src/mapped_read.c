@@ -497,7 +497,7 @@ recheck_candidate_mapping(
                     real_seq,
                     rst->char_seq + seq_pos,
                     current_entry.len,
-                    penalty_array
+                    penalty_array->array + seq_pos
                 );
 
             seq_pos += current_entry.len;
@@ -514,6 +514,7 @@ recheck_candidate_mapping(
                 genome_pos += current_entry.len;
             }
         } else {
+            print_candidate_mapping( mapping ); // DEBUG
             assert( false );
         }
     }
@@ -716,7 +717,6 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
         /* I set the safe bit to 1e-6, which is correct for most floats */
         if( max_penalty_spread > 1e-6 )
         {
-            assert( max_penalty_spread >= 0.0 ); // ?
             if( (*penalties)[i] < ( max_penalty - max_penalty_spread ) )
             {
                 filter_current_group = true;
