@@ -178,62 +178,6 @@ search_index(
     return;
 };
 
-static inline void
-build_candidate_mapping_from_mapped_location(
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-
-        mapped_location* result, 
-        struct indexable_subtemplate* probe,
-
-        candidate_mappings* mappings,
-
-        enum bool follows_ref_gap
-    )
-{
-    int subseq_len = probe->subseq_length;
-
-    /****** Prepare the template candidate_mapping objects ***********/
-    candidate_mapping cm 
-        = init_candidate_mapping_from_read_subtemplate( rst );
-
-    /* Make sure the "subseq" is acutally shorter than the read */
-    assert( subseq_len <= rst->length );
-
-    /* set the strand */
-    assert( result->strnd == FWD || result->strnd == BKWD );
-    cm.rd_strnd = result->strnd;
-
-    /* set metadata */
-    cm.penalty = result->penalty;
-
-    /* set location information */
-    cm.chr = result->chr;
-
-    /* set (partial) READ_TYPE information
-     * (rd_type.pos is set in update_read_type_pos) */
-    cm.rd_type.follows_ref_gap = follows_ref_gap;
-
-    /* We need to play with this a bit to account for index probes that are
-     * shorter than the read length */
-    int read_location =
-        modify_mapped_read_location_for_index_probe_offset(
-            result->loc,
-            result->chr,
-            result->strnd,
-            probe->subseq_offset,
-            probe->subseq_length,
-            rst->length,
-            genome
-        );
-    if( read_location < 0 ) // the read location was invalid; skip this mapped_locations_container
-        return;
-
-    cm.start_bp = read_location;
-
-    add_candidate_mapping( mappings, &cm );
-}
-
 /* 
    Returns true if these candidate mappigns can be used to update the error 
    data. Basically, we just test for uniqueness. 
@@ -1517,12 +1461,14 @@ find_potential_gapped_candidate_mappings(
     // DEBUG
     // print out the penalties of the potential gapped mappings so we can see
     // if we're getting the kind of distribution we expect
+    /*
     fprintf(stderr, "===============================================\n");
     int pi;
     for( pi = 0; pi < potential_gapped_mappings->length; pi++ )
     {
         fprintf( stderr, "%f\n", potential_gapped_mappings->mappings[pi].penalty );
     }
+    */
 
     /* Unpack the search parameters */
     float min_match_penalty = search_params->min_match_penalty;
