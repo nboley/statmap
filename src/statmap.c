@@ -117,10 +117,10 @@ map_marginal( struct args_t* args,
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
 
-    /* store index search parameters in a struct */
-    struct search_params search_params;
-    search_params.min_match_penalty = args->min_match_penalty;
-    search_params.max_penalty_spread = args->max_penalty_spread;
+    /* Save the user-set mapping metaparameters in a struct */
+    struct mapping_metaparams mapping_metaparams;
+    mapping_metaparams.error_model_type = args->error_model_type;
+    /* TODO set the metaparameters - wait for error_model merge */
     
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
@@ -128,7 +128,7 @@ map_marginal( struct args_t* args,
        enough to estiamte the errors
     */
     struct error_model_t* error_model = NULL;
-    if( args->search_type == ESTIMATE_ERROR_MODEL )
+    if( args->error_model_type == ESTIMATED )
     {
         fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
         init_error_model( &error_model, ESTIMATED );
@@ -141,17 +141,17 @@ map_marginal( struct args_t* args,
         
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
-    } else if(args->search_type == PROVIDED_ERROR_MODEL) {
-        fprintf(stderr, "FATAL       :  PROVIDED_ERROR_MODEL is not implemented yet\n" );
+    } else if(args->error_model_type == FASTQ_MODEL) {
+        fprintf(stderr, "FATAL       :  FASTQ_MODEL (provided error scores) is not implemented yet\n" );
         exit( 1 );
-    } else if(args->search_type == MISMATCHES) {
+    } else if(args->error_model_type == MISMATCH) {
         init_error_model( &error_model, MISMATCH );
     } else {
         fprintf(stderr, "FATAL       :  Unrecognized index search type '%i'\n",
-            args->search_type);
+            args->error_model_type);
         exit( 1 );
     }
-    
+
     /* initialize the mapped reads db */
     if( false == is_nc )
     {
@@ -173,8 +173,10 @@ map_marginal( struct args_t* args,
         genome,
         rdb,
         *mpd_rds_db,
+        &mapping_metaparams,
         error_model,
-        &search_params
+        args->min_match_penalty,
+        args->max_penalty_spread
     );
     
     free_error_model( error_model );
@@ -442,7 +444,7 @@ main( int argc, char** argv )
     fclose( arg_fp  );
     
     /* intialize an R instance */
-    if( args.search_type == ESTIMATE_ERROR_MODEL )
+    if( args.error_model_type == ESTIMATED )
     {
         fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
         init_R( );        

@@ -18,6 +18,7 @@
 #include "genome.h"
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
+#include "error_correction.h"
 
 /* a global pointer offset */
 /* This must be added to all pointers */
@@ -990,7 +991,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               const int seq_length,
               float curr_penalty, 
 
-              struct search_params* search_params,
+              struct index_search_params* search_params,
               mapped_locations* results,
 
               struct genome_data* genome,
@@ -1299,7 +1300,7 @@ extern void
 find_matches_from_root(
         struct index_t* index,
 
-        struct search_params* search_params,
+        struct index_search_params* search_params,
         mapped_locations* results,
 
         struct genome_data* genome,

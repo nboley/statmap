@@ -356,7 +356,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
-                                  struct search_params* search_params );
+                                  struct mapping_params* mapping_params
+    );
 
 mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(

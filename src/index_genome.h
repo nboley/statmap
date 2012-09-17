@@ -12,6 +12,7 @@
 #include "genome.h"
 #include "sequences_node.h"
 #include "mapped_location.h"
+#include "error_correction.h"
 
 /* a hash to store chromosome name */
 char* chr_names[CHR_NUM_MAX+1];
@@ -238,7 +239,7 @@ extern void
 find_matches_from_root(
         struct index_t* index,
 
-        struct search_params* search_params,
+        struct index_search_params* search_params,
         mapped_locations* results,
 
         struct genome_data* genome,

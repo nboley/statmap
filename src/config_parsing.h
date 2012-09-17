@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include "config.h"
+#include "error_correction.h"
 
 /* Store parsed command line options */
 struct args_t {
@@ -36,7 +37,7 @@ struct args_t {
     
     int num_threads;
 
-    enum SEARCH_TYPE search_type;
+    enum error_model_type_t error_model_type;
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 

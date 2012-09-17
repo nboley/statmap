@@ -25,6 +25,7 @@
 #include "rawread.h"
 #include "quality.h"
 #include "statmap.h"
+#include "error_correction.h"
 #include "util.h"
 
 /**** Handle different sources of reads ****/
@@ -368,10 +369,10 @@ parse_opt( int key, char *arg, struct argp_state *state )
             switch( arg[0] )
             {
                 case 'e':
-                    args->search_type = ESTIMATE_ERROR_MODEL;
+                    args->error_model_type = ESTIMATED;
                     break;
                 case 'm':
-                    args->search_type = MISMATCHES;
+                    args->error_model_type = MISMATCH;
                     break;
                 default:
                     argp_failure( state, 1, 0,
@@ -467,7 +468,7 @@ parse_arguments( int argc, char** argv )
 
     args.num_threads = -1;
 
-    args.search_type = UNKNOWN;
+    args.error_model_type = UNKNOWN;
     args.input_file_type = UNKNOWN;
     args.assay_type = UNKNOWN;
 
@@ -663,10 +664,9 @@ parse_arguments( int argc, char** argv )
         }
     }
 
-    if( args.search_type == UNKNOWN )
+    if( args.error_model_type == UNKNOWN )
     {
-        /* set default to using the observed error rates */
-        args.search_type = ESTIMATE_ERROR_MODEL;
+        args.error_model_type = ESTIMATED;
     }
 
     /********* END CHECK REQUIRED ARGUMENTS ***********************************/
@@ -852,7 +852,7 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
     
     fprintf( arg_fp, "num_threads:\t%i\n", args->num_threads );
 
-    fprintf( arg_fp, "search_type:\t%i\n", args->search_type );
+    fprintf( arg_fp, "error_model_type:\t%i\n", args->error_model_type );
 
     fprintf( arg_fp, "input_file_type:\t%i\n", args->input_file_type );
     fprintf( arg_fp, "assay_type:\t%i\n", args->assay_type );
@@ -943,8 +943,8 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
 
-    fscanf( arg_fp, "search_type:\t%u\n",
-            &((*args)->search_type) );
+    fscanf( arg_fp, "error_model_type:\t%u\n",
+            &((*args)->error_model_type) );
 
     fscanf( arg_fp, "input_file_type:\t%u\n", 
             &( (*args)->input_file_type) );

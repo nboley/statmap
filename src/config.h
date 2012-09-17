@@ -259,13 +259,6 @@ enum CHR_SOURCE
     MATERNAL  = 3
 };
 
-enum SEARCH_TYPE
-{
-    PROVIDED_ERROR_MODEL  = 1,
-    ESTIMATE_ERROR_MODEL  = 2,
-    MISMATCHES            = 3
-};
-
 enum input_file_type_t {
     // We have not specified the file type
     // UNKNOWN = 0,

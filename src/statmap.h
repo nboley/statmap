@@ -18,14 +18,6 @@ extern char** trace_track_names;
 /* Fwd declarations */
 struct mapped_reads_db;
 
-/*
-   Store search parameters in a unified type
-*/
-struct search_params {
-    float min_match_penalty;
-    float max_penalty_spread;
-};
-
 void
 map_marginal( struct args_t* args, 
               struct genome_data* genome,

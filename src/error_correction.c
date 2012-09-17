@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "config.h"
+#include "read.h"
+#include "genome.h"
 #include "error_correction.h"
 
 /*
@@ -291,6 +293,70 @@ void free_error_model( struct error_model_t* error_model )
     return;
 }
 
+void
+init_mapping_params_for_read(
+        struct mapping_params** p,
+        struct mapping_metaparams* metaparams,
+        float recheck_min_match_penalty,
+        float recheck_max_penalty_spread
+    )
+{
+    *p = malloc( sizeof( struct mapping_params ));
+
+    (*p)->metaparams = metaparams;
+    
+    (*p)->recheck_min_match_penalty = recheck_min_match_penalty;
+    (*p)->recheck_max_penalty_spread = recheck_max_penalty_spread;
+
+    return;
+}
+
+void
+init_index_search_params(
+        struct index_search_params** isp,
+        struct indexable_subtemplates* ists,
+        struct mapping_params* mapping_params )
+{
+    /* Allocate memory for an array of index_search_params, one for each index
+     * probe */
+    *isp = malloc( sizeof( struct index_search_params ) * ists->length );
+
+    /* TODO for now, set the index search params equal to the recheck params */
+    int i;
+    for( i = 0; i < ists->length; i++ )
+    {
+        (*isp)[i].min_match_penalty
+            = mapping_params->recheck_min_match_penalty;
+        (*isp)[i].max_penalty_spread
+            = mapping_params->recheck_max_penalty_spread;
+    }
+
+    return;
+}
+
+void
+free_mapping_params( struct mapping_params* p )
+{
+    if( p == NULL ) return;
+    free( p );
+}
+
+/*
+ * Find the necessary penalties so that we map the expected number of reads.
+ *
+ *
+ *
+ */
+void
+find_mapping_params( struct mapping_params* params,
+                     struct read_subtemplate* rst,
+                     struct genome_data* genome,
+                     struct error_model_t* error_model_t
+    )
+{
+    /* TODO stub */
+    return;
+}
 
 /*******************************************************************************
  *
