@@ -245,54 +245,6 @@ populate_rawread_from_fastq_file(
     return 0;
 }
 
-enum bool
-filter_rawread( struct rawread* r,
-                struct error_model_t* error_model )
-{
-    /* Might pass a NULL read (r2 in the single read case) 
-       from find_candidate_mappings */
-    if( r == NULL )
-        return false; // Do not filter nonexistent read
-    
-    /* never filter mismatches */
-    if( MISMATCH == error_model->error_model_type )
-        return false;
-    
-    /***************************************************************
-     * check to make sure this read is mappable
-     * we consider a read 'mappable' if:
-     * 1) There are enough hq bps
-     *
-     */
-
-    /* Make sure the global option has been set 
-       ( it's initialized to -1 ); */
-    assert( min_num_hq_bps >= 0 );
-
-    int num_hq_bps = 0;
-    int i;
-    for( i = 0; i < r->length; i++ )
-    {
-        /*
-           compute the inverse probability of error (quality)
-           NOTE when error_prb receieves identical bp's, it returns the
-           inverse automatically
-         */
-        double error = error_prb( r->char_seq[i], r->char_seq[i], 
-                                  r->error_str[i], i, error_model );
-        double qual = pow(10, error );
-        
-        /* count the number of hq basepairs */
-        if( qual > 0.999 )
-            num_hq_bps += 1;
-    }
-
-    if ( num_hq_bps < min_num_hq_bps )
-        return true;
-        
-    return false;
-}
-
 /******* BEGIN raw read DB code ********************************************/
 
 void 
