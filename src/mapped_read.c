@@ -287,30 +287,26 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
                                         float** penalties,
                                         int* joined_mappings_len )
 {
-    /* for single end reads, just copy the candidate mappings over, adding
-     * NULL delimiters */
+    /* Allocate memory */
+    /* For the single end case, there are N potential mappings. Allocate N*2
+     * pointers for the NULL delimiters */
+    *joined_mappings = malloc( sizeof(candidate_mapping*) * mappings->length * 2 );
+    *penalties = malloc( sizeof(float) * mappings->length );
+
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        *joined_mappings_len += 1;
-
-        /* add new joined mapping to the joined_mappings
-         * multiply by 2 for the NULL pointers separating entries */
-        *joined_mappings = realloc( *joined_mappings,
-                sizeof(candidate_mapping*) * (*joined_mappings_len * 2) );
-
         /* second to last pointer is the pointer to the current candidate
          * mapping */
-        (*joined_mappings)[(*joined_mappings_len*2) - 2] = mappings->mappings + i;
+        (*joined_mappings)[(i+1)*2-2] = mappings->mappings + i;
         /* last pointer is NULL pointer indicating the end of this set of
          * joined candidate mappings */
-        (*joined_mappings)[(*joined_mappings_len*2) - 1] = NULL;
+        (*joined_mappings)[(i+1)*2-1] = NULL;
 
-        /* add the penalty for this new joined_mapping */
-        *penalties = realloc( *penalties,
-                sizeof(float) * *joined_mappings_len );
-        (*penalties)[*joined_mappings_len - 1] = mappings->mappings[i].penalty;
+        (*penalties)[i] = mappings->mappings[i].penalty;
     }
+
+    *joined_mappings_len = mappings->length;
 
     return;
 }
@@ -324,25 +320,34 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     int pair_1_start = 0;
     int pair_2_start = -1;
 
+    int num_pair_1 = 0;
+    int num_pair_2 = 0;
+
     /* find the start of the second pair candidate mappings */
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
         candidate_mapping* mapping = mappings->mappings + i;
 
-        if( mapping->rd_type.pos == 1 )
+        if( mapping->rd_type.pos == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
-            break;
+            num_pair_1 = i-1;
         }
     }
-    /* TODO instead of asserting, just don't build a mapped read if there are
-     * no paired end 2 reads */
-    assert( pair_2_start > 0 );
 
+    if( pair_2_start == -1 )
+    {
+        /* Don't build a mapped read if there are no second pair reads */
+        return;
+    }
     /* sanity check */
     assert( pair_2_start > pair_1_start );
 
+    num_pair_2 = (i-1) - pair_2_start;
+
+    /* Count the number of valid joined combinations of reads */
+    int num_joined_mappings = 0;
     int j;
     for( i = pair_1_start; i < pair_2_start; i++ )
     {
@@ -361,35 +366,66 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
 
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
 
-            *joined_mappings_len += 1;
+            num_joined_mappings++;
+        }
+    }
 
-            /* allocate memory for new set of joined candidate mappings
-             * multiply by 3 for 2 candidate mappings and 1 NULL pointer
-             * separating the entries */
-            *joined_mappings = realloc( *joined_mappings,
-                    sizeof(candidate_mapping*) * (*joined_mappings_len * 3));
+    /* Allocate memory.
+     * We have counted the number of valid ways to join paired end reads for
+     * this set of candidate mappings. For each set of joined mappings, we need
+     * to allocate 3 pointers - one for the first mapping, one for the second
+     * mapping, and one for the NULL delimiter. */
+    *joined_mappings = malloc(
+            sizeof(candidate_mapping*) * (num_joined_mappings*3));
+    *penalties = malloc( sizeof(float) * num_joined_mappings );
+
+    int joined_mappings_index = 0;
+    int penalties_index = 0;
+
+    for( i = pair_1_start; i < pair_2_start; i++ )
+    {
+        for( j = pair_2_start; j < mappings->length; j++ )
+        {
+            candidate_mapping* pair_1_mapping = mappings->mappings + i;
+            candidate_mapping* pair_2_mapping = mappings->mappings + j;
+
+            /* If the chrs mismatch, since these are sorted we know there is no 
+             * need to continue. */
+            if( pair_2_mapping->chr > pair_1_mapping->chr )
+                break;
+
+            if( pair_2_mapping->chr < pair_1_mapping->chr )
+                continue;
+
+            assert( pair_1_mapping->chr == pair_2_mapping->chr );
 
             /* third to last pointer is 1st candidate mapping */
-            (*joined_mappings)[(*joined_mappings_len*3) - 3] = pair_1_mapping;
+            (*joined_mappings)[joined_mappings_index] = pair_1_mapping;
 
             /* second to last pointer is 2nd candidate mapping */
-            (*joined_mappings)[(*joined_mappings_len*3) - 2] = pair_2_mapping;
+            (*joined_mappings)[joined_mappings_index + 1] = pair_2_mapping;
 
             /* last pointer is NULL pointer indicating the end of this set of
              * joined candidate mappings */
-            (*joined_mappings)[(*joined_mappings_len*3) - 1] = NULL;
+            (*joined_mappings)[joined_mappings_index + 2] = NULL;
 
             /* add the penalty for this (joined) candidate mapping. Simply
              * add the penalties from both candidate mappings (since these are
              * log probabilities, adding is equivalent to the product of the
              * marginal probabilities) */
-            *penalties = realloc( *penalties,
-                    sizeof(float) * *joined_mappings_len );
-            (*penalties)[*joined_mappings_len - 1]
+            (*penalties)[penalties_index]
                 = pair_1_mapping->penalty
                 + pair_2_mapping->penalty;
+
+            /* Update the array indices */
+            joined_mappings_index += 3;
+            penalties_index += 1;
         }
     }
+
+    *joined_mappings_len = num_joined_mappings;
+
+    return;
 }
 
 void
