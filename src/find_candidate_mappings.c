@@ -1465,43 +1465,16 @@ find_potential_gapped_candidate_mappings(
 
     /* Unpack the search parameters */
     float min_match_penalty = mapping_params->recheck_min_match_penalty;
-    float max_penalty_spread = mapping_params->recheck_max_penalty_spread;
 
-    /* Find the maximum penalty among the gapped candidate mappings */
-    float max_penalty = min_match_penalty;
-
+    /* If a potential gapped mapping has penalty above the minimum, add it to
+     * the final set of gapped mappings. */
     int i;
     for( i = 0; i < potential_gapped_mappings->length; i++ )
     {
         candidate_mapping* current_mapping
             = potential_gapped_mappings->mappings + i;
 
-        if( current_mapping->penalty > max_penalty ) {
-            max_penalty = current_mapping->penalty;
-        }
-    }
-
-    /* If a gapped candidate mapping has a penalty about the minimum and within
-     * the penalty spread, add it to mappings */
-    for( i = 0; i < potential_gapped_mappings->length; i++ )
-    {
-        candidate_mapping* current_mapping
-            = potential_gapped_mappings->mappings + i;
-
-        enum bool add_current_mapping = true;
-
-        if( (max_penalty_spread > 1e-6 &&
-                current_mapping->penalty < (max_penalty - max_penalty_spread) ))
-        {
-            add_current_mapping = false;
-        }
-
-        if( current_mapping->penalty < min_match_penalty )
-        {
-            add_current_mapping = false;
-        }
-
-        if( add_current_mapping )
+        if( current_mapping->penalty >= min_match_penalty )
         {
             condense_candidate_mapping_cigar_string( current_mapping );
             add_candidate_mapping( gapped_mappings, current_mapping );
