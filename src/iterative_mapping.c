@@ -847,7 +847,9 @@ sample_random_trace(
 
     struct trace_t* sample_trace;
     init_trace( genome, &sample_trace, num_tracks, track_names );
-
+    set_trace_to_uniform( sample_trace, 1.0 );
+    
+    /*
     build_random_starting_trace( 
         sample_trace, genome, rdb, cond_prbs_db,
         update_trace_expectation_from_location,
@@ -866,7 +868,8 @@ sample_random_trace(
         fprintf( ss_mi, "%i,%e\n", sample_index+1, log_lhd );
         fflush( ss_mi );
     }
-        
+    */
+    
     /* maximize the likelihood */
     update_mapping( 
         rdb, cond_prbs_db, sample_trace, max_num_iterations,
@@ -879,7 +882,8 @@ sample_random_trace(
     if( SAVE_SAMPLES )
     {
         char buffer[100];
-        sprintf( buffer, "%ssample%i.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
+        sprintf( buffer, "%ssample%i.bin.trace", 
+                 RELAXED_SAMPLES_PATH, sample_index+1 );
 
         write_trace_to_file( sample_trace, buffer );
             
@@ -1261,7 +1265,7 @@ void update_CAGE_trace_expectation_from_location(
     MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
     MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
-    // unsigned int stop = get_stop_from_mapped_read_location( loc  );
+    MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc  );
     
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
@@ -1282,28 +1286,31 @@ void update_CAGE_trace_expectation_from_location(
     /* If the read is *not* paired */
     else {
         int trace_index;
-
+        int peak_pos = -1;
+        
         /* If this is in the reverse ( 3') transcriptome */
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
             trace_index = 1;
+            peak_pos = stop;
         } 
         /* We are in the 5' ( positive ) transcriptome */
         else {
             trace_index = 0;
+            peak_pos = start;
         }
 
         /* lock the spinlock */
         #ifdef USE_MUTEX
-        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (peak_pos/TM_GRAN) );
         #else
-        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (peak_pos/TM_GRAN) );
         #endif        
-        traces->traces[ trace_index ][ chr_index ][ start ] += cond_prob; 
+        traces->traces[ trace_index ][ chr_index ][ peak_pos ] += cond_prob; 
         #ifdef USE_MUTEX
-        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (peak_pos/TM_GRAN) );
         #else
-        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (peak_pos/TM_GRAN) );
         #endif
     }
     
@@ -1331,9 +1338,9 @@ update_CAGE_mapped_read_prbs(
         /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
         double window_density = 2*DBL_EPSILON;
 
-        MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( r->locations + i  );
+        MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( 
+            r->locations + i  );
         MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( r->locations + i );
-        MRL_START_POS_TYPE start = get_start_from_mapped_read_location( r->locations + i );
         
         /* If the reads are paired */
         unsigned int j = 0;
@@ -1346,19 +1353,23 @@ update_CAGE_mapped_read_prbs(
         else {
             /* store the trace that we care about */
             TRACE_TYPE** trace;
+            int peak_pos = -1;
             
             /* If this is in the rev strnanded transcriptome */
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
                 trace = traces->traces[1];
+                peak_pos = get_stop_from_mapped_read_location( r->locations + i );
             } 
             /* We are in the 5' ( negative ) transcriptome */
             else {
                 trace = traces->traces[0];
+                peak_pos = get_start_from_mapped_read_location( r->locations + i );
             }
             
-            unsigned int win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
-            unsigned int win_start = start - MIN( start, WINDOW_SIZE );
+            unsigned int win_stop = MIN( 
+                traces->chr_lengths[chr_index], peak_pos + WINDOW_SIZE );
+            unsigned int win_start = peak_pos - MIN( peak_pos, WINDOW_SIZE );
             for( j = win_start; j < win_stop; j++ )
             {
                 window_density += trace[chr_index][j];

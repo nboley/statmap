@@ -16,7 +16,7 @@ AGGREGATE_OVER_TRACES_BIN = os.path.join( STATMAP_PATH, "bin/aggregate_over_trac
 CONVERT_TRACE_INTO_WIGGLE_CMD = os.path.join( STATMAP_PATH, "bin/convert_trace_into_wiggle" )
 
 # Path to genome file
-GENOME_PATH = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosophila"
+GENOME_PATH = "/media/scratch/genomes/drosophila/drosophila_all.genome"
 #GENOME_PATH = "/media/scratch/genomes/D.pseudoobscura/genome.20.D.pseudoobscura"
 
 # Performance configuration
@@ -35,7 +35,10 @@ def read_samples_file( fname ):
     with open( fname ) as fp:
         for line in fp:
             # split sample line into fields
-            sn, lab_id, fns = line.strip().split('\t')
+            sn, lab_id, fns = line.strip().split()
+            sn = sn.replace( ";", "_" )
+            lab_id = lab_id.replace( ";", "_" )
+            
             # list of comma-sep filenames
             fns = fns.split(',')
             samples.append( (sn, lab_id, fns) )
@@ -91,6 +94,7 @@ def run_statmap( sample_name, bs_id ):
         marginal_wig_fname
     )
 
+    """
     # build the minimum trace over each sample using build_min_trace
     bootstrap_samples_cmd = ";\n".join([
         "%s min %s %s %i" % (
@@ -117,7 +121,8 @@ def run_statmap( sample_name, bs_id ):
             for sample_number in range(1, NUM_STARTING_SAMPLES+1)
         ])
     )
-
+    """
+    
     # covert single aggregated min trace to wiggle
     aggregated_min_wig_fname = os.path.join(
         output_dir_name_from_sample_name( sample_name, bs_id ),
