@@ -101,6 +101,12 @@ init_mapping_params_for_read(
     );
 
 void
+init_index_search_params(
+        struct index_search_params** isp,
+        struct indexable_subtemplates* ists,
+        struct mapping_params* mapping_params );
+
+void
 free_mapping_params( struct mapping_params* p );
 
 void
