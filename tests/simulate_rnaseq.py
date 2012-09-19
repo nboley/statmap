@@ -5,18 +5,44 @@ import re
 
 import tests as sc # for genome building and sampling functions
 
-def splice_introns_from_sequence( sequence,
-                                  n_introns,
-                                  min_intron_len,
-                                  max_intron_len
-                                ):
+def build_introns( sequence, n_introns, min_intron_len, max_intron_len ):
+    # Generate random sets of intron starts until we have one that won't
+    # produce overlapping introns
+    intron_starts = None
+
+    while(True):
+        # Subtract max_intron_len to account for the missing sample range at
+        # the end
+        intron_starts = sorted( random.sample(
+            xrange(len(sequence) - max_intron_len), n_introns ))
+
+        # Since they're sorted, we can easily use a linear search to find the
+        # minimum distance between intron starts
+        min_distance = len(sequence)
+        for i in xrange( len(intron_starts) - 1 ):
+            # distance between the start of the current intron and the start of
+            # the next intron
+            intron_distance = intron_starts[i+1] - intron_starts[i]
+            if intron_distance < min_distance:
+                min_distance = intron_distance
+
+        if min_distance > max_intron_len:
+            # if there's no way we could build an intron that would overlap
+            # with another, we're done generating possible intron starts
+            break
+
     introns = []
-    # Subtract max_intron_len to account for the missing sample range at the end
-    intron_starts = sorted(
-            random.sample( xrange(len(sequence) - max_intron_len), n_introns ))
+
     for intron_start in intron_starts:
         intron_len = random.randint(min_intron_len, max_intron_len)
         introns.append( ( intron_start, intron_start + intron_len ) )
+
+    return introns
+
+def splice_introns_from_sequence( sequence, n_introns, min_intron_len,
+        max_intron_len ):
+    introns = build_introns( sequence, n_introns, min_intron_len,
+            max_intron_len )
 
     # Now build the corresponding set of exons
     exons = []
