@@ -21,7 +21,7 @@
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
-#define MAX_NUM_UNTEMPLATED_GS 3
+#define MAX_NUM_UNTEMPLATED_GS 1
 
 int
 find_optimal_subseq_offset( 
@@ -179,7 +179,11 @@ make_assay_specific_corrections( struct rawread* r,
             }
             /* ELSE */
             /* shift the genomic location */
-            tmp_loc.loc += (j+1);
+            if( BKWD == loc.strnd ) {
+                tmp_loc.loc -= (j+1);
+            } else {
+                tmp_loc.loc += (j+1);
+            }
             
             /* add this new location */
             add_mapped_location( 

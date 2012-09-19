@@ -24,7 +24,7 @@ NUM_THREAD_PER_PROC = 4
 MAX_NUM_PROC = 7
 
 # value of Statmap -n parameter to use for iterative mapping
-NUM_STARTING_SAMPLES = 2
+NUM_STARTING_SAMPLES = 0
 
 def read_samples_file( fname ):
     '''
@@ -94,34 +94,7 @@ def run_statmap( sample_name, bs_id ):
         marginal_wig_fname
     )
 
-    """
-    # build the minimum trace over each sample using build_min_trace
-    bootstrap_samples_cmd = ";\n".join([
-        "%s min %s %s %i" % (
-            BUILD_MIN_TRACE_BIN,
-            "min_trace%i.bin.trace" % sample_number, # NOTE: build_min_trace cd's into smo_dir
-            output_dir_name_from_sample_name( sample_name, bs_id ),
-            sample_number
-        )
-        for sample_number in range(1, NUM_STARTING_SAMPLES+1)
-    ])
-
-    # aggregate min bootstrap traces from each sample into single min trace
-    aggregated_min_trace_fname = os.path.join(
-        output_dir_name_from_sample_name( sample_name, bs_id ),
-        "aggregated_min.trace" )
-    aggregate_bootstraps_cmd = "%s min %s %s" % (
-        AGGREGATE_OVER_TRACES_BIN,
-        aggregated_min_trace_fname,
-        " ".join([
-            os.path.join(
-                output_dir_name_from_sample_name( sample_name, bs_id ),
-                "min_trace%i.bin.trace" % sample_number
-            )
-            for sample_number in range(1, NUM_STARTING_SAMPLES+1)
-        ])
-    )
-    """
+    
     
     # covert single aggregated min trace to wiggle
     aggregated_min_wig_fname = os.path.join(

@@ -1343,7 +1343,7 @@ update_CAGE_mapped_read_prbs(
         MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( r->locations + i );
         
         /* If the reads are paired */
-        unsigned int j = 0;
+        int j = 0;
         if( (flag&IS_PAIRED) > 0 )
         {
             fprintf( stderr, "FATAL: paired cage reads are not supported\n" );
@@ -1360,16 +1360,18 @@ update_CAGE_mapped_read_prbs(
             {
                 trace = traces->traces[1];
                 peak_pos = get_stop_from_mapped_read_location( r->locations + i );
+
             } 
             /* We are in the 5' ( negative ) transcriptome */
             else {
                 trace = traces->traces[0];
                 peak_pos = get_start_from_mapped_read_location( r->locations + i );
             }
+
+            int win_start = MAX( 0, peak_pos-WINDOW_SIZE );            
+            int win_stop = MIN( 
+                (int)traces->chr_lengths[chr_index], peak_pos+WINDOW_SIZE+1 );
             
-            unsigned int win_stop = MIN( 
-                traces->chr_lengths[chr_index], peak_pos + WINDOW_SIZE );
-            unsigned int win_start = peak_pos - MIN( peak_pos, WINDOW_SIZE );
             for( j = win_start; j < win_stop; j++ )
             {
                 window_density += trace[chr_index][j];
