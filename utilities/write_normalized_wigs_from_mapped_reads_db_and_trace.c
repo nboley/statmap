@@ -24,10 +24,16 @@ void usage()
 
 int main( int argc, char** argv )
 {
-    if( argc != 3 )
+    if( argc < 3 || argc > 4 )
     {
         usage();
         exit(1);
+    }
+
+    float filter_threshold = 0;
+    if( argc == 4 )
+    {
+        filter_threshold = atof( argv[3] );
     }
 
     /* change to the output directory */
@@ -103,8 +109,7 @@ int main( int argc, char** argv )
     multiply_trace_by_scalar( traces, num_mapped_reads );
 
     /* Write the trace out to stream */
-    /* filter_threshold is 0 - don't filter anything */
-    write_wiggle_from_trace_to_stream( traces, stdout, 0 );
+    write_wiggle_from_trace_to_stream( traces, stdout, filter_threshold );
 
     close_traces( traces );
         

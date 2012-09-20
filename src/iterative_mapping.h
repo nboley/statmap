@@ -18,7 +18,7 @@ struct mapped_reads_db;
 // BUG
 // static const void* iterative_mapping_args; 
 
-#define WINDOW_SIZE 100
+#define WINDOW_SIZE 50
 
 #define CHIPSEQ_LHD_RATIO_STOP_VALUE 1.05
 #define CAGE_LHD_RATIO_STOP_VALUE 1.10

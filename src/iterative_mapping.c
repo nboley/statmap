@@ -1292,12 +1292,12 @@ void update_CAGE_trace_expectation_from_location(
         if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
         {
             trace_index = 1;
-            peak_pos = stop;
+            peak_pos = stop - loc->rd1_trim_offset;
         } 
         /* We are in the 5' ( positive ) transcriptome */
         else {
             trace_index = 0;
-            peak_pos = start;
+            peak_pos = start + loc->rd1_trim_offset;
         }
 
         /* lock the spinlock */
@@ -1359,13 +1359,15 @@ update_CAGE_mapped_read_prbs(
             if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
             {
                 trace = traces->traces[1];
-                peak_pos = get_stop_from_mapped_read_location( r->locations + i );
+                peak_pos = get_stop_from_mapped_read_location( r->locations + i ) 
+                    - ( r->locations + i )->rd1_trim_offset;
 
             } 
             /* We are in the 5' ( negative ) transcriptome */
             else {
                 trace = traces->traces[0];
-                peak_pos = get_start_from_mapped_read_location( r->locations + i );
+                peak_pos = get_start_from_mapped_read_location( r->locations + i )
+                    + ( r->locations + i )->rd1_trim_offset;
             }
 
             int win_start = MAX( 0, peak_pos-WINDOW_SIZE );            

@@ -177,13 +177,6 @@ make_assay_specific_corrections( struct rawread* r,
             if( tmp_loc.loc < (j+1) ) {
                 continue;
             }
-            /* ELSE */
-            /* shift the genomic location */
-            if( BKWD == loc.strnd ) {
-                tmp_loc.loc -= (j+1);
-            } else {
-                tmp_loc.loc += (j+1);
-            }
             
             /* add this new location */
             add_mapped_location( 
