@@ -75,9 +75,32 @@ int main( int argc, char** argv )
     mmap_mapped_reads_db( mpd_rdb );
     index_mapped_reads_db( mpd_rdb );
 
+    /* Count the number of mapped reads w/ at least 1 mapping
+     * (mpd_rdb->num_mmapped_reads counts reads that were declared mappable, but
+     * did not map */
+
+    /* because mapped_reads_db->num_mmapped_reads is unsigned long */
+    unsigned long num_mapped_reads = 0;
+
+    struct mapped_read_t* mapped_rd;
+    while( get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd) != EOF )
+    {
+	if( mapped_rd->num_mappings > 0 ) {
+	    num_mapped_reads++;
+	}
+	
+	free_mapped_read( mapped_rd );
+    }
+
+    /* Useful information */
+    fprintf( stderr, "DEBUG         :  num_mmapped_reads : %lu\n",
+	     mpd_rdb->num_mmapped_reads );
+    fprintf( stderr, "DEBUG         :   num_mapped_reads : %lu\n",
+	     num_mapped_reads );
+
     /* Normalize the trace, then multiply by the number of mapped reads */
     normalize_traces( traces );
-    multiply_trace_by_scalar( traces, mpd_rdb->num_mmapped_reads );
+    multiply_trace_by_scalar( traces, num_mapped_reads );
 
     /* Write the trace out to stream */
     /* filter_threshold is 0 - don't filter anything */
