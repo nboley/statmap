@@ -80,7 +80,8 @@ int main( int argc, char** argv )
     multiply_trace_by_scalar( traces, mpd_rdb->num_mmapped_reads );
 
     /* Write the trace out to stream */
-    write_trace_to_stream( traces, stdout );
+    /* filter_threshold is 0 - don't filter anything */
+    write_wiggle_from_trace_to_stream( traces, stdout, 0 );
 
     close_traces( traces );
         
