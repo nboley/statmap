@@ -1502,7 +1502,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
     {
         candidate_mapping* cm = mappings->mappings + i;
 
-        enum bool found_gapped_mappings
+        enum bool mapping_was_gapped
             = find_potential_gapped_candidate_mappings(
                 cm,
                 mappings,
@@ -1514,7 +1514,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
                 mapping_params
             );
 
-        if( !found_gapped_mappings )
+        if( !mapping_was_gapped )
         {
             /* Then this candidate mapping did not have a gap, and should be
              * added to the set of mappings to return as-is */
@@ -1528,7 +1528,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
 void
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
-        candidate_mappings** rst_mappings,
+        candidate_mappings** final_mappings,
         struct genome_data* genome,
 
         struct error_model_t* error_model,
@@ -1551,13 +1551,14 @@ find_candidate_mappings_for_read_subtemplate(
             &fwd_pa, &rev_pa
         );
 
-    struct index_search_params* index_search_params = NULL;
-    init_index_search_params( &index_search_params, ists, mapping_params );
-
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
     mapped_locations** search_results = malloc(
             sizeof(mapped_locations*) * search_results_length );
+
+    /* initialize search parameters for the index probes */
+    struct index_search_params* index_search_params = NULL;
+    init_index_search_params( &index_search_params, ists, mapping_params );
 
     search_index_for_indexable_subtemplates(
             ists,
@@ -1578,18 +1579,16 @@ find_candidate_mappings_for_read_subtemplate(
             mappings, search_results, search_results_length,
             rst, genome, mapping_params );
 
-    /* Note - search_results contains references to memory allocated in the
+    /* NOTE search_results contains references to memory allocated in the
      * indexable_subtemplates. search_results must be freed before ists */
     free_search_results( search_results, search_results_length );
 
-    /* if this is a gapped assay, build candidate mappings with potential
-     * gaps */
-    candidate_mappings* gapped_mappings = NULL;
-    init_candidate_mappings( &gapped_mappings );
-
+    /* Return the set of gapped mappings - if mappings were ungapped, they were
+     * included in this set of candidate mappings as-is (so for an ungapped
+     * assay, gapped_mappings and mappings are identical). */
     build_gapped_candidate_mappings_for_read_subtemplate(
             mappings,
-            gapped_mappings,
+            final_mappings,
             rst,
             ists,
             genome,
@@ -1597,25 +1596,13 @@ find_candidate_mappings_for_read_subtemplate(
             mapping_params
         );
 
-    /* Select which set of candidate mappings to return - if we were able to
-     * successfully build gapped candidate mappings, return them; otherwise
-     * return the original set of (implicit non-gapped) mappings */
-    if( gapped_mappings->length > 0 )
-    {
-        *rst_mappings = gapped_mappings;
-        free( mappings );
-    } else {
-        *rst_mappings = mappings;
-        free( gapped_mappings );
-    }
-
     free_indexable_subtemplates( ists );
 
     /* update the thread local copy of error data (need the error data
      * and the subtemplate to do this) */
     update_error_data_record_from_candidate_mappings(
             genome,
-            *rst_mappings,
+            final_mappings,
             rst,
             scratch_error_data_record
         );
@@ -1659,10 +1646,11 @@ find_candidate_mappings_for_read(
         /* initialize the candidate mappings container for this read
          * subtemplate */
         candidate_mappings* rst_mappings = NULL;
+        init_candidate_mappings( &rst_mappings );
 
         find_candidate_mappings_for_read_subtemplate(
                 rst,
-                &rst_mappings,
+                rst_mappings,
                 genome,
 
                 error_model,
