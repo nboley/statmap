@@ -1528,7 +1528,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
 void
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
-        candidate_mappings** final_mappings,
+        candidate_mappings* final_mappings,
         struct genome_data* genome,
 
         struct error_model_t* error_model,
