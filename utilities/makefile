@@ -8,7 +8,8 @@ compile_options = -O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 # --short-enum
 all: build_index aggregate_over_wiggles mapped_reads_into_sam sample_mapping \
 	call_peaks aggregate_over_traces convert_trace_into_wiggle \
 	build_marginal_mappings_trace_from_mpd_read_db verify_mapped_read_locations \
-	build_min_trace mapped_reads_into_sam_from_trace 
+	build_min_trace mapped_reads_into_sam_from_trace \
+	write_normalized_wigs_from_mapped_reads_db_and_trace 
 
 build_index : build_index.c
 	$(compiler) $(compile_options) -o build_index build_index.c \
@@ -63,9 +64,6 @@ verify_mapped_read_locations : verify_mapped_read_locations.c
 	-lm -pthread
 	cp verify_mapped_read_locations ../bin/
 
-mapped_reads_into_sam.c :
-
-
 mapped_reads_into_sam : mapped_reads_into_sam.c
 	$(compiler) $(compile_options) -o mapped_reads_into_sam write_sam_from_mapped_reads_db.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
@@ -100,8 +98,6 @@ build_marginal_mappings_trace_from_mpd_read_db : build_marginal_mappings_trace_f
 	-lm -lpthread
 	cp build_marginal_mappings_trace_from_mpd_read_db ../bin/
 
-build_marginal_mappings_trace_from_mpd_read_db.c :
-
 sample_mapping : sample_mapping.c
 	$(compiler) $(compile_options) -o sample_mapping sample_mapping.c \
 	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
@@ -123,7 +119,15 @@ call_peaks : call_peaks.c
 	-lm -pthread
 	cp call_peaks ../bin/
 
-call_peaks.c :
+write_normalized_wigs_from_mapped_reads_db_and_trace : write_normalized_wigs_from_mapped_reads_db_and_trace.c
+	$(compiler) $(compile_options) -o write_normalized_wigs_from_mapped_reads_db_and_trace write_normalized_wigs_from_mapped_reads_db_and_trace.c \
+	../src/rawread.o ../src/mapped_read.o ../src/fragment_length.o ../src/trace.o \
+	../src/quality.o ../src/genome.o  ../src/sam.o  ../src/pseudo_location.o \
+	../src/index_genome.o ../src/sequences_node.o ../src/dna_sequence.o ../src/mapped_location.o  \
+	../src/iterative_mapping.o ../src/config_parsing.o ../src/diploid_map_data.o \
+	../src/candidate_mapping.o \
+	-lm -pthread
+	cp write_normalized_wigs_from_mapped_reads_db_and_trace ../bin/
 
 #wiggle.o : ../src/wiggle.c
 #	$(compiler) $(compile_options) -c ../src/wiggle.c ../src/trace.c ../src/mapped_read.c
@@ -141,3 +145,4 @@ clean :
 	-rm verify_mapped_read_locations
 	-rm build_min_trace
 	-rm mapped_reads_into_sam_from_trace 
+	-rm write_normalized_wigs_from_mapped_reads_db_and_trace

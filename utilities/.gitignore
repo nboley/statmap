@@ -6,5 +6,7 @@ build_min_trace
 call_peaks
 convert_trace_into_wiggle
 mapped_reads_into_sam
+mapped_reads_into_sam_from_trace
 sample_mapping
 verify_mapped_read_locations
+write_normalized_wigs_from_mapped_reads_db_and_trace
