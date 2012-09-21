@@ -690,6 +690,40 @@ remove_candidate_mapping_group(
 }
 
 void
+filter_penalties_array( float** penalties, int joined_mappings_len )
+{
+    /* Rewrite the penalties array with just the penalties from the filtered
+     * mappings */
+    int num_filtered_penalties = 0;
+
+    int i;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        if( (*penalties)[i] != 1 ) {
+            num_filtered_penalties++;
+        }
+    }
+
+    float* filtered_penalties = malloc( sizeof(float)*num_filtered_penalties );
+    int fp_index = 0;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        if( (*penalties)[i] != 1 )
+        {
+            filtered_penalties[fp_index] = (*penalties)[i];
+            fp_index++;
+        }
+    }
+
+    /* Free the original penalties array and replace it with a pointer to the
+     * new, filtered penalties array */
+    free( *penalties );
+    *penalties = filtered_penalties;
+
+    return;
+}
+
+void
 filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
                                   float** penalties,
                                   int* joined_mappings_len,
@@ -780,33 +814,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                 &current_mapping, i, *joined_mappings_len );
     }
 
-    /* Rewrite the penalties array with just the penalties from the filtered
-     * mappings */
-    int num_filtered_penalties = 0;
-
-    // int i declared earlier
-    for( i = 0; i < *joined_mappings_len; i++ )
-    {
-        if( (*penalties)[i] != 1 ) {
-            num_filtered_penalties++;
-        }
-    }
-
-    float* filtered_penalties = malloc( sizeof(float)*num_filtered_penalties );
-    int fp_index = 0;
-    for( i = 0; i < *joined_mappings_len; i++ )
-    {
-        if( (*penalties)[i] != 1 )
-        {
-            filtered_penalties[fp_index] = (*penalties)[i];
-            fp_index++;
-        }
-    }
-
-    /* Free the original penalties array and replace it with a pointer to the
-     * new, filtered penalties array */
-    free( *penalties );
-    *penalties = filtered_penalties;
+    filter_penalties_array( penalties, *joined_mappings_len );
 
     *joined_mappings_len = filtered_mappings_len;
 
