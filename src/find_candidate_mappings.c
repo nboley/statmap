@@ -708,9 +708,12 @@ condense_candidate_mapping_cigar_string(
     assert( cm->cigar_len == 5 );
     assert( cm->cigar[1].op == 'U' && cm->cigar[3].op == 'U' );
 
-    int first_match_len = cm->cigar[0].len + cm->cigar[1].len;
+    /* TODO - remove all code related to 'U' - since we now examine all
+     * possibilities within the index probes as well, it is unnecessary and
+     * complicates things */
+    int first_match_len = cm->cigar[1].len;
     int gap_len = cm->cigar[2].len;
-    int second_match_len = cm->cigar[3].len + cm->cigar[4].len;
+    int second_match_len = cm->cigar[3].len;
 
     /* Clear the original cigar string array */
     memset( cm->cigar, 0,
@@ -1236,6 +1239,7 @@ build_candidate_mappings_from_search_results(
          * possible expansions to consider for matching */
         mapped_locations* expanded_base =
             mapped_locations_template( base_locs->probe );
+
         expand_base_mapped_locations( base_loc, expanded_base, genome );
 
         /* match across each of the expanded locations */
@@ -1296,21 +1300,6 @@ count_gaps_in_candidate_mapping(
     return num_m - 1;
 }
 
-int
-count_length_of_indexable_subtemplates(
-        struct indexable_subtemplates* ists )
-{
-    int total_length = 0;
-
-    int i;
-    for( i = 0; i < ists->length; i++ )
-    {
-        total_length += ists->container[i].subseq_length;
-    }
-
-    return total_length;
-}
-
 void
 build_gapped_candidate_mappings_for_candidate_mapping(
         candidate_mapping* cm,
@@ -1347,59 +1336,80 @@ build_gapped_candidate_mappings_for_candidate_mapping(
         penalty_array = rev_pa;
     }
 
-    /* Get a pointer to the genome sequence this read maps to */
+    /* The full length of the fragment, including any gaps */
+    int gapped_length = gapped_cm.rd_len + gapped_cm.cigar[2].len;
+
+    /* Get a pointer to the genome sequence this read maps to. This is the
+     * whole genome sequence it covers, including the intron. */
     char* genome_seq = find_seq_ptr( genome,
             gapped_cm.chr,
             gapped_cm.start_bp,
-            gapped_cm.rd_len + gapped_cm.cigar[2].len // XXX check this
+            gapped_length
         );
 
-    /* Compute the additional penalty from this arrangement of sequence around
-     * the intron */
-    float probe1_penalty = recheck_penalty(
-            genome_seq + gapped_cm.cigar[0].len,
-            mapped_seq + gapped_cm.cigar[0].len,
-            gapped_cm.cigar[1].len,
-            penalty_array->array + gapped_cm.cigar[0].len
+    /* Start by computing the penalty of a candidate mapping where the exon is
+     * the first num_intron_configurations bp's in the read.
+     * 
+     * This corresponds to 
+     * 
+     *          rst->length
+     *              |
+     *      -----------------
+     *      |  p1  |   e1   |    intron     |  p2  |
+     *      -------
+     *         |
+     *      indexed_seq_len
+     *
+     *  where e2 is not shown because it has zero length.
+     *
+     * */
+    float exon1_penalty = recheck_penalty(
+            genome_seq,
+            mapped_seq,
+            penalty_array->array,
+            gapped_cm.cigar[1].len
         );
 
-    float probe2_penalty = 0;
+    float exon2_penalty = 0;
 
     /* Add the initial proposed candidate mapping */
     /* TODO could optimize here by not adding anything below the minimum
-     * match penalty */
-    gapped_cm.penalty = cm->penalty + probe1_penalty + probe2_penalty;
+     * match penalty. could potentially optimize further by breaking once
+     * penalties start climbing again (assumes approximately normal
+     * distribution around the intron). */
+    gapped_cm.penalty = cm->penalty + exon1_penalty + exon2_penalty;
     add_candidate_mapping( gapped_mappings, &gapped_cm );
 
     int i;
-    for( i = 1; i <= num_intron_configurations; i++ )
+    for( i = 1; i < num_intron_configurations; i++ )
     {
         gapped_cm.cigar[1].len -= 1;
         gapped_cm.cigar[3].len += 1;
 
         /* Compute the penalty of the shifted bps */
-        float probe1_bp_penalty = recheck_penalty(
-                genome_seq + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len,
-                mapped_seq + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len,
-                1,
-                penalty_array->array + gapped_cm.cigar[0].len + gapped_cm.cigar[1].len
+
+        /* We are subtracting one base pair from the end of the first exon, and
+         * adding one to the start of the second exon */
+        float exon1_bp_penalty = recheck_penalty(
+                genome_seq + gapped_cm.cigar[1].len,
+                mapped_seq + gapped_cm.cigar[1].len,
+                penalty_array->array + gapped_cm.cigar[1].len,
+                1
             );
 
-        float probe2_bp_penalty = recheck_penalty(
-                /* TODO - extremely hack. The start of the second index probe relative to
-                 * the genome is the subsequence offset from the read start + the known gap. */
-                genome_seq + ists->container[1].subseq_offset + gapped_cm.cigar[2].len - i,
-                mapped_seq + ists->container[1].subseq_offset - i,
-                1,
-                penalty_array->array + ists->container[1].subseq_offset - i
+        float exon2_bp_penalty = recheck_penalty(
+                genome_seq + gapped_length - gapped_cm.cigar[3].len,
+                mapped_seq + num_intron_configurations - gapped_cm.cigar[3].len,
+                penalty_array->array + num_intron_configurations - gapped_cm.cigar[3].len,
+                1
             );
 
-        probe1_penalty -= probe1_bp_penalty;
-        probe2_penalty += probe2_bp_penalty;
+        exon1_penalty -= exon1_bp_penalty;
+        exon2_penalty += exon2_bp_penalty;
 
-        /* Update the cm penalty, and add the candidate mapping to the list of
-         * gapped mappings */
-        gapped_cm.penalty = cm->penalty + probe1_penalty + probe2_penalty;
+        /* Update the cm penalty (sum of log probs is product of probs)
+         * and add the candidate mapping to the list of gapped mappings */
+        gapped_cm.penalty = cm->penalty + exon1_penalty + exon2_penalty;
         add_candidate_mapping( gapped_mappings, &gapped_cm );
     }
 
@@ -1431,11 +1441,7 @@ find_potential_gapped_candidate_mappings(
     assert( num_gaps == 1 );
     assert( ists->length == 2 );
 
-    /* Between two indexable subtemplates with a gap between them, the number
-     * of possible configurations for the rest of the read is equal to
-     *      rd_len - length of indexable subtemplates                       */
-    int total_probe_len = count_length_of_indexable_subtemplates( ists );
-    int num_intron_configurations = rst->length - total_probe_len;
+    int num_intron_configurations = rst->length;
 
     /* Allocate memory to store the potential gapped candidate mappings */
     candidate_mappings* potential_gapped_mappings;

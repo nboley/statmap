@@ -314,9 +314,9 @@ float
 recheck_penalty(
         char* reference,
         char* observed,
-        const int seq_length,
         /* Pointer into an array of penalty_t */
-        struct penalty_t* pa
+        struct penalty_t* pa,
+        const int seq_length
     )
 {
     int i;

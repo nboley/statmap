@@ -532,8 +532,8 @@ recheck_candidate_mapping(
             rechecked_penalty += recheck_penalty(
                     real_seq,
                     rst->char_seq + seq_pos,
-                    current_entry.len,
-                    penalty_array->array + seq_pos
+                    penalty_array->array + seq_pos,
+                    current_entry.len
                 );
 
             seq_pos += current_entry.len;

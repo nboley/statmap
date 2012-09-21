@@ -116,8 +116,9 @@ float
 recheck_penalty(
         char* reference,
         char* observed,
-        const int seq_length,
-        struct penalty_t* penalties
+        /* Pointer into an array of penalty_t */
+        struct penalty_t* pa,
+        const int seq_length
     );
 
 /* Compute the penalty form LETTER_TYPE sequences */
