@@ -333,6 +333,9 @@ def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
     
     return truth
 
+def reverse_complement( read ):
+    return read.translate( rev_comp_table )[::-1]
+
 def build_reads_from_fragments(
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
     reads = []
@@ -340,14 +343,14 @@ def build_reads_from_fragments(
         if paired_end:
             read_1 = genome[chr][start:(start+read_len)]
             read_2 = genome[chr][(stop-read_len):stop]
-            read_2 = read_2.translate( rev_comp_table )[::-1]
+            read_2 = reverse_complement( read_2 )
             reads.append( ( read_1, read_2 ) )
         else:
             if random.random() > 0.5 or not rev_comp:
                 read = genome[chr][start:(start+read_len)]
             elif rev_comp:
                 read = genome[chr][(stop-read_len):(stop)]
-                read = read.translate( rev_comp_table )[::-1]
+                read = reverse_complement( read )
             
             reads.append( read )
     return reads

@@ -234,9 +234,13 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
         entry_len = int( entry[0] )
 
         if entry[1] == 'M':
-            # TODO handle rev comp (first, generate rev comp test reads)
             read_segment = read_seq[seq_pos:seq_pos+entry_len]
             genome_segment = genome[truth[0]][genome_pos:genome_pos+entry_len]
+
+            if rev_comp:
+                # reverse complement the genome sequence; the read sequence
+                # from the SAM is already reverse complement
+                genome_segment = sc.reverse_complement( genome_segment )
 
             # Normalize sequence to upper case
             if( read_segment.upper() != genome_segment.upper() ):
@@ -295,7 +299,7 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
         if nonmapping_read_id not in categorized_fragments['probe_overlaps_intron']:
             print "ERROR       :  Nonmapping read %i did not have index probes overlapping the intron." \
                     % nonmapping_read_id
-            print " Introns :", introns
+            print "Introns :", introns
             print "Fragment :", fragments[nonmapping_read_id]
             sys.exit(1)
 
@@ -350,7 +354,7 @@ def main():
     reads = sc.build_reads_from_fragments(
             transcriptome, fragments,
             read_len=read_len,
-            rev_comp=False,
+            rev_comp=True,
             paired_end=False )
 
     # Write out the test files
