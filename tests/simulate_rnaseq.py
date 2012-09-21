@@ -84,7 +84,7 @@ def find_fragment_pos_in_genome( fragment, introns ):
     return fragment[1] + offset, fragment[2] + offset
 
 def fragment_overlaps_intron( frag_start, frag_stop, intron_start ):
-    if frag_start < intron_start and frag_stop >= intron_start:
+    if frag_start < intron_start and frag_stop > intron_start:
         return True
     return False
 
@@ -100,8 +100,8 @@ def categorize_fragments( genome, transcriptome, introns, fragments,
 
     categorized_fragments = {
             "no_overlap": [],
-            "intron_overlap": [],
-            "intron_overlap_probe": []
+            "overlaps_intron": [],
+            "probe_overlaps_intron": []
         }
 
     # A mapped fragment's read_id is the index of the fragment in fragments,
@@ -126,9 +126,9 @@ def categorize_fragments( genome, transcriptome, introns, fragments,
                 # intron, then the index probe overlaps the intron
                 if fragment_index_probe_overlaps_intron( frag_start, frag_stop,
                         intron[0], intron[1], indexed_seq_len ):
-                    categorized_fragments["intron_overlap_probe"].append( read_id )
+                    categorized_fragments["probe_overlaps_intron"].append( read_id )
                 else:
-                    categorized_fragments["intron_overlap"].append( read_id )
+                    categorized_fragments["overlaps_intron"].append( read_id )
             else:
                 categorized_fragments["no_overlap"].append( read_id )
 
@@ -176,8 +176,8 @@ def cigar_match( mapped_read, fragments, introns ):
         return True
 
     # DEBUG (if match failed)
-    print "Mapped Cigar :", mapped_read[5] # cigar entry in SAM line
-    print "  True Cigar :", true_cigar
+    #print "Mapped Cigar :", mapped_read[5] # cigar entry in SAM line
+    #print "  True Cigar :", true_cigar
 
     return False
 
@@ -211,20 +211,16 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
             truth, introns )
 
     if( truth[0] != contig or frag_start_in_genome != start_pos ):
-        print "Mapped read does not match truth: found (%s, %i) for (%s, %i)" \
-                % ( contig, start_pos, truth[0], frag_start_in_genome )
-        print "Introns:", introns
-        print "Mapped: ", mapped_read
-        print "Truth:  ", truth
-        sys.exit(1)
-
-    # Set the number of allowed mismatches for comparison back to the genome If
-    # a read didn't overlap an intron, it must match perfectly. Otherwise, we
-    # allow some variance.
-    if read_id in categorized_fragments['no_overlap']:
-        num_allowed_mismatches = 0
-    else:
-        num_allowed_mismatches = 3 # empirically chosen
+        if read_id in categorized_fragments['probe_overlaps_intron']:
+            print "Mapped read (with probe overlapping intron) does not match truth: found (%s, %i) for (%s, %i)" \
+                    % ( contig, start_pos, truth[0], frag_start_in_genome )
+        else:
+            print "Mapped read does not match truth: found (%s, %i) for (%s, %i)" \
+                    % ( contig, start_pos, truth[0], frag_start_in_genome )
+            print "Introns:", introns
+            print "Mapped: ", mapped_read
+            print "Truth:  ", truth
+            sys.exit(1)
 
     ## Check - all M sequence in the cigar string should match the genome
     # location they mapped to
@@ -238,24 +234,24 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
         entry_len = int( entry[0] )
 
         if entry[1] == 'M':
-            # TODO rev comp if necessary
+            # TODO handle rev comp (first, generate rev comp test reads)
             read_segment = read_seq[seq_pos:seq_pos+entry_len]
             genome_segment = genome[truth[0]][genome_pos:genome_pos+entry_len]
 
-            # Since the read might overlap the intron slightly and still have
-            # been within Statmap's bounds, we say a match is good enough if it
-            # has less than some number of mismatches
-            mismatch_count = num_mismatches( read_segment.upper(),
-                                             genome_segment.upper() )
-            if( mismatch_count > num_allowed_mismatches ):
-                print "Mapped read match segment does not match genome"
-                print "read_id %i had %i mismatches to the reference genome" \
-                        % (read_id, mismatch_count)
+            # Normalize sequence to upper case
+            if( read_segment.upper() != genome_segment.upper() ):
                 print "Mapped Read :", read_segment
                 print "     Genome :", genome_segment
                 print introns
                 print mapped_read
-                sys.exit(1)
+
+                if read_id in categorized_fragments['no_overlap']:
+                    print "Mapped read match segment does not match genome"
+                    sys.exit(1)
+                elif read_id in categorized_fragments['overlaps_intron']:
+                    print "Mapped read (that overlaps an intron) match segment does not match genome"
+                else: # read_id in categorized_fragments['probe_overlaps_intron']
+                    print "Mapped read (with probe overlapping an intron) match segment does not match genome"
 
             # update the position in the underlying mapped read_len
             seq_pos += entry_len
@@ -279,8 +275,6 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
     categorized_fragments = categorize_fragments( genome,
             transcriptome, introns, fragments, read_len, indexed_seq_len )
 
-    #print categorized_fragments # DEBUG
-
     # test the sam file to make sure that each of the reads appears
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     num_mapped_reads = sum( 1 for mapped_read in sc.iter_sam_reads(sam_fp) )
@@ -298,8 +292,11 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
     # Since the test reads are perfect samples from the genome, this is the
     # only way a read should be nonmapping.
     for nonmapping_read_id in nonmapping_read_ids:
-        if nonmapping_read_id not in categorized_fragments['intron_overlap_probe']:
-            print "ERROR       :  Nonmapping read id did not have index probes overlapping the intron."
+        if nonmapping_read_id not in categorized_fragments['probe_overlaps_intron']:
+            print "ERROR       :  Nonmapping read %i did not have index probes overlapping the intron." \
+                    % nonmapping_read_id
+            print " Introns :", introns
+            print "Fragment :", fragments[nonmapping_read_id]
             sys.exit(1)
 
     for mapped_reads in sc.iter_sam_reads(sam_fp): # each read id
@@ -317,12 +314,19 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
                 cigar_matched = True
 
         if not cigar_matched:
-            print "ERROR       :  Did not find a matching cigar string for read id %i." \
-                    % read_id
-            print "Introns :", introns
-            print "  Truth :", fragments[read_id]
-            print " Mapped :", mapped_read
-            sys.exit(1)
+            if read_id not in categorized_fragments['probe_overlaps_intron']:
+                print "ERROR       :  Did not find a matching cigar string for read id %i (expected %s)" \
+                        % (read_id, build_cigar_string_for_fragment(
+                            fragments[read_id], introns ) )
+                print "Introns :", introns
+                print "  Truth :", fragments[read_id]
+                print " Mapped :", mapped_read
+                sys.exit(1)
+            else:
+                print "NOTICE      :  Did not find a matching cigar string for read id %i (expected %s)" \
+                        % ( read_id, build_cigar_string_for_fragment(
+                                fragments[read_id], introns ) )
+                print "               Fragment had index probe overlapping an intron, so this was probably unavoidable."
 
 def main():
     output_directory = "smo_rnaseq_sim"
