@@ -198,7 +198,8 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
 
     # parse the cigar string into a list of entries
     cigar_re = r'([0-9]+)([MN])'
-    cigar_entries = re.findall( cigar_re, mapped_read[5] )
+    cigar_string = mapped_read[5]
+    cigar_entries = re.findall( cigar_re, cigar_string )
 
     read_seq = mapped_read[9]
 
@@ -212,11 +213,11 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
 
     if( truth[0] != contig or frag_start_in_genome != start_pos ):
         if read_id in categorized_fragments['probe_overlaps_intron']:
-            print "Mapped read (with probe overlapping intron) does not match truth: found (%s, %i) for (%s, %i)" \
-                    % ( contig, start_pos, truth[0], frag_start_in_genome )
+            print "NOTICE      :  Mapped read %i (with probe overlapping intron) does not match truth: found (%s, %i) for (%s, %i)" \
+                    % ( read_id, contig, start_pos, truth[0], frag_start_in_genome )
         else:
-            print "Mapped read does not match truth: found (%s, %i) for (%s, %i)" \
-                    % ( contig, start_pos, truth[0], frag_start_in_genome )
+            print "ERROR       :  Mapped read %i does not match truth: found (%s, %i) for (%s, %i)" \
+                    % ( read_id, contig, start_pos, truth[0], frag_start_in_genome )
             print "Introns:", introns
             print "Mapped: ", mapped_read
             print "Truth:  ", truth
@@ -244,18 +245,20 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
 
             # Normalize sequence to upper case
             if( read_segment.upper() != genome_segment.upper() ):
-                print "Mapped Read :", read_segment
-                print "     Genome :", genome_segment
-                print introns
-                print mapped_read
-
                 if read_id in categorized_fragments['no_overlap']:
-                    print "Mapped read match segment does not match genome"
+                    print "ERROR       :  Mapped read match segment does not match genome in read %i" \
+                            % read_id
+                    print "Mapped Read :", read_segment
+                    print "     Genome :", genome_segment
+                    print introns
+                    print mapped_read
                     sys.exit(1)
                 elif read_id in categorized_fragments['overlaps_intron']:
-                    print "Mapped read (that overlaps an intron) match segment does not match genome"
+                    print "NOTICE      :  Mapped read %i (that overlaps an intron) match segment does not match genome in read" \
+                            % read_id
                 else: # read_id in categorized_fragments['probe_overlaps_intron']
-                    print "Mapped read (with probe overlapping an intron) match segment does not match genome"
+                    print "NOTICE      :  Mapped read %i (with probe overlapping an intron) match segment does not match genome" \
+                            % read_id
 
             # update the position in the underlying mapped read_len
             seq_pos += entry_len
