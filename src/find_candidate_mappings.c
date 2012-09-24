@@ -1606,6 +1606,7 @@ find_candidate_mappings_for_read_subtemplate(
             mapping_params
         );
 
+    free_candidate_mappings( mappings );
     free_indexable_subtemplates( ists );
 
     /* update the thread local copy of error data (need the error data
