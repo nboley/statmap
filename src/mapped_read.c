@@ -489,7 +489,14 @@ recheck_candidate_mapping(
 
     float rechecked_penalty = 0;
 
-    int seq_pos = 0;
+    int seq_pos;
+    if( mapping->rd_strnd == FWD )
+    {
+        seq_pos = 0;
+    } else {
+        seq_pos = rst->length;
+    }
+
     int genome_pos = mapping->start_bp;
 
     /* loop over the entries in this candidate mapping's cigar string */
@@ -522,11 +529,10 @@ recheck_candidate_mapping(
             {
                 rev_complement_read( genome_seq, real_seq, current_entry.len );
                 penalty_array = &rev_pa;
-                genome_pos -= current_entry.len;
+                seq_pos -= current_entry.len;
             } else {
                 memcpy( real_seq, genome_seq, sizeof(char)*current_entry.len );
                 penalty_array = &fwd_pa;
-                genome_pos += current_entry.len;
             }
 
             rechecked_penalty += recheck_penalty(
@@ -536,19 +542,19 @@ recheck_candidate_mapping(
                     current_entry.len
                 );
 
-            seq_pos += current_entry.len;
+            if( mapping->rd_strnd == FWD )
+            {
+                seq_pos += current_entry.len;
+            }
+
+            genome_pos += current_entry.len;
 
             free( real_seq );
 
         } else if ( current_entry.op == 'N' ) {
             /* Move the genome_pos pointer forward to skip the intron indicated
              * by this cigar string entry */
-            if( BKWD == mapping->rd_strnd )
-            {
-                genome_pos -= current_entry.len;
-            } else {
-                genome_pos += current_entry.len;
-            }
+            genome_pos += current_entry.len;
         } else {
             print_candidate_mapping( mapping ); // DEBUG
             assert( false );
@@ -907,7 +913,7 @@ populate_mapped_read_sublocations_from_candidate_mappings(
     while( current_mapping != NULL )
     {
         /* Keep track of the start position of each mapped location (including
-         * offsets from gaps/N ops */
+         * the cumulative offset from gaps) */
         int start_pos = current_mapping->start_bp;
 
         /* Add a sublocation for each M region in each candidate mappings in
@@ -975,12 +981,7 @@ populate_mapped_read_sublocations_from_candidate_mappings(
 
             /* Move the start position to the start of the next entry in the
              * cigar string */
-            /* TODO - is this right for FWD/BKWD ? */
-            if( current_mapping->rd_strnd == FWD ) {
-                start_pos += cigar_entry.len;
-            } else {
-                start_pos -= cigar_entry.len;
-            }
+            start_pos += cigar_entry.len;
         }
 
         /* Advance the candidate mapping pointers to the next candidate mapping

@@ -572,8 +572,8 @@ build_candidate_mapping_cigar_string_from_match(
                 ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
                         - (match->locations[i-1]->loc - match->subseq_offsets[i-1]);
             } else {
-                ref_gap = (match->locations[i]->loc + match->subseq_offsets[i])
-                        - (match->locations[i-1]->loc + match->subseq_offsets[i-1]);
+                ref_gap = (match->locations[i-1]->loc + match->subseq_offsets[i-1])
+                        - (match->locations[i]->loc + match->subseq_offsets[i]);
             }
 
             if( ref_gap > 0 )
@@ -619,7 +619,7 @@ build_candidate_mapping_cigar_string_from_match(
     assert( cm->cigar_len <= MAX_CIGAR_STRING_ENTRIES );
 
     /* If this wasn't a gapped candidate mapping, hard-code the full read
-     * length. TODO this is an ugly hack */
+     * length. TODO hack */
     if( cm->cigar_len == 1 )
     {
         cm->cigar[0].op = 'M';
@@ -678,11 +678,16 @@ build_candidate_mapping_from_match(
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
-    int read_location = 
-        modify_mapped_read_location_for_index_probe_offset(
+    int read_location = modify_mapped_read_location_for_index_probe_offset(
                 base->loc, base->chr, base->strnd,
                 match->subseq_offsets[0], match->subseq_lengths[0],
                 rst->length, genome );
+
+    /* HACK */
+    if( match->len > 1 && base->strnd == BKWD ) {
+        read_location = match->locations[match->len-1]->loc;
+    }
+
     if( read_location < 0 ) // the read location was invalid; skip this matched set
         return;
 
@@ -987,9 +992,8 @@ add_matches_from_locations_to_stack(
                 - candidate_locs->probe->subseq_offset
                 - prev_matched_location_start;
         } else {
-            candidate_ref_gap = candidate_loc->loc
-                + candidate_locs->probe->subseq_offset
-                - prev_matched_location_start;
+            candidate_ref_gap = prev_matched_location_start
+                - ( candidate_loc->loc + candidate_locs->probe->subseq_offset );
         }
 
         int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;

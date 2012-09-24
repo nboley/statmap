@@ -99,6 +99,14 @@ error_prb_for_estimated_model(
     struct freqs_array* freqs = error_model->data;
     double prb = freqs->freqs[(unsigned char)error_score][pos];
 
+    /* Fudge factor - don't take the log of 0 */
+    /* TODO - check the behavior of the error model here (only observed when
+     * pos == 0) */
+    if( prb == 0 )
+    {
+        prb += 1e-6;
+    }
+
     if( ref == obs )
         return log10(1 - prb);
     else

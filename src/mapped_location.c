@@ -243,13 +243,13 @@ void
 print_mapped_locations( mapped_locations* results )
 {
     int i;
-    // printf("Num:\tPenalty\tLoc\n");
     
     for( i = 0; i < results->length; i++)
     {
-        printf("\t%i:%i\t%.6f\n", 
+        printf("\t%i:%i\t%d\t%.6f\n", 
                results->locations[i].chr,
                results->locations[i].loc,
+               results->locations[i].strnd,
                results->locations[i].penalty
         );
     }

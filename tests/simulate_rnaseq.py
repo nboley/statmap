@@ -76,20 +76,30 @@ def splice_introns_from_genome( genome,
     return introns_dict, transcriptome
 
 def find_fragment_pos_in_genome( fragment, introns ):
+    # Since reads are sampled from the transcriptome, their coordinates cannot
+    # be compared to the genome without accounting the offset produced by any
+    # introns.
     offset = 0
     for intron in introns[fragment[0]]: # sorted by start
-        if intron[0] <= fragment[1]: # intron start < fragment start
+        # if the intron comes before the fragment, add its length to the offset
+        if intron[0] <= fragment[1]:
             offset += ( intron[1] - intron[0] )
 
     return fragment[1] + offset, fragment[2] + offset
 
 def fragment_overlaps_intron( frag_start, frag_stop, intron_start ):
+    # a read's start cannot be inside an intron, since we sampled reads
+    # from the transcriptome. a fragment overlaps the intron if the
+    # start is < the intron's start and the end is >= the intron start
     if frag_start < intron_start and frag_stop > intron_start:
         return True
     return False
 
 def fragment_index_probe_overlaps_intron( frag_start, frag_stop, intron_start,
         intron_stop, probe_length ):
+    # if the range between the fragment start + indexed_seq_len or
+    # the range from fragment end - indexed_seq_len is inside the
+    # intron, then the index probe overlaps the intron
     if ( frag_start + probe_length > intron_start or
          frag_stop - probe_length < intron_stop ):
         return True
@@ -117,13 +127,7 @@ def categorize_fragments( genome, transcriptome, introns, fragments,
 
         # check against each intron
         for intron in introns[fragment[0]]:
-            # a read's start cannot be inside an intron, since we sampled reads
-            # from the transcriptome. a fragment overlaps the intron if the
-            # start is < the intron's start and the end is >= the intron start
             if fragment_overlaps_intron( frag_start, frag_stop, intron[0] ):
-                # if the range between the fragment start + indexed_seq_len or
-                # the range from fragment end - indexed_seq_len is inside the
-                # intron, then the index probe overlaps the intron
                 if fragment_index_probe_overlaps_intron( frag_start, frag_stop,
                         intron[0], intron[1], indexed_seq_len ):
                     categorized_fragments["probe_overlaps_intron"].append( read_id )
@@ -134,7 +138,7 @@ def categorize_fragments( genome, transcriptome, introns, fragments,
 
     return categorized_fragments
 
-def num_mismatches( str1, str2 ):
+def count_mismatches( str1, str2 ):
     num_mismatches = 0
     for c1, c2 in izip( str1, str2 ):
         if c1 != c2:
@@ -156,11 +160,11 @@ def build_cigar_string_for_fragment( fragment, introns ):
         if fragment_overlaps_intron( f_start, f_stop, intron[0] ):
             cigar_entries.append( ( intron[0] - f_start, 'M' ) )
             cigar_entries.append( ( intron[1] - intron[0], 'N' ) )
-            # TODO this could be cleaner
+            # TODO clean up
             cigar_entries.append( ( (f_stop - f_start) - (intron[0] - f_start), 'M' ) )
             
     if cigar_entries == []:
-        # then the fragment did not overlap any introns - just add an M entry
+        # then the fragment did not overlap any introns - just has an M entry
         cigar_entries.append( ( fragment[2] - fragment[1], 'M' ) )
 
     return ''.join( [ "%i%c" % (t[0], t[1]) for t in cigar_entries ] )
@@ -172,7 +176,8 @@ def cigar_match( mapped_read, fragments, introns ):
 
     true_cigar = build_cigar_string_for_fragment( truth, introns )
 
-    if true_cigar == mapped_read[5]: # mapped_read[5] cigar entry in SAM line
+    # cigar string is 6th entry in SAM line
+    if true_cigar == mapped_read[5]:
         return True
 
     # DEBUG (if match failed)
@@ -226,42 +231,59 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
     ## Check - all M sequence in the cigar string should match the genome
     # location they mapped to
 
+    # If the read overlaps the intron, there may be multiple mappings found
+    # with sequences that are close, but not exact matches with the original
+    # genome. This is allowed.
+    max_allowed_mismatches = 0
+    if ( read_id in categorized_fragments['overlaps_intron'] or
+         read_id in categorized_fragments['probe_overlaps_intron'] ):
+        max_allowed_mismatches = 3 # empirically chosen
+
     # Keep track of the location in the genome to compare to matched sequences
     # (accounting for gaps)
     genome_pos = start_pos
-    seq_pos = 0
+    if rev_comp:
+        seq_pos = len(read_seq)
+    else:
+        seq_pos = 0
 
     for entry in cigar_entries:
         entry_len = int( entry[0] )
 
         if entry[1] == 'M':
-            read_segment = read_seq[seq_pos:seq_pos+entry_len]
             genome_segment = genome[truth[0]][genome_pos:genome_pos+entry_len]
 
             if rev_comp:
-                # reverse complement the genome sequence; the read sequence
-                # from the SAM is already reverse complement
+                seq_pos -= entry_len
+            read_segment = read_seq[seq_pos:seq_pos+entry_len]
+
+            if rev_comp:
+                # reverse complement the genome sequence for comparison
                 genome_segment = sc.reverse_complement( genome_segment )
 
             # Normalize sequence to upper case
-            if( read_segment.upper() != genome_segment.upper() ):
-                if read_id in categorized_fragments['no_overlap']:
-                    print "ERROR       :  Mapped read match segment does not match genome in read %i" \
-                            % read_id
-                    print "Mapped Read :", read_segment
-                    print "     Genome :", genome_segment
-                    print introns
-                    print mapped_read
+            num_mismatches = count_mismatches( read_segment.upper(),
+                    genome_segment.upper() )
+            if( num_mismatches > max_allowed_mismatches ):
+                print "ERROR       :  Mapped read %i match segment does not match genome" \
+                        % read_id
+                print "Truth:  ", truth
+                print "Introns:", introns
+                print "Mapped Read :", read_segment
+                print "     Genome :", genome_segment
+                print mapped_read
+
+                if read_id in categorized_fragments['overlaps_intron']:
+                    print "OVERLAPS INTRON"
+                elif read_id in categorized_fragments['probe_overlaps_intron']:
+                    print "PROBE OVERLAPS INTRON"
+                else:
                     sys.exit(1)
-                elif read_id in categorized_fragments['overlaps_intron']:
-                    print "NOTICE      :  Mapped read %i (that overlaps an intron) match segment does not match genome in read" \
-                            % read_id
-                else: # read_id in categorized_fragments['probe_overlaps_intron']
-                    print "NOTICE      :  Mapped read %i (with probe overlapping an intron) match segment does not match genome" \
-                            % read_id
 
             # update the position in the underlying mapped read_len
-            seq_pos += entry_len
+            if not rev_comp:
+                seq_pos += entry_len
+
         elif entry[1] == 'N':
             pass
         else:
@@ -270,10 +292,7 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
             sys.exit(1)
 
         # Update the position in the genome to compare to
-        if rev_comp:
-            genome_pos -= entry_len
-        else:
-            genome_pos += entry_len
+        genome_pos += entry_len
 
 def check_statmap_output( output_directory, genome, transcriptome, introns,
         fragments, read_len, indexed_seq_len ):
@@ -282,7 +301,7 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
     categorized_fragments = categorize_fragments( genome,
             transcriptome, introns, fragments, read_len, indexed_seq_len )
 
-    # test the sam file to make sure that each of the reads appears
+    # count mapping reads
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     num_mapped_reads = sum( 1 for mapped_read in sc.iter_sam_reads(sam_fp) )
     sam_fp.seek(0)

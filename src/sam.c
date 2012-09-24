@@ -52,7 +52,8 @@ end_of_sublocations_group( mapped_read_sublocation* sub_loc )
 
 char*
 build_cigar_string_for_sublocations_group(
-        mapped_read_sublocation* group_start )
+        mapped_read_sublocation* group_start,
+        enum STRAND strand )
 {
     /* Note - this function allocates dynamic memory. It is the responsibility
      * of the caller to free it. */
@@ -68,6 +69,16 @@ build_cigar_string_for_sublocations_group(
      * the first sublocation, since it has no prev_stop */
     int prev_stop = -1;
 
+    // DEBUG
+    /*
+    if( strand == FWD )
+    {
+        fprintf( stderr, "\nFWD\n" );
+    } else {
+        fprintf( stderr, "\nBKWD\n" );
+    }
+    */
+
     /* loop over the sublocations */
     while(true)
     {
@@ -78,13 +89,19 @@ build_cigar_string_for_sublocations_group(
         {
             /* If prev_stop is a real position, represent the intron gap
              * in the CIGAR string with N */
-            assert( current_sublocation->start_pos > prev_stop );
             buf_pos += sprintf( buf_pos, "%iN", 
                     current_sublocation->start_pos - prev_stop );
         }
 
         /* Write the region of aligned sequence with M */
         buf_pos += sprintf( buf_pos, "%iM", current_sublocation->length );
+
+        // DEBUG
+        /*
+        fprintf( stderr, "(start=%d, length=%d)\n",
+                current_sublocation->start_pos,
+                current_sublocation->length );
+                */
 
         /* Save prev_stop for the next iteration */
         prev_stop = current_sublocation->start_pos + current_sublocation->length;
@@ -253,6 +270,13 @@ fprintf_sam_line_from_sublocations_group(
     const int stop = get_stop_for_sublocations_group( group );
     const float seq_error = location_prologue->seq_error;
 
+    enum STRAND strand;
+    if( location_prologue->strand == 0 ) {
+        strand = FWD;
+    } else { 
+        strand = BKWD;
+    }
+
     int rd_len = MAX( start, stop )
                - MIN( start, stop );
 
@@ -281,7 +305,7 @@ fprintf_sam_line_from_sublocations_group(
              (unsigned int) MIN( 254, (-10*log10( 1- cond_prob )) ) );
 
     /* print the cigar string */
-    char* cigar_string = build_cigar_string_for_sublocations_group( group );
+    char* cigar_string = build_cigar_string_for_sublocations_group( group, strand );
     fprintf( sam_fp, "%s\t", cigar_string );
     free( cigar_string );
 
