@@ -3,14 +3,12 @@
 # This sets up the R environment for the C calls
 #
 #
-suppressPackageStartupMessages( library( mgcv ) )
 dir.create( "error_model" )
 logfname <- "error_model/r_output.log";
 logfp = file( logfname, "w" );
 
 MIN.NUM.OBS = 10;
-DEFAULT.ERROR.EST = 0.001;
-MIN.ERROR.PRB = 1e-6;
+MIN.ERROR.PRB = 1e-4;
 
 logit = function(x)log(x) - log(1-x)
 logistic = function(x)exp(x)/(1+exp(x))
@@ -41,45 +39,61 @@ plot.hists = function( obs, pred, n=100 )
         return();
 }
 
-build.mo = function( mm_cnts, cnts, pos, qual ) {
-    # calculate bounds of the predictors. We do this to choose how complex to 
-    # make the error model.
-    obs.pos = find.observed.predictors(pos, cnts);
-    obs.quals = find.observed.predictors(qual, cnts);
+build.mo = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
+      aggregate.marginal.data = function( mm.cnts, cnts, by ) {
+        mm.cnts.agg = aggregate( mm.cnts, by=list( by ), sum );
+        cnts.agg = aggregate( cnts, by=list( by ), sum );
+        data.frame(mm.cnts=mm.cnts.agg$x, cnts=cnts.agg$x, pred=cnts.agg$Group.1);
+      };
+      
+      initial.smoothing = function( mm.cnts, cnts ) {
+        prbs = mm.cnts/(cnts + 1e-6);
+        prbs = sapply( prbs, function(m)max( MIN.ERROR.PRB, m ) );
+        # weights = sqrt( prbs*(1-prbs)*cnts );
+        weights = sqrt(cnts*prbs);
+        mo = smooth.spline( prbs, w=weights );
+        predict( mo )$y;
+      };
+      
+      build.marginals = function(data) {
+        pos.agg = aggregate.marginal.data( data$mm.cnts, data$cnts, data$pos );
+        pos.smooth = data.frame( pos=pos.agg$pred,
+          pos.prb=initial.smoothing( pos.agg$mm, pos.agg$cnts ));
 
-    # make sure that we have observed enough positions. It shouldn't be possible
-    # for this not to be true because of the index probe size, so we throw a 
-    # fatal exception if this doesn't hold.
-    if( length( obs.pos ) < 12 ) {
-        stop( "FATAL     : Too few observed unique positions (", length(obs.pos), ") to build error model." );
-        return;
-    }
+        if( do.plot ) {
+          plot( pos.agg$pred, pos.agg$mm/(pos.agg$cnts+0.01) );
+          lines( pos.agg$pred, pos.smooth$pos.prb, col='red' );
+        }
+        
+        qual.agg = aggregate.marginal.data( data$mm.cnts, data$cnts, data$qual );
+        qual.smooth = data.frame( qual=qual.agg$pred,
+          qual.prb=initial.smoothing( qual.agg$mm, qual.agg$cnts ));
+        
+        if( do.plot ) {
+          plot( qual.agg$pred, qual.agg$mm/(qual.agg$cnts+0.01) );
+          lines( qual.agg$pred, qual.smooth$qual.prb, col='red' );
+        }
+        
+        pos.smooth.prb = merge( data, pos.smooth )$pos.prb;
+        qual.smooth.prb = merge( data, qual.smooth )$qual.prb;
+        
+        data.frame( mm.cnts=data$mm.cnts, cnts=data$cnts,
+                   pos=pos.smooth.prb-mean(pos.smooth.prb),
+                   qual=qual.smooth.prb-mean(qual.smooth.prb) );
+      }
+      
+      data = data.frame(mm.cnts=mm.cnts, cnts=cnts, pos=pos, qual=qual);
+      new.data = build.marginals( data )
+      response = cbind( new.data$mm.cnts, new.data$cnts-new.data$mm.cnts );
+      mo = glm( response~pos+qual, data=new.data, family=binomial );
+      
+      print( summary( mo ) );
 
-    #
-    # Determine the model type
-    #    
-    response = cbind( mm_cnts, cnts-mm_cnts );
-    if( length( obs.quals ) < 4 ) {
-        eqn = formula( response ~ s(pos) );
-        predictors = data.frame( pos=pos );
-    }
-    else if( 1 || length( obs.quals ) < 6 ) {
-        eqn = formula( response ~ s(pos) + qual*pos );
-        predictors = data.frame( pos=pos );
-    } else {
-        eqn = formula( response ~ s(qual) + s(pos) + s(qual, pos) );
-        predictors = data.frame( pos=pos, qual=qual );
-    }
-    
-    mo = gam( eqn, data=predictors, family=binomial );
-            
-    print( summary( mo ) );    
-    
-    mo;
+      mo;
 }
 
 # find a dense block subset of observations
-find.data.subset = function( mm_cnts, cnts, pos, qual ) {
+find.data.subset = function( mm.cnts, cnts, pos, qual ) {
     obs.pos = find.observed.predictors(pos, cnts);
     valid.pos = ( pos >= min(obs.pos) & pos <= max(obs.pos) );
     obs.quals = find.observed.predictors(qual, cnts);
@@ -89,7 +103,7 @@ find.data.subset = function( mm_cnts, cnts, pos, qual ) {
     # easier to rebuild the full matrices
     rv = list()
     rv$good.pos = valid.pos&valid.quals;
-    rv$mm_cnts = mm_cnts[ valid.pos&valid.quals ];
+    rv$mm.cnts = mm.cnts[ valid.pos&valid.quals ];
     rv$cnts = cnts[ valid.pos&valid.quals ];
     rv$pos = pos[ valid.pos&valid.quals ];
     rv$qual = qual[ valid.pos&valid.quals ];
@@ -97,7 +111,7 @@ find.data.subset = function( mm_cnts, cnts, pos, qual ) {
     rv;
 }
 
-predict_freqs_for_record = function( mm_cnts, cnts, pos, qual, plot.str=NULL ) {
+predict_freqs_for_record = function( mm.cnts, cnts, pos, qual, plot.str=NULL ) {
     # set up the logging
     # sink( logfp, append=TRUE, type="message" );
     sink( logfp, append=TRUE );
@@ -113,32 +127,40 @@ predict_freqs_for_record = function( mm_cnts, cnts, pos, qual, plot.str=NULL ) {
         print( paste( "WARNING     :  Number of observations (", n.obs, 
                       ") is too low. Using default error estimates.") );
         sink( NULL );
-        return( mm_cnts/(cnts + 0.01) );         
+        return( mm.cnts/(cnts + 0.01) );         
     }
-    
-        
+
     # find a subset of the data to build the model on. This essentially
     # excludes predictors with 0 observations, but includes interior points
-    data = find.data.subset( mm_cnts, cnts, pos, qual );
-    
-    mo = build.mo( data$mm_cnts, data$cnts, data$pos, data$qual );
-    est.prbs = logistic( predict(mo) );
-    
-    rv = mm_cnts/(cnts + 0.01);
-    pred.freqs = logistic( predict( mo ) );
-    rv[ data$good.pos ] = pred.freqs;
+    data = find.data.subset( mm.cnts, cnts, pos, qual );
+
+    # Set up the plotting environment
     if( !is.null(plot.str) )
     {
-        png(paste("error_model/", plot.str, ".png", sep=""), width=1200, height=1200);
-        par( mfrow=c(2,2) );
-        plot.hists( mm_cnts[cnts>0]/cnts[cnts>0], pred.freqs );
-        qqplot( mm_cnts[cnts>0]/cnts[cnts>0], rv[cnts>0]);
-        res = tryCatch({ 
-            vis.gam( mo, plot.type="contour" );
-        }, error = function(e) {
-            hist(pred.freqs);
-        })
-        dev.off();
+      save( data, file=paste("error_model/", plot.str, ".obj", sep="") );
+
+      plot.fname = paste("error_model/", plot.str, ".png", sep="");
+      png(plot.fname, width=1200, height=1200);
+      par( mfrow=c(2,2) );
+    }    
+    
+    mo = build.mo( data$mm.cnts, data$cnts,
+      data$pos, data$qual, !is.null(plot.str) );
+    
+    pred.freqs = logistic( predict( mo ) );
+    rv = rep( max(MIN.ERROR.PRB, min(pred.freqs)), length(data$good.pos) );
+    rv[ data$good.pos ] = pred.freqs;
+    
+    if( !is.null(plot.str) )
+    {
+      # set the seed so that Identical models yield identical plots
+      set.seed( 0 );
+      r.sample = rbinom( length(cnts), cnts, rv );
+      plot.hists( mm.cnts[cnts>0]/cnts[cnts>0], r.sample[cnts>0]/cnts[cnts>0] );
+      qqplot( mm.cnts[cnts>0]/cnts[cnts>0], r.sample[cnts>0]/cnts[cnts>0]);
+      abline( a=0, b=1 )
+        
+      dev.off();
     }
     
     sink( NULL );
@@ -146,6 +168,6 @@ predict_freqs_for_record = function( mm_cnts, cnts, pos, qual, plot.str=NULL ) {
     return( rv );
 }
 
-predict_freqs = function( mm_cnts, cnts, pos, qual, plot.str=NULL ) {
-     predict_freqs_for_record( mm_cnts, cnts, pos, qual, plot.str );
+predict_freqs = function( mm.cnts, cnts, pos, qual, plot.str=NULL ) {
+     predict_freqs_for_record( mm.cnts, cnts, pos, qual, plot.str );
 };

@@ -107,7 +107,7 @@ def map_with_statmap( read_fnames, output_dir,
                       indexed_seq_len,
                       min_penalty=-7.0, max_penalty_spread=2.1, 
                       num_threads=1, 
-                      search_type=None,
+                      search_type="m",
                       assay=None,
                       genome_fnames=["*.fa",]):
     if not P_STATMAP_OUTPUT:
@@ -139,7 +139,7 @@ def map_with_statmap( read_fnames, output_dir,
             % str( ret_code )
 
     # run statmap
-    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i" \
+    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i -q 0" \
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
     if assay != None:
         call += ( " -n 1 -a " + assay )
@@ -897,84 +897,6 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
 
-def test_error_rate_estimation( ):
-    """Test to ensure that the error modelling code is working properly.
-    
-    We use the following error model:
-    
-    Error rate from position:
-        0.01 + (pos/read_len)*0.04
-        
-    Error rate from char string:
-        ?: +0.05
-        a: +0.03
-        d: +0.02
-        f: +0.01
-        h: +0.00
-    """
-    error_char_mappings = dict(zip('?adfh', [0.05, 0.03, 0.02, 0.01, 0.00] ))
-    
-    rl = read_len = 50
-    indexed_seq_len = 20
-    nsamples = 20000
-    output_directory = "smo_test_error_rate_estimation"
-    
-    
-    ###### Prepare the data for the test #######################################
-    # build a random genome
-    genome_of = open("tmp.genome.fa", "w")
-    r_genome = build_random_genome( [2000,2000], ["1","2"] )
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
-    
-    # sample uniformly from the genome. This gives us the sequences
-    # that we need to map. Note that we dont RC them, so every read should be in
-    # the 5' direction
-    fragments = sample_uniformly_from_genome( 
-        r_genome, nsamples=nsamples, frag_len=rl )
-    reads = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
-    
-    # mutate the reads according to some simple eror model
-    def iter_mutated_reads( reads ):
-        for read in reads:
-            error_str = "".join( random.choice('?adfh') 
-                                 for i in xrange(len(read)) )
-            error_rates = [ 0.01 + 0.04*float(i)/len(read) 
-                            + error_char_mappings[char]
-                            for i, char in enumerate( error_str ) ]
-            mutated_read = []
-            for base, error_prb in izip(read, error_rates):
-                if random.random() < error_prb:
-                    mutated_read.append( random.choice('acgtACGT') )
-                else:
-                    mutated_read.append( base )
-            mutated_read = ''.join( mutated_read )
-            yield ( mutated_read, error_str, read )
-
-    mutated_reads = list( iter_mutated_reads( reads ) )
-
-    # build and write the reads    
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
-    reads_of.close()
-    
-    ###### Write out the test files, and run statmap ###########################
-    
-    ## Map the data
-    read_fnames = [ "tmp.fastq", ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len )
-    
-    ###### Make sure that the error data looks correct #########################
-    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
-    
-    ###### Cleanup the created files ###########################################
-    if CLEANUP:
-        os.remove("./tmp.genome.fa")
-        os.remove("./tmp.fastq")
-        shutil.rmtree(output_directory)
-
-
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
@@ -1107,7 +1029,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
         read_len, nreads, len(genome) )
     read_fnames = [ "tmp.fastq" ]
     map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
-            genome_fnames = output_filenames
+            genome_fnames = output_filenames, search_type='e'
         )
 
     # test the sam file to make sure that each of the reads appears
@@ -1460,8 +1382,6 @@ def main( RUN_SLOW_TESTS ):
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
-        print "[SLOW] Starting test_error_rate_estimation()"
-        test_error_rate_estimation( )
     
     #print "Starting test_index_probe()"
     #test_short_index_probe()
