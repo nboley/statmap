@@ -73,19 +73,18 @@ build.mo = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
           plot( qual.agg$pred, qual.agg$mm/(qual.agg$cnts+0.01) );
           lines( qual.agg$pred, qual.smooth$qual.prb, col='red' );
         }
-        
-        pos.smooth.prb = merge( data, pos.smooth )$pos.prb;
-        qual.smooth.prb = merge( data, qual.smooth )$qual.prb;
-        
-        data.frame( mm.cnts=data$mm.cnts, cnts=data$cnts,
-                   pos=pos.smooth.prb-mean(pos.smooth.prb),
-                   qual=qual.smooth.prb-mean(qual.smooth.prb) );
+
+        data.m1 = merge( data, pos.smooth );
+        data.m2 = merge( data.m1, qual.smooth );
+        return( data.m2 );
       }
       
       data = data.frame(mm.cnts=mm.cnts, cnts=cnts, pos=pos, qual=qual);
       new.data = build.marginals( data )
+      print( head( new.data ) );
+      
       response = cbind( new.data$mm.cnts, new.data$cnts-new.data$mm.cnts );
-      mo = glm( response~pos+qual, data=new.data, family=binomial );
+      mo = glm( response~qual.prb, data=new.data, family=binomial );
       
       print( summary( mo ) );
 
