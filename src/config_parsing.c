@@ -124,45 +124,42 @@ guess_input_file_type( struct args_t* args )
     } else {
         // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
-        if( max_qual > 74 ) {
-            if( max_qual < 104 )
-            {
-                /* If the maximum quality is less than 104 but greater than 73, it's probably the
-                   plus 64 version, but we can't be sure. However, assume that it is and print a 
-                   warning. 
-                */
-                fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
-                fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
-            }
-            /*
-             * If the shifted min quality is less than 0, then the
-             * format is almost certainly the log odds solexa version
-             */
-            if( min_qual < 64 )
-            {
-                input_file_type = SOLEXA_LOG_ODDS_FQ;
-            }
-            // If the min is less than 69, it is still most likely
-            // a log odds version, but we emit a warning anyways.
-            else if ( min_qual < 66 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = ILLUMINA_v13_FQ;
-            } else if ( min_qual < 70 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = ILLUMINA_v15_FQ;
-            } else if ( min_qual < 90 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = MARKS_SOLEXA;
-            } else if ( min_qual == 104 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = TEST_SUITE_FORMAT;
-            } else {
-                fprintf( stderr, "ERROR       :  Could not automatically determine " );
-                fprintf( stderr, "input format. ( max=%i, min=%i  )\n",
-                         max_qual, min_qual );
-                exit( -1 );
-            }
-        }
+	if( max_qual < 104 )
+	{
+	    /* If the maximum quality is less than 104 but greater than 73, it's probably the
+	       plus 64 version, but we can't be sure. However, assume that it is and print a 
+	       warning. 
+	    */
+	    fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
+	    fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
+	}
+	/*
+	 * If the shifted min quality is less than 0, then the
+	 * format is almost certainly the log odds solexa version
+	 */
+	if( min_qual < 64 )
+	{
+	    input_file_type = SOLEXA_LOG_ODDS_FQ;
+	}
+	// If the min is less than 69, it is still most likely
+	// a log odds version, but we emit a warning anyways.
+	else if ( min_qual < 66 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = ILLUMINA_v13_FQ;
+	} else if ( min_qual < 70 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = ILLUMINA_v15_FQ;
+	} else if ( min_qual < 90 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = MARKS_SOLEXA;
+	} else if ( min_qual == 104 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = TEST_SUITE_FORMAT;
+	} else {
+	    fprintf( stderr, "ERROR       :  Could not automatically determine input format. ( max=%i, min=%i  )\n",
+		     max_qual, min_qual );
+	    exit( -1 );
+	}
     }
 
     set_global_quality_parameters_from_input_file_type( input_file_type );
@@ -189,18 +186,15 @@ set_input_file_type( char* arg, struct args_t* args )
             args->input_file_type = SOLEXA_v14_FQ;
             break;
         case 5:
-            args->input_file_type = ILLUMINA_v15_FQ;
-            break;
-        case 6:
             args->input_file_type = SOLEXA_LOG_ODDS_FQ;
             break;
-        case 7:
+        case 6:
             args->input_file_type = TEST_SUITE_FORMAT;
             break;
-        case 8:
+        case 7:
             args->input_file_type = MARKS_SOLEXA;
             break;
-        case 9:
+        case 8:
             args->input_file_type = ILLUMINA_v18_FQ;
             break;
         default:
@@ -280,8 +274,8 @@ static struct argp_option options[] =
      "(not implemented yet)", 0 },
     {"input-file-type", 'i', "TYPE", 0,
      "Type of sequencing platform used to generate the input reads. Valid "
-     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: SOLEXA_v14_FQ, 4: "
-     "ILLUMINA_v15_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
+     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: ILLUMINA_v15_FQ, 4: "
+     "SOLEXA_v14_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
      "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
     {"paired-end-reads-map-to-opposite-strands", 'P', NULL, 0,
      "(not implemented yet)", 0 },

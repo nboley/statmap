@@ -35,9 +35,6 @@ struct genome_data {
     /* The index for this genome */
     struct index_t* index;
 
-    /* the pseudo locations info */
-    struct pseudo_locations_t* ps_locs;
-    
     /* The number of chromosomes */
     int num_chrs;
     /* The chromosome names - indexed by their keys */

@@ -228,7 +228,6 @@ add_and_expand_location_from_index(
 {
     if( iloc->is_paternal && iloc->is_maternal )
     {
-        assert( genome != NULL );
         expand_diploid_index_location( iloc, results, strnd, penalty, genome );
     } else {
         add_new_mapped_location( results,

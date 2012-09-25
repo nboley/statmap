@@ -100,10 +100,6 @@ init_genome( struct genome_data** gen )
     
     (*gen)->is_mmapped = false;
 
-    /** Init the pseudo locations **/
-    (*gen)->ps_locs = NULL;    
-    init_pseudo_locations( &((*gen)->ps_locs)  );
-    
     /* Add the pseudo chromosome */
     add_chr_to_genome( "Pseudo", "", 0, REFERENCE, *gen );
 }
@@ -290,9 +286,6 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
     char* curr_pos = OD_genome + header.genome_offset;
     populate_standard_genome_from_mmapped_file( *gen, curr_pos );
 
-    curr_pos = OD_genome + header.pseudo_locs_offset;
-    load_pseudo_locations_from_mmapped_data( &((*gen)->ps_locs), curr_pos );
-        
     return;
 }
 
