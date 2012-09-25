@@ -42,9 +42,15 @@ subseq_penalty(
     int pos;
     for( pos = offset; pos < subseq_len; pos++ )
     {
-        int bp = bp_code( rst->char_seq[pos] );
-        /* take the match penalty for this bp */
-        penalty += penalty_array->array[pos].penalties[bp][bp];
+        int bp = rst->char_seq[pos];
+        if( bp == 'N' || bp == 'n' )
+        {
+            penalty += N_penalty;
+        } else {
+            int bpc = bp_code( bp );
+            /* take the match penalty for this bp */
+            penalty += penalty_array->array[pos].penalties[bpc][bpc];
+        }
     }
 
     return penalty;
