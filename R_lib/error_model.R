@@ -33,10 +33,15 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
         # if we don't have enough observations, then
         # use logistic regression ( since we only have 1 or 2 points
         # the linear model is as good as we can do.
-        if( sum(cnts > 0) < 3 ) {
-          response = cbind( mm.cnts, cnts-mm.cnts );
+        if( sum( cnts > 0 ) == 1 )
+        {
+            return( rep( (mm.cnts[cnts>0]+1)/(cnts[cnts>0]+40), length(cnts) ) );
+        } else if( sum(cnts > 0) < 3 )
+        {	
+          response = cbind( mm.cnts+1, cnts-mm.cnts+20 );
           x = 1:length(cnts);
           mo = glm( response~x, family=binomial )
+          print( summary( mo ) );
           return( predict( mo ) );
         }
         prbs = mm.cnts/(cnts + 1e-6);
