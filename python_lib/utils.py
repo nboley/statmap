@@ -88,7 +88,7 @@ class StatmapOutput:
             self.trace_update_fn = \
                 statmap_o.update_chipseq_trace_expectation_from_location
 
-    def _load_mapped_reads( self ):
+    def _load_mapped_reads( self, load_nc ):
         # load default mapped reads db
         self.mpd_rdb = open_mapped_reads_db_for_reading(
                 MAPPED_READS_DB_FNAME )
@@ -124,7 +124,7 @@ class StatmapOutput:
 
             self.NC_cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.NC_mpd_rdb )
 
-    def _load_rawreads(self):
+    def _load_rawreads(self, load_nc ):
         # Note: if loading rawread db does not work, None is returned (NULL ptr)
         self.rawread_db = populate_rawread_db( *RAWREADS_FNAMES )
         if load_nc:
@@ -159,11 +159,11 @@ class StatmapOutput:
 
         # load mapped reads
         if load_mapped_reads:
-            self._load_mapped_reads()
+            self._load_mapped_reads( load_nc )
 
         # load the rawread db (if requested)
         if load_raw_reads:
-            self._load_rawreads()
+            self._load_rawreads( load_nc )
 
 def test():
     """test code in this file"""
