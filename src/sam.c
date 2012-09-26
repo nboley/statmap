@@ -435,7 +435,7 @@ write_mapped_reads_to_sam(
     enum bool reset_cond_read_prbs,
     FILE* sam_ofp )
 {
-    int error;
+    int rv;
 
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
@@ -445,11 +445,19 @@ write_mapped_reads_to_sam(
     struct read* rd;
     mapped_read_t* mapped_rd;
 
-    error = get_next_read_from_mapped_reads_db( 
+    rv = get_next_read_from_mapped_reads_db( 
         mappings_db, 
         &mapped_rd
     );
-    assert( error == 0 );
+
+    /* This is the first call to a rewound mapped reads db; rv will be non-zero
+     * only if the mapped reads db is empty. */
+    if( rv != 0 )
+    {
+        fprintf( stderr, "ERROR       :  Mapped Reads DB is empty - nothing to write to SAM.\n" );
+        assert( false );
+        exit( -1 );
+    }
 
     get_next_read_from_rawread_db( 
         rdb, &rd, -1 );
@@ -504,7 +512,7 @@ write_mapped_reads_to_sam(
         /* Free the read */
         free_read( rd );
 
-        error = get_next_read_from_mapped_reads_db( 
+        rv = get_next_read_from_mapped_reads_db( 
             mappings_db, 
             &mapped_rd
         );
