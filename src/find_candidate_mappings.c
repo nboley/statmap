@@ -1726,6 +1726,14 @@ build_mapped_read_from_candidate_mappings(
     return rd;
 }
 
+void
+increment_counter_with_lock( unsigned int *counter, pthread_spinlock_t* lock )
+{
+    pthread_spin_lock( lock );
+    *counter += 1;
+    pthread_spin_unlock( lock );
+}
+
 /* TODO - revisit the read length vs seq length distinction */
 /* 
  * I use a struct for the parameters so that I can initialzie threads
@@ -1826,18 +1834,6 @@ find_candidate_mappings( void* params )
 
         //fprintf( stderr, "DEBUG       :  Found %i cm's for read_id %i\n", mappings->length, r->read_id );
 
-        /* We'll say we mapped the read if we found at least one candidate
-         * mapping. This does the right thing for both mapping and
-         * bootstrapping the error data. */
-        if( mappings->length > 0 )
-        {
-            /* mapped count is the number of reads that successfully mapped
-             * (not the number of mappings) */
-            pthread_spin_lock( mapped_cnt_lock );
-            *mapped_cnt += 1;
-            pthread_spin_unlock( mapped_cnt_lock );            
-        }
-
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
@@ -1853,6 +1849,10 @@ find_candidate_mappings( void* params )
             
             if( mapped_read != NULL )
             {
+                /* mapped count is the number of reads that successfully mapped
+                 * (not the number of mappings) */
+                increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
+
                 /* the read has at least one mapping - add it to the mapped
                  * reads database */
                 add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
@@ -1861,6 +1861,10 @@ find_candidate_mappings( void* params )
                 /* the read was declared mappable, but did not map */
                 add_nonmapping_read_to_mapped_reads_db( r, mpd_rds_db );
             }
+        } else {
+            /* Update the number of bootstrapped reads (also uses mapped_cnt) */
+            if( mappings->length > 0 )
+                increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
         }
 
         curr_read_index += 1;
