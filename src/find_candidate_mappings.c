@@ -128,6 +128,7 @@ search_index(
     /* note that the NULL ending is pre-set from the calloc */
     memcpy( sub_read, ist->char_seq,
             sizeof(char)*(subseq_length) );
+    replace_ns_inplace( sub_read, subseq_length );
 
     /** Deal with the read on the fwd strand */
     /* Store the translated sequences here */
