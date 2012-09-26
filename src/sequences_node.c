@@ -810,8 +810,12 @@ add_duplicate_sequence_to_sequences_node(
             /* unset the array bit */
             clear_bit( get_bitmap_start( seqs ), insert_loc );
             
+            /* convert the old location to a proper pseudo locations. This means
+               giving it the new pseudoloc_chr, the new pseudo position, and resetting
+               the diploid mapping flags. */
+            assert( psloc_index <= LOCATION_MAX );            
+            memset( &(loc->loc), 0, sizeof(INDEX_LOC_TYPE) );
             loc->loc.chr = PSEUDO_LOC_CHR_INDEX;
-            assert( psloc_index <= LOCATION_MAX );
             loc->loc.loc = psloc_index;
         } else {
             /* we add memory for the new genome location */
