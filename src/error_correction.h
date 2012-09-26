@@ -109,12 +109,14 @@ init_index_search_params(
 void
 free_mapping_params( struct mapping_params* p );
 
+#if 0
 void
 find_mapping_params( struct mapping_params* params,
                      struct read_subtemplate* rst,
                      struct genome_data* genome,
                      struct error_model_t* error_model_t
     );
+#endif
 
 /*
  *  Functions for saving error information

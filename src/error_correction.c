@@ -343,10 +343,9 @@ free_mapping_params( struct mapping_params* p )
 
 /*
  * Find the necessary penalties so that we map the expected number of reads.
- *
- *
- *
+ * TODO fill in when error model is fully merged
  */
+#if 0
 void
 find_mapping_params( struct mapping_params* params,
                      struct read_subtemplate* rst,
@@ -357,6 +356,7 @@ find_mapping_params( struct mapping_params* params,
     /* TODO stub */
     return;
 }
+#endif
 
 /*******************************************************************************
  *

@@ -173,7 +173,6 @@ map_marginal( struct args_t* args,
         genome,
         rdb,
         *mpd_rds_db,
-        &mapping_metaparams,
         error_model,
         args->min_match_penalty,
         args->max_penalty_spread

@@ -1399,7 +1399,8 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
                        mapped_read_t* rd,
                        struct mapped_reads_db* mpd_rds_db )
 {
-    struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
+    assert( mpd_rds_db != NULL );
+    //struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
     
     /* build an index for this mapped_read */
     mapped_read_index* rd_index = NULL;

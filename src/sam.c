@@ -69,6 +69,7 @@ build_cigar_string_for_sublocations_group(
      * the first sublocation, since it has no prev_stop */
     int prev_stop = -1;
 
+    assert( strand == FWD || strand == BKWD );
     // DEBUG
     /*
     if( strand == FWD )
@@ -201,8 +202,10 @@ build_mate_info_for_sublocations_group(
         int subtemplate_index,
         int pnext )
 {
-    /* HACK - hardcode for single and paired end for now */
-    // TODO generalize this
+    /* FIXME - INCORRECT AND INCOMPLETE. */
+
+    assert( group != NULL );
+    assert( subtemplate_index >= 0 );
     
     assert( read->num_subtemplates == 1 ||
             read->num_subtemplates == 2 );
@@ -355,6 +358,10 @@ fprintf_mapped_read_to_sam(
     struct genome_data* genome,
     struct read* r )
 {
+    /* FIXME unneeded, as we already built the index. Assert for now to get rid
+     * of warnings */
+    assert( mpd_rd != NULL );
+
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
@@ -632,7 +639,6 @@ write_reads_from_read_id_list_to_fastq(
         rv = fscanf( read_ids_fp, "%i\n", &read_id );
     }
 
-cleanup:
     /* rewind the fp, in case we need it again later */
     rewind( read_ids_fp );
 

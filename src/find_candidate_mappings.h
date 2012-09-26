@@ -47,7 +47,6 @@ find_all_candidate_mappings(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db,
-        struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model,
         float min_match_penalty,
         float max_penalty_spread

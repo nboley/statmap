@@ -431,9 +431,7 @@ search_index_for_indexable_subtemplates(
 }
 
 int
-choose_mapped_locations_base_index(
-        mapped_locations** search_results,
-        int search_results_length )
+choose_mapped_locations_base_index( int search_results_length )
 {
     assert( search_results_length > 0 );
 
@@ -1237,7 +1235,7 @@ build_candidate_mappings_from_search_results(
 
     /* pick a mapped_locations to use as the basis for matching */
     int base_locs_index = choose_mapped_locations_base_index(
-            search_results, search_results_length );
+            search_results_length );
     mapped_locations* base_locs = search_results[base_locs_index];
     
     /* consider each base location */
@@ -1317,7 +1315,6 @@ build_gapped_candidate_mappings_for_candidate_mapping(
         candidate_mappings* gapped_mappings,
         int num_intron_configurations,
         struct read_subtemplate* rst,
-        struct indexable_subtemplates* ists,
         struct genome_data* genome,
         struct penalty_array_t* fwd_pa,
         struct penalty_array_t* rev_pa )
@@ -1432,7 +1429,6 @@ build_gapped_candidate_mappings_for_candidate_mapping(
 enum bool
 find_potential_gapped_candidate_mappings(
         candidate_mapping* cm,
-        candidate_mappings* mappings,
         candidate_mappings* gapped_mappings,
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
@@ -1463,7 +1459,6 @@ find_potential_gapped_candidate_mappings(
             potential_gapped_mappings,
             num_intron_configurations,
             rst,
-            ists,
             genome,
             fwd_pa, rev_pa
         );
@@ -1522,7 +1517,6 @@ build_gapped_candidate_mappings_for_read_subtemplate(
         enum bool mapping_was_gapped
             = find_potential_gapped_candidate_mappings(
                 cm,
-                mappings,
                 gapped_mappings,
                 rst,
                 ists,
@@ -2087,7 +2081,6 @@ find_all_candidate_mappings(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db,
-        struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model,
         float min_match_penalty,
         float max_penalty_spread
