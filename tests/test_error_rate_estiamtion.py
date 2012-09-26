@@ -19,7 +19,7 @@ def test_error_rate_estimation( ):
     
     rl = read_len = 50
     indexed_seq_len = 20
-    nsamples = 49000
+    nsamples = 199000
     output_directory = "smo_test_error_rate_estimation"
     
     
@@ -41,9 +41,9 @@ def test_error_rate_estimation( ):
     # mutate the reads according to some simple eror model
     def iter_mutated_reads( reads ):
         for read in reads:
-            error_str = "".join( random.choice('?adfh') 
+            error_str = "".join( random.choice('?adfh') #'?adfh') 
                                  for i in xrange(len(read)) )
-            error_rates = [ 0.01 #+ 0.03*float(i)/len(read)
+            error_rates = [ 0.01 + 0.03*float(i)/len(read)
                             + error_char_mappings[char]
                             for i, char in enumerate( error_str ) ]
             

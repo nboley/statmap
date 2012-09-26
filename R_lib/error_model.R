@@ -21,25 +21,8 @@ find.observed.predictors = function( predictor, cnts ) {
     agg$Group.1[ which( agg$x > 0 ) ];
 };
 
-plot.hists = function( obs, pred, n=100 )
-{
-        p1 = hist( obs, plot=FALSE, n=n );
-        p2 = hist( pred, plot=FALSE, n=n );        
-        x_min = min(p1$mids, p2$mids);
-        x_max = max(p1$mids, p2$mids);
-        y_min = min(p1$density, p2$density);
-        y_max = max(p1$density, p2$density);
-        plot( p1$mids, p1$density, 
-              xlim=c(x_min, x_max), ylim=c(y_min, y_max), 
-              type='b', col='blue');
-        points( p2$mids, p2$density, type='b', col='red');
-        legend( x="topright", 
-                legend=c("observed", "predicted"), 
-                fill=c("blue", "red") );
-        return();
-}
 
-build.mo = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
+predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
       aggregate.marginal.data = function( mm.cnts, cnts, by ) {
         mm.cnts.agg = aggregate( mm.cnts, by=list( by ), sum );
         cnts.agg = aggregate( cnts, by=list( by ), sum );
@@ -47,48 +30,55 @@ build.mo = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
       };
       
       initial.smoothing = function( mm.cnts, cnts ) {
+        # if we don't have enough observations, then
+        # use logistic regression ( since we only have 1 or 2 points
+        # the linear model is as good as we can do.
+        if( sum(cnts > 0) < 3 ) {
+          response = cbind( mm.cnts, cnts-mm.cnts );
+          x = 1:length(cnts);
+          mo = glm( response~x, family=binomial )
+          return( predict( mo ) );
+        }
         prbs = mm.cnts/(cnts + 1e-6);
         prbs = sapply( prbs, function(m)max( MIN.ERROR.PRB, m ) );
-        # weights = sqrt( prbs*(1-prbs)*cnts );
-        weights = sqrt(cnts*prbs);
-        mo = smooth.spline( prbs, w=weights );
+
+        # var(p) = np(1-p) => var(logit(p)) ~= n
+        weights = sqrt( cnts );
+        mo = smooth.spline( logit(prbs), w=weights );
         predict( mo )$y;
       };
       
-      build.marginals = function(data) {
-        pos.agg = aggregate.marginal.data( data$mm.cnts, data$cnts, data$pos );
-        pos.smooth = data.frame( pos=pos.agg$pred,
-          pos.prb=initial.smoothing( pos.agg$mm, pos.agg$cnts ));
-
-        if( do.plot ) {
-          plot( pos.agg$pred, pos.agg$mm/(pos.agg$cnts+0.01) );
-          lines( pos.agg$pred, pos.smooth$pos.prb, col='red' );
-        }
-        
-        qual.agg = aggregate.marginal.data( data$mm.cnts, data$cnts, data$qual );
-        qual.smooth = data.frame( qual=qual.agg$pred,
-          qual.prb=initial.smoothing( qual.agg$mm, qual.agg$cnts ));
+      build.marginal = function(mm.cnts, cnts, pred) {
+        agg = aggregate.marginal.data( mm.cnts, cnts, pred );
+        pred.smooth = data.frame( pred=agg$pred,
+          pred.prb=initial.smoothing( agg$mm, agg$cnts ));
         
         if( do.plot ) {
-          plot( qual.agg$pred, qual.agg$mm/(qual.agg$cnts+0.01) );
-          lines( qual.agg$pred, qual.smooth$qual.prb, col='red' );
+          obs.logit.prbs = logit((agg$mm+0.0001)/(agg$cnts+0.01))
+          plot( agg$pred, obs.logit.prbs );
+          lines( agg$pred, pred.smooth$pred.prb, col='red' );
         }
 
-        data.m1 = merge( data, pos.smooth );
-        data.m2 = merge( data.m1, qual.smooth );
-        return( data.m2 );
+        return( pred.smooth );
       }
       
       data = data.frame(mm.cnts=mm.cnts, cnts=cnts, pos=pos, qual=qual);
-      new.data = build.marginals( data )
-      print( head( new.data ) );
-      
-      response = cbind( new.data$mm.cnts, new.data$cnts-new.data$mm.cnts );
-      mo = glm( response~qual.prb, data=new.data, family=binomial );
-      
-      print( summary( mo ) );
+      pos.smooth.marginal = build.marginal(mm.cnts, cnts, pos)
+      qual.smooth.marginal = build.marginal(mm.cnts, cnts, qual)
 
-      mo;
+      data = merge( data, qual.smooth.marginal, by.x="qual", by.y="pred" )
+      names(data)[5] <- "qual.smooth.prb";
+      
+      data = merge( data, pos.smooth.marginal, by.x="pos", by.y="pred" )
+      names(data)[6] <- "pos.smooth.prb";
+      
+      response = cbind( data$mm.cnts, data$cnts-data$mm.cnts );
+      mo = glm( response~qual.smooth.prb*pos.smooth.prb,
+        data=data, family=binomial );
+      print( summary( mo ) );
+      
+      data$pred.freqs = logistic( predict( mo ) );
+      data;
 }
 
 # find a dense block subset of observations
@@ -143,20 +133,25 @@ predict_freqs_for_record = function( mm.cnts, cnts, pos, qual, plot.str=NULL ) {
       par( mfrow=c(2,2) );
     }    
     
-    mo = build.mo( data$mm.cnts, data$cnts,
+    new.data = predict.freqs( data$mm.cnts, data$cnts,
       data$pos, data$qual, !is.null(plot.str) );
-    
-    pred.freqs = logistic( predict( mo ) );
-    rv = rep( max(MIN.ERROR.PRB, min(pred.freqs)), length(data$good.pos) );
-    rv[ data$good.pos ] = pred.freqs;
+
+    min.error.rate = max(MIN.ERROR.PRB, min(new.data$pred.freqs));
+    rv = rep( min.error.rate, length(data$good.pos) );
+    rv[ data$good.pos ] = new.data$pred.freqs;
     
     if( !is.null(plot.str) )
     {
       # set the seed so that Identical models yield identical plots
-      set.seed( 0 );
-      r.sample = rbinom( length(cnts), cnts, rv );
-      plot.hists( mm.cnts[cnts>0]/cnts[cnts>0], r.sample[cnts>0]/cnts[cnts>0] );
-      qqplot( mm.cnts[cnts>0]/cnts[cnts>0], r.sample[cnts>0]/cnts[cnts>0]);
+      #set.seed( 0 );
+      plot( ecdf( new.data$mm.cnts/new.data$cnts ), col='blue' );
+      for( i in 1:10 ) {
+        r.sample = rbinom( length(new.data$cnts), new.data$cnts, new.data$pred.freqs );
+        lines( ecdf( r.sample/new.data$cnts ), col='red' );      
+      }
+      lines( ecdf( new.data$mm.cnts/new.data$cnts ), col='blue' );
+      
+      qqplot( new.data$mm.cnts/new.data$cnts, r.sample/new.data$cnts );
       abline( a=0, b=1 )
         
       dev.off();
