@@ -1,8 +1,11 @@
 '''
 Mappings of the enums used in libstatmap.so
 
-Most, but not all of these, are defined in src/config.h
+Most (but not all) of these are defined in src/config.h
 '''
+
+from ctypes import c_uint
+ENUM_TYPE = c_uint
 
 # enum bool
 (false, true) = (0, 1)

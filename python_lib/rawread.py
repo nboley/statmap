@@ -53,8 +53,8 @@ struct rawread_db_t {
         ("non_mapping_paired_end_1_reads", c_void_p),
         ("non_mapping_paired_end_2_reads", c_void_p),
 
-        ("file_type", c_uint),  # enum inputfile_type
-        ("assay", c_uint),      # enum assay_type_t
+        ("file_type", ENUM_TYPE),  # enum inputfile_type
+        ("assay", ENUM_TYPE),      # enum assay_type_t
     ]
 
 def populate_rawread_db( unpaired_fname,
