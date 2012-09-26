@@ -16,7 +16,7 @@
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
 // the num of reads that we map before updating the error estimates
-#define READS_STAT_UPDATE_STEP_SIZE 5000
+#define READS_STAT_UPDATE_STEP_SIZE 50000
 
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500

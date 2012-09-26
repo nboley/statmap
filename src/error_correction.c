@@ -171,7 +171,7 @@ void
 predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* predicted_freqs )
 {
     fprintf( stderr, 
-             "NOTICE      :  Predicting the error models for readkeys %i - %i.\n",
+             "DEBUG       :  Predicting the error models for readkeys %i - %i.\n",
              data->records[record_index]->min_readkey, 
              data->records[record_index]->max_readkey );
     

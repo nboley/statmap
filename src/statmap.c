@@ -450,14 +450,14 @@ main( int argc, char** argv )
         init_R( );        
         load_statmap_source( statmap_base_dir );
     }
-    
+
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args );
     } else {
         map_generic_data( &args );
     }
-       
+    
     goto cleanup;
     
 cleanup:

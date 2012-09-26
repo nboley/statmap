@@ -29,7 +29,7 @@ init_R( )
 void
 end_R()
 {
-    Rf_endEmbeddedR(0);
+    // Rf_endEmbeddedR(0);
     return;
 }
 

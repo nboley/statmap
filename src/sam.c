@@ -590,42 +590,41 @@ write_reads_from_read_id_list_to_fastq(
         FILE* paired_end_1_fp,
         FILE* paired_end_2_fp )
 {
-    /* If the file with the list of read is empty, do nothing */
-    if( file_is_empty(read_ids_fp) )
-        return;
-
     int rv;
 
-    struct read* rd;
-
-    /* start by getting the first raw read */
     rewind_rawread_db( rdb );
-    get_next_read_from_rawread_db( 
-        rdb,  &rd, -1 );
-
+    
+    struct read* rd;
+    int read_id = -1;
+    
+    rv = get_next_read_from_rawread_db( rdb,  &rd, -1 );
+    rv = fscanf( read_ids_fp, "%i\n", &read_id );
+    
     /* loop through the read id's in the list */
-    while( !feof( read_ids_fp ))
+    while( rd != NULL && !feof( read_ids_fp ))
     {
-        int read_id = -1;
-        rv = fscanf( read_ids_fp, "%i\n", &read_id );
-
-        /* If nothing was read, we've encountered the end of the file */
-        if( rv != 1 )
-            break;
-
-        while( rd->read_id != read_id )
+        while( rd != NULL && rd->read_id < read_id )
         {
             free_read( rd );
             get_next_read_from_rawread_db( 
                 rdb,  &rd, -1 );
         }
-
+        
+        if( rd == NULL )
+            break;
+        
+        assert( rd->read_id >= read_id );
+        
         write_nonmapping_read_to_fastq( rd,
                 single_end_fp,
                 paired_end_1_fp,
                 paired_end_2_fp );
+        
+        /* get the next nonmapping read id */
+        rv = fscanf( read_ids_fp, "%i\n", &read_id );
     }
 
+cleanup:
     /* rewind the fp, in case we need it again later */
     rewind( read_ids_fp );
 
