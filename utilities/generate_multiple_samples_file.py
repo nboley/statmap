@@ -14,7 +14,7 @@ def get_filenames_by_sample():
              SELECT sample_name, originating_lab_id, unnest(file) as file 
                FROM solexa_lane_view 
               WHERE sample_name ~ 'CAGE' 
-                AND sample_name ~ 'Dpse'
+                AND NOT sample_name ~ 'Dpse'
     ) as foo 
     WHERE file IS NOT NULL 
     GROUP BY sample_name, originating_lab_id;
@@ -40,7 +40,8 @@ def write_samples_file( samples ):
             for sn, lab_id, fns in samples
         ]
     ))
-
+    sys.stdout.write( '\n' )
+    
 def main():
     # Writes to stdout - redirect to save to a file
     write_samples_file( get_filenames_by_sample() )

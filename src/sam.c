@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <assert.h>
 
@@ -10,7 +11,57 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 #include "error_correction.h"
+#include "dna_sequence.h"
 #include "util.h"
+
+void
+fprintf_sam_headers_from_genome(
+        FILE* sam_fp,
+        struct genome_data* genome
+    )
+{
+    /**
+     * Write @SQ tag for each contig in the genome
+     **/
+    int chr;
+    /* loop over contigs; chr=1 to skip pseudo chr */
+    for( chr = 1; chr < genome->num_chrs; chr++ )
+    {
+        fprintf(sam_fp, "@SQ\tSN:%s\tLN:%d\n",
+                genome->chr_names[chr], genome->chr_lens[chr]
+            );
+    }
+}
+
+/* TODO - come back to this - reverse complemented reads should be printed outer
+ * as reverse complemented, but we need to finish the new mapped reads
+ * interface first (to determine if a mapped read is rev comp or not) */
+#if 0
+void
+fprintf_seq(
+        FILE* sam_fp,
+        char* seq,
+        int rd_len,
+        MRL_FLAG_TYPE flag
+    )
+{
+    if( 0 < (flag&FIRST_READ_WAS_REV_COMPLEMENTED) )
+    {
+        /* print the reverse complemented sequence for reads that map to the
+         * reverse strand */
+        char* tmp_seq = calloc( rd_len + 1, sizeof(char) );
+
+        rev_complement_read( seq, tmp_seq, rd_len );
+        fprintf( sam_fp, "%.*s\t", rd_len, tmp_seq );
+
+        free( tmp_seq );
+    }
+    else
+    {
+        fprintf( sam_fp, "%.*s\t", rd_len, seq );
+    }
+}
+#endif
 
 /*************************************************************************
  *
@@ -269,9 +320,12 @@ fprintf_sam_line_from_sublocations_group(
         = read->subtemplates + subtemplate_index;
 
     const int chr_index = location_prologue->chr;
-    const int start = get_start_for_sublocations_group( group );
-    const int stop = get_stop_for_sublocations_group( group );
     const float seq_error = location_prologue->seq_error;
+
+    /* Offset +1 because Statmap's internal representation of genome locations
+     * is 0-based, but SAM is 1-based */
+    const int start = get_start_for_sublocations_group( group ) + 1;
+    const int stop = get_stop_for_sublocations_group( group ) + 1;
 
     enum STRAND strand;
     if( location_prologue->strand == 0 ) {
@@ -321,6 +375,8 @@ fprintf_sam_line_from_sublocations_group(
 
     /* print the actual sequence */
     fprintf( sam_fp, "%.*s\t", rd_len, subtemplate->char_seq );
+    // TODO rev comp sequence if necesary
+    //fprintf_seq( sam_fp, r2_seq, r2_len, mrl_flag );
 
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", rd_len, subtemplate->error_str );
@@ -343,8 +399,8 @@ fprintf_sam_line_from_sublocations_group(
     */
     fprintf( sam_fp, "PQ:i:%u\t",
              (unsigned int) MIN(254, (-10*log10(1-seq_error))));
-    fprintf( sam_fp, "XQ:i:%e\t", seq_error);
-    fprintf( sam_fp, "XP:i:%e\n", cond_prob);
+    fprintf( sam_fp, "XQ:f:%f\t", seq_error);
+    fprintf( sam_fp, "XP:f:%f\n", cond_prob);
 
     return;
 }
@@ -443,6 +499,8 @@ write_mapped_reads_to_sam(
     FILE* sam_ofp )
 {
     int rv;
+
+    fprintf_sam_headers_from_genome( sam_ofp, genome );
 
     /* Join all candidate mappings */
     /* get the cursor to iterate through the reads */
