@@ -346,6 +346,10 @@ parse_opt( int key, char *arg, struct argp_state *state )
                             "FATAL       :  Unrecognized assay type: '%s'",
                             arg );
             }
+
+            /* Set the global assay type variable */
+            _assay_type = args->assay_type;
+
             break;
         case 'f':
             args->frag_len_fname = arg;

@@ -44,6 +44,8 @@
 int num_threads = -1;
 int min_num_hq_bps = -1;
 int max_reference_insert_len = -1;
+/* TODO check for conflicts with variable name before removing leading underscore */
+enum assay_type_t _assay_type = UNKNOWN;
 
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
