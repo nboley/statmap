@@ -1801,6 +1801,7 @@ find_candidate_mappings( void* params )
         if( filter_read( r, error_model ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
+	    free_read( r );
             continue; // skip the unmappable read
         }
 
