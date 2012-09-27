@@ -145,10 +145,10 @@ mapped_read_t {
             signed start_pos    :LOCATION_BITS; ( 29 )
             unsigned length     :SUBTEMPLATE_LENGTH_BITS; ( 15 )
 
-            unsigned rev_comp                 :1;
+            unsigned rev_comp                 :1; // 0 = no, 1 = yes
             unsigned is_full_contig           :1; // unused for now
-            unsigned next_subread_is_gapped   :1; // next subread is paired end
-            unsigned next_subread_is_ungapped :1; // next subread is junction
+            unsigned next_subread_is_gapped   :1; // gapped
+            unsigned next_subread_is_ungapped :1; // paired end
         }
         // potentially more sublocations
     }
@@ -208,121 +208,149 @@ typedef struct {
     unsigned next_subread_is_ungapped :1;
 } mapped_read_sublocation;
 
+/* Utility functions for accessing components of mapped_read_t */
+
+mapped_read_sublocation*
+get_start_of_sublocations_in_mapped_read_location(
+        const mapped_read_location* loc );
+
+int
+get_start_for_sublocations_group(
+        mapped_read_sublocation* group );
+
+int
+get_stop_for_sublocations_group(
+        mapped_read_sublocation* group );
+
+enum bool
+last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub );
+
+enum bool
+end_of_sublocations_group( mapped_read_sublocation* sub_loc );
+
 /* 
- * small, inline functions for setting and accessing the items
- * in mapped_read_location. These are how elements should be 
- * accessed - there is no guarantee that mapped_read_location 
- * will remain the same 
+ * small, inline functions for accessing the items in mapped_read_location.
+ * These are how elements should be accessed - there is no guarantee that
+ * mapped_read_location will remain the same 
  *
  * These are defined in the header so that they can be inlined.
  *
  */
-
-// TODO get rid of these getters/setters (they are hacks for single end assay
-// types, and are incorrect for paired end/gapped assays)
 
 /** CHR **/
 
 static inline MRL_CHR_TYPE
 get_chr_from_mapped_read_location( const mapped_read_location* loc)
 {
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
+    mapped_read_location_prologue* prologue
+        = (mapped_read_location_prologue*) loc;
     return (MRL_CHR_TYPE) prologue->chr;
-}
-
-static inline void
-set_chr_in_mapped_read_location( const mapped_read_location* loc, MRL_CHR_TYPE value )
-{
-    assert( value <= CHR_NUM_MAX );
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
-    prologue->chr = value;
 }
 
 /** FRAGMENT/READ COVERAGE **/
 
-static mapped_read_sublocation*
-get_start_of_sublocations( const mapped_read_location* loc )
-{
-    /* Given a pointer to a mapped_read_location, return a pointer to the start
-     * of the first read subtemplate mapped location in the
-     * mapped_read_location */
-
-    // skip the location prologue
-    char* ptr = (char*) loc;
-    ptr += sizeof(mapped_read_location_prologue);
-
-    return (mapped_read_sublocation*) ptr;
-}
-
 static inline MRL_START_POS_TYPE
 get_start_from_mapped_read_location( const mapped_read_location* loc )
 {
-    /* TODO for now, just return the start location of the first subtemplate
+    /* The index of the first sublocation is the start of the mapped read
      * location */
-    mapped_read_sublocation* st_loc
-        = get_start_of_sublocations( loc );
-    return (MRL_STOP_POS_TYPE) st_loc->start_pos;
+    mapped_read_sublocation* first_subloc
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    MRL_START_POS_TYPE start = first_subloc->start_pos;
+
+    assert( start >= LOCATION_MIN );
+    assert( start <= LOCATION_MAX );
+
+    return start;
 }
 
 static inline MRL_STOP_POS_TYPE
 get_stop_from_mapped_read_location( const mapped_read_location* loc )
 {
-    /* TODO for now, just return the stop of the first subtemplate location */
-    mapped_read_sublocation* st_loc
-        = get_start_of_sublocations( loc );
-    return (MRL_STOP_POS_TYPE) st_loc->start_pos + st_loc->length;
+    MRL_STOP_POS_TYPE length = 0; // TODO what type?
+
+    /* TODO this requires a loop over all the sublocations. look in sam code */
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    MRL_STOP_POS_TYPE stop = get_stop_for_sublocations_group( sl_start );
+
+    assert( stop >= LOCATION_MIN );
+    assert( stop <= LOCATION_MAX );
+
+    return stop;
 }
 
 static inline MRL_FL_TYPE
 get_fl_from_mapped_read_location( const mapped_read_location* loc )
 {
-    /* TODO for now, just return the stop of the first subtemplate location */
-    mapped_read_sublocation* st_loc
-        = get_start_of_sublocations( loc );
-    return (MRL_FL_TYPE) st_loc->length;
+    MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
+    MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc );
+
+    assert( stop - start >= FRAGMENT_LENGTH_MIN );
+    assert( stop - start <= FRAGMENT_LENGTH_MAX );
+
+    return (MRL_FL_TYPE) stop - start;
 }
 
-static inline void
-set_start_and_stop_in_mapped_read_location(
-        mapped_read_location* loc,
-        int start,
-        int stop )
-{
-    // TODO for now, just set start and stop of the first subtemplate location
-    mapped_read_sublocation* st_loc
-        = get_start_of_sublocations( loc );
-
-    assert( start >= 0 );
-    assert( start < LOCATION_MAX );
-    st_loc->start_pos = start;
-
-    assert( stop >= 0 );
-    assert( stop < LOCATION_MAX );
-
-    assert( (stop - start) > FRAGMENT_LENGTH_MIN );
-    assert( (stop - start) < FRAGMENT_LENGTH_MAX );
-
-    st_loc->length = stop - start;
-}
+/** SEQ_ERROR **/
 
 static inline ML_PRB_TYPE
 get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
 {
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
+    mapped_read_location_prologue* prologue
+        = (mapped_read_location_prologue*) loc;
     return (ML_PRB_TYPE) prologue->seq_error;
 }
 
-static inline void
-set_seq_error_in_mapped_read_location( 
-        const mapped_read_location* loc,
-        ML_PRB_TYPE value )
+static inline enum bool
+is_mapped_read_location_paired( const mapped_read_location* loc )
 {
-    mapped_read_location_prologue* prologue = 
-        (mapped_read_location_prologue*) loc;
-    prologue->seq_error = value;
+    /* if one sublocation has next_subread_is_ungapped set, then the
+     * mapped_read_location is from a paired end read */
+
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    enum bool is_paired = false;
+
+    char* ptr = (char*) sl_start;
+
+    while( !last_sublocation_in_mapped_read_location(
+                (mapped_read_sublocation*) ptr) )
+    {
+        mapped_read_sublocation* current_sl
+            = (mapped_read_sublocation *) ptr;
+
+        if( current_sl->next_subread_is_ungapped )
+        {
+            is_paired = true;
+            break;
+        }
+
+        ptr += sizeof( mapped_read_sublocation );
+    }
+
+    return is_paired;
+}
+
+/* TODO - make sure we're setting rev_comp on the mapped_read_sublocation */
+static inline enum bool
+is_first_read_in_mapped_read_location_rev_comp(
+        const mapped_read_location* loc )
+{
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    /* if the first sublocation is reverse complemented, then the first read is
+     * reverse complement (whether it was gapped or not - strand matches for all
+     * sublocations in a gapped read) */
+    if( sl_start->rev_comp == 0 ) {
+        return false;
+    }
+
+    return true;
 }
 
 void

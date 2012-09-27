@@ -69,38 +69,6 @@ fprintf_seq(
  * 
  */
 
-enum bool
-last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub )
-{
-    if( !sub->next_subread_is_ungapped &&
-        !sub->next_subread_is_gapped )
-    {
-        /* then there is no "next" subread, and this is the last sublocation in
-         * the mapped_read_location */
-        return true;
-    }
-
-    return false;
-}
-
-enum bool
-end_of_sublocations_group( mapped_read_sublocation* sub_loc )
-{
-    /* Sublocations are grouped by consecutive gapped sublocations.
-     *
-     * If a sublocation is either
-     * 1) The last sublocation in a group of gapped sublocations
-     * 2) The last sublocation in a mapped_read_location
-     *
-     * it is at the end of a group of sublocations.
-     */
-    if( sub_loc->next_subread_is_ungapped ||
-            last_sublocation_in_mapped_read_location( sub_loc ))
-        return true;
-
-    return false;
-}
-
 char*
 build_cigar_string_for_sublocations_group(
         mapped_read_sublocation* group_start,
@@ -175,37 +143,6 @@ build_cigar_string_for_sublocations_group(
     strcpy( cigar_string, buf );
 
     return cigar_string;
-}
-
-int
-get_start_for_sublocations_group(
-        mapped_read_sublocation* group )
-{
-    /* simply return the start of the first sublocation in the group */
-    return group->start_pos;
-}
-
-int
-get_stop_for_sublocations_group(
-        mapped_read_sublocation* group )
-{
-    /* loop through to the last sublocation, and return its
-     * start + length */
-
-    char* ptr = (char*) group;
-
-    while( true )
-    {
-        if( end_of_sublocations_group( (mapped_read_sublocation*) ptr ) )
-            break;
-
-        ptr += sizeof( mapped_read_sublocation );
-    }
-
-    mapped_read_sublocation* final_sublocation
-        = (mapped_read_sublocation*) ptr;
-
-    return final_sublocation->start_pos + final_sublocation->length;
 }
 
 unsigned short

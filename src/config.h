@@ -222,11 +222,12 @@ enum JUNCTION_TYPE
 #define CHR_NUM_MAX (16384 - 1) // 2**14 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 29
+#define LOCATION_MIN 0
 #define LOCATION_MAX (536870912 - 1) // 2**29 = 536870912
 
 #define FRAGMENT_LENGTH_BITS 20
-#define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
-#define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
+#define FRAGMENT_LENGTH_MIN  0
+#define FRAGMENT_LENGTH_MAX ( 524288 - 1 ) // 2**20 = 1048576
 
 /* TODO this is an arbitrary default (doesn't matter for now) */
 #define REFERENCE_INSERT_LENGTH_MAX 500

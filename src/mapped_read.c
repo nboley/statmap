@@ -20,6 +20,81 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+/** MAPPED READ SUBLOCATIONS **/
+mapped_read_sublocation*
+get_start_of_sublocations_in_mapped_read_location(
+        const mapped_read_location* loc )
+{
+    // skip the location prologue
+    char* ptr = (char*) loc;
+    ptr += sizeof(mapped_read_location_prologue);
+
+    return (mapped_read_sublocation*) ptr;
+}
+
+int
+get_start_for_sublocations_group(
+        mapped_read_sublocation* group )
+{
+    /* simply return the start of the first sublocation in the group */
+    return group->start_pos;
+}
+
+int
+get_stop_for_sublocations_group(
+        mapped_read_sublocation* group )
+{
+    /* loop through to the last sublocation, and return its
+     * start + length */
+
+    char* ptr = (char*) group;
+
+    while( true )
+    {
+        if( end_of_sublocations_group( (mapped_read_sublocation*) ptr ) )
+            break;
+
+        ptr += sizeof( mapped_read_sublocation );
+    }
+
+    mapped_read_sublocation* final_sublocation
+        = (mapped_read_sublocation*) ptr;
+
+    return final_sublocation->start_pos + final_sublocation->length;
+}
+
+enum bool
+last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub )
+{
+    if( !sub->next_subread_is_ungapped &&
+        !sub->next_subread_is_gapped )
+    {
+        /* then there is no "next" subread, and this is the last sublocation in
+         * the mapped_read_location */
+        return true;
+    }
+
+    return false;
+}
+
+enum bool
+end_of_sublocations_group( mapped_read_sublocation* sub_loc )
+{
+    /* Sublocations are grouped by consecutive gapped sublocations.
+     *
+     * If a sublocation is either
+     * 1) The last sublocation in a group of gapped sublocations
+     * 2) The last sublocation in a mapped_read_location
+     *
+     * it is at the end of a group of sublocations.
+     */
+    if( sub_loc->next_subread_is_ungapped ||
+            last_sublocation_in_mapped_read_location( sub_loc ))
+        return true;
+
+    return false;
+}
+
 /*************************************************************************
  *
  *  Mapped Reads
@@ -931,9 +1006,6 @@ populate_mapped_read_sublocations_from_candidate_mappings(
                 subloc->start_pos = start_pos;
                 subloc->length = cigar_entry.len;
 
-                /* TODO - does this rev_comp flag make sense? Haven't we
-                 * decided that these subreads must all have the same strand?
-                 * */
                 if( current_mapping->rd_strnd == FWD )
                 {
                     subloc->rev_comp = 0;
@@ -1021,13 +1093,11 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         mapped_read_location_prologue* prologue = 
             (mapped_read_location_prologue*) rd_ptr;
 
-        /* The chromsome and strand must match across a joined set of candidate
-         * mappings (they match across gapped alignments and across paired
-         * end).
-         *
-         * TODO - do they have to match across paired end? */
         prologue->chr = (*current_mapping)->chr;
 
+        /* The strand of a mapped_read_location (which may be built from
+         * multiple candidate mappings with different strands) is determined by
+         * the first candidate mapping (first read) in the joined set. */
         if( (*current_mapping)->rd_strnd == FWD ) {
             prologue->strand = 0;
         } else if ( (*current_mapping)->rd_strnd == BKWD ) {
