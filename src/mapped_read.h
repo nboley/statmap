@@ -165,6 +165,7 @@ typedef void mapped_read_location;
 #define MRL_START_POS_TYPE unsigned int
 #define MRL_STOP_POS_TYPE unsigned int
 #define MRL_FL_TYPE unsigned short
+#define MRL_TRIM_TYPE unsigned char
 
 #define SUBTEMPLATE_LENGTH_BITS 15
 #define MAX_SUBTEMPLATE_LENGTH 32767 // 2**15 - 1

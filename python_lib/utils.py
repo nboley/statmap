@@ -95,7 +95,7 @@ class StatmapOutput:
 
         # if the mapped reads db is empty, we can't do anything with it
         if self.mpd_rdb.contents.num_mapped_reads == 0:
-            print "Mapped reads db is empty (num_mapped_reads=%i)." \
+            print >> sys.stderr, "Mapped reads db is empty (num_mapped_reads=%i)." \
                     % ( self.mpd_rdb.contents.num_mapped_reads )
             sys.exit(-1)
 
@@ -114,7 +114,7 @@ class StatmapOutput:
 
             # if the mapped reads db is empty, we can't do anything with it
             if self.NC_mpd_rdb.contents.num_mapped_reads == 0:
-                print "Mapped reads db is empty (num_mapped_reads=%i)." \
+                print >> sys.stderr, "Mapped reads db is empty (num_mapped_reads=%i)." \
                         % ( self.NC_mpd_rdb.contents.num_mapped_reads )
                 sys.exit(-1)
 
