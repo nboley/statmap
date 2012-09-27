@@ -13,6 +13,9 @@
 #define N_DEBUG
 
 // Candidate Mappings
+#define MAX_NUM_MM_RATE 0.20
+#define MAX_NUM_MM_SPREAD_RATE 0.05
+
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
 // the num of reads that we map before updating the error estimates
@@ -28,7 +31,6 @@
 #define MIN_TRACE_FNAME "min_trace.wig"
 
 // Samples output 
-
 #define SAM_MARGINAL_OFNAME "mapped_reads.sam"
 #define SAM_MARGINAL_NC_OFNAME "mapped_reads.nc.sam"
 

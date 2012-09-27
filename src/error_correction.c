@@ -296,18 +296,30 @@ void free_error_model( struct error_model_t* error_model )
 void
 init_mapping_params_for_read(
         struct mapping_params** p,
-        struct mapping_metaparams* metaparams,
-        float recheck_min_match_penalty,
-        float recheck_max_penalty_spread
+        struct mapping_metaparams* metaparams
     )
 {
     *p = malloc( sizeof( struct mapping_params ));
 
     (*p)->metaparams = metaparams;
     
-    (*p)->recheck_min_match_penalty = recheck_min_match_penalty;
-    (*p)->recheck_max_penalty_spread = recheck_max_penalty_spread;
+    if( metaparams->error_model_type == MISMATCH ) {
+        int read_len = 20;
+        
+        int max_num_mm = -(int)(metaparams->error_model_params[0]*read_len)-1;
+        int max_mm_spread = (int)(metaparams->error_model_params[1]*read_len)+1;
 
+        (*p)->recheck_min_match_penalty = max_num_mm;
+        (*p)->recheck_max_penalty_spread = max_mm_spread;
+    } 
+    /* if the error model is estiamted, then just pass the meta params
+       through ( for now ) */
+    else {
+        assert( metaparams->error_model_type == ESTIMATED );
+        (*p)->recheck_min_match_penalty = metaparams->error_model_params[0];
+        (*p)->recheck_max_penalty_spread = metaparams->error_model_params[1];
+    }
+    
     return;
 }
 

@@ -22,4 +22,8 @@ safe_realloc( void* ptr, size_t size );
 enum bool
 file_is_empty( FILE* fp );
 
+int
+cmp_ints( const int* i1,
+	  const int* i2 );
+
 #endif /* UTIL_H */

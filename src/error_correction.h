@@ -95,9 +95,7 @@ struct mapping_params {
 void
 init_mapping_params_for_read(
         struct mapping_params** p,
-        struct mapping_metaparams* metaparams,
-        float recheck_min_match_penalty,
-        float recheck_max_penalty_spread
+        struct mapping_metaparams* metaparams
     );
 
 void

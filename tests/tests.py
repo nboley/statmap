@@ -105,7 +105,7 @@ except AttributeError:
 
 def map_with_statmap( read_fnames, output_dir, 
                       indexed_seq_len,
-                      min_penalty=-7.0, max_penalty_spread=2.1, 
+                      min_penalty=None, max_penalty_spread=None, 
                       num_threads=1, 
                       search_type="m",
                       assay=None,
@@ -115,6 +115,18 @@ def map_with_statmap( read_fnames, output_dir,
         stderr.truncate()
         stdout.seek( 0 )
         stdout.truncate()
+    
+    if min_penalty == None:
+        if search_type == 'm':
+            min_penalty = 0.01
+        else:
+            min_penalty = -7.0
+    
+    if max_penalty_spread == None:
+        if search_type == 'm':
+            max_penalty_spread = 0.01
+        else:
+            max_penalty_spread = 2.1
     
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
@@ -499,9 +511,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     assay = None if untemplated_gs_perc == 0.0 else 'a'
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay, 
-            search_type=search_type,
-            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread )
-
+            search_type=search_type )
+    
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = sum( 1 for line in sam_fp )
@@ -798,7 +809,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
-                      min_penalty = min_penalty, max_penalty_spread=10,
+                      min_penalty = 0.90, max_penalty_spread=0.20,
                       indexed_seq_len = read_len - 2,
                       num_threads = n_threads ) # read_len = read_len - 2
     

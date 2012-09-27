@@ -21,14 +21,11 @@ struct single_map_thread_data {
     
     struct mapped_reads_db* mpd_rds_db;
 
-    float min_match_penalty;
-    float max_penalty_spread;
-    
+    struct mapping_metaparams* metaparams;    
     struct error_model_t* error_model;
     struct error_data_t* error_data;
     enum bool only_collect_error_data;
 
-    struct mapping_metaparams* mapping_metaparams;
 };
 
 void*
@@ -39,6 +36,7 @@ bootstrap_estimated_error_model(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db, // TODO set to NULL for bootstrap?
+        struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model
     ); 
 
@@ -47,8 +45,8 @@ find_all_candidate_mappings(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db,
-        struct error_model_t* error_model,
-        float min_match_penalty,
-        float max_penalty_spread
+
+        struct mapping_metaparams* mapping_metaparams,
+        struct error_model_t* error_model
     );
 

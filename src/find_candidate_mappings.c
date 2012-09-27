@@ -1750,10 +1750,7 @@ find_candidate_mappings( void* params )
     struct rawread_db_t* rdb = td->rdb;
     
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
-
-    float min_match_penalty = td->min_match_penalty;
-    float max_penalty_spread = td->max_penalty_spread;
-
+    
     /* Store observed error data from the current thread's 
        execution in scratch */
     struct error_model_t* error_model = td->error_model;
@@ -1765,7 +1762,7 @@ find_candidate_mappings( void* params )
        except unique reads. */
     enum bool only_collect_error_data = td->only_collect_error_data;
 
-    struct mapping_metaparams* mapping_metaparams = td->mapping_metaparams;
+    struct mapping_metaparams* metaparams = td->metaparams;
     
     /* END parameter 'recreation' */
 
@@ -1801,7 +1798,7 @@ find_candidate_mappings( void* params )
         if( filter_read( r, error_model ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
-	    free_read( r );
+            free_read( r );
             continue; // skip the unmappable read
         }
 
@@ -1810,9 +1807,8 @@ find_candidate_mappings( void* params )
         init_candidate_mappings( &mappings );
 
         struct mapping_params* mapping_params = NULL;
-        init_mapping_params_for_read( &mapping_params,
-                mapping_metaparams, min_match_penalty, max_penalty_spread );
-
+        init_mapping_params_for_read( &mapping_params, metaparams );
+        
         //fprintf( stderr, "DEBUG       :  Finding cm's for read_id %i\n", r->read_id );
 
         find_candidate_mappings_for_read(
@@ -1952,10 +1948,9 @@ void init_td_template( struct single_map_thread_data* td_template,
                        struct rawread_db_t* rdb,
                        struct mapped_reads_db* mpd_rds_db,
 
+                       struct mapping_metaparams* metaparams,
                        struct error_model_t* error_model,
-                       struct error_data_t* error_data,
-                       float min_match_penalty,
-                       float max_penalty_spread
+                       struct error_data_t* error_data
     )
 {
     int rc;
@@ -1978,12 +1973,9 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->rdb = rdb;
     
     td_template->mpd_rds_db = mpd_rds_db;
-
-    td_template->min_match_penalty = min_match_penalty;
-    td_template->max_penalty_spread = max_penalty_spread;
-
-    td_template->error_data = error_data;
     
+    td_template->metaparams = metaparams;
+    td_template->error_data = error_data;
     td_template->error_model = error_model;
 
     td_template->thread_id = 0;
@@ -2009,6 +2001,7 @@ bootstrap_estimated_error_model(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db, // TODO set to NULL for bootstrap?
+        struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model
     ) 
 {
@@ -2022,21 +2015,10 @@ bootstrap_estimated_error_model(
     struct error_data_t* error_data;
     init_error_data( &error_data );
     
-    /* This is the fraction of bases that can have a mismatch */
-    #define MAX_NUM_MM_RATE 0.20
-    #define MAX_MM_SPREAD_RATE 0.10
-    
-    int max_num_mm = -(int)(MAX_NUM_MM_RATE*genome->index->seq_length) - 1;
-    int max_mm_spread = (int)(MAX_MM_SPREAD_RATE*genome->index->seq_length) + 1;
-    
-    printf( "NOTICE      :  Setting bootstrap mismatch rates to %i and %i\n",
-            max_num_mm, max_mm_spread );
-
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
     init_td_template( &td_template, genome, rdb, mpd_rds_db, 
-                      bootstrap_error_model, error_data, 
-                      max_num_mm, max_mm_spread );
+                      mapping_metaparams, bootstrap_error_model, error_data   );
     
     /* 
        only use unique mappers for the initial bootstrap. This is just a small
@@ -2082,9 +2064,9 @@ find_all_candidate_mappings(
         struct genome_data* genome,
         struct rawread_db_t* rdb,
         struct mapped_reads_db* mpd_rds_db,
-        struct error_model_t* error_model,
-        float min_match_penalty,
-        float max_penalty_spread
+        
+        struct mapping_metaparams* mapping_metaparams,
+        struct error_model_t* error_model
     )
 {
     clock_t start = clock();
@@ -2094,8 +2076,8 @@ find_all_candidate_mappings(
     
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
-    init_td_template( &td_template, genome, rdb, mpd_rds_db, error_model,
-                      error_data, min_match_penalty, max_penalty_spread );
+    init_td_template( &td_template, genome, rdb, mpd_rds_db, 
+                      mapping_metaparams, error_model, error_data );
 
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
