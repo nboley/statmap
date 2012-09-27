@@ -258,11 +258,12 @@ iterative_mapping( struct args_t* args,
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
-    if( args->assay_type == UNKNOWN )
+    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN )
     {
         fprintf( stderr,
-                 "WARNING     :  Cannot iteratively map data with unknown assay type. Skipping iterative mapping.\n" );
-        return;
+                 "FATAL     :  Cannot iteratively map data with unknown assay type.\n" );
+        assert( false );
+        exit(1);
     }
 
     if( NULL != args->unpaired_reads_fnames 
