@@ -279,6 +279,8 @@ static struct argp_option options[] =
      "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
     {"paired-end-reads-map-to-opposite-strands", 'P', NULL, 0,
      "(not implemented yet)", 0 },
+    {"soft-clip-length", 'S', "LEN", 0,
+     "Number of basepair's to soft clip from the start of each read (default 0)", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -398,6 +400,10 @@ parse_opt( int key, char *arg, struct argp_state *state )
             argp_failure( state, 1, 0,
                     "FATAL       :  -P ( --paired-end-reads-map-to-opposite-strands ) is not implemented yet." );
             break;
+        case 'S':
+            args->softclip_len = atoi( arg );
+            softclip_len = args->softclip_len;
+            break;
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
@@ -471,6 +477,7 @@ parse_arguments( int argc, char** argv )
     args.assay_type = UNKNOWN;
 
     args.max_reference_insert_len = -1;
+    args.softclip_len = 0;
 
     /* parse arguments with argp */
     argp_parse( &argp, argc, argv, 0, 0, &args );

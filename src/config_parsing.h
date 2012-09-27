@@ -43,6 +43,8 @@ struct args_t {
     enum assay_type_t assay_type; 
 
     int max_reference_insert_len;
+
+    int softclip_len;
 };
 
 struct args_t

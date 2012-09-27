@@ -44,6 +44,7 @@ struct args_t {
     enum assay_type_t assay_type; 
 
     int max_reference_insert_len;
+    int softclip_len;
 };
     """
     _fields_ = [
@@ -81,6 +82,7 @@ struct args_t {
         ("assay_type", ENUM_TYPE),         # enum assay_type_t
 
         ("max_reference_insert_len", c_int),
+        ("softclip_len", c_int),
     ]
 
 def load_config_from_file( fname ):
