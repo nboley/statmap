@@ -113,7 +113,8 @@ def map_with_statmap( read_fnames, output_dir,
                       search_type="m",
                       assay=None,
                       genome_fnames=["*.fa",],
-                      num_samples=1
+                      num_samples=1,
+                      softclip_len=0,
         ):
     if not P_STATMAP_OUTPUT:
         stderr.seek( 0 )
@@ -166,6 +167,9 @@ def map_with_statmap( read_fnames, output_dir,
     # add the search type
     if search_type != None:
         call += " -s " + search_type
+
+    if softclip_len > 0:
+        call += " -S " + str(softclip_len)
 
     print >> stderr, "========", re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -421,13 +425,31 @@ def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
-def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout, untemplated_gs_perc=0.0 ):
+#def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
+#        untemplated_gs_perc=0.0, random_prefix_len=0 ):
+#    for sample_num, seq in enumerate( samples_iter ):
+#        num_untemplated_gs = random.randint(1,3) \
+#            if random.random() < untemplated_gs_perc else 0
+#        error_str = 'h'*len(seq)
+#        of.write("@%s\n" % sample_num )
+#        of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
+#        of.write("+%s\n" % sample_num )
+#        of.write(error_str + "\n")
+
+def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
+        untemplated_gs_perc=0.0, random_prefix_len=0 ):
+    assert( untemplated_gs_perc == 0 )
+
     for sample_num, seq in enumerate( samples_iter ):
-        num_untemplated_gs = random.randint(1,3) \
-            if random.random() < untemplated_gs_perc else 0
+
+        random_prefix = ''.join(
+                [ random.choice(bps)
+                  for n in range(random_prefix_len) ] )
+
         error_str = 'h'*len(seq)
+
         of.write("@%s\n" % sample_num )
-        of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
+        of.write(random_prefix + seq + "\n")
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
@@ -518,8 +540,9 @@ def build_expected_map_locations_from_repeated_genome( \
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
-        search_type="m", min_penalty=-1.0, max_penalty_spread=1, num_samples=1, assay=None ):
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
+        untemplated_gs_perc=0.0, search_type="m", min_penalty=-1.0,
+        max_penalty_spread=1, num_samples=1, assay=None, random_prefix_len=0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -550,7 +573,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc )
+    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc,
+            random_prefix_len )
     reads_of.close()
 
     ## Map the data
@@ -560,7 +584,8 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
 
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay, 
-            search_type=search_type, num_samples=num_samples )
+            search_type=search_type, num_samples=num_samples,
+            softclip_len=random_prefix_len )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -605,7 +630,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
 
                 if original != mapped:
                     print "Original:", original
-                    print "Mapped: ", mapped
+                    print "Mapped  :", mapped
                     raise ValueError, "Mapped sequence does not match the genome"
 
     sam_fp.close()
@@ -1513,7 +1538,16 @@ if False:
                       num_chr_repeats=1, \
                       min_penalty=-10, max_penalty_spread=2 )
 
+def test_softclipped_read_finding():
+    rl = 20
+    # TODO rev_comp = True
+    test_sequence_finding( rl, rev_comp = False, random_prefix_len=3 )
+    print "PASS: Finding soft clipped reads"
+
 def main( RUN_SLOW_TESTS ):
+    print "Start test_softclipped_read_finding()"
+    test_softclipped_read_finding()
+    sys.exit(1)
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"
