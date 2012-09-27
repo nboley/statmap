@@ -1545,8 +1545,8 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
-    print "Start test_multiple_indexable_subtemplate_for_threep()"
-    test_multiple_indexable_subtemplate_for_threep()
+    #print "Start test_multiple_indexable_subtemplate_for_threep()"
+    #test_multiple_indexable_subtemplate_for_threep()
     print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
     test_multiple_indexable_subtemplates_for_repeat_sequences()
     print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"

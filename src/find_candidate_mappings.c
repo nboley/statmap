@@ -26,7 +26,7 @@
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
-#define MAX_NUM_UNTEMPLATED_GS 3
+#define MAX_NUM_UNTEMPLATED_GS 1
 
 float
 subseq_penalty(
@@ -318,23 +318,39 @@ build_indexable_subtemplate(
      * the read of length subseq_length, which will work well for both types of
      * assays. */
 
-#if 0
-    /* Find the optimal subsequence offset for this read subtemplate */
-    int subseq_offset = find_optimal_subseq_offset(
-            rst,
-            fwd_penalty_array, // TODO - different offset for rev comp?
-            subseq_length,
-            range_start,
-            range_length
-        );
-#endif
+    int subseq_offset = 0;
 
-    int subseq_offset;
+    /* Our strategy for choosing indexable subtemplates depends on the type of
+     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
+     * between probes in order to optimize intron finding. For ungapped assays,
+     * we want to use the highest quality subsequence in the read for the index
+     * search. */
+    if( _assay_type == RNA_SEQ ) // Gapped assay
+    {
+        if( range_start == 0 ) {
+            subseq_offset = 0;
+        } else {
+            subseq_offset = range_length - subseq_length;
+        }
+    } else if( _assay_type == CAGE ) {
+        /* To deal with the possibility of untemplated G's, we always add an
+         * offset to CAGE reads. */
+        if( rst->length - MAX_NUM_UNTEMPLATED_GS < subseq_length ) {
+            fprintf( stderr,
+                    "FATAL        : CAGE experiments need indexes that have probe lengths at least %i basepairs short, to account for templated G's.", MAX_NUM_UNTEMPLATED_GS );
+            assert( false );
+            exit(1);
+        }
 
-    if( range_start == 0 ) {
-        subseq_offset = 0;
+        subseq_offset = MAX_NUM_UNTEMPLATED_GS;
     } else {
-        subseq_offset = range_length - subseq_length;
+        subseq_offset = find_optimal_subseq_offset(
+                rst,
+                fwd_penalty_array,
+                subseq_length,
+                range_start,
+                range_length
+            );
     }
 
     struct indexable_subtemplate* ist = NULL;
