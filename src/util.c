@@ -131,8 +131,7 @@ file_is_empty( FILE* fp )
 }
 
 int
-cmp_ints( const int* i1,
-	  const int* i2 )
+cmp_ints( const int* i1, const int* i2 )
 {
-    return i1 - i2;
+    return *i1 - *i2;
 }
