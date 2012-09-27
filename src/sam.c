@@ -603,54 +603,82 @@ write_reads_from_read_id_list_to_fastq(
 
         FILE* single_end_fp,
         FILE* paired_end_1_fp,
-        FILE* paired_end_2_fp )
+        FILE* paired_end_2_fp
+    )
 {
     int rv;
 
-    rewind_rawread_db( rdb );
-    
-    struct read* rd;
-    int read_id = -1;
-    
-    rv = get_next_read_from_rawread_db( rdb,  &rd, -1 );
-    rv = fscanf( read_ids_fp, "%i\n", &read_id );
-    
-    /* loop through the read id's in the list */
-    while( rd != NULL && !feof( read_ids_fp ))
+    /* Do nothing if there are no read ids to process */
+    if( file_is_empty( read_ids_fp ) )
+	return;
+
+    /* For performance, read ids are written out to their file pointers as soon
+     * as they are found. If Statmap is run single-threaded, this list will
+     * naturally be sorted, but if threads are used it may not be. We solve this
+     * problem by loading the read ids into memory, sorting them, and then
+     * processing them. */
+
+    /* Count the number of read ids */
+    int num_read_ids = 0;
+    char c;
+    while( (c = fgetc(read_ids_fp)) != EOF )
     {
-        while( rd != NULL && rd->read_id < read_id )
-        {
-            free_read( rd );
-            get_next_read_from_rawread_db( 
-                rdb,  &rd, -1 );
-        }
-        
-        if( rd == NULL )
-            break;
-        
-        assert( rd->read_id >= read_id );
-        
-        write_nonmapping_read_to_fastq( rd,
-                single_end_fp,
-                paired_end_1_fp,
-                paired_end_2_fp );
-        
-        /* get the next nonmapping read id */
-        rv = fscanf( read_ids_fp, "%i\n", &read_id );
+	/* one read id on each line */
+	if( c == '\n' )
+	    num_read_ids++;
+    }
+    rewind( read_ids_fp );
+
+    /* Allocate memory for the read ids */
+    int* read_ids = calloc( num_read_ids, sizeof(int) );
+
+    /* Load the read_ids */
+    int i;
+    for( i = 0; i < num_read_ids; i++ )
+    {
+	int read_id;
+	rv = fscanf( read_ids_fp, "%i\n", &read_id );
+	assert( rv == 1 );
+	read_ids[i] = read_id;
     }
 
     /* rewind the fp, in case we need it again later */
     rewind( read_ids_fp );
 
-    /* cleanup */
-    free_read( rd );
+    /* Sort the read ids */
+    qsort( read_ids,
+	   num_read_ids,
+	   sizeof(int),
+	   (int(*)(const void*, const void*))cmp_ints );
 
-    /* flush the fastq output file pointers */
-    fflush( single_end_fp );
-    fflush( paired_end_1_fp );
-    fflush( paired_end_2_fp );
+    struct read* rd;
+    rewind_rawread_db( rdb );
+    rv = get_next_read_from_rawread_db( rdb,  &rd, -1 );
+    assert( rd != NULL );
 
-    return;
+    /* Looping through the sorted ids allows us to use very simple logic here,
+     * and make just one pass through the raw reads db. */
+    for( i = 0; i < num_read_ids; i++ )
+    {
+	int read_id = read_ids[i];
+
+	while( rd->read_id < read_id )
+	{
+	    free_read( rd );
+	    get_next_read_from_rawread_db(
+		rdb, &rd, -1 );
+	    assert( rd != NULL );
+	}
+
+	assert( rd->read_id == read_id );
+
+        write_nonmapping_read_to_fastq( rd,
+                single_end_fp,
+                paired_end_1_fp,
+                paired_end_2_fp );
+    }
+
+    free( read_ids );
 }
 
 void
