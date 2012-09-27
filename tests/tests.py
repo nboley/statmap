@@ -1514,9 +1514,6 @@ if False:
                       min_penalty=-10, max_penalty_spread=2 )
 
 def main( RUN_SLOW_TESTS ):
-    print "Starting test_iterative_mapping()"
-    test_iterative_mapping()
-    sys.exit(1)
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"

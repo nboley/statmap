@@ -122,12 +122,11 @@ get_frag_len( mapped_read_t* rd )
     if( rd_index->num_mappings == 0 )
         return -1;
     
-#if 0
     /* if the reads aren't paired, we can't infer the frag len */
-    if ((get_flag_from_mapped_read_location(rd_index->mappings + 0)
-        &IS_PAIRED) == 0)
+    enum bool reads_are_paired 
+        = mapped_read_location_is_paired( rd_index->mappings + 0 );
+    if( !reads_are_paired )
         return -1;
-#endif
     
     /* initialize the fraglen to the fraglen of the first mapped location */
     int frag_len = 1 +
@@ -139,12 +138,9 @@ get_frag_len( mapped_read_t* rd )
     {
         mapped_read_location* current_loc = rd_index->mappings[i];
 
-#if 0
         /* reads should never be a mixture of paired and unpaired reads 
          XXX IS THIS ACTUALLY TRUE? WE COULD JUST CONTINUE... */
-        assert( (get_flag_from_mapped_read_location( current_loc )
-                    &IS_PAIRED) != 0 );
-#endif
+        assert( mapped_read_location_is_paired( current_loc) );
         
         int tmp_fl = 1 +
             get_stop_from_mapped_read_location( current_loc ) -

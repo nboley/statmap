@@ -268,9 +268,6 @@ get_start_from_mapped_read_location( const mapped_read_location* loc )
 static inline MRL_STOP_POS_TYPE
 get_stop_from_mapped_read_location( const mapped_read_location* loc )
 {
-    MRL_STOP_POS_TYPE length = 0; // TODO what type?
-
-    /* TODO this requires a loop over all the sublocations. look in sam code */
     mapped_read_sublocation* sl_start
         = get_start_of_sublocations_in_mapped_read_location( loc );
 
@@ -305,7 +302,7 @@ get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
 }
 
 static inline enum bool
-is_mapped_read_location_paired( const mapped_read_location* loc )
+mapped_read_location_is_paired( const mapped_read_location* loc )
 {
     /* if one sublocation has next_subread_is_ungapped set, then the
      * mapped_read_location is from a paired end read */
@@ -337,7 +334,7 @@ is_mapped_read_location_paired( const mapped_read_location* loc )
 
 /* TODO - make sure we're setting rev_comp on the mapped_read_sublocation */
 static inline enum bool
-is_first_read_in_mapped_read_location_rev_comp(
+first_read_in_mapped_read_location_is_rev_comp(
         const mapped_read_location* loc )
 {
     mapped_read_sublocation* sl_start

@@ -317,6 +317,7 @@ index_mapped_read( mapped_read_t* rd,
     index->mappings = realloc( index->mappings,
                                num_mapped_locations*
                                sizeof(mapped_read_location*) );
+
     /* save number of mapped locations */
     index->num_mappings = num_mapped_locations;
 

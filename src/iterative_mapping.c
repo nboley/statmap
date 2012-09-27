@@ -58,10 +58,9 @@ update_stranded_read_start_density_from_location(
 )
 {
     const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
-    const MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
     const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
     
-    if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+    if( first_read_in_mapped_read_location_is_rev_comp( loc ) )
     {
         
         #ifdef USE_MUTEX
@@ -203,7 +202,7 @@ bootstrap_traces_from_mapped_reads(
                         
             /* Add this location to the trace, with prb 1 */
             update_trace_expectation_from_location( traces,
-                                                    rd_index->mappings + j,
+                                                    rd_index->mappings[j],
                                                     1.0 );
         }
 
@@ -273,14 +272,11 @@ update_traces_from_mapped_reads_worker( void* params )
                 cond_prbs_db, rd_index->read_id, j );
             // update_stranded_read_start_density_from_location( traces, r->locations + j );
             update_trace_expectation_from_location( 
-                traces, rd_index->mappings + j, cond_prob );
+                traces, rd_index->mappings[j], cond_prob );
         }
         
         free_mapped_read_index( rd_index );
-        free_mapped_read( r );
     }
-    
-    free_mapped_read( r );
     
     pthread_exit( NULL );
 }
@@ -327,15 +323,11 @@ update_traces_from_mapped_reads(
                     cond_prbs_db, rd_index->read_id, j );
                 // update_stranded_read_start_density_from_location( traces, r->locations + j );
                 update_trace_expectation_from_location( 
-                    traces, rd_index->mappings + j, cond_prob );
+                    traces, rd_index->mappings[j], cond_prob );
             }
             
             free_mapped_read_index( rd_index );
-            free_mapped_read( r );
         }
-
-        free_mapped_read( r );
-        
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
@@ -457,7 +449,6 @@ update_mapped_reads_from_trace_worker( void* params )
         
         // TODO - we assume this can't happen now
         if( rd_index->num_mappings <= 1 ) {
-            free_mapped_read( r );
             continue;
         }
         
@@ -473,10 +464,7 @@ update_mapped_reads_from_trace_worker( void* params )
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
 
         free_mapped_read_index( r );
-        free_mapped_read( r );
     }
-    
-    free_mapped_read( r );
 
     pthread_exit( NULL );
 }
@@ -521,7 +509,6 @@ update_mapped_reads_from_trace(
             /* if there aren't more than 1 potential locations, 
                there's no point in updating this */
             if( rd_index->num_mappings <= 1 ) {
-                free_mapped_read( r );
                 continue;
             }
 
@@ -540,10 +527,7 @@ update_mapped_reads_from_trace(
             rv.log_lhd += tmp_rv.log_lhd;
 
             free_mapped_read_index( rd_index );
-            free_mapped_read( r );
         }
-
-        free_mapped_read( r );
         
     } else {
         /* initialize the thread parameters structure */
@@ -770,7 +754,7 @@ build_random_starting_trace(
         /* update the read conditional probabilities from the trace */
         update_mapped_read_prbs( cond_prbs_db, traces, r );        
 
-        mapped_read_index* rd_index;
+        mapped_read_index* rd_index = NULL;
         init_mapped_read_index( &rd_index, r );
         
         if( rd_index->num_mappings > 0 )
@@ -807,17 +791,14 @@ build_random_starting_trace(
                         
             /* Add this location to the trace, with prb 1 */
             update_trace_expectation_from_location(
-                    traces, rd_index->mappings + j, 1.0 );
+                    traces, rd_index->mappings[j], 1.0 );
         }
 
-        free_mapped_read( r );
+        free_mapped_read_index( rd_index );
     }
-    
-    free_mapped_read( r );
     
     return;
 }
-
 
 /*
  * END Chr Trace Code
@@ -933,10 +914,14 @@ update_chipseq_trace_expectation_from_location(
     float cond_prob 
 )
 {
-    const MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
     const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
     const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
     const MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc  );
+
+    enum bool is_paired 
+        = mapped_read_location_is_paired( loc );
+    enum bool first_read_is_rev_comp
+        = first_read_in_mapped_read_location_is_rev_comp( loc );
     
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
@@ -950,12 +935,12 @@ update_chipseq_trace_expectation_from_location(
 
     /* update the trace */
     /* If the reads are paired */
-    if( (flag&IS_PAIRED) != 0 )
+    if( is_paired )
     {
         const float scale = (1.0/(stop-start));
 
         int trace_index;
-        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        if( first_read_is_rev_comp )
         {
             trace_index = 0;
         } else {
@@ -998,13 +983,12 @@ update_chipseq_trace_expectation_from_location(
     } 
     /* If the read is *not* paired */
     else {
-        assert( 0 == (flag&IS_PAIRED) ); 
         /* the binding site must be on the five prime side of the read */
         unsigned int window_start;
         unsigned int window_stop;
         /* determine which trace to lock */
         int trace_index;
-        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        if( first_read_is_rev_comp )
         {
             /* prevent overrunning the trace bounadry - this is fancy to avoid the 
                fact that the indexes are unsigned */
@@ -1034,7 +1018,7 @@ update_chipseq_trace_expectation_from_location(
             
             float* fl_dist_array;
             int trace_index;
-            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            if( first_read_is_rev_comp )
             {
                 /* we use the rev_chipseq_bs_density instead of just
                    moving through the bs density in reverse order so
@@ -1124,11 +1108,12 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
-    mapped_read_index* r_index;
-    init_mapped_read_index( &r_index, r );
+    mapped_read_index* rd_index;
+    /* FIXME cast away const? */
+    init_mapped_read_index( &rd_index, (mapped_read_t*) r );
     
     /* allocate space to store the temporary values */
-    float* new_prbs = malloc( sizeof(float)*(r_index->num_mappings) );
+    float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
     
     /* Update the reads from the trace */
     /* set to flt_min to avoid division by 0 */
@@ -1136,25 +1121,28 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
     double error_prb_sum = ML_PRB_MIN;
 
     int i;
-    for( i = 0; i < r_index->num_mappings; i++ )
+    for( i = 0; i < rd_index->num_mappings; i++ )
     {
         /* calculate the mean density */
         double window_density = 0;
 
-        mapped_read_location* current_loc = r_index->mappings + i;
+        mapped_read_location* current_loc = rd_index->mappings[i];
 
         MRL_CHR_TYPE chr_index =
             get_chr_from_mapped_read_location( current_loc );
-        MRL_FLAG_TYPE flag =
-            get_flag_from_mapped_read_location( current_loc );
         MRL_START_POS_TYPE start =
             get_start_from_mapped_read_location( current_loc );
         MRL_STOP_POS_TYPE stop =
             get_stop_from_mapped_read_location( current_loc );
 
+        enum bool is_paired 
+            = mapped_read_location_is_paired( current_loc );
+        enum bool first_read_is_rev_comp
+            = first_read_in_mapped_read_location_is_rev_comp( current_loc );
+
         /* If the reads are paired */
         unsigned int j = 0;
-        if( (flag&IS_PAIRED) > 0 )
+        if( is_paired )
         {
             for( j = start; j <= stop; j++ )
             {
@@ -1182,7 +1170,7 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
             unsigned int window_start;
             unsigned int window_stop;
             /* determine which trace to use */
-            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            if( first_read_is_rev_comp )
             {
                 /* we don't use MAX bc stop-max_fl might be negative */
                 window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
@@ -1193,7 +1181,7 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
                                    global_genome->chr_lens[chr_index] );
             }
 
-            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            if( first_read_is_rev_comp )
             {
                 for( k = window_start; k < window_stop; k++ )
                 {
@@ -1232,18 +1220,18 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
     /* renormalize the read probabilities */
     if( prb_sum > 0 )
     {
-        for( i = 0; i < r_index->num_mappings; i++ )
+        for( i = 0; i < rd_index->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
             /* absolute value error */
             double normalized_density = new_prbs[i]/prb_sum; 
             
             rv.max_change += fabs( 
-                get_cond_prb( cond_prbs_db, r_index->read_id, i ) -
+                get_cond_prb( cond_prbs_db, rd_index->read_id, i ) -
                 normalized_density );
             
             set_cond_prb( cond_prbs_db,
-                          r_index->read_id,
+                          rd_index->read_id,
                           i,
                           normalized_density );
         }
@@ -1258,18 +1246,18 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
            experiment using the IP marginal density.
         */
     } else {
-        for( i = 0; i < r_index->num_mappings; i++ )
+        for( i = 0; i < rd_index->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
             /* absolute value error */
-            mapped_read_location* current_loc = r_index->mappings + i;
+            mapped_read_location* current_loc = rd_index->mappings[i];
 
             double normalized_density = 
                 get_seq_error_from_mapped_read_location( current_loc ) /
                 error_prb_sum; 
 
             set_cond_prb( cond_prbs_db,
-                          r_index->read_id,
+                          rd_index->read_id,
                           i,
                           normalized_density );
         }
@@ -1280,7 +1268,7 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
     /* Free the tmp array */
     free( new_prbs );
 
-    free_mapped_read_index( r_index );
+    free_mapped_read_index( rd_index );
 
     return rv;
 }
@@ -1298,10 +1286,13 @@ void update_CAGE_trace_expectation_from_location(
 )
 {
     MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
-    MRL_FLAG_TYPE flag = get_flag_from_mapped_read_location( loc  );
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
-    // unsigned int stop = get_stop_from_mapped_read_location( loc  );
     
+    enum bool is_paired 
+        = mapped_read_location_is_paired( loc );
+    enum bool first_read_is_rev_comp
+        = first_read_in_mapped_read_location_is_rev_comp( loc );
+
     assert( cond_prob >= 0.0 );
     assert( stop >= start );
     
@@ -1313,7 +1304,7 @@ void update_CAGE_trace_expectation_from_location(
     
     /* update the trace */
     /* If the reads are paired */
-    if( (flag&IS_PAIRED) != 0 )
+    if( is_paired )
     {
         fprintf( stderr, "FATAL: paired cage reads are not supported" );
         exit( -1 );                
@@ -1323,7 +1314,7 @@ void update_CAGE_trace_expectation_from_location(
         int trace_index;
 
         /* If this is in the reverse ( 3') transcriptome */
-        if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+        if( first_read_is_rev_comp )
         {
             trace_index = 1;
         } 
@@ -1358,33 +1349,36 @@ update_CAGE_mapped_read_prbs(
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
-    mapped_read_index* r_index;
-    init_mapped_read_index( &r_index, r );
+    mapped_read_index* rd_index;
+    /* FIXME cast away const? */
+    init_mapped_read_index( &rd_index, (mapped_read_t*) r );
     
     /* allocate space to store the temporary values */
-    float* new_prbs = malloc( sizeof(float)*(r_index->num_mappings) );
+    float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
     
     /* Update the reads from the trace */
     double density_sum = 0;
     int i;
-    for( i = 0; i < r_index->num_mappings; i++ )
+    for( i = 0; i < rd_index->num_mappings; i++ )
     {
         /* calculate the mean density */
         /* We set this to 2*DBL_EPSILON to prevent the division by 0 */
         double window_density = 2*DBL_EPSILON;
 
-        mapped_read_location* current_loc = r_index->mappings + i;
+        mapped_read_location* current_loc = rd_index->mappings[i];
 
         MRL_CHR_TYPE chr_index =
             get_chr_from_mapped_read_location( current_loc );
-        MRL_FLAG_TYPE flag =
-            get_flag_from_mapped_read_location( current_loc );
         MRL_START_POS_TYPE start = 
             get_start_from_mapped_read_location( current_loc );
+        enum bool is_paired 
+            = mapped_read_location_is_paired( current_loc );
+        enum bool first_read_is_rev_comp
+            = first_read_in_mapped_read_location_is_rev_comp( current_loc );
         
         /* If the reads are paired */
         unsigned int j = 0;
-        if( (flag&IS_PAIRED) > 0 )
+        if( is_paired )
         {
             fprintf( stderr, "FATAL: paired cage reads are not supported\n" );
             continue;
@@ -1395,7 +1389,7 @@ update_CAGE_mapped_read_prbs(
             TRACE_TYPE** trace;
             
             /* If this is in the rev strnanded transcriptome */
-            if( flag&FIRST_READ_WAS_REV_COMPLEMENTED )
+            if( first_read_is_rev_comp )
             {
                 trace = traces->traces[1];
             } 
@@ -1419,11 +1413,11 @@ update_CAGE_mapped_read_prbs(
     }
     
     /* renormalize the read probabilities */
-    if( r_index->num_mappings > 0 )
+    if( rd_index->num_mappings > 0 )
     {
         assert( density_sum > 0 );
         
-        for( i = 0; i < r_index->num_mappings; i++ )
+        for( i = 0; i < rd_index->num_mappings; i++ )
         {
             /** Calculate the error, to check for convergence */
             /* quadratic error */
@@ -1432,14 +1426,14 @@ update_CAGE_mapped_read_prbs(
             /* absolute value error */
             double normalized_density = new_prbs[i]/density_sum; 
             double old_cnd_prb =
-                get_cond_prb( cond_prbs_db, r_index->read_id, i );
+                get_cond_prb( cond_prbs_db, rd_index->read_id, i );
             
             // printf("%i\t%e\t%e\t%e\n", i, new_prbs[i], normalized_density, old_cnd_prb );
             
             rv.max_change += fabs( normalized_density - old_cnd_prb );
            
             set_cond_prb( cond_prbs_db,
-                          r_index->read_id,
+                          rd_index->read_id,
                           i,
                           normalized_density );
         }
@@ -1449,7 +1443,7 @@ update_CAGE_mapped_read_prbs(
         rv.log_lhd = log10( density_sum );
     }      
 
-    free_mapped_read_index( r_index );
+    free_mapped_read_index( rd_index );
     
     /* Free the tmp array */
     free( new_prbs );   

@@ -251,12 +251,18 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     return;
 }
 
-#if 0
 void
 iterative_mapping( struct args_t* args, 
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
+    if( args->assay_type == UNKNOWN )
+    {
+        fprintf( stderr,
+                 "WARNING     :  Cannot iteratively map data with unknown assay type. Skipping iterative mapping.\n" );
+        return;
+    }
+
     if( NULL != args->unpaired_reads_fnames 
         && args->assay_type == CHIP_SEQ
         && mpd_rds_db->fl_dist == NULL )
@@ -264,7 +270,7 @@ iterative_mapping( struct args_t* args,
         fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
         exit(-1);
     }
- 
+
     /* Do the iterative mapping */
     generic_update_mapping( mpd_rds_db,
                             genome, 
@@ -274,7 +280,6 @@ iterative_mapping( struct args_t* args,
         
     return;
 }
-#endif
 
 void
 map_generic_data(  struct args_t* args )
@@ -306,10 +311,14 @@ map_generic_data(  struct args_t* args )
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
-#if 0
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
-#endif
+
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
+    } else {
+        build_fl_dist( args, mpd_rds_db );
+    }
     
     close_mapped_reads_db( &mpd_rds_db );
     
@@ -341,6 +350,12 @@ map_chipseq_data(  struct args_t* args )
     /* map the real ( IP ) data */
     struct mapped_reads_db* chip_mpd_rds_db = NULL;    
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
+
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &(chip_mpd_rds_db->fl_dist), args->frag_len_fp );
+    } else {
+        build_fl_dist( args, chip_mpd_rds_db );
+    }
     
     /* 
        this is a bit hacky - for single end chipseq we need to 
@@ -355,6 +370,12 @@ map_chipseq_data(  struct args_t* args )
     {        
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
+        if( args->frag_len_fp != NULL ) {
+            init_fl_dist_from_file( &(NC_mpd_rds_db->fl_dist), args->frag_len_fp );
+        } else {
+            build_fl_dist( args, NC_mpd_rds_db );
+        }
+
         /* 
            this is a bit messy - for single end chipseq we need to 
            do a bit of work in advance to speed up the fragment 
@@ -369,7 +390,6 @@ map_chipseq_data(  struct args_t* args )
     fprintf(stderr, "NOTICE      :  Freeing index\n" );
     free_ondisk_index( genome->index );
     
-#if 0
     /* if there is no negative control, we use the same iterative 
        scheme as the generic version. iterative_mapping takes care of 
        everything ( output, iterative, etc. ). We dont touch peak calling - 
@@ -393,18 +413,6 @@ map_chipseq_data(  struct args_t* args )
        the negative control. 
     */
     else {
-        /* Iterative mapping */
-        /* mmap and index the necessary data */
-        fprintf(stderr, "NOTICE      :  mmapping mapped IP reads DB.\n" );
-        mmap_mapped_reads_db( chip_mpd_rds_db );
-        fprintf(stderr, "NOTICE      :  indexing mapped IP reads DB.\n" );
-        index_mapped_reads_db( chip_mpd_rds_db );
-
-        fprintf(stderr, "NOTICE      :  mmapping mapped NC reads DB.\n" );
-        mmap_mapped_reads_db( NC_mpd_rds_db );
-        fprintf(stderr, "NOTICE      :  indexing mapped NC reads DB.\n" );
-        index_mapped_reads_db( NC_mpd_rds_db );
-        
         /* open the file to store the meta info, and print out the header */
         FILE* s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
         fprintf( s_mi, "sample_number,log_lhd\n" );
@@ -424,7 +432,6 @@ map_chipseq_data(  struct args_t* args )
     
         fclose( s_mi );
     }
-#endif
     
     goto cleanup;
 
