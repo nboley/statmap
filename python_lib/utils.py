@@ -87,6 +87,9 @@ class StatmapOutput:
         elif self.config.contents.assay_type == CHIP_SEQ:
             self.trace_update_fn = \
                 statmap_o.update_chipseq_trace_expectation_from_location
+        else:
+            print >> sys.stderr, "ERROR: Found unexpected assay type; cannot set trace update function."
+            sys.exit(1)
 
     def _load_mapped_reads( self, load_nc ):
         # load default mapped reads db
@@ -153,6 +156,8 @@ class StatmapOutput:
             self.config.contents.max_reference_insert_len )
 
         self._set_num_threads( num_threads )
+
+        self._set_trace_update_fn()
         
         # load genome
         self.genome = load_genome_from_disk( GENOME_FNAME )
