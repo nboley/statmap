@@ -1287,6 +1287,7 @@ void update_CAGE_trace_expectation_from_location(
 {
     MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
+    MRL_START_POS_TYPE stop = get_stop_from_mapped_read_location( loc  );
     
     enum bool is_paired 
         = mapped_read_location_is_paired( loc );
@@ -1312,28 +1313,30 @@ void update_CAGE_trace_expectation_from_location(
     /* If the read is *not* paired */
     else {
         int trace_index;
-
+        int promoter_pos = -1;
         /* If this is in the reverse ( 3') transcriptome */
         if( first_read_is_rev_comp )
         {
             trace_index = 1;
+            promoter_pos = stop - 1;
         } 
         /* We are in the 5' ( positive ) transcriptome */
         else {
             trace_index = 0;
+            promoter_pos = start;
         }
-
+        
         /* lock the spinlock */
         #ifdef USE_MUTEX
-        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
         #else
-        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
         #endif        
-        traces->traces[ trace_index ][ chr_index ][ start ] += cond_prob; 
+        traces->traces[ trace_index ][ chr_index ][ promoter_pos ] += cond_prob; 
         #ifdef USE_MUTEX
-        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
         #else
-        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (start/TM_GRAN) );
+        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
         #endif
     }
     
@@ -1371,6 +1374,9 @@ update_CAGE_mapped_read_prbs(
             get_chr_from_mapped_read_location( current_loc );
         MRL_START_POS_TYPE start = 
             get_start_from_mapped_read_location( current_loc );
+        MRL_START_POS_TYPE stop = 
+            get_stop_from_mapped_read_location( current_loc ) ;
+        assert( stop > 0 );
         enum bool is_paired 
             = mapped_read_location_is_paired( current_loc );
         enum bool first_read_is_rev_comp
@@ -1387,19 +1393,23 @@ update_CAGE_mapped_read_prbs(
         else {
             /* store the trace that we care about */
             TRACE_TYPE** trace;
+            unsigned int win_stop = 0;
+            unsigned int win_start = 0;
             
-            /* If this is in the rev strnanded transcriptome */
+            /* If this is in the rev stranded transcriptome */
             if( first_read_is_rev_comp )
             {
                 trace = traces->traces[1];
+                win_start = stop - MIN( stop, WINDOW_SIZE ) - 1;
+                win_stop = MIN( traces->chr_lengths[chr_index], stop + WINDOW_SIZE - 1 );
             } 
-            /* We are in the 5' ( negative ) transcriptome */
+            /* We are in the 5' ( positive ) transcriptome */
             else {
                 trace = traces->traces[0];
+                win_start = start - MIN( start, WINDOW_SIZE );
+                win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
             }
             
-            unsigned int win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
-            unsigned int win_start = start - MIN( start, WINDOW_SIZE );
             for( j = win_start; j < win_stop; j++ )
             {
                 window_density += trace[chr_index][j];
