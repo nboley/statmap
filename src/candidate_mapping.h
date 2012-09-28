@@ -82,7 +82,7 @@ typedef struct __attribute__((packed))__{
     float penalty;
 
     /* Length of the read that was soft clipped */
-    int softclip_len;
+    int trimmed_length;
 
     /* cigar string */
     struct CIGAR_ENTRY cigar[MAX_CIGAR_STRING_ENTRIES];

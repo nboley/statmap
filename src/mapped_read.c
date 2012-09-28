@@ -1118,6 +1118,16 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
             prologue->are_more = 1;
         }
 
+        /* Set the mapped_read_location's trimmed_length from the first
+         * candidate mapping
+         * (corresponding to the first read in the fragment) */
+        assert( (*current_mapping)->trimmed_length >= 0 );
+        assert( (*current_mapping)->trimmed_length <= TRIMMED_LENGTH_MAX );
+        prologue->trimmed_length = (*current_mapping)->trimmed_length;
+
+        /* unused_bits are initialized to 0 by the calloc in
+         * init_new_mapped_read_from_single_read_id */
+
         /* Convert the sum of the log penalties to a probability in standard
          * [0,1] probability space */
         prologue->seq_error = pow( 10, penalties[i] );

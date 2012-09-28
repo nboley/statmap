@@ -132,11 +132,13 @@ mapped_read_t {
     struct mapped_read_location {
         // 6 bytes
         struct mapped_read_location_prologue{
-            unsigned chr      :CHR_BITS;              // 14 bits
-            unsigned strand   :1;                     // 1 bits
-            unsigned are_more :1;                     // 1 bit
+            unsigned chr            :CHR_BITS;      // 15 bits
+            unsigned strand         :1;
+            unsigned are_more       :1;
+            unsigned trimmed_length :6;
+            unsigned unused_bits    :2;             // total: 2 bytes
         
-            ML_PRB_TYPE seq_error[NUM_READ_IDS];      // 4 bytes
+            ML_PRB_TYPE seq_error[NUM_READ_IDS];    // 4 bytes
             // 1 sequencing error for each read id
         }
         
@@ -172,6 +174,8 @@ typedef void mapped_read_location;
 
 #define READ_ID_BITS 31
 #define MAX_READ_ID 1073741823 // 2**31 / 2 - 1 = 1073741823
+
+#define TRIMMED_LENGTH_MAX 63 // 2**6 - 1 = 63
 /*
  * Structures used to access and manipulate the mapped_read_t and
  * mapped_read_location pseudo structs
@@ -189,9 +193,11 @@ typedef struct {
 
 // 6 bytes
 typedef struct {
-    unsigned chr      :CHR_BITS;
-    unsigned strand   :1;
-    unsigned are_more :1;
+    unsigned chr            :CHR_BITS;
+    unsigned strand         :1;
+    unsigned are_more       :1;
+    unsigned trimmed_length :6;
+    unsigned unused_bits    :2;
     /* For now, we assume that there is only 1 readid and therefore only
      * 1 corresponding seq_error */
     ML_PRB_TYPE seq_error;      
