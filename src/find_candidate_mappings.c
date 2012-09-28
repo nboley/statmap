@@ -261,34 +261,35 @@ update_error_data_record_from_candidate_mappings(
     // emphasize the array aspect with the + 0
     // but, since aal of the sequence is identical,
     // we only need to deal with this read
-    candidate_mapping* loc = mappings->mappings + 0;         
-    int mapped_length = rst->length;
+    candidate_mapping* cm = mappings->mappings + 0;         
+    int mapped_length = cm->rd_len;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
-        loc->chr, 
-        loc->start_bp,
+        cm->chr, 
+        cm->start_bp,
         mapped_length
     );            
         
-    char* error_str = rst->error_str;
-
     /* get the read sequence - rev complement if on reverse strand */
     char* read_seq;
-    if( loc->rd_strnd == BKWD )
+    if( cm->rd_strnd == BKWD )
     {
-        read_seq = calloc( rst->length + 1, sizeof(char) );
-        rev_complement_read( rst->char_seq,
-                read_seq, rst->length);
+        read_seq = calloc( mapped_length + 1, sizeof(char) );
+        rev_complement_read( rst->char_seq + cm->trimmed_length,
+                read_seq, mapped_length );
     } else {
-        read_seq = rst->char_seq;
+        read_seq = rst->char_seq + cm->trimmed_length;
     }
     
+    /* Is this correct for rev comp? */
+    char* error_str = rst->error_str + cm->trimmed_length;
+
     update_error_data_record( 
         error_data_record, genome_seq, read_seq, error_str, mapped_length );
 
     /* free memory if we allocated it */
-    if( loc->rd_strnd == BKWD )
+    if( cm->rd_strnd == BKWD )
         free( read_seq );
     
     return;
@@ -310,6 +311,14 @@ build_indexable_subtemplate(
 {
     int subseq_length = index->seq_length;
 
+    if( rst->length - softclip_len < subseq_length )
+    {
+        fprintf( stderr,
+                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
+        assert( false );
+        exit(1);
+    }
+
     /* Finding the optimal subsequence offset is desirable for ungapped assays,
      * but is not best for gapped assays (where we want the ists to be as far
      * apart as possible to avoid overlapping with potential introns).
@@ -327,22 +336,14 @@ build_indexable_subtemplate(
      * search. */
     if( _assay_type == RNA_SEQ ) // Gapped assay
     {
+        /* FIXME soft clipping for gapped assays? */
         if( range_start == 0 ) {
+            /* subseq_offset = softclip_len ? will that mess up the matching
+             * code later? */
             subseq_offset = 0;
         } else {
             subseq_offset = range_length - subseq_length;
         }
-    } else if( _assay_type == CAGE ) {
-        /* To deal with the possibility of untemplated G's, we always add an
-         * offset to CAGE reads. */
-        if( rst->length - MAX_NUM_UNTEMPLATED_GS < subseq_length ) {
-            fprintf( stderr,
-                    "FATAL        : CAGE experiments need indexes that have probe lengths at least %i basepairs short, to account for templated G's.", MAX_NUM_UNTEMPLATED_GS );
-            assert( false );
-            exit(1);
-        }
-
-        subseq_offset = MAX_NUM_UNTEMPLATED_GS;
     } else {
         subseq_offset = find_optimal_subseq_offset(
                 rst,
@@ -352,6 +353,11 @@ build_indexable_subtemplate(
                 range_length
             );
     }
+
+    /* The probe must be offset by at least the soft clip length; if there is
+     * an optimal subseq offset greater than the soft clip length, that will be
+     * used instead. */
+    subseq_offset = MAX( subseq_offset, softclip_len );
 
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist,
@@ -699,10 +705,11 @@ build_candidate_mapping_from_match(
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
+    cm.rd_len = rst->length - softclip_len;
     int read_location = modify_mapped_read_location_for_index_probe_offset(
                 base->loc, base->chr, base->strnd,
                 match->subseq_offsets[0], match->subseq_lengths[0],
-                rst->length, genome );
+                cm.rd_len, genome );
 
     /* HACK */
     if( match->len > 1 && base->strnd == BKWD ) {
@@ -717,8 +724,7 @@ build_candidate_mapping_from_match(
     /* build the cigar string from the mapped_locations */
     build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
-    // DEBUG
-    //print_candidate_mapping( &cm );
+    //print_candidate_mapping( &cm ); // DEBUG
 
     add_candidate_mapping( mappings, &cm );
 }
@@ -1731,6 +1737,8 @@ build_mapped_read_from_candidate_mappings(
                                       fl_dist,
                                               
                                       mapping_params );
+
+    //make_assay_specific_corrections();
             
     rd = build_mapped_read_from_joined_candidate_mappings(
         r->read_id, joined_mappings, joined_mappings_len, penalties

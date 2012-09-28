@@ -65,7 +65,8 @@ fprintf_seq(
 char*
 build_cigar_string_for_sublocations_group(
         mapped_read_sublocation* group_start,
-        enum STRAND strand )
+        enum STRAND strand,
+        int trimmed_length )
 {
     /* Note - this function allocates dynamic memory. It is the responsibility
      * of the caller to free it. */
@@ -82,15 +83,11 @@ build_cigar_string_for_sublocations_group(
     int prev_stop = -1;
 
     assert( strand == FWD || strand == BKWD );
-    // DEBUG
-    /*
     if( strand == FWD )
     {
-        fprintf( stderr, "\nFWD\n" );
-    } else {
-        fprintf( stderr, "\nBKWD\n" );
+        /* Add the soft clipped bases first */
+        buf_pos += sprintf( buf_pos, "%iS", trimmed_length );
     }
-    */
 
     /* loop over the sublocations */
     while(true)
@@ -109,13 +106,6 @@ build_cigar_string_for_sublocations_group(
         /* Write the region of aligned sequence with M */
         buf_pos += sprintf( buf_pos, "%iM", current_sublocation->length );
 
-        // DEBUG
-        /*
-        fprintf( stderr, "(start=%d, length=%d)\n",
-                current_sublocation->start_pos,
-                current_sublocation->length );
-                */
-
         /* Save prev_stop for the next iteration */
         prev_stop = current_sublocation->start_pos + current_sublocation->length;
 
@@ -126,6 +116,12 @@ build_cigar_string_for_sublocations_group(
 
         /* move ptr to the next sublocation */
         ptr += sizeof( mapped_read_sublocation );
+    }
+
+    if( strand == BKWD )
+    {
+        /* Add the soft clipped bases last */
+        buf_pos += sprintf( buf_pos, "%iS", trimmed_length );
     }
 
     /* append terminating null byte */
@@ -251,11 +247,12 @@ fprintf_sam_line_from_sublocations_group(
 
     const int chr_index = location_prologue->chr;
     const float seq_error = location_prologue->seq_error;
+    const int trimmed_length = location_prologue->trimmed_length;
 
     /* Offset +1 because Statmap's internal representation of genome locations
      * is 0-based, but SAM is 1-based */
-    const int start = get_start_for_sublocations_group( group ) + 1;
-    const int stop = get_stop_for_sublocations_group( group ) + 1;
+    int start = get_start_for_sublocations_group( group ) + 1;
+    int stop = get_stop_for_sublocations_group( group ) + 1;
 
     enum STRAND strand;
     if( location_prologue->strand == 0 ) {
@@ -292,7 +289,8 @@ fprintf_sam_line_from_sublocations_group(
              (unsigned int) MIN( 254, (-10*log10( 1- cond_prob )) ) );
 
     /* print the cigar string */
-    char* cigar_string = build_cigar_string_for_sublocations_group( group, strand );
+    char* cigar_string = build_cigar_string_for_sublocations_group( group,
+            strand, trimmed_length );
     fprintf( sam_fp, "%s\t", cigar_string );
     free( cigar_string );
 

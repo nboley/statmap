@@ -108,6 +108,9 @@ candidate_mapping
 init_candidate_mapping_from_read_subtemplate(
         struct read_subtemplate* rst );
 
+int
+get_length_from_cigar_string( candidate_mapping* mapping );
+
 /* add a copy of a candidate mapping */
 void
 add_candidate_mapping( candidate_mappings* mappings,

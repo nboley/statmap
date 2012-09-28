@@ -38,7 +38,7 @@ modify_mapped_read_location_for_index_probe_offset(
         return -1;
     }
     
-    // If this is a pseudo chromosome, we need to do these checks later.
+    // Pseudo locations should already have been expanded
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
         perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
         return -1;
@@ -47,19 +47,21 @@ modify_mapped_read_location_for_index_probe_offset(
     /* first deal with reads that map to the 5' genome */
     if( strnd == FWD )
     {
-        /* if the mapping location of the probe is less than
-           the length of the probe offset, then the actual 
-           read is mapping before the start of the genome, which 
-           is clearly impossible 
+        /* if the mapping location of the probe is less than the length of the
+           probe offset, then the actual read is mapping before the start of
+           the genome, which is clearly impossible. We add the softclip length
+           here under the assumption that any soft clipped basepairs may not
+           have come from the genome (may have been part of a primer sequence,
+           etc.)
         */
-        if( read_location < subseq_offset ) 
+        if( read_location + softclip_len < subseq_offset ) 
         {
             return -1;
         } 
         /* we shift the location to the beggining of the sequence, 
            rather than the subseq that we looked at in the index  */
         else {
-            read_location -= subseq_offset;
+            read_location -= (subseq_offset - softclip_len);
         }
                 
         /* if the end of the read extends past the end of the genome
@@ -107,18 +109,18 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         }
-                
+
         /* this will actually be the read end in the 5' genome,
            so we check to make sure that it won't make the read extend
            past the end of the genome */                
         if( read_location > 
             (long) genome->chr_lens[chr]
-            - ( subseq_len + subseq_offset )
+            - ( subseq_len + subseq_offset - softclip_len )
             ) {
             return -1;
         }
                 
-        read_location += ( subseq_len + subseq_offset );             
+        read_location += ( subseq_len + subseq_offset );
                 
         /* now we subtract off the full read length, so that we have the 
            read *end* in the 5' genome. Which is what our coordinates are 
@@ -130,7 +132,7 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         } else {
-            read_location -= read_len;
+            read_location -= (read_len + softclip_len);
         }
     
     } else {
@@ -214,6 +216,7 @@ init_candidate_mapping_from_read_subtemplate(
     memset( &cand_map, 0, sizeof(cand_map) );
 
     /* Set the read length */
+    /* FIXME Unused... */
     cand_map.rd_len = rst->length;
 
     /* Initialize the values in READ_TYPE.
@@ -221,12 +224,26 @@ init_candidate_mapping_from_read_subtemplate(
     cand_map.rd_type.follows_ref_gap = false;
     cand_map.rd_type.pos = -1;
 
-    cand_map.trimmed_length = 0;
+    cand_map.trimmed_length = softclip_len;
 
     /* The cigar string is initialized by the initial call to memset */
     cand_map.cigar_len = 0;
 
     return cand_map;
+}
+
+int
+get_length_from_cigar_string( candidate_mapping* mapping )
+{
+    int fragment_length = 0;
+
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
+    {
+        fragment_length += mapping->cigar[i].len;
+    }
+
+    return fragment_length;
 }
 
 void

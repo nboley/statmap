@@ -557,89 +557,64 @@ recheck_candidate_mapping(
 
         struct error_model_t* error_model )
 {
+    float rechecked_penalty = 0;
+
     /* build penalty arrays from the underlying read subtemplate */
     struct penalty_array_t fwd_pa, rev_pa;
     build_penalty_array( &fwd_pa, rst->length,
             error_model, rst->error_str );
     build_reverse_penalty_array( &rev_pa, &fwd_pa );
 
-    float rechecked_penalty = 0;
+    /* Get the entire region of the genome covered by this fragment */
+    int full_fragment_length = get_length_from_cigar_string( mapping);
+    char* genome_seq = find_seq_ptr( genome, mapping->chr, mapping->start_bp, 
+            full_fragment_length );
+    assert( genome_seq != NULL );
 
-    int seq_pos;
+    /* Build the sequence to compare and a pick a penalty array
+     * depending on strand */
+    char* mapped_seq = calloc( full_fragment_length+1, sizeof(char) );
+    assert( mapped_seq != NULL );
+
+    struct penalty_array_t* mapped_pa;
+
     if( mapping->rd_strnd == FWD )
     {
-        seq_pos = 0;
+        memcpy( mapped_seq, genome_seq, full_fragment_length );
+        mapped_pa = &fwd_pa;
     } else {
-        seq_pos = rst->length;
+        rev_complement_read( genome_seq, mapped_seq, full_fragment_length );
+        mapped_pa = &rev_pa;
     }
 
-    int genome_pos = mapping->start_bp;
-
     /* loop over the entries in this candidate mapping's cigar string */
+    int seq_pos = mapping->trimmed_length;
+
     int i;
     for( i = 0; i < mapping->cigar_len; i++ )
     {
-        struct CIGAR_ENTRY current_entry = mapping->cigar[i];
+        struct CIGAR_ENTRY entry = mapping->cigar[i];
 
-        if( current_entry.op == 'M' )
+        if( entry.op == 'M' )
         {
-            /* This indicates a portion of matched sequence. Compare it to the
-             * genome to recompute the penalty across the entire sequence */
-            char* genome_seq = find_seq_ptr(
-                    genome, mapping->chr, genome_pos, current_entry.len );
-
-            /* if the genome_seq pointer is null, the sequence isn't valid
-               for some reason ( ie, it falls off the end of the chromosome). 
-               In this case, mark as invalid (TODO how?) and continue */
-            if( NULL == genome_seq )
-                return; // TODO signal invalid
-
-            /* Build the sequence to compare and pick a penalty array depending
-             * on the strand of the mapping */
-
-            char* real_seq = calloc( current_entry.len+1, sizeof(char) );
-            assert( real_seq != NULL );
-            struct penalty_array_t* penalty_array;
-
-            if( BKWD == mapping->rd_strnd )
-            {
-                rev_complement_read( genome_seq, real_seq, current_entry.len );
-                penalty_array = &rev_pa;
-                seq_pos -= current_entry.len;
-            } else {
-                memcpy( real_seq, genome_seq, sizeof(char)*current_entry.len );
-                penalty_array = &fwd_pa;
-            }
-
             rechecked_penalty += recheck_penalty(
-                    real_seq,
+                    mapped_seq,
                     rst->char_seq + seq_pos,
-                    penalty_array->array + seq_pos,
-                    current_entry.len
+                    mapped_pa->array + seq_pos,
+                    entry.len
                 );
-
-            if( mapping->rd_strnd == FWD )
-            {
-                seq_pos += current_entry.len;
-            }
-
-            genome_pos += current_entry.len;
-
-            free( real_seq );
-
-        } else if ( current_entry.op == 'N' ) {
-            /* Move the genome_pos pointer forward to skip the intron indicated
-             * by this cigar string entry */
-            genome_pos += current_entry.len;
         } else {
             print_candidate_mapping( mapping ); // DEBUG
             assert( false );
         }
+
+        seq_pos += entry.len;
     }
 
     mapping->penalty = rechecked_penalty;
 
     /* cleanup memory */
+    free( mapped_seq );
     free_penalty_array( &fwd_pa );
     free_penalty_array( &rev_pa );
 

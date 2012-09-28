@@ -240,7 +240,8 @@ def count_lines_in_sam( sam_fp ):
     skip_sam_header( sam_fp )
 
     num_lines = sum( 1 for line in sam_fp )
-    # reset sam_fp to beginning
+
+    # reset sam_fp to beginning for next function
     sam_fp.seek(0)
 
     return num_lines
@@ -592,7 +593,13 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     total_num_reads = count_lines_in_sam( sam_fp )
 
     if len(fragments) > total_num_reads:
-        raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        missing_reads = set( xrange(nsamples) ).difference(
+                set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
+        sys.exit(1)
+
+    sam_fp.seek(0)
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
@@ -600,34 +607,40 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
             raise ValueError, "Mapping for readid %s returned too many results (read has %i mappings, expected 1)." \
                     % ( reads_data[0][0], len(reads_data) )
         
-        locs = [ ( read_data[2], int(read_data[3]), read_data[9], int(read_data[1]) )
-                 for read_data in reads_data ]
+        locs = [ ( read_data[2], int(read_data[3]), read_data[9],
+                   int(read_data[1]), int(read_data[0]) )
+                   for read_data in reads_data ]
         
-        # loc := (chr, start, sequence, flag)
+        # loc := (chr, start, sequence, flag, read_id )
         # truth := (chr, start, stop)
 
         for i, loc in enumerate(locs):
             # make sure the chr and start locations match
             if loc[0] != truth[0]:
-                raise ValueError, "Mapped to the wrong chromosome - expected %s, got %s" \
-                        % (loc[0], truth[0])
+                raise ValueError, "Mapping for read_id %i mapped to the wrong chromosome - expected %s, got %s" \
+                        % (loc[4], loc[0], truth[0])
 
             if untemplated_gs_perc == 0.0:
 
                 # TODO proper tests for untemplated G reads
 
                 if loc[1] != truth[1]:
-                    raise ValueError, "Mapped to the wrong location - expected %i, got %i" \
-                            % (truth[1], loc[1])
+                    raise ValueError, "Mapping for read_id %i mapped to the wrong location - expected %i, got %i" \
+                            % (loc[4], truth[1], loc[1])
 
                 # check sequence against the original genome
                 original = r_genome[truth[0]][truth[1]:truth[2]].upper()
-                mapped = loc[2]
+                # todo - interpret cigar string to build this
+                if loc[3] == 16 :
+                    mapped = loc[2][:len(loc[2])-random_prefix_len]
+                else:
+                    mapped = loc[2][random_prefix_len:]
 
                 if original.upper() != mapped.upper():
                     print "Original:", original
                     print "Mapped  :", mapped
-                    raise ValueError, "Mapped sequence does not match the genome"
+                    raise ValueError, "Mapped sequence in read_id %i does not match the genome" \
+                            % (loc[4])
 
     sam_fp.close()
     
@@ -700,6 +713,7 @@ def test_paired_end_reads( read_len ):
     output_directory = "smo_test_paired_end_reads_%i" % ( read_len )    
 
     rl = read_len
+    nsamples=100
 
     ###### Prepare the data for the test ############################################
     # build a random genome
@@ -709,7 +723,7 @@ def test_paired_end_reads( read_len ):
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
     assert 2*rl < 200 # make sure the fragments are long enough
-    fragments = sample_uniformly_from_genome( r_genome, nsamples=100, frag_len=200 )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=200 )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
     
@@ -736,7 +750,11 @@ def test_paired_end_reads( read_len ):
     total_num_reads = count_lines_in_sam(sam_fp) / 2
 
     if len(fragments) != total_num_reads:
-        raise ValueError, "Mapping returned too few reads (%i/%i)." % ( total_num_reads, len(fragments) )
+        missing_reads = set( xrange(nsamples) ).difference(
+                set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
+        sys.exit(1)
         
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
@@ -933,8 +951,9 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
     all_read_ids.sort( )
 
     if len(fragments) != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
-        raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
+        print "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
             % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
+        sys.exit(1)
     
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
@@ -1536,20 +1555,18 @@ if False:
 
 def test_softclipped_read_finding():
     rl = 20
-    # TODO rev_comp = True
-    test_sequence_finding( rl, rev_comp = False, random_prefix_len=3 )
+    test_sequence_finding( rl, rev_comp = True, random_prefix_len=3 )
     print "PASS: Finding soft clipped reads"
 
 def main( RUN_SLOW_TESTS ):
-    #print "Start test_softclipped_read_finding()"
-    #test_softclipped_read_finding()
-    #sys.exit(1)
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()    
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
+    print "Start test_softclipped_read_finding()"
+    test_softclipped_read_finding()
     print "Starting test_paired_end_sequence_finding()"
     test_paired_end_sequence_finding( )
     print "Starting test_repeat_sequence_finding()"
