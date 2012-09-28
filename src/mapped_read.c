@@ -1456,7 +1456,7 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
                        struct mapped_reads_db* mpd_rds_db )
 {
     assert( mpd_rds_db != NULL );
-    //struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
+    struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
     
     /* build an index for this mapped_read */
     mapped_read_index* rd_index = NULL;
@@ -1472,15 +1472,13 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     MPD_RD_ID_T i;
     for( i = 0; i < rd_index->num_mappings; i++ )
     {
-        mapped_read_location* loc = rd_index->mappings + i;
+        mapped_read_location* loc = rd_index->mappings[i];
 
         float cond_prob = get_seq_error_from_mapped_read_location( loc );
-        /* WARNING - this needs to be reconsidered. Simply removing the flag
-         * makes this code incorrect. */
-#if 0
-        if( get_flag_from_mapped_read_location( loc )&IS_PAIRED )
+
+        if( mapped_read_location_is_paired( loc) )
             cond_prob *= get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
-#endif
+
         prbs[i] = cond_prob;
         prb_sum += cond_prob;
     }
