@@ -392,8 +392,8 @@ def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
     
     return truth
 
-def reverse_complement( read ):
-    return read.translate( rev_comp_table )[::-1]
+def reverse_complement( seq ):
+    return seq.translate( rev_comp_table )[::-1]
 
 def build_reads_from_fragments(
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
@@ -597,13 +597,9 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
 
                 # check sequence against the original genome
                 original = r_genome[truth[0]][truth[1]:truth[2]].upper()
-                # if the reverse complement flag is set, rev_comp sequence from SAM
-                if( loc[3] == 16 ):
-                    mapped = reverse_complement( loc[2].upper() )
-                else:
-                    mapped = loc[2].upper()
+                mapped = loc[2]
 
-                if original != mapped:
+                if original.upper() != mapped.upper():
                     print "Original:", original
                     print "Mapped: ", mapped
                     raise ValueError, "Mapped sequence does not match the genome"

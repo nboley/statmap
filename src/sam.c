@@ -33,19 +33,15 @@ fprintf_sam_headers_from_genome(
     }
 }
 
-/* TODO - come back to this - reverse complemented reads should be printed outer
- * as reverse complemented, but we need to finish the new mapped reads
- * interface first (to determine if a mapped read is rev comp or not) */
-#if 0
 void
 fprintf_seq(
         FILE* sam_fp,
         char* seq,
         int rd_len,
-        MRL_FLAG_TYPE flag
+        enum STRAND strand
     )
 {
-    if( 0 < (flag&FIRST_READ_WAS_REV_COMPLEMENTED) )
+    if( strand == BKWD )
     {
         /* print the reverse complemented sequence for reads that map to the
          * reverse strand */
@@ -55,13 +51,10 @@ fprintf_seq(
         fprintf( sam_fp, "%.*s\t", rd_len, tmp_seq );
 
         free( tmp_seq );
-    }
-    else
-    {
+    } else {
         fprintf( sam_fp, "%.*s\t", rd_len, seq );
     }
 }
-#endif
 
 /*************************************************************************
  *
@@ -311,9 +304,7 @@ fprintf_sam_line_from_sublocations_group(
     free( mate_info );
 
     /* print the actual sequence */
-    fprintf( sam_fp, "%.*s\t", rd_len, subtemplate->char_seq );
-    // TODO rev comp sequence if necesary
-    //fprintf_seq( sam_fp, r2_seq, r2_len, mrl_flag );
+    fprintf_seq( sam_fp, subtemplate->char_seq, subtemplate->length, strand );
 
     /* print the quality string */
     fprintf( sam_fp, "%.*s\t", rd_len, subtemplate->error_str );
