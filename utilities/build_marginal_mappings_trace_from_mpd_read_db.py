@@ -29,7 +29,7 @@ def main():
     smo, filter_threshold = parse_args()
 
     reset_all_read_cond_probs( smo.mpd_rdb, smo.cond_prbs_db )
-
+    
     # initialize a trace
     track_names = [ "fwd_strand", "bkwd_strand" ]
     trace = init_trace( smo.genome, 2, track_names )

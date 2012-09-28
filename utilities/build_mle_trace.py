@@ -46,7 +46,7 @@ def main():
     update_mapped_rd_prbs = statmap_o.update_CAGE_mapped_read_prbs
     
     # initialize the starting trace
-    statmap_o.multiply_trace_by_scalar( starting_trace, 1.0 )
+    statmap_o.set_trace_to_uniform( starting_trace, 1.0 )
     
     # update the mapping
     statmap_o.update_mapping(

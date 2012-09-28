@@ -494,7 +494,7 @@ write_mapped_reads_to_sam(
             /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
-
+            
             fprintf_mapped_read_to_sam( 
                 sam_ofp, mapped_rd, mapped_rd_index,
                 cond_prbs_db, genome, rd );
