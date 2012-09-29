@@ -373,6 +373,12 @@ void
 fprintf_mapped_read( FILE* fp, mapped_read_t* r );
 
 void
+advance_pointer_to_start_of_next_joined_candidate_mappings(
+        candidate_mapping*** current_mapping,
+        int current_set_index,
+        int num_sets );
+
+void
 join_candidate_mappings( candidate_mappings* mappings, 
                          candidate_mapping*** joined_mappings, 
                          float** penalties,

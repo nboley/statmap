@@ -26,8 +26,6 @@
 
 const float untemplated_g_marginal_log_prb = -1.30103;
 
-#define MAX_NUM_UNTEMPLATED_GS 1
-
 float
 subseq_penalty(
         struct read_subtemplate* rst,
@@ -1706,6 +1704,129 @@ find_candidate_mappings_for_read(
     }
 }
 
+void
+add_candidate_mappings_for_untemplated_gs(
+        candidate_mapping* cm,
+        struct read* r,
+        candidate_mappings* mappings
+    )
+{
+    /* Since CAGE is always single-ended, we can assume there is only one
+     * candidate mapping in each joined group */
+
+    struct read_subtemplate* rst = r->subtemplates + cm->rd_type.pos;
+
+    int i;
+    for( i = 1; i <= softclip_len; i++ )
+    {
+        /* As long as the soft clipped bases are *consecutive* G's, they could
+         * be untemplated G's. Add candidate mappings for each possible mapping
+         * with untemplated G's. */
+        char soft_clipped = rst->char_seq[ softclip_len - i ];
+
+        if( soft_clipped == 'G' || soft_clipped == 'g' )
+        {
+            /* build a new candidate mapping, including the untemplated G's */
+            candidate_mapping new_cm = *cm;
+
+            if( cm->rd_strnd == FWD )
+            {
+                new_cm.start_bp -= i;
+            }
+
+            new_cm.rd_len += i;
+            new_cm.trimmed_length -= i;
+            new_cm.penalty += untemplated_g_marginal_log_prb;
+
+            add_candidate_mapping( mappings, &new_cm );
+
+        } else {
+            break;
+        }
+    }
+}
+
+void
+make_cage_specific_corrections(
+        candidate_mapping*** joined_mappings,
+        float** penalties,
+        int* joined_mappings_len,
+
+        struct read* r,
+        candidate_mappings* mappings
+    )
+{
+    /* To make keeping track of memory easier, we re-use the original container
+     * of candidate mappings. In order to know how many additonal mappings
+     * we've added (for reads with untemplated G's) we need to save the
+     * original length */
+    int original_mappings_length = mappings->length;
+
+    /* For each candidate mapping that passed the recheck, build additional
+     * candidate mappings for any possible mappings with untemplated g's */
+
+    /* Pointer to the start of the current set of joined candidate_mappings */
+    candidate_mapping** current_mapping = *joined_mappings;
+    
+    int i;
+    for( i = 0; i < *joined_mappings_len; i++ )
+    {
+        add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
+                mappings );
+
+        advance_pointer_to_start_of_next_joined_candidate_mappings(
+                &current_mapping, i, *joined_mappings_len );
+    }
+
+    int additional_mappings_length = mappings->length - original_mappings_length;
+
+    /* Reallocate the lists of joined candidate mappings and penalties to add
+     * the new mappings */
+    *joined_mappings = realloc( *joined_mappings,
+            sizeof(candidate_mapping*) * 
+            (*joined_mappings_len + additional_mappings_length) * 2 );
+    *penalties = realloc( *penalties,
+            sizeof(float) *
+            (*joined_mappings_len + additional_mappings_length) );
+
+    /* Add the additional candidate mappings */
+    for( i = 0; i < additional_mappings_length; i++ )
+    {
+        *joined_mappings[ (*joined_mappings_len + i)*2 - 2 ]
+            = mappings->mappings + ( original_mappings_length + i );
+        *joined_mappings[ (*joined_mappings_len + i)*2 - 1 ]
+            = NULL;
+
+        *penalties[ *joined_mappings_len + i ] 
+            = mappings->mappings[ original_mappings_length + i].penalty;
+    }
+
+    /* update the length of the joined mappings */
+    *joined_mappings_len += additional_mappings_length;
+
+    return;
+}
+
+void
+make_assay_specific_corrections(
+        candidate_mapping*** joined_mappings,
+        float** penalties,
+        int* joined_mappings_len,
+
+        struct read* r,
+        candidate_mappings* mappings
+    )
+{
+    /* Only handle CAGE (untemplated G's) for now */
+    if( _assay_type == CAGE )
+    {
+        make_cage_specific_corrections( joined_mappings, penalties,
+                joined_mappings_len, r, mappings );
+    }
+        
+    return;
+}
+
 mapped_read_t*
 build_mapped_read_from_candidate_mappings(
         candidate_mappings* mappings,
@@ -1738,8 +1859,9 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       mapping_params );
 
-    //make_assay_specific_corrections();
-            
+    make_assay_specific_corrections( &joined_mappings, &penalties,
+            &joined_mappings_len, r, mappings );
+
     rd = build_mapped_read_from_joined_candidate_mappings(
         r->read_id, joined_mappings, joined_mappings_len, penalties
     );
