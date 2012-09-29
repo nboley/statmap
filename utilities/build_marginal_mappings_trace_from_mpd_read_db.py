@@ -6,6 +6,7 @@ import os
 # add python_lib to sys.path
 sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
 from trace import *
+from wiggle import *
 from utils import *
 
 def usage():
