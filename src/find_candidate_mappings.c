@@ -1747,21 +1747,53 @@ add_candidate_mappings_for_untemplated_gs(
 }
 
 void
+append_candidate_mappings_to_joined_mappings(
+        candidate_mappings* assay_specific_mappings,
+
+        candidate_mapping*** joined_mappings,
+        float** penalties,
+        int* joined_mappings_len
+    )
+{
+    if( assay_specific_mappings->length == 0 )
+        return;
+
+    *joined_mappings = realloc( *joined_mappings,
+            sizeof(candidate_mapping*) * 
+            (*joined_mappings_len + assay_specific_mappings->length) * 2 );
+    *penalties = realloc( *penalties,
+            sizeof(float) *
+            (*joined_mappings_len + assay_specific_mappings->length) );
+
+    /* Add the additional candidate mappings */
+    int i;
+    for( i = 0; i < assay_specific_mappings->length; i++ )
+    {
+        *joined_mappings[ (*joined_mappings_len + (i+1))*2 - 2 ]
+            = assay_specific_mappings->mappings + i;
+        *joined_mappings[ (*joined_mappings_len + (i+1))*2 - 1 ]
+            = NULL;
+
+        *penalties[ *joined_mappings_len + i ] 
+            = assay_specific_mappings->mappings[i].penalty;
+    }
+
+    /* update the length of the joined mappings */
+    *joined_mappings_len += assay_specific_mappings->length;
+
+    return;
+}
+
+void
 make_cage_specific_corrections(
         candidate_mapping*** joined_mappings,
         float** penalties,
         int* joined_mappings_len,
 
         struct read* r,
-        candidate_mappings* mappings
+        candidate_mappings* assay_specific_mappings
     )
 {
-    /* To make keeping track of memory easier, we re-use the original container
-     * of candidate mappings. In order to know how many additonal mappings
-     * we've added (for reads with untemplated G's) we need to save the
-     * original length */
-    int original_mappings_length = mappings->length;
-
     /* For each candidate mapping that passed the recheck, build additional
      * candidate mappings for any possible mappings with untemplated g's */
 
@@ -1771,38 +1803,22 @@ make_cage_specific_corrections(
     int i;
     for( i = 0; i < *joined_mappings_len; i++ )
     {
-        add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
-                mappings );
+        /* This is the filtered set of candidate mappings, so it's possible
+         * that advance_pointer_to_start_of_next_joined_candidate_mappings will
+         * advance the pointer to a NULL pointer (how we mark a filtered
+         * candidate mapping). */
+        if( (*current_mapping) != NULL )
+        {
+            add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
+                    assay_specific_mappings );
+        }
 
         advance_pointer_to_start_of_next_joined_candidate_mappings(
                 &current_mapping, i, *joined_mappings_len );
     }
 
-    int additional_mappings_length = mappings->length - original_mappings_length;
-
-    /* Reallocate the lists of joined candidate mappings and penalties to add
-     * the new mappings */
-    *joined_mappings = realloc( *joined_mappings,
-            sizeof(candidate_mapping*) * 
-            (*joined_mappings_len + additional_mappings_length) * 2 );
-    *penalties = realloc( *penalties,
-            sizeof(float) *
-            (*joined_mappings_len + additional_mappings_length) );
-
-    /* Add the additional candidate mappings */
-    for( i = 0; i < additional_mappings_length; i++ )
-    {
-        *joined_mappings[ (*joined_mappings_len + i)*2 - 2 ]
-            = mappings->mappings + ( original_mappings_length + i );
-        *joined_mappings[ (*joined_mappings_len + i)*2 - 1 ]
-            = NULL;
-
-        *penalties[ *joined_mappings_len + i ] 
-            = mappings->mappings[ original_mappings_length + i].penalty;
-    }
-
-    /* update the length of the joined mappings */
-    *joined_mappings_len += additional_mappings_length;
+    append_candidate_mappings_to_joined_mappings( assay_specific_mappings,
+            joined_mappings, penalties, joined_mappings_len );
 
     return;
 }
@@ -1814,14 +1830,14 @@ make_assay_specific_corrections(
         int* joined_mappings_len,
 
         struct read* r,
-        candidate_mappings* mappings
+        candidate_mappings* assay_specific_mappings
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
         make_cage_specific_corrections( joined_mappings, penalties,
-                joined_mappings_len, r, mappings );
+                joined_mappings_len, r, assay_specific_mappings );
     }
         
     return;
@@ -1859,20 +1875,32 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       mapping_params );
 
+    /* Build additional candidate mappings to make corrections for known
+     * problems in the assay (e.g. untemplated G's in CAGE).
+     *
+     * This set of mappings is declared here because joined_mappings is a set
+     * of pointers - we need to be able to free the original mappings *after*
+     * they've been used to build the mapped read. */
+    candidate_mappings* assay_specific_mappings = NULL;
+    init_candidate_mappings( &assay_specific_mappings );
     make_assay_specific_corrections( &joined_mappings, &penalties,
-            &joined_mappings_len, r, mappings );
+            &joined_mappings_len, r, assay_specific_mappings );
+
+    /* TODO should joined candidate mappings be sorted? */
 
     rd = build_mapped_read_from_joined_candidate_mappings(
         r->read_id, joined_mappings, joined_mappings_len, penalties
     );
     
+    free_candidate_mappings( assay_specific_mappings );
+    
     free( joined_mappings );
     free( penalties );
-    
+
     return rd;
 }
 
-void
+static inline void
 increment_counter_with_lock( unsigned int *counter, pthread_spinlock_t* lock )
 {
     pthread_spin_lock( lock );
