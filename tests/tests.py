@@ -44,7 +44,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -547,6 +547,51 @@ def build_expected_map_locations_from_repeated_genome( \
             read_starts = [ start + i*chr_len for i in xrange(num_repeats) ]
             read_stops = [ start + i*chr_len for i in xrange(num_repeats) ]
         return set( read_starts ), set( read_stops )
+
+def check_sequence_match( mapped_read, truth, genome ):
+    # Get the start and length of the fragment in the genome that this read
+    # maps to (including soft clipping, introns, etc.)
+    cigar_re = r'([0-9]+)([MNS])'
+    cigar_string = mapped_read[5]
+    cigar_entries = re.findall( cigar_re, cigar_string )
+
+    mapped_fragment_len = 0
+    for entry in cigar_entries:
+        mapped_fragment_len += int( entry[0] )
+
+    # The SAM spec defines the POS entry as the
+    # "1-based leftmost mapping POSition of the first matching base"
+    #
+    # so if there are any non-M entries in the cigar string before the first
+    # M segment, we must subtract their length from the start position given in
+    # the SAM to get the full fragment
+    mapped_fragment_start = mapped_read[1]
+    for entry in cigar_entries:
+        if entry[1] == 'M': break
+        mapped_fragment_start -= int( entry[0] )
+
+    mapped_fragment = genome[mapped_read[0]][mapped_fragment_start:\
+            mapped_fragment_start+mapped_fragment_len]
+
+    # loop over the entries in the cigar string, comparing the sequence of the
+    # mapped read to the genome
+    seq_pos = 0
+    for entry in cigar_entries:
+
+        if entry[1] == 'M':
+
+            original = mapped_fragment[seq_pos:seq_pos + int( entry[0] )]
+            mapped = mapped_read[2][seq_pos:seq_pos + int( entry[0] )]
+
+            if original.upper() != mapped.upper():
+                print "Original:", original
+                print "Mapped  :", mapped
+                raise ValueError, "Mapped sequence in read_id %i does not match the genome" \
+                        % (mapped_read[4])
+
+        seq_pos += int( entry[0] )
+
+    return
     
 ###
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
@@ -621,10 +666,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
                     % ( reads_data[0][0], len(reads_data) )
         
         locs = [ ( read_data[2], int(read_data[3]), read_data[9],
-                   int(read_data[1]), int(read_data[0]) )
+                   int(read_data[1]), int(read_data[0]), read_data[5] )
                    for read_data in reads_data ]
         
-        # loc := (chr, start, sequence, flag, read_id )
+        # loc := (chr, start, sequence, flag, read_id, cigar )
         # truth := (chr, start, stop)
 
         for i, loc in enumerate(locs):
@@ -633,27 +678,13 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
                 raise ValueError, "Mapping for read_id %i mapped to the wrong chromosome - expected %s, got %s" \
                         % (loc[4], loc[0], truth[0])
 
-            if untemplated_gs_perc == 0.0:
+            # TODO proper tests for untemplated G reads
 
-                # TODO proper tests for untemplated G reads
+            if loc[1] != truth[1]:
+                raise ValueError, "Mapping for read_id %i mapped to the wrong location - expected %i, got %i" \
+                        % (loc[4], truth[1], loc[1])
 
-                if loc[1] != truth[1]:
-                    raise ValueError, "Mapping for read_id %i mapped to the wrong location - expected %i, got %i" \
-                            % (loc[4], truth[1], loc[1])
-
-                # check sequence against the original genome
-                original = r_genome[truth[0]][truth[1]:truth[2]].upper()
-                # todo - interpret cigar string to build this
-                if loc[3] == 16 :
-                    mapped = loc[2][:len(loc[2])-random_prefix_len]
-                else:
-                    mapped = loc[2][random_prefix_len:]
-
-                if original.upper() != mapped.upper():
-                    print "Original:", original
-                    print "Mapped  :", mapped
-                    raise ValueError, "Mapped sequence in read_id %i does not match the genome" \
-                            % (loc[4])
+            check_sequence_match( loc, truth, r_genome )
 
     sam_fp.close()
     
@@ -671,7 +702,8 @@ def test_fivep_sequence_finding( ):
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_untemplated_g_finding( ):
-    rls = [ 15, 25, 50, 75  ]
+    #rls = [ 15, 25, 50, 75  ]
+    rls = [ 25, ]
     for rl in rls:
         test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25 )
         print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
