@@ -893,6 +893,12 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     *args = malloc( sizeof(struct args_t)  );
     FILE* arg_fp = fopen( fname, "r" );
 
+    if( arg_fp == NULL )
+    {
+        fprintf( stderr, "ERROR       :  Could not load config file '%s'\n", fname );
+        exit( -1 );
+    }
+
     fscanf_name_or_null( 
             arg_fp, "genome_fname", &((*args)->genome_fname) );
     fscanf_name_or_null( 

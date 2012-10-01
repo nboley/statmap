@@ -19,7 +19,7 @@ def test_error_rate_estimation( ):
     
     rl = read_len = 50
     indexed_seq_len = 20
-    nsamples = 199000
+    nsamples = 19900
     output_directory = "smo_test_error_rate_estimation"
     
     

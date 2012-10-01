@@ -48,7 +48,8 @@ add_location_to_locations_node( locations_node* node,
     INDEX_LOC_TYPE* locs = 
         (INDEX_LOC_TYPE*) (((unsigned short*) node) + 1 );
     locs[ num_locations ] = loc;
-
+    assert( loc.is_maternal == 0 && loc.is_paternal == 0 );
+    
     /* increment the number of locations */
     *( (unsigned short*) node ) += 1;
 
@@ -69,6 +70,7 @@ get_locations_from_locations_node( const locations_node* const node,
     int i;
     for( i = 0; i < num_locations; i++ )
     {
+        assert( (locs + i)->is_maternal == 0 && (locs + i)->is_paternal == 0 );
         add_and_expand_location_from_index(
                 results,
                 locs + i,

@@ -270,7 +270,7 @@ update_traces_from_mapped_reads_worker( void* params )
         for( j = 0; j < rd_index->num_mappings; j++ ) {
             float cond_prob = get_cond_prb(
                 cond_prbs_db, rd_index->read_id, j );
-            // update_stranded_read_start_density_from_location( traces, r->locations + j );
+            
             update_trace_expectation_from_location( 
                 traces, rd_index->mappings[j], cond_prob );
         }
@@ -293,10 +293,7 @@ update_traces_from_mapped_reads(
 )
 {        
     zero_traces( traces );
-
-    //struct trace_t* locs_trace;
-    //copy_trace_structure( &locs_trace, traces );
-
+    
     /* Move the database ( this should be a cursor ) back to the first read */
     rewind_mapped_reads_db( reads_db );
     
@@ -308,10 +305,6 @@ update_traces_from_mapped_reads(
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
             read_num++;
-            /*
-            if( read_num%1000000 == 0 )
-                fprintf( stderr, "DEBUG       :  Updated traces from mapped reads for %i reads\n", read_num );
-            */
             
             mapped_read_index* rd_index = NULL;
             init_mapped_read_index( &rd_index, r );
@@ -321,7 +314,7 @@ update_traces_from_mapped_reads(
             for( j = 0; j < rd_index->num_mappings; j++ ) {
                 float cond_prob = get_cond_prb(
                     cond_prbs_db, rd_index->read_id, j );
-                // update_stranded_read_start_density_from_location( traces, r->locations + j );
+                
                 update_trace_expectation_from_location( 
                     traces, rd_index->mappings[j], cond_prob );
             }
@@ -438,20 +431,6 @@ update_mapped_reads_from_trace_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
     {
-        /*
-        if( r->read_id%1000000 == 0 && r->read_id > 0  )
-            fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", 
-                     r->read_id );
-        */
-
-        mapped_read_index *rd_index;
-        init_mapped_read_index( &rd_index, r );
-        
-        // TODO - we assume this can't happen now
-        if( rd_index->num_mappings <= 1 ) {
-            continue;
-        }
-        
         /* Update the read */
         struct update_mapped_read_rv_t tmp_rv 
             = update_mapped_read_prbs( cond_prbs_db, traces, r );
@@ -462,8 +441,6 @@ update_mapped_reads_from_trace_worker( void* params )
         
         /* Update the lhd */
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
-
-        free_mapped_read_index( r );
     }
 
     pthread_exit( NULL );
@@ -487,62 +464,24 @@ update_mapped_reads_from_trace(
     /* reset the cursor */
     rewind_mapped_reads_db( reads_db );
 
-    int read_cnt = 0;
-
+    /* initialize the thread parameters structure */
+    struct update_mapped_reads_param params;
+        
+    params.rv.max_change = 0;
+    params.rv.log_lhd = 0;
+                
+    params.reads_db = reads_db;
+    params.cond_prbs_db = cond_prbs_db;
+        
+    /* traces should be read only, so they are shared */
+    params.traces = traces;
+    params.update_mapped_read_prbs = update_mapped_read_prbs;
+    
     /* If the number of threads is one, then just do everything in serial */
     if( num_threads == 1 )
     {
-        mapped_read_t* r;
-        
-        while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
-        {
-            read_cnt++;
-
-            mapped_read_index* rd_index;
-            init_mapped_read_index( &rd_index, r );
-                        
-            /*
-            if( read_cnt%1000000 == 0 && r->read_id > 0 )
-                fprintf( stderr, "DEBUG       :  Updated reads from traces for %i reads\n", read_cnt );
-            */
-            
-            /* if there aren't more than 1 potential locations, 
-               there's no point in updating this */
-            if( rd_index->num_mappings <= 1 ) {
-                continue;
-            }
-
-            /* Update the read */
-            // TODO - pass in read index?
-            struct update_mapped_read_rv_t tmp_rv 
-                = update_mapped_read_prbs( cond_prbs_db, traces, r );
-            
-            /* Hand reduce the max */
-            if( tmp_rv.max_change > rv.max_change )
-            {
-                rv.max_change = tmp_rv.max_change;
-            }
-            
-            /* Update the lhd */
-            rv.log_lhd += tmp_rv.log_lhd;
-
-            free_mapped_read_index( rd_index );
-        }
-        
-    } else {
-        /* initialize the thread parameters structure */
-        struct update_mapped_reads_param params;
-        
-        params.rv.max_change = 0;
-        params.rv.log_lhd = 0;
-                
-        params.reads_db = reads_db;
-        params.cond_prbs_db = cond_prbs_db;
-        
-        /* traces should be read only, so they are shared */
-        params.traces = traces;
-        params.update_mapped_read_prbs = update_mapped_read_prbs;
-        
+        update_mapped_reads_from_trace_worker( &params );
+    } else {        
         /* initialize all of the threads */
         int rc;
         void* status;

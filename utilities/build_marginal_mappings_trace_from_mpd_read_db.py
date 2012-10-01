@@ -14,13 +14,14 @@ def usage():
     sys.exit(1)
 
 def parse_args():
-    if len(sys.argv) not in (2, 3): usage()
+    if len(sys.argv) not in (2, 3): 
+        usage()
 
     try:
         filter_threshold = float( sys.argv[2] )
     except:
         filter_threshold = 0.0
-
+    
     smo = StatmapOutput( sys.argv[1],
                          load_mapped_reads=True )
 
@@ -33,11 +34,9 @@ def main():
     
     # initialize a trace
     track_names = [ "fwd_strand", "bkwd_strand" ]
-    trace = init_trace( smo.genome, 2, track_names )
+    trace = init_trace( smo.genome, track_names )
 
-    # update the trace from the naive kernel
-    # we hack this a bit by noting that the naive kernel is just the
-    # trace kernel (stranded, which we nearly always want )
+    # update the trace
     update_traces_from_mapped_reads(
         smo.mpd_rdb, smo.cond_prbs_db, trace, smo.trace_update_fn
     )
