@@ -87,7 +87,11 @@ struct index_search_params
 
 struct mapping_params {
     struct mapping_metaparams* metaparams;
-
+    
+    int num_penalty_arrays;
+    struct penalty_array_t** fwd_penalty_arrays;
+    struct penalty_array_t** rev_penalty_arrays;
+    
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
@@ -95,7 +99,9 @@ struct mapping_params {
 void
 init_mapping_params_for_read(
         struct mapping_params** p,
-        struct mapping_metaparams* metaparams
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model
     );
 
 void
@@ -107,14 +113,6 @@ init_index_search_params(
 void
 free_mapping_params( struct mapping_params* p );
 
-#if 0
-void
-find_mapping_params( struct mapping_params* params,
-                     struct read_subtemplate* rst,
-                     struct genome_data* genome,
-                     struct error_model_t* error_model_t
-    );
-#endif
 
 /*
  *  Functions for saving error information

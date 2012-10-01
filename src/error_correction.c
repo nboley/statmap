@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "read.h"
+#include "quality.h"
 #include "genome.h"
 #include "error_correction.h"
 
@@ -168,7 +169,8 @@ update_freqs_array( struct freqs_array* est_freqs,
 }
 
 void
-predict_freqs( struct error_data_t* data, int record_index, struct freqs_array* predicted_freqs )
+predict_freqs( struct error_data_t* data, int record_index, 
+               struct freqs_array* predicted_freqs )
 {
     fprintf( stderr, 
              "DEBUG       :  Predicting the error models for readkeys %i - %i.\n",
@@ -296,19 +298,56 @@ void free_error_model( struct error_model_t* error_model )
 void
 init_mapping_params_for_read(
         struct mapping_params** p,
-        struct mapping_metaparams* metaparams
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model
     )
 {
     *p = malloc( sizeof( struct mapping_params ));
 
     (*p)->metaparams = metaparams;
     
-    if( metaparams->error_model_type == MISMATCH ) {
-        int read_len = 20;
+    /* build the penalty arrays */
+    (*p)->num_penalty_arrays = r->num_subtemplates;
+    
+    (*p)->fwd_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
+    (*p)->rev_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
+    
+    int i;
+    for( i = 0; i < (*p)->num_penalty_arrays; i++ )
+    {
+        (*p)->fwd_penalty_arrays[i] = calloc( 
+            sizeof(struct penalty_array_t), r->subtemplates[i].length );
+        build_penalty_array( (*p)->fwd_penalty_arrays[i],
+                             r->subtemplates[i].length, 
+                             error_model, 
+                             r->subtemplates[i].error_str );
         
-        int max_num_mm = -(int)(metaparams->error_model_params[0]*read_len)-1;
-        int max_mm_spread = (int)(metaparams->error_model_params[1]*read_len)+1;
+        (*p)->rev_penalty_arrays[i] = calloc( 
+            sizeof(struct penalty_array_t), r->subtemplates[i].length );        
+        build_reverse_penalty_array( 
+            (*p)->rev_penalty_arrays[i], 
+            (*p)->fwd_penalty_arrays[i]
+        );
+    }
 
+    /* calculate the total read length. This is just the sum of the read 
+       subtemplate lengths */
+    int total_read_len = 0;
+    for( i = 0; i < r->num_subtemplates; i++ )
+    {
+        total_read_len += r->subtemplates[i].length;
+    }
+    
+    /* now, calcualte the model parameters */
+    if( metaparams->error_model_type == MISMATCH ) {
+        int max_num_mm = -(int)(
+            metaparams->error_model_params[0]*total_read_len)-1;
+        int max_mm_spread = (int)(
+            metaparams->error_model_params[1]*total_read_len)+1;
+        
         (*p)->recheck_min_match_penalty = max_num_mm;
         (*p)->recheck_max_penalty_spread = max_mm_spread;
     } 
@@ -350,6 +389,19 @@ void
 free_mapping_params( struct mapping_params* p )
 {
     if( p == NULL ) return;
+    
+    int i = 0;
+    for( i = 0; i < p->num_penalty_arrays; i++ )
+    {
+        free_penalty_array(p->fwd_penalty_arrays[i]);
+        free_penalty_array(p->rev_penalty_arrays[i]);
+        free(p->fwd_penalty_arrays[i]);
+        free(p->rev_penalty_arrays[i]);
+    }
+    
+    free(p->fwd_penalty_arrays );
+    free(p->rev_penalty_arrays );
+
     free( p );
 }
 
