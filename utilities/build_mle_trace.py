@@ -38,6 +38,7 @@ def main():
     op_dir, ofname, num_threads = parse_arguments()
     
     smo = StatmapOutput( op_dir,
+                         num_threads=num_threads,
                          load_mapped_reads=True,
                          load_raw_reads=True )
     
