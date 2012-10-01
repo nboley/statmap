@@ -355,8 +355,6 @@ free_mapped_read_index( mapped_read_index* index )
     return;
 }
 
-/* Longstanding TODO -- expand joined_mappings dynamically for performance */
-
 void
 join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
                                         candidate_mapping*** joined_mappings, 

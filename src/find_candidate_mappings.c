@@ -1736,7 +1736,7 @@ add_candidate_mappings_for_untemplated_gs(
 
             new_cm.rd_len += i;
             new_cm.trimmed_length -= i;
-            new_cm.penalty += untemplated_g_marginal_log_prb;
+            new_cm.penalty += i*untemplated_g_marginal_log_prb;
 
             add_candidate_mapping( mappings, &new_cm );
 
@@ -1749,32 +1749,48 @@ add_candidate_mappings_for_untemplated_gs(
 void
 append_candidate_mappings_to_joined_mappings(
         candidate_mappings* assay_specific_mappings,
-
         candidate_mapping*** joined_mappings,
         float** penalties,
-        int* joined_mappings_len
+        int* joined_mappings_len,
+        int original_mappings_length
     )
 {
     if( assay_specific_mappings->length == 0 )
         return;
 
+    /* The joined mappings structures were originally allocated to have enough
+     * sets of matched pointers for each mapping in the original set of
+     * mappings. *joined_mappings_len does not represent this value, as it
+     * includes any reads that were filtered. In order to reallocate this
+     * memory, we have to use the length of the original set of mappings. */
+
     *joined_mappings = realloc( *joined_mappings,
             sizeof(candidate_mapping*) * 
-            (*joined_mappings_len + assay_specific_mappings->length) * 2 );
+            (original_mappings_length + assay_specific_mappings->length) * 2 );
+    assert( *joined_mappings != NULL );
+
     *penalties = realloc( *penalties,
             sizeof(float) *
-            (*joined_mappings_len + assay_specific_mappings->length) );
+            (original_mappings_length + assay_specific_mappings->length) );
+    assert( *penalties != NULL);
 
     /* Add the additional candidate mappings */
     int i;
     for( i = 0; i < assay_specific_mappings->length; i++ )
     {
-        *joined_mappings[ (*joined_mappings_len + (i+1))*2 - 2 ]
+        /* Start adding pointers to additional candidate mappings after the
+         * originally allocated set of pointers. This boundary is reflected by
+         * the original mappings length (not *joined_mappings_len, which was
+         * updated during filtering) */
+        (*joined_mappings)[ (original_mappings_length + (i+1))*2 - 2 ]
             = assay_specific_mappings->mappings + i;
-        *joined_mappings[ (*joined_mappings_len + (i+1))*2 - 1 ]
+        (*joined_mappings)[ (original_mappings_length + (i+1))*2 - 1 ]
             = NULL;
 
-        *penalties[ *joined_mappings_len + i ] 
+        /* The penalties array was resized to only contain penalties from
+         * filtered joined sets, so here the correct offset is provided by
+         * *joined_mappings_len */
+        (*penalties)[ *joined_mappings_len + i ] 
             = assay_specific_mappings->mappings[i].penalty;
     }
 
@@ -1789,6 +1805,7 @@ make_cage_specific_corrections(
         candidate_mapping*** joined_mappings,
         float** penalties,
         int* joined_mappings_len,
+        int original_mappings_length,
 
         struct read* r,
         candidate_mappings* assay_specific_mappings
@@ -1800,25 +1817,23 @@ make_cage_specific_corrections(
     /* Pointer to the start of the current set of joined candidate_mappings */
     candidate_mapping** current_mapping = *joined_mappings;
     
+    /* move the current_mapping pointer to the start of the first set of joined
+     * candidate_mappings */
+    while( *current_mapping == NULL )
+        current_mapping++;
+
     int i;
     for( i = 0; i < *joined_mappings_len; i++ )
     {
-        /* This is the filtered set of candidate mappings, so it's possible
-         * that advance_pointer_to_start_of_next_joined_candidate_mappings will
-         * advance the pointer to a NULL pointer (how we mark a filtered
-         * candidate mapping). */
-        if( (*current_mapping) != NULL )
-        {
-            add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
-                    assay_specific_mappings );
-        }
-
+        add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
+                assay_specific_mappings );
         advance_pointer_to_start_of_next_joined_candidate_mappings(
                 &current_mapping, i, *joined_mappings_len );
     }
 
     append_candidate_mappings_to_joined_mappings( assay_specific_mappings,
-            joined_mappings, penalties, joined_mappings_len );
+            joined_mappings, penalties, joined_mappings_len,
+            original_mappings_length );
 
     return;
 }
@@ -1828,6 +1843,7 @@ make_assay_specific_corrections(
         candidate_mapping*** joined_mappings,
         float** penalties,
         int* joined_mappings_len,
+        int original_mappings_length,
 
         struct read* r,
         candidate_mappings* assay_specific_mappings
@@ -1837,7 +1853,8 @@ make_assay_specific_corrections(
     if( _assay_type == CAGE )
     {
         make_cage_specific_corrections( joined_mappings, penalties,
-                joined_mappings_len, r, assay_specific_mappings );
+                joined_mappings_len, original_mappings_length, r,
+                assay_specific_mappings );
     }
         
     return;
@@ -1884,7 +1901,8 @@ build_mapped_read_from_candidate_mappings(
     candidate_mappings* assay_specific_mappings = NULL;
     init_candidate_mappings( &assay_specific_mappings );
     make_assay_specific_corrections( &joined_mappings, &penalties,
-            &joined_mappings_len, r, assay_specific_mappings );
+            &joined_mappings_len, mappings->length, r,
+            assay_specific_mappings );
 
     /* TODO should joined candidate mappings be sorted? */
 

@@ -44,8 +44,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-# TODO - fix so this doesn't create conflicting output directories
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -113,7 +112,7 @@ def map_with_statmap( read_fnames, output_dir,
                       search_type="m",
                       assay=None,
                       genome_fnames=["*.fa",],
-                      num_samples=1,
+                      num_samples=0,
                       softclip_len=0,
         ):
     if not P_STATMAP_OUTPUT:
@@ -160,9 +159,13 @@ def map_with_statmap( read_fnames, output_dir,
     call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i -q 0" \
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
 
-    # Setting num_samples only make sense if also specify the assay type
     if assay != None:
-        call += ( " -a " + assay + " -n " + str(num_samples) )
+        call += " -a " + assay
+
+    # Setting num_samples only makes sense if we also specify the assay, since
+    # the iterative mapping code is assay-specific
+    if num_samples > 0 and assay != None:
+        call += " -n " + str(num_samples)
 
     # add the search type
     if search_type != None:
@@ -439,18 +442,26 @@ def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
 
 def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
         untemplated_gs_perc=0.0, random_prefix_len=0 ):
-    assert( untemplated_gs_perc == 0 )
+
+    # (for now) only do one type of prepending transformation
+    assert( untemplated_gs_perc == 0 or random_prefix_len == 0 )
 
     for sample_num, seq in enumerate( samples_iter ):
 
-        random_prefix = ''.join(
-                [ random.choice(bps)
-                  for n in range(random_prefix_len) ] )
+        if random_prefix_len > 0:
+            prefix = ''.join( [ random.choice(bps)
+                    for n in range(random_prefix_len) ] )
+        else:
+            num_untemplated_gs = random.randint(1,3) \
+                    if random.random() < untemplated_gs_perc else 0
+            prefix = 'g'*num_untemplated_gs
+
+        seq = prefix + seq
 
         error_str = 'h'*len(seq)
 
         of.write("@%s\n" % sample_num )
-        of.write(random_prefix + seq + "\n")
+        of.write(seq + "\n")
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
@@ -543,7 +554,7 @@ def build_expected_map_locations_from_repeated_genome( \
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
         untemplated_gs_perc=0.0, search_type="m", min_penalty=-1.0,
-        max_penalty_spread=1, num_samples=1, assay=None, random_prefix_len=0 ):
+        max_penalty_spread=1, num_samples=0, assay=None, random_prefix_len=0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -583,10 +594,12 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     if assay == None:
         assay = None if untemplated_gs_perc == 0.0 else 'a'
 
+    softclip_len = random_prefix_len if untemplated_gs_perc == 0 else 3
+
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay, 
             search_type=search_type, num_samples=num_samples,
-            softclip_len=random_prefix_len )
+            softclip_len=softclip_len )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -692,9 +705,10 @@ def test_build_index():
 
 def test_iterative_mapping():
     """Run Statmap on some basic data and do iterative mapping just to see if it works"""
+    # TODO why is this so slow?
     rls = [ 25, ]
     for rl in rls:
-        test_dirty_reads( rl, assay='a' ) # CAGE
+        test_dirty_reads( rl, assay='a', num_samples=1 ) # CAGE
         print "PASS: Iterative mapping code (%i BP reads) is at least running..." \
                 % rl
 
@@ -878,7 +892,7 @@ def test_lots_of_repeat_sequence_finding( ):
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
 def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
-        fasta_prefix=None, assay=None ):
+        fasta_prefix=None, assay=None, num_samples=0 ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
         % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
@@ -886,7 +900,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
 
     ###### Prepare the data for the test ############################################
     # build a random genome
-    r_genome = build_random_genome( [1000,1000, 10000], ["1","2","3"] )
+    r_genome = build_random_genome( [1000, 1000, 10000], ["1","2","3"] )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
@@ -920,7 +934,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
                       min_penalty = 0.90, max_penalty_spread=0.20,
                       indexed_seq_len = read_len - 2,
                       num_threads = n_threads,
-                      assay=assay ) # read_len = read_len - 2
+                      assay=assay, num_samples=num_samples ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1560,7 +1574,8 @@ def test_softclipped_read_finding():
 
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
-    #test_untemplated_g_finding()    
+    #test_untemplated_g_finding()
+    #sys.exit(1)
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
@@ -1583,8 +1598,8 @@ def main( RUN_SLOW_TESTS ):
     test_build_index( )
     print "Starting test_iterative_mapping()"
     test_iterative_mapping()
-    #print "Starting test_untemplated_g_finding()"
-    #test_untemplated_g_finding()
+    print "Starting test_untemplated_g_finding()"
+    test_untemplated_g_finding()
     print "Starting test_diploid_genome()"
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
