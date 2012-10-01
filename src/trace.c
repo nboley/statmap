@@ -334,10 +334,15 @@ close_traces( struct trace_t* traces )
                a warning so Im keeping it */
             free( (void*) traces->locks[i][j] );
         }
-        free( traces->chr_names[i] );
+        //free( traces->chr_names[i] );
         free( traces->track_names[i] );
         free( traces->traces[i] );                          
         free( traces->locks[i] );
+    }
+
+    for( j = 0; j < traces->num_chrs; j++ )
+    {
+        free( traces->chr_names[j] );
     }
 
     free( traces->chr_names );
