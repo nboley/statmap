@@ -291,19 +291,27 @@ void free_error_model( struct error_model_t* error_model )
     return;
 }
 
+
 double
-calc_min_patch_penalty( struct penalty_array_t* p, int p_len, float exp_miss_frac )
+calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
 {
     double mean = 0;
     double var = 0;
+    
     int i;
-    for( i = 0; i < p_len; i++ )
+    for( i = 0; i < p->length; i++ )
     {
-        mean += 
+        double penalty = p->array[i].penalties[0][1];
+        double mm_prb = pow( 10, penalty );
+        mean += mm_prb*penalty;
+        mean += (1-mm_prb)*log10((1-mm_prb));
+        
+        var += (1-mm_prb)*mm_prb*penalty*penalty;
     }
     
-    
+    return mean - 4*sqrt( var );
 }
+
 
 void
 init_mapping_params_for_read(
@@ -365,8 +373,11 @@ init_mapping_params_for_read(
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
-        (*p)->recheck_min_match_penalty = metaparams->error_model_params[0];
-        (*p)->recheck_max_penalty_spread = metaparams->error_model_params[1];
+        (*p)->recheck_min_match_penalty 
+            = calc_min_match_penalty( (*p)->fwd_penalty_arrays[0], 0.01 );
+        
+         //metaparams->error_model_params[0];
+        (*p)->recheck_max_penalty_spread = 2.1; //metaparams->error_model_params[1];
     }
     
     return;

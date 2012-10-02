@@ -13,11 +13,14 @@
 #define N_DEBUG
 
 // Candidate Mappings
-#define MAX_NUM_MM_RATE 0.20
+#define MAX_NUM_MM_RATE 0.10
 #define MAX_NUM_MM_SPREAD_RATE 0.05
 
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
+
+#define HIGH_QUALITY_BP_ERROR_PRB 0.002
+
 // the num of reads that we map before updating the error estimates
 #define READS_STAT_UPDATE_STEP_SIZE 50000
 

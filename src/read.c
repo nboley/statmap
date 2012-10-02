@@ -143,12 +143,12 @@ filter_read(
        ( it's initialized to -1 ); */
     assert( min_num_hq_bps >= 0 );
 
-    int num_hq_bps = 0;
-
     // loop over the subtemplates, counting hq basepairs
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
+        int num_hq_bps = 0;
+        
         // get a pointer to the current subtemplate
         struct read_subtemplate* rst = &(r->subtemplates[i]);
 
@@ -166,13 +166,14 @@ filter_read(
             double qual = pow(10, error );
             
             /* count the number of hq basepairs */
-            if( qual > 0.999 )
+            if( qual > 1 - HIGH_QUALITY_BP_ERROR_PRB )
                 num_hq_bps += 1;
         }
+
+        if ( num_hq_bps < min_num_hq_bps )
+            return true;
     }
 
-    if ( num_hq_bps < min_num_hq_bps )
-        return true;
         
     return false;
 }
