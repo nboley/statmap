@@ -1905,9 +1905,9 @@ build_mapped_read_from_candidate_mappings(
      * they've been used to build the mapped read. */
     candidate_mappings* assay_specific_mappings = NULL;
     init_candidate_mappings( &assay_specific_mappings );
-    make_assay_specific_corrections( &joined_mappings, &penalties,
-            &joined_mappings_len, mappings->length, r,
-            assay_specific_mappings );
+    make_assay_specific_corrections( &joined_mappings,
+            &joined_mapping_penalties, &joined_mappings_len, mappings->length,
+            r, assay_specific_mappings );
 
     /* TODO should joined candidate mappings be sorted? */
 
