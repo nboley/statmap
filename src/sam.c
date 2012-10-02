@@ -83,7 +83,7 @@ build_cigar_string_for_sublocations_group(
     int prev_stop = -1;
 
     assert( strand == FWD || strand == BKWD );
-    if( strand == FWD )
+    if( trimmed_length > 0 && strand == FWD )
     {
         /* Add the soft clipped bases first */
         buf_pos += sprintf( buf_pos, "%iS", trimmed_length );
@@ -118,7 +118,7 @@ build_cigar_string_for_sublocations_group(
         ptr += sizeof( mapped_read_sublocation );
     }
 
-    if( strand == BKWD )
+    if( trimmed_length > 0 && strand == BKWD )
     {
         /* Add the soft clipped bases last */
         buf_pos += sprintf( buf_pos, "%iS", trimmed_length );
