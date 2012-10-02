@@ -291,6 +291,7 @@ void free_error_model( struct error_model_t* error_model )
     return;
 }
 
+#if 0
 double
 calc_min_patch_penalty( struct penalty_array_t* p, int p_len, float exp_miss_frac )
 {
@@ -304,6 +305,7 @@ calc_min_patch_penalty( struct penalty_array_t* p, int p_len, float exp_miss_fra
     
     
 }
+#endif
 
 void
 init_mapping_params_for_read(
