@@ -44,7 +44,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
