@@ -34,7 +34,7 @@ error_prb(
 );
 
 /* 
-   the probability of observing obs given that the ref basepair is unobservable. 
+   the probability of observing obs given that the ref basepair is unobservable.
    this is just log10( 0.25 ) - the N gives us 0 information. 
 */
 static const double N_penalty = -0.60206;

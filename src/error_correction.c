@@ -231,11 +231,7 @@ init_error_model(
     *error_model = malloc( sizeof(struct error_model_t) );
     (*error_model)->error_model_type = error_model_type;
     (*error_model)->data = NULL;
-
-    if( error_model_type == ESTIMATED )
-    {
-    }
-
+    
     return;
 }
 
@@ -293,6 +289,20 @@ void free_error_model( struct error_model_t* error_model )
 
     free( error_model );
     return;
+}
+
+double
+calc_min_patch_penalty( struct penalty_array_t* p, int p_len, float exp_miss_frac )
+{
+    double mean = 0;
+    double var = 0;
+    int i;
+    for( i = 0; i < p_len; i++ )
+    {
+        mean += 
+    }
+    
+    
 }
 
 void
@@ -371,17 +381,30 @@ init_index_search_params(
     /* Allocate memory for an array of index_search_params, one for each index
      * probe */
     *isp = malloc( sizeof( struct index_search_params ) * ists->length );
-
+    
     /* TODO for now, set the index search params equal to the recheck params */
     int i;
     for( i = 0; i < ists->length; i++ )
     {
-        (*isp)[i].min_match_penalty
-            = mapping_params->recheck_min_match_penalty;
-        (*isp)[i].max_penalty_spread
-            = mapping_params->recheck_max_penalty_spread;
+        float min_match_penalty = 1;
+        float max_penalty_spread = -1;
+        int length = ists->container[i].subseq_length;
+        
+        if( mapping_params->metaparams->error_model_type == MISMATCH ) {
+            min_match_penalty = -(int)(
+                mapping_params->metaparams->error_model_params[0]*length)-1;
+            max_penalty_spread = (int)(
+                mapping_params->metaparams->error_model_params[1]*length)+1;
+        } else {
+            assert( mapping_params->metaparams->error_model_type == ESTIMATED );
+            min_match_penalty = mapping_params->recheck_min_match_penalty;
+            max_penalty_spread = mapping_params->recheck_max_penalty_spread;
+        }        
+        
+        (*isp)[i].min_match_penalty = min_match_penalty;
+        (*isp)[i].max_penalty_spread = max_penalty_spread;
     }
-
+    
     return;
 }
 
@@ -390,37 +413,23 @@ free_mapping_params( struct mapping_params* p )
 {
     if( p == NULL ) return;
     
-    int i = 0;
-    for( i = 0; i < p->num_penalty_arrays; i++ )
+    if( NULL != p->fwd_penalty_arrays )
     {
-        free_penalty_array(p->fwd_penalty_arrays[i]);
-        free_penalty_array(p->rev_penalty_arrays[i]);
-        free(p->fwd_penalty_arrays[i]);
-        free(p->rev_penalty_arrays[i]);
+        int i = 0;
+        for( i = 0; i < p->num_penalty_arrays; i++ )
+        {
+            free_penalty_array(p->fwd_penalty_arrays[i]);
+            free_penalty_array(p->rev_penalty_arrays[i]);
+            free(p->fwd_penalty_arrays[i]);
+            free(p->rev_penalty_arrays[i]);
+        }
+    
+        free(p->fwd_penalty_arrays );
+        free(p->rev_penalty_arrays );
     }
     
-    free(p->fwd_penalty_arrays );
-    free(p->rev_penalty_arrays );
-
     free( p );
 }
-
-/*
- * Find the necessary penalties so that we map the expected number of reads.
- * TODO fill in when error model is fully merged
- */
-#if 0
-void
-find_mapping_params( struct mapping_params* params,
-                     struct read_subtemplate* rst,
-                     struct genome_data* genome,
-                     struct error_model_t* error_model_t
-    )
-{
-    /* TODO stub */
-    return;
-}
-#endif
 
 /*******************************************************************************
  *
@@ -762,6 +771,3 @@ fprintf_error_data_record(
     
     fprintf( stream, "\n" );
 }
-
-
-
