@@ -963,7 +963,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
-                      min_penalty = 0.90, max_penalty_spread=0.20,
+                      min_penalty = 0.20, max_penalty_spread=0.05,
                       indexed_seq_len = read_len - 2,
                       num_threads = n_threads,
                       assay=assay, num_samples=num_samples ) # read_len = read_len - 2

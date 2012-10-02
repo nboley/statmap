@@ -83,7 +83,7 @@ def main():
     # write mapped reads to sam
     write_mapped_reads_to_sam(
         raw_rdb, mpd_rdb, cond_prbs_db, smo.genome,
-        reset_cond_prbs, sys.stdout
+        True, sys.stdout
     )
          
 if __name__ == "__main__": main()

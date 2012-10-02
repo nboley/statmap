@@ -1561,27 +1561,24 @@ find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         candidate_mappings* final_mappings,
         struct genome_data* genome,
-
-        struct error_model_t* error_model,
+        
         struct error_data_record_t* scratch_error_data_record,
         enum bool only_collect_error_data,
 
         struct mapping_params* mapping_params
     )
 {
-    /* build the penalty arrays for this read subtemplate */
-    struct penalty_array_t fwd_pa, rev_pa;
-    build_penalty_array( &fwd_pa, rst->length, error_model, rst->error_str );
-    build_reverse_penalty_array( &rev_pa, &fwd_pa );
-
+    int rst_pos = rst->pos_in_template.pos;
+    
     // build a set of indexable subtemplates from this read subtemplate
     struct indexable_subtemplates* ists = NULL;
     init_indexable_subtemplates( &ists );
     build_indexable_subtemplates_from_read_subtemplate(
             ists, rst, genome->index,
-            &fwd_pa, &rev_pa
+            mapping_params->fwd_penalty_arrays[rst_pos],
+            mapping_params->rev_penalty_arrays[rst_pos]
         );
-
+    
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
     mapped_locations** search_results = malloc(
@@ -1623,7 +1620,8 @@ find_candidate_mappings_for_read_subtemplate(
             rst,
             ists,
             genome,
-            &fwd_pa, &rev_pa,
+            mapping_params->fwd_penalty_arrays[rst_pos],
+            mapping_params->rev_penalty_arrays[rst_pos],
             mapping_params
         );
 
@@ -1638,10 +1636,8 @@ find_candidate_mappings_for_read_subtemplate(
             rst,
             scratch_error_data_record
         );
-
-    /* cleanup memory */
-    free_penalty_array( &fwd_pa );
-    free_penalty_array( &rev_pa );
+    
+    return;
 }
 
 void
@@ -1669,6 +1665,8 @@ find_candidate_mappings_for_read(
         struct mapping_params* mapping_params
     )
 {
+    assert( NULL != error_model );
+    
     int rst_index;
     for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
     {
@@ -1684,8 +1682,7 @@ find_candidate_mappings_for_read(
                 rst,
                 rst_mappings,
                 genome,
-
-                error_model,
+                
                 scratch_error_data_record,
                 only_collect_error_data,
 
@@ -1881,16 +1878,16 @@ build_mapped_read_from_candidate_mappings(
 {            
     int joined_mappings_len = 0;
     candidate_mapping** joined_mappings = NULL;
-    float* penalties = NULL;
+    float* joined_mapping_penalties = NULL;
     mapped_read_t* rd = NULL;
     
     join_candidate_mappings( mappings,
                              &joined_mappings,
-                             &penalties,
+                             &joined_mapping_penalties,
                              &joined_mappings_len );
             
     filter_joined_candidate_mappings( &joined_mappings,
-                                      &penalties,
+                                      &joined_mapping_penalties,
                                       &joined_mappings_len,
                                               
                                       genome,
@@ -1914,15 +1911,14 @@ build_mapped_read_from_candidate_mappings(
 
     /* TODO should joined candidate mappings be sorted? */
 
-    rd = build_mapped_read_from_joined_candidate_mappings(
-        r->read_id, joined_mappings, joined_mappings_len, penalties
-    );
+    rd = build_mapped_read_from_joined_candidate_mappings( r->read_id,
+            joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
     free_candidate_mappings( assay_specific_mappings );
     
     free( joined_mappings );
-    free( penalties );
-
+    free( joined_mapping_penalties );
+    
     return rd;
 }
 
@@ -2001,24 +1997,23 @@ find_candidate_mappings( void* params )
             fprintf(stderr, "DEBUG       :  Mapped %u reads, %i successfully\n", 
                     r->read_id, *mapped_cnt);
         }
+
+        struct mapping_params* mapping_params = NULL;
+        init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, error_model ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
+            free_mapping_params( mapping_params );
             continue; // skip the unmappable read
         }
 
         /* Initialize container for candidate mappings for this read */
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
-
-        struct mapping_params* mapping_params = NULL;
-        init_mapping_params_for_read( &mapping_params, metaparams );
         
-        //fprintf( stderr, "DEBUG       :  Finding cm's for read_id %i\n", r->read_id );
-
         find_candidate_mappings_for_read(
                 r,
                 mappings,
@@ -2028,9 +2023,7 @@ find_candidate_mappings( void* params )
                 only_collect_error_data,
                 mapping_params
             );
-
-        //fprintf( stderr, "DEBUG       :  Found %i cm's for read_id %i\n", mappings->length, r->read_id );
-
+        
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {

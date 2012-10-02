@@ -744,7 +744,8 @@ remove_candidate_mapping_group(
 }
 
 void
-filter_penalties_array( float** penalties, int joined_mappings_len )
+filter_joined_mapping_penalties( 
+    float** joined_mapping_penalties, int joined_mappings_len )
 {
     /* Rewrite the penalties array with just the penalties from the filtered
      * mappings */
@@ -753,7 +754,7 @@ filter_penalties_array( float** penalties, int joined_mappings_len )
     int i;
     for( i = 0; i < joined_mappings_len; i++ )
     {
-        if( (*penalties)[i] != 1 ) {
+        if( (*joined_mapping_penalties)[i] != 1 ) {
             num_filtered_penalties++;
         }
     }
@@ -762,24 +763,24 @@ filter_penalties_array( float** penalties, int joined_mappings_len )
     int fp_index = 0;
     for( i = 0; i < joined_mappings_len; i++ )
     {
-        if( (*penalties)[i] != 1 )
+        if( (*joined_mapping_penalties)[i] != 1 )
         {
-            filtered_penalties[fp_index] = (*penalties)[i];
+            filtered_penalties[fp_index] = (*joined_mapping_penalties)[i];
             fp_index++;
         }
     }
 
     /* Free the original penalties array and replace it with a pointer to the
      * new, filtered penalties array */
-    free( *penalties );
-    *penalties = filtered_penalties;
+    free( *joined_mapping_penalties );
+    *joined_mapping_penalties = filtered_penalties;
 
     return;
 }
 
 void
 filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
-                                  float** penalties,
+                                  float** joined_mapping_penalties,
                                   int* joined_mappings_len,
                                   
                                   struct genome_data* genome,
@@ -801,15 +802,18 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     candidate_mapping** current_mapping = *joined_mappings;
 
     int i;
-    /* recheck the locations, updating penalties, and find the max penalty */
+    /* recheck the locations, updating joined_mapping_penalties, 
+       and find the max penalty */
     for( i = 0; i < *joined_mappings_len; i++ )
     {
-        recheck_joined_candidate_mappings( current_mapping, (*penalties) + i,
-                genome, r, error_model, fl_dist );
+        recheck_joined_candidate_mappings( 
+            current_mapping, (*joined_mapping_penalties) + i,
+            genome, r, error_model, fl_dist 
+        );
 
         /* we may need to update the max penalty */
-        if( (*penalties)[i] > max_penalty ) {
-            max_penalty = (*penalties)[i];
+        if( (*joined_mapping_penalties)[i] > max_penalty ) {
+            max_penalty = (*joined_mapping_penalties)[i];
         }
 
         advance_pointer_to_start_of_next_joined_candidate_mappings(
@@ -842,14 +846,15 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
         /* I set the safe bit to 1e-6, which is correct for most floats */
         if( max_penalty_spread > 1e-6 )
         {
-            if( (*penalties)[i] < ( max_penalty - max_penalty_spread ) )
+            if( (*joined_mapping_penalties)[i] 
+                < ( max_penalty - max_penalty_spread ) )
             {
                 filter_current_group = true;
             }
         }
 
         /* Make sure that the penalty isn't too low */
-        if( (*penalties)[i] < min_match_penalty )
+        if( (*joined_mapping_penalties)[i] < min_match_penalty )
         {
             filter_current_group = true;
         }
@@ -858,9 +863,10 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
         if( filter_current_group )
         {
             remove_candidate_mapping_group( current_mapping );
-            /* Mark the invalid penalty with 1 - since the penalties are log
-             * probabilities, any value > 0 is invalid. */
-            (*penalties)[i] = 1;
+            /* Mark the invalid penalty with 1 - since the 
+             * joined_mapping_penalties are log probabilities, any value > 0
+             * is invalid. */
+            (*joined_mapping_penalties)[i] = 1;
             filtered_mappings_len -= 1;
         }
 
@@ -868,7 +874,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                 &current_mapping, i, *joined_mappings_len );
     }
 
-    filter_penalties_array( penalties, *joined_mappings_len );
+    filter_joined_mapping_penalties( 
+        joined_mapping_penalties, *joined_mappings_len );
 
     *joined_mappings_len = filtered_mappings_len;
 
@@ -923,8 +930,8 @@ calculate_mapped_read_space_from_joined_candidate_mappings(
 
         if( i < joined_mappings_len - 1 )
         {
-            /* skip any NULL markers until we get to the start of the next set of
-             * candidate_mappings */
+            /* skip any NULL markers until we get to the start of the next set
+             * of candidate_mappings */
             while( *current_mapping == NULL )
                 current_mapping++;
         }
@@ -1019,8 +1026,8 @@ populate_mapped_read_sublocations_from_candidate_mappings(
                     }
                 }
 
-                /* Advance pointer in mapped_read_t to the next sublocation to fill
-                 * in */
+                /* Advance pointer in mapped_read_t to the next sublocation to
+                 * fill in */
                 *rd_ptr += sizeof( mapped_read_sublocation );
             }
 
@@ -1043,7 +1050,7 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         mapped_read_t** rd,
         candidate_mapping** joined_mappings,
         int joined_mappings_len,
-        float* penalties )
+        float* joined_mapping_penalties )
 {
     /* loop over the joined candidate mappings, adding mapped locations as we
      * go */
@@ -1100,9 +1107,9 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         /* unused_bits are initialized to 0 by the calloc in
          * init_new_mapped_read_from_single_read_id */
 
-        /* Convert the sum of the log penalties to a probability in standard
-         * [0,1] probability space */
-        prologue->seq_error = pow( 10, penalties[i] );
+        /* Convert the sum of the log joined_mapping_penalties to a probability
+         * in standard [0,1] probability space */
+        prologue->seq_error = pow( 10, joined_mapping_penalties[i] );
         assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
 
         rd_ptr += sizeof( mapped_read_location_prologue );
@@ -1125,7 +1132,7 @@ build_mapped_read_from_joined_candidate_mappings(
         MPD_RD_ID_T read_id,
         candidate_mapping** joined_mappings,
         int joined_mappings_len,
-        float* penalties )
+        float* joined_mapping_penalties )
 {
     if( joined_mappings_len == 0 )
         return NULL;
@@ -1141,7 +1148,7 @@ build_mapped_read_from_joined_candidate_mappings(
     init_new_mapped_read_from_single_read_id( &rd, read_id, mapped_read_size );
     
     populate_mapped_read_locations_from_joined_candidate_mappings(
-            &rd, joined_mappings, joined_mappings_len, penalties );
+           &rd, joined_mappings, joined_mappings_len, joined_mapping_penalties);
     
     return rd;
 }

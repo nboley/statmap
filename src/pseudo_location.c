@@ -244,7 +244,7 @@ load_pseudo_locations_from_mmapped_data(
             data += sizeof( INDEX_LOC_TYPE );
         }
     }
-
+    
     return;
 }
 

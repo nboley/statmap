@@ -8,7 +8,7 @@ logfname <- "error_model/r_output.log";
 logfp = file( logfname, "w" );
 
 MIN.NUM.OBS = 10;
-MIN.ERROR.PRB = 1e-4;
+MIN.ERROR.PRB = 1e-3;
 
 logit = function(x)log(x) - log(1-x)
 logistic = function(x)exp(x)/(1+exp(x))
@@ -37,7 +37,7 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
         {
             return( rep( (mm.cnts[cnts>0]+1)/(cnts[cnts>0]+40), length(cnts) ) );
         } else if( sum(cnts > 0) < 3 )
-        {	
+        {
           response = cbind( mm.cnts+1, cnts-mm.cnts+20 );
           x = 1:length(cnts);
           mo = glm( response~x, family=binomial )
@@ -144,6 +144,7 @@ predict_freqs_for_record = function( mm.cnts, cnts, pos, qual, plot.str=NULL ) {
     min.error.rate = max(MIN.ERROR.PRB, min(new.data$pred.freqs));
     rv = rep( min.error.rate, length(data$good.pos) );
     rv[ data$good.pos ] = new.data$pred.freqs;
+    rv[ rv < min.error.rate ] = min.error.rate;
     
     if( !is.null(plot.str) )
     {

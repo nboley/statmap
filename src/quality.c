@@ -72,6 +72,7 @@ code_bp( int code )
     fprintf(stderr, "PANIC - Error converting bp code %i in "
                     "penalty array build.\n", code
         );
+    assert( false );
     exit( -1 );
 }
 
