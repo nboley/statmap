@@ -24,6 +24,8 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 
+#define MAX_NUM_UNTEMPLATED_GS 3
+
 const float untemplated_g_marginal_log_prb = -1.30103;
 
 float
@@ -1714,7 +1716,10 @@ add_candidate_mappings_for_untemplated_gs(
     struct read_subtemplate* rst = r->subtemplates + cm->rd_type.pos;
 
     int i;
-    for( i = 1; i <= softclip_len; i++ )
+    for( i = 1;
+         i <= softclip_len &&
+         i <= MAX_NUM_UNTEMPLATED_GS;
+         i++ )
     {
         /* As long as the soft clipped bases are *consecutive* G's, they could
          * be untemplated G's. Add candidate mappings for each possible mapping
