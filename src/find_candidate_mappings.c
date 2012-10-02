@@ -1729,9 +1729,17 @@ add_candidate_mappings_for_untemplated_gs(
             /* build a new candidate mapping, including the untemplated G's */
             candidate_mapping new_cm = *cm;
 
+            /* Adjust the entries in the cigar string to account for soft
+             * clipping adjacent to the matches. */
             if( cm->rd_strnd == FWD )
             {
                 new_cm.start_bp -= i;
+                /* update cm's cigar */
+                assert( new_cm.cigar[0].op == 'M' );
+                new_cm.cigar[0].len += i;
+            } else { // BKWD
+                assert( new_cm.cigar[cm->cigar_len-1].op == 'M' );
+                new_cm.cigar[cm->cigar_len-1].len += i;
             }
 
             new_cm.rd_len += i;

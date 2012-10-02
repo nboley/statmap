@@ -1630,8 +1630,8 @@ def main( RUN_SLOW_TESTS ):
     test_build_index( )
     print "Starting test_iterative_mapping()"
     test_iterative_mapping()
-    print "Starting test_untemplated_g_finding()"
-    test_untemplated_g_finding()
+    #print "Starting test_untemplated_g_finding()"
+    #test_untemplated_g_finding()
     print "Starting test_diploid_genome()"
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
