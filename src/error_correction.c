@@ -291,7 +291,6 @@ void free_error_model( struct error_model_t* error_model )
     return;
 }
 
-
 double
 calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
 {
@@ -311,7 +310,6 @@ calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
     
     return mean - 4*sqrt( var );
 }
-
 
 void
 init_mapping_params_for_read(
