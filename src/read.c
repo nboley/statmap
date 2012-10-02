@@ -153,16 +153,16 @@ filter_read(
         struct read_subtemplate* rst = &(r->subtemplates[i]);
 
         /* loop over each bp in the subtemplate */
-        int bp;
-        for( bp = 0; bp < rst->length; bp++ )
+        int pos;
+        for( pos = 0; pos < rst->length; pos++ )
         {
             /*
                compute the inverse probability of error (quality)
                NOTE when error_prb receieves identical bp's, it returns the
                inverse automatically
              */
-            double error = error_prb( rst->char_seq[bp], rst->char_seq[bp], 
-                                      rst->error_str[bp], i, error_model );
+            double error = error_prb( rst->char_seq[pos], rst->char_seq[pos], 
+                                      rst->error_str[pos], pos, error_model );
             double qual = pow(10, error );
             
             /* count the number of hq basepairs */
