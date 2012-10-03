@@ -8,7 +8,7 @@ logfname <- "error_model/r_output.log";
 logfp = file( logfname, "w" );
 
 MIN.NUM.OBS = 10;
-MIN.ERROR.PRB = 1e-3;
+MIN.ERROR.PRB = 1e-4;
 
 logit = function(x)log(x) - log(1-x)
 logistic = function(x)exp(x)/(1+exp(x))

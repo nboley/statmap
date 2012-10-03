@@ -19,7 +19,7 @@
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
 
-#define HIGH_QUALITY_BP_ERROR_PRB 0.002
+#define HIGH_QUALITY_BP_ERROR_PRB 1e-2
 
 // the num of reads that we map before updating the error estimates
 #define READS_STAT_UPDATE_STEP_SIZE 50000
