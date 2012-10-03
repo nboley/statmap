@@ -305,7 +305,7 @@ fprintf_sam_line_from_sublocations_group(
     fprintf_seq( sam_fp, subtemplate->char_seq, subtemplate->length, strand );
 
     /* print the quality string */
-    fprintf( sam_fp, "%.*s\t", rd_len, subtemplate->error_str );
+    fprintf( sam_fp, "%.*s\t", subtemplate->length, subtemplate->error_str );
 
     /* Print the optional fields */
     /* For single end reads, we use 
