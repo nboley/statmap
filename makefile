@@ -15,7 +15,8 @@ clean:
 	-rm utilities/verify_mapped_read_locations
 
 check: 
-	cd tests; rm -rf smo_* *.fa *.map; python tests.py #&& python simulate_chipseq.py;
+	cd tests; rm -rf smo_* *.fa *.map; python tests.py \
+		&& python simulate_rnaseq.py #&& python simulate_chipseq.py;
 
 tags:
 	cd src; ctags *.c;
