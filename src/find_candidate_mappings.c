@@ -207,7 +207,7 @@ can_be_used_to_update_error_data(
     assert( mappings->length >= 1 );
     
     candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = rst->length;
+    int mapped_length = loc->rd_len;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -227,11 +227,12 @@ can_be_used_to_update_error_data(
     {
         /* this is guaranteed at the start of the function */
         assert( mappings->length == 2 );
+
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
             mappings->mappings[1].chr, 
             mappings->mappings[1].start_bp, 
-            rst->length
+            mapped_length
         );
         
         /* if the sequences aren't identical, then return */
