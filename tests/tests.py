@@ -21,9 +21,11 @@ import StringIO
 import tempfile
 
 import numpy
-sys.path.append( "../python_lib/" )
-from error_model import load_error_data
+import pysam
 
+# add python_lib to the path relative to the location of tests.py
+sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
+from error_model import load_error_data
 
 STATMAP_PATH = '../bin/statmap'
 BUILD_SAM_PATH = '../utilities/write_sam_from_mapped_reads_db.py'
@@ -42,8 +44,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-# TODO - fix so this doesn't create conflicting output directories
-CLEANUP = False
+CLEANUP = True
     
 ### END verbosity level information  ############################################################
 
@@ -62,6 +63,8 @@ from_str = ''.join(bps[:-2])
 to_str = ''.join( bp_complement[bp] for bp in from_str )
 rev_comp_table = string.maketrans( from_str, to_str  )
 
+def reverse_complement(seq):
+    return seq.translate( rev_comp_table )[::-1]
 
 #### Data Types ########
 
@@ -104,16 +107,31 @@ except AttributeError:
 
 def map_with_statmap( read_fnames, output_dir, 
                       indexed_seq_len,
-                      min_penalty=-7.0, max_penalty_spread=2.1, 
+                      min_penalty=None, max_penalty_spread=None, 
                       num_threads=1, 
-                      search_type=None,
+                      search_type="m",
                       assay=None,
-                      genome_fnames=["*.fa",]):
+                      genome_fnames=["*.fa",],
+                      num_samples=0,
+                      softclip_len=0,
+        ):
     if not P_STATMAP_OUTPUT:
         stderr.seek( 0 )
         stderr.truncate()
         stdout.seek( 0 )
         stdout.truncate()
+    
+    if min_penalty == None:
+        if search_type == 'm':
+            min_penalty = 0.01
+        else:
+            min_penalty = -7.0
+    
+    if max_penalty_spread == None:
+        if search_type == 'm':
+            max_penalty_spread = 0.01
+        else:
+            max_penalty_spread = 2.1
     
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
@@ -138,14 +156,23 @@ def map_with_statmap( read_fnames, output_dir,
             % str( ret_code )
 
     # run statmap
-    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i" \
+    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i -q 0" \
         % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
+
     if assay != None:
-        call += ( " -n 1 -a " + assay )
+        call += " -a " + assay
+
+    # Setting num_samples only makes sense if we also specify the assay, since
+    # the iterative mapping code is assay-specific
+    if num_samples > 0 and assay != None:
+        call += " -n " + str(num_samples)
 
     # add the search type
     if search_type != None:
         call += " -s " + search_type
+
+    if softclip_len > 0:
+        call += " -S " + str(softclip_len)
 
     print >> stderr, "========", re.sub( "\s+", " ", call)    
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -163,7 +190,34 @@ def map_with_statmap( read_fnames, output_dir,
 
 ### SAM File parsing code
 
+def skip_sam_header( fp ):
+    """Skips header in fp of SAM file, returning fp pointing to first read"""
+    # skip header (all lines start with '@')
+    while True:
+        fpos = fp.tell()
+        next_line = fp.readline()
+        if next_line.startswith('@'):
+            continue
+        else:
+            # restore file pointer to start of first read
+            fp.seek(fpos)
+            break
+
+def convert_from_one_indexed(reads):
+    """
+    Subtract 1 from the location in all reads from SAM
+    SAM is 1-indexed, so we convert to 0-indexed to make it cleaner to compare
+    to generated sequence
+    """
+    for read in reads:
+        read[3] = str( int(read[3]) - 1 )
+    return reads
+
 def iter_sam_reads( f ):
+
+    # skip header (all lines start with '@')
+    skip_sam_header( f )
+
     # get the next line in the sam file
     next_line = f.readline().strip().split("\t")
     readname = next_line[0].split("/")[0]
@@ -178,8 +232,22 @@ def iter_sam_reads( f ):
             data.append( next_line )
             next_line = f.readline().strip().split("\t")
             # yield the split read lines
-        yield data
+        yield convert_from_one_indexed(data)
     return
+
+def count_lines_in_sam( sam_fp ):
+    """
+    Counts number of lines, excluding the header (== number of mapped reads)
+    in a SAM file
+    """
+    skip_sam_header( sam_fp )
+
+    num_lines = sum( 1 for line in sam_fp )
+
+    # reset sam_fp to beginning for next function
+    sam_fp.seek(0)
+
+    return num_lines
 
 ### SOLEXA Specific mutation routines ###############
 
@@ -311,7 +379,7 @@ def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
     
     return files_out
 
-def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
+def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
     # store a list of the true fragments
     truth = []
     # calculate the genome lengths sum, to make
@@ -332,21 +400,24 @@ def sample_uniformily_from_genome( genome, nsamples=100, frag_len=200 ):
     
     return truth
 
-def build_reads_from_fragments( \
+def reverse_complement( seq ):
+    return seq.translate( rev_comp_table )[::-1]
+
+def build_reads_from_fragments(
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
     reads = []
     for chr, start, stop in fragments:
         if paired_end:
             read_1 = genome[chr][start:(start+read_len)]
             read_2 = genome[chr][(stop-read_len):stop]
-            read_2 = read_2.translate( rev_comp_table )[::-1]
+            read_2 = reverse_complement( read_2 )
             reads.append( ( read_1, read_2 ) )
         else:
             if random.random() > 0.5 or not rev_comp:
                 read = genome[chr][start:(start+read_len)]
             elif rev_comp:
                 read = genome[chr][(stop-read_len):(stop)]
-                read = read.translate( rev_comp_table )[::-1]
+                read = reverse_complement( read )
             
             reads.append( read )
     return reads
@@ -358,13 +429,39 @@ def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
-def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout, untemplated_gs_perc=0.0 ):
+#def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
+#        untemplated_gs_perc=0.0, random_prefix_len=0 ):
+#    for sample_num, seq in enumerate( samples_iter ):
+#        num_untemplated_gs = random.randint(1,3) \
+#            if random.random() < untemplated_gs_perc else 0
+#        error_str = 'h'*len(seq)
+#        of.write("@%s\n" % sample_num )
+#        of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
+#        of.write("+%s\n" % sample_num )
+#        of.write(error_str + "\n")
+
+def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
+        untemplated_gs_perc=0.0, random_prefix_len=0 ):
+
+    # (for now) only do one type of prepending transformation
+    assert( untemplated_gs_perc == 0 or random_prefix_len == 0 )
+
     for sample_num, seq in enumerate( samples_iter ):
-        num_untemplated_gs = random.randint(1,3) \
-            if random.random() < untemplated_gs_perc else 0
+
+        if random_prefix_len > 0:
+            prefix = ''.join( [ random.choice(bps)
+                    for n in range(random_prefix_len) ] )
+        else:
+            num_untemplated_gs = random.randint(1,3) \
+                    if random.random() < untemplated_gs_perc else 0
+            prefix = 'g'*num_untemplated_gs
+
+        seq = prefix + seq
+
         error_str = 'h'*len(seq)
+
         of.write("@%s\n" % sample_num )
-        of.write('g'*num_untemplated_gs + seq[:(len(seq)-num_untemplated_gs)] + "\n")
+        of.write(seq + "\n")
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
@@ -450,13 +547,59 @@ def build_expected_map_locations_from_repeated_genome( \
             read_starts = [ start + i*chr_len for i in xrange(num_repeats) ]
             read_stops = [ start + i*chr_len for i in xrange(num_repeats) ]
         return set( read_starts ), set( read_stops )
+
+def check_sequence_match( mapped_read, truth, genome ):
+    # Get the start and length of the fragment in the genome that this read
+    # maps to (including soft clipping, introns, etc.)
+    cigar_re = r'([0-9]+)([MNS])'
+    cigar_string = mapped_read[5]
+    cigar_entries = re.findall( cigar_re, cigar_string )
+
+    mapped_fragment_len = 0
+    for entry in cigar_entries:
+        mapped_fragment_len += int( entry[0] )
+
+    # The SAM spec defines the POS entry as the
+    # "1-based leftmost mapping POSition of the first matching base"
+    #
+    # so if there are any non-M entries in the cigar string before the first
+    # M segment, we must subtract their length from the start position given in
+    # the SAM to get the full fragment
+    mapped_fragment_start = mapped_read[1]
+    for entry in cigar_entries:
+        if entry[1] == 'M': break
+        mapped_fragment_start -= int( entry[0] )
+
+    mapped_fragment = genome[mapped_read[0]][mapped_fragment_start:\
+            mapped_fragment_start+mapped_fragment_len]
+
+    # loop over the entries in the cigar string, comparing the sequence of the
+    # mapped read to the genome
+    seq_pos = 0
+    for entry in cigar_entries:
+
+        if entry[1] == 'M':
+
+            original = mapped_fragment[seq_pos:seq_pos + int( entry[0] )]
+            mapped = mapped_read[2][seq_pos:seq_pos + int( entry[0] )]
+
+            if original.upper() != mapped.upper():
+                print "Original:", original
+                print "Mapped  :", mapped
+                raise ValueError, "Mapped sequence in read_id %i does not match the genome" \
+                        % (mapped_read[4])
+
+        seq_pos += int( entry[0] )
+
+    return
     
 ###
 # Test to make sure that we are correctly finding reverse complemented subsequences. These
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
-def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, untemplated_gs_perc=0.0,
-        search_type="m", min_penalty=-1.0, max_penalty_spread=1 ):
+def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
+        untemplated_gs_perc=0.0, search_type="m", min_penalty=-1.0,
+        max_penalty_spread=1, num_samples=0, assay=None, random_prefix_len=0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -475,7 +618,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=rev_comp, paired_end=False )
     
@@ -487,49 +630,62 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None, unt
     
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc )
+    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc,
+            random_prefix_len )
     reads_of.close()
 
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
-    assay = None if untemplated_gs_perc == 0.0 else 'a'
+    if assay == None:
+        assay = None if untemplated_gs_perc == 0.0 else 'a'
+
+    softclip_len = random_prefix_len if untemplated_gs_perc == 0 else 3
+
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay, 
-            search_type=search_type,
-            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread )
-
+            search_type=search_type, num_samples=num_samples,
+            softclip_len=softclip_len )
+    
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam( sam_fp )
 
     if len(fragments) > total_num_reads:
-        raise ValueError, "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
-    
+        missing_reads = set( xrange(nsamples) ).difference(
+                set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
+        sys.exit(1)
+
+    sam_fp.seek(0)
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if untemplated_gs_perc == 0.0 and len(reads_data) != 1:
-            raise ValueError, "Mapping returned too many results (read has %i mappings, expected 1)." \
-                    % len(reads_data)
+            raise ValueError, "Mapping for readid %s returned too many results (read has %i mappings, expected 1)." \
+                    % ( reads_data[0][0], len(reads_data) )
         
-        locs = zip(*[ (read_data[2], int(read_data[3]) ) for read_data in reads_data ])
+        locs = [ ( read_data[2], int(read_data[3]), read_data[9],
+                   int(read_data[1]), int(read_data[0]), read_data[5] )
+                   for read_data in reads_data ]
         
-        # make sure the chr and start locations are identical
-        # first, check that all chromosomes are the same *and*
-        # that the correct loc exists
-        if any( loc != truth[0] for loc in locs[0] ) \
-           or truth[1] not in locs[1]:
-            # we need to special case an untemplated g that happens to correspond to a genomic g. 
-            # in such cases, we really can't tell what is correct.
-            if untemplated_gs_perc == 0.0:
-               print reads_data
-               print truth
-               print reads_data[0][9][0]
-               print r_genome[truth[0]][truth[1]-1]
-               raise ValueError, \
-                    "Truth (%s, %i) and Mapped Location (%s, %i, %i) are not equivalent" \
-                    % ( loc[0], loc[1], truth[0], truth[1], truth[2]  )
+        # loc := (chr, start, sequence, flag, read_id, cigar )
+        # truth := (chr, start, stop)
+
+        for i, loc in enumerate(locs):
+            # make sure the chr and start locations match
+            if loc[0] != truth[0]:
+                raise ValueError, "Mapping for read_id %i mapped to the wrong chromosome - expected %s, got %s" \
+                        % (loc[4], loc[0], truth[0])
+
+            # TODO proper tests for untemplated G reads
+
+            if loc[1] != truth[1]:
+                raise ValueError, "Mapping for read_id %i mapped to the wrong location - expected %i, got %i" \
+                        % (loc[4], truth[1], loc[1])
+
+            check_sequence_match( loc, truth, r_genome )
+
     sam_fp.close()
     
     ###### Cleanup the created files ###############################################
@@ -546,7 +702,8 @@ def test_fivep_sequence_finding( ):
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_untemplated_g_finding( ):
-    rls = [ 15, 25, 50, 75  ]
+    #rls = [ 15, 25, 50, 75  ]
+    rls = [ 25, ]
     for rl in rls:
         test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25 )
         print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
@@ -578,6 +735,15 @@ def test_build_index():
         test_sequence_finding( rl, False, rl )
         print "PASS: Build Index w/ Forward Mapping %i BP Test. ( Statmap appears to be externally building/loading index correctly )" % rl
 
+def test_iterative_mapping():
+    """Run Statmap on some basic data and do iterative mapping just to see if it works"""
+    # TODO why is this so slow?
+    rls = [ 25, ]
+    for rl in rls:
+        test_dirty_reads( rl, assay='a', num_samples=1 ) # CAGE
+        print "PASS: Iterative mapping code (%i BP reads) is at least running..." \
+                % rl
+
 def test_short_index_probe():
     rls = [ 25, 50, 75  ]
     for rl in rls:
@@ -593,6 +759,7 @@ def test_paired_end_reads( read_len ):
     output_directory = "smo_test_paired_end_reads_%i" % ( read_len )    
 
     rl = read_len
+    nsamples=100
 
     ###### Prepare the data for the test ############################################
     # build a random genome
@@ -602,7 +769,7 @@ def test_paired_end_reads( read_len ):
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
     assert 2*rl < 200 # make sure the fragments are long enough
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=100, frag_len=200 )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=200 )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
     
@@ -626,11 +793,14 @@ def test_paired_end_reads( read_len ):
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     # we divide by two to account for the double write
-    total_num_reads = sum( 1 for line in sam_fp )/2
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp) / 2
 
     if len(fragments) != total_num_reads:
-        raise ValueError, "Mapping returned too few reads (%i/%i)." % ( total_num_reads, len(fragments) )
+        missing_reads = set( xrange(nsamples) ).difference(
+                set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
+        sys.exit(1)
         
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
@@ -680,7 +850,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=n_reads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     # note: if we do rev_comp, statmap still correctly maps the read, but our comparison back to
@@ -709,19 +879,16 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp)
 
     if len(fragments)*n_dups != total_num_reads:
         raise ValueError, "Mapping returned too few reads (%s/%s)" % \
                 (total_num_reads, len(fragments)*n_dups)
     
-    
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
         if len(reads_data) != n_dups:
             raise ValueError, "Mapping returned incorrect number of results."
-        
         
         locs = [ (reads_data[i][2], int(reads_data[i][3])) for i in xrange(len(reads_data)) ]
         
@@ -732,6 +899,7 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
                 raise ValueError, \
                     "Mapped Location (%s, %i) and Truth (%s, %i, %i) are not equivalent" \
                     % ( loc[0], loc[1]%GENOME_LEN, truth[0], truth[1], truth[2]  )
+
     sam_fp.close()
 
     ###### Cleanup the created files ###############################################
@@ -755,7 +923,8 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_prefix=None ):
+def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
+        fasta_prefix=None, assay=None, num_samples=0 ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
         % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
     
@@ -763,11 +932,11 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
 
     ###### Prepare the data for the test ############################################
     # build a random genome
-    r_genome = build_random_genome( [1000,1000, 10000], ["1","2","3"] )
+    r_genome = build_random_genome( [1000, 1000, 10000], ["1","2","3"] )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. 
-    fragments = sample_uniformily_from_genome( r_genome, nsamples=nreads, frag_len=rl )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nreads, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
@@ -794,13 +963,15 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
-                      min_penalty = min_penalty, max_penalty_spread=10,
+                      min_penalty = 0.20, max_penalty_spread=0.05,
                       indexed_seq_len = read_len - 2,
-                      num_threads = n_threads ) # read_len = read_len - 2
+                      num_threads = n_threads,
+                      assay=assay, num_samples=num_samples ) # read_len = read_len - 2
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    mapped_read_ids = set( ( line.split("\t")[0].strip() for line in sam_fp ) )
+    mapped_read_ids = set( ( line.split("\t")[0].strip() 
+                             for line in sam_fp if not line.startswith('@') ) )
     total_num_reads = len( mapped_read_ids ) 
     sam_fp.seek(0)
 
@@ -826,8 +997,9 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
     all_read_ids.sort( )
 
     if len(fragments) != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
-        raise ValueError, "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
+        print "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
             % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
+        sys.exit(1)
     
     # build a dictionary of mapped reads
     mapped_reads_dict = dict( (data[0][0], data) for data in iter_sam_reads(sam_fp) )
@@ -892,84 +1064,6 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100, fasta_
             os.remove("./tmp_genome_3.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
-
-def test_error_rate_estimation( ):
-    """Test to ensure that the error modelling code is working properly.
-    
-    We use the following error model:
-    
-    Error rate from position:
-        0.01 + (pos/read_len)*0.04
-        
-    Error rate from char string:
-        ?: +0.05
-        a: +0.03
-        d: +0.02
-        f: +0.01
-        h: +0.00
-    """
-    error_char_mappings = dict(zip('?adfh', [0.05, 0.03, 0.02, 0.01, 0.00] ))
-    
-    rl = read_len = 50
-    indexed_seq_len = 20
-    nsamples = 20000
-    output_directory = "smo_test_error_rate_estimation"
-    
-    
-    ###### Prepare the data for the test #######################################
-    # build a random genome
-    genome_of = open("tmp.genome.fa", "w")
-    r_genome = build_random_genome( [2000,2000], ["1","2"] )
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
-    
-    # sample uniformly from the genome. This gives us the sequences
-    # that we need to map. Note that we dont RC them, so every read should be in
-    # the 5' direction
-    fragments = sample_uniformily_from_genome( 
-        r_genome, nsamples=nsamples, frag_len=rl )
-    reads = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
-    
-    # mutate the reads according to some simple eror model
-    def iter_mutated_reads( reads ):
-        for read in reads:
-            error_str = "".join( random.choice('?adfh') 
-                                 for i in xrange(len(read)) )
-            error_rates = [ 0.01 + 0.04*float(i)/len(read) 
-                            + error_char_mappings[char]
-                            for i, char in enumerate( error_str ) ]
-            mutated_read = []
-            for base, error_prb in izip(read, error_rates):
-                if random.random() < error_prb:
-                    mutated_read.append( random.choice('acgtACGT') )
-                else:
-                    mutated_read.append( base )
-            mutated_read = ''.join( mutated_read )
-            yield ( mutated_read, error_str, read )
-
-    mutated_reads = list( iter_mutated_reads( reads ) )
-
-    # build and write the reads    
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
-    reads_of.close()
-    
-    ###### Write out the test files, and run statmap ###########################
-    
-    ## Map the data
-    read_fnames = [ "tmp.fastq", ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len )
-    
-    ###### Make sure that the error data looks correct #########################
-    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
-    
-    ###### Cleanup the created files ###########################################
-    if CLEANUP:
-        os.remove("./tmp.genome.fa")
-        os.remove("./tmp.fastq")
-        shutil.rmtree(output_directory)
-
 
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
@@ -1082,7 +1176,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads,
+    fragments = sample_uniformly_from_genome( genome, nsamples=nreads,
             frag_len=read_len )
     # note: if we do rev_comp, statmap still correctly maps the read, but our
     # comparison back to the original genome will fail (incorrectly). Since
@@ -1103,7 +1197,7 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
         read_len, nreads, len(genome) )
     read_fnames = [ "tmp.fastq" ]
     map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
-            genome_fnames = output_filenames
+            genome_fnames = output_filenames, search_type='e'
         )
 
     # test the sam file to make sure that each of the reads appears
@@ -1181,7 +1275,7 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len,
     indexed_seq_len = indexed_seq_len or read_len
 
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformily_from_genome( genome, nsamples=nreads, frag_len=read_len )
+    fragments = sample_uniformly_from_genome( genome, nsamples=nreads, frag_len=read_len )
     reads = build_reads_from_fragments(
             genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
         )
@@ -1204,8 +1298,7 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len,
 
     # in order to be able to count the number of reads, we had to use a completely unmutated
     # diploid genome
-    total_num_reads = sum( 1 for line in sam_fp )
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam( sam_fp )
 
     # Since the paternal and maternal chrs of the reference genome are identical, each read
     # will be repeated n_dups times * 2, since there will be a paternal and maternal copy for
@@ -1314,7 +1407,7 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     # we want to sample whole chunks of the genome, then build_read_from_fragments will take
     # care of simulating paired end reads
     assert 2*rl < 50 # make sure the fragments are long enough
-    fragments = sample_uniformily_from_genome( genome, nsamples=100, frag_len=50)
+    fragments = sample_uniformly_from_genome( genome, nsamples=100, frag_len=50)
     reads = build_reads_from_fragments(
         genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
 
@@ -1334,12 +1427,14 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     # test the sam file
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     # we divide by two since there are two lines for each paired end read
-    total_num_reads = sum( 1 for line in sam_fp )/2
-    sam_fp.seek(0)
+    total_num_reads = count_lines_in_sam(sam_fp) / 2
 
-    # each paired end read should map n_dups**2*2 times
-    # when you duplicate the genome for paired end reads, number of matches grows exponentially
-    # * 2 for diploid
+    # Every fragment will map twice in a perfect diploid genome (since the
+    # paternal and maternal chromosomes are identical). Since we are simulating
+    # duplicated reads by repeatedly copying the genome, each fragment will
+    # also map an exponential number of times across each chromosome -
+    # each first pair will map to all of the following second pairs for that
+    # fragment, and so on.
     if len(fragments)*(n_dups**2)*2 != total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
                 % ( len(fragments)*(n_dups**2)*2, total_num_reads )
@@ -1358,6 +1453,16 @@ def test_multiple_indexable_subtemplates():
         # - 5 so the find_optimal_subseq_offset code should choose different offsets
         test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
         print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
+
+def test_multiple_indexable_subtemplate_for_threep():
+    rls = [ 50, 75 ]
+    for rl in rls:
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2, rev_comp=True )
+        print "PASS: Multiple indexable subtemplates 3' %i BP test." % rl
+
+# note - for repeat sequence tests, n_dups must be greater than
+# PSEUDO_LOC_MIN_SIZE in config.h to trigger the use of pseudo locations to store
+# the locations
 
 def test_multiple_indexable_subtemplates_for_repeat_sequences():
     rls = [ 50, 75 ]
@@ -1380,6 +1485,97 @@ def test_multiple_indexable_subtemplates_for_diploid_mapping():
                 indexed_seq_len=rl/2, num_threads=-1 )
         print "PASS: Multiple indexable subtemplates in a highly repeated diploid genome %i BP test " % rl
 
+def sam_lines_match( line1, line2 ):
+    """
+    Compare two lines from a Statmap SAM file, controlling for case and
+    numeric representation
+    """
+    for i, (f1, f2) in enumerate(
+            izip( re.split( '\s', line1.strip() ),
+                  re.split( '\s', line2.strip() ) )):
+        # compare specific fields
+        if i == 9: # SEQ field
+            # control for case
+            if f1.upper() != f2.upper():
+                print "SEQ entries do not match"
+                return False
+        elif i == 12 or i == 13: # XP or XQ fields # control for numeric representation
+            if float(f1.split(':')[-1]) != float(f2.split(':')[-1]):
+                print "XP or XQ fields do not match"
+                return False
+        else:
+            if f1 != f2:
+                return False
+
+    return True
+
+def test_sam_output():
+    output_directory = "smo_test_sam_output"
+
+    n_reads=1000
+    rl=20
+
+    genome = build_random_genome( [1000, 1000], ["1", "2"] )
+
+    fragments = sample_uniformly_from_genome( genome, nsamples=n_reads, frag_len=rl )
+    reads = build_reads_from_fragments( 
+        genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
+
+    ###### Write out the test files, and run statmap ###########################
+
+    # write genome
+    genome_of = open("tmp.genome.fa", "w")
+    write_genome_to_fasta( genome, genome_of, 1 )
+    genome_of.close()
+    
+    # build and write the reads
+    reads_of = open("tmp.fastq", "w")
+    build_single_end_fastq_from_seqs( reads, reads_of )
+    reads_of.close()
+
+    read_fnames = ( "tmp.fastq", )
+    map_with_statmap( read_fnames, output_directory,
+            indexed_seq_len=rl )
+
+    # Load the SAM file with pysam
+    sam_fname = "./%s/mapped_reads.sam" % output_directory
+    sam_copy_fname = sam_fname + ".copy"
+    try:
+        samfile = pysam.Samfile( sam_fname, "r" )
+        samcopy = pysam.Samfile( sam_copy_fname, "wh", template=samfile )
+
+        # copy reads from samfile into samcopy
+        for read in samfile.fetch():
+            samcopy.write(read)
+
+        samfile.close()
+        samcopy.close()
+    except Exception, e:
+        print e
+        print "FAIL: Error parsing Statmap output SAM file with pysam"
+        sys.exit(1)
+
+    # compare the sam files
+    sam = open( sam_fname )
+    sam_copy = open( sam_copy_fname )
+
+    for i, (l1, l2) in enumerate( izip( sam, sam_copy ) ):
+        if not sam_lines_match( l1, l2 ):
+            print "FAIL: Statmap output SAM file and pysam parsed copy do not match on line %i" \
+                    % i
+            print "Original   :", l1
+            print "pysam copy :", l2
+            sys.exit(1)
+
+    sam.close()
+    sam_copy.close()
+
+    ###### Cleanup the created files ###############################################
+    if CLEANUP:
+        os.remove("./tmp.genome.fa")
+        os.remove("./tmp.fastq")
+        shutil.rmtree(output_directory)
+
 if False:
     num_repeats = 1
     num_chrs = 1
@@ -1391,7 +1587,7 @@ if False:
     assert all( frag_len < chr_len for chr_len in chr_sizes )
     
     r_genome = build_random_genome( chr_sizes, chr_names )
-    truth = sample_uniformily_from_genome( r_genome, nsamples=1000, frag_len=frag_len )
+    truth = sample_uniformly_from_genome( r_genome, nsamples=1000, frag_len=frag_len )
     reads = build_reads_from_fragments( r_genome, truth, paired_end=paired )
     
     sample_file = gzip.open( 'clean_error_strs.fastq.gz' )
@@ -1403,17 +1599,27 @@ if False:
                       num_chr_repeats=1, \
                       min_penalty=-10, max_penalty_spread=2 )
 
+def test_softclipped_read_finding():
+    rl = 20
+    test_sequence_finding( rl, rev_comp = True, random_prefix_len=3 )
+    print "PASS: Finding soft clipped reads"
+
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
-    #test_untemplated_g_finding()    
+    #test_untemplated_g_finding()
+    #sys.exit(1)
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
     test_threep_sequence_finding()
+    print "Start test_softclipped_read_finding()"
+    test_softclipped_read_finding()
     print "Starting test_paired_end_sequence_finding()"
     test_paired_end_sequence_finding( )
     print "Starting test_repeat_sequence_finding()"
     test_repeat_sequence_finding()
+    print "Starting test_sam_output()"
+    test_sam_output()
     print "Starting test_mutated_read_finding()"
     test_mutated_read_finding()
     print "Starting test_multithreaded_mapping()"
@@ -1422,6 +1628,10 @@ def main( RUN_SLOW_TESTS ):
     test_multi_fasta_mapping( )
     print "Starting test_build_index()"
     test_build_index( )
+    print "Starting test_iterative_mapping()"
+    test_iterative_mapping()
+    #print "Starting test_untemplated_g_finding()"
+    #test_untemplated_g_finding()
     print "Starting test_diploid_genome()"
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
@@ -1429,6 +1639,8 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
+    #print "Start test_multiple_indexable_subtemplate_for_threep()"
+    #test_multiple_indexable_subtemplate_for_threep()
     print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
     test_multiple_indexable_subtemplates_for_repeat_sequences()
     print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
@@ -1441,9 +1653,7 @@ def main( RUN_SLOW_TESTS ):
         test_lots_of_diploid_repeat_sequence_finding()
         print "[SLOW] Start test_paired_end_diploid_repeat_sequence_finding()"
         test_paired_end_diploid_repeat_sequence_finding()
-        print "[SLOW] Starting test_error_rate_estimation()"
-        test_error_rate_estimation( )
-    
+
     #print "Starting test_index_probe()"
     #test_short_index_probe()
 
@@ -1461,5 +1671,3 @@ if __name__ == '__main__':
             print stderr.read()
         
         raise
-        
-    

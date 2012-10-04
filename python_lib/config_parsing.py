@@ -38,10 +38,13 @@ struct args_t {
 
     int num_threads;
 
-    enum SEARCH_TYPE search_type;
+    enum error_model_type_t error_model_type;
         
     enum input_file_type_t input_file_type;
     enum assay_type_t assay_type; 
+
+    int max_reference_insert_len;
+    int softclip_len;
 };
     """
     _fields_ = [
@@ -51,12 +54,12 @@ struct args_t {
         ("unpaired_reads_fnames", c_char_p),
         ("pair1_reads_fnames", c_char_p),
         ("pair2_reads_fnames", c_char_p),
-        ("rdb", c_void_p), # do we need this from python? leave as void_p for now
+        ("rdb", c_void_p),
 
         ("unpaired_NC_reads_fnames", c_char_p),
         ("pair1_NC_reads_fnames", c_char_p),
         ("pair2_NC_reads_fnames", c_char_p),
-        ("NC_rdb", c_void_p), # do we need this from python? leave as void_p for now
+        ("NC_rdb", c_void_p),
 
         ("frag_len_fname", c_char_p),
         ("frag_len_fp", c_void_p), # really, why would we save a file* if we have the fname?
@@ -73,10 +76,13 @@ struct args_t {
 
         ("num_threads", c_int),
 
-        ("search_type", c_uint),        # enum SEARCH_TYPE
+        ("error_model_type", ENUM_TYPE),   # enum error_model_type_t
         
-        ("input_file_type", c_uint),    # enum input_file_type_t
-        ("assay_type", c_uint),         # enum assay_type_t
+        ("input_file_type", ENUM_TYPE),    # enum input_file_type_t
+        ("assay_type", ENUM_TYPE),         # enum assay_type_t
+
+        ("max_reference_insert_len", c_int),
+        ("softclip_len", c_int),
     ]
 
 def load_config_from_file( fname ):

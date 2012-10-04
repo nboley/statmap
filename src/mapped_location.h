@@ -27,9 +27,11 @@
  */
 
 typedef struct {
-    GENOME_LOC_TYPE location;
+    unsigned int chr; // TODO use MRL_CHR_TYPE, etc. ?
+    unsigned int loc; // maybe put some unified types in config.h?
     enum STRAND strnd;
     float penalty;
+    enum bool free_with_match;
 } mapped_location;
 
 typedef struct {
@@ -67,22 +69,26 @@ void
 free_mapped_locations( mapped_locations* results );
 
 void
+add_new_mapped_location(
+    mapped_locations* results, 
+    unsigned int chr,
+    unsigned int loc,
+    enum STRAND strnd,
+    float penalty );
+
+void
 add_mapped_location(
     mapped_location* loc,
-    mapped_locations* locs
-);
+    mapped_locations* locs );
 
 void
-add_new_mapped_location( mapped_locations* results, 
-                     GENOME_LOC_TYPE location, 
-                     enum STRAND strnd,
-                     float penalty );
-
-void
-add_and_expand_mapped_location(
-    mapped_location* loc,
-    mapped_locations* locs,
-    struct genome_data* genome );
+add_and_expand_location_from_index(
+        mapped_locations* results,
+        INDEX_LOC_TYPE* iloc,
+        enum STRAND strnd,
+        float penalty,
+        struct genome_data* genome
+    );
 
 void
 copy_mapped_location( mapped_location* dest, mapped_location* src );
@@ -95,28 +101,97 @@ print_mapped_locations( mapped_locations* results );
  *
  **************************************************************************/
 
-/*** mapped_locations_container ***/
+/***** ml_match *****/
 
-typedef struct {
-    /* container of pointers to mapped_locations */
-    mapped_locations** container;
+/* Stores a matching set of mapped_locations */
+struct ml_match {
+    mapped_location** locations;
+    int* subseq_lengths;
+    int* subseq_offsets;
+    int len;
+
+    /* The cumulative length of gaps in the reference genome for this set of
+     * matched mapped_locations */
+    int cum_ref_gap;
+
+    /* The cumulative penalty from the mapped locations in this match.
+     *
+     * Since we are taking the product of the marginal probabilities, we know
+     * that if a match is below the min match penalty, no joined set of
+     * mappings that it is a part will be able to pass, so we can optimize by
+     * ignoring such matches in the first place. */
+    int cum_penalty;
+};
+
+void
+init_ml_match( struct ml_match** match, int match_len );
+
+struct ml_match*
+copy_ml_match( struct ml_match* match );
+
+void
+free_ml_match( struct ml_match* match, enum bool free_locations );
+
+/* TODO - compute the ref gap inside this function? */
+void
+add_location_to_ml_match(
+        mapped_location* location,
+        struct ml_match* match, 
+        int subseq_length,
+        int subseq_offset,
+        int location_index,
+        int cum_ref_gap );
+
+enum bool
+ml_match_is_valid( struct ml_match* match );
+
+/***** ml_matches ******/
+
+#define ML_MATCHES_GROWTH_FACTOR 10
+struct ml_matches {
+    int allocated_length;
     int length;
-} mapped_locations_container;
+    struct ml_match** matches;
+};
 
 void
-init_mapped_locations_container(
-        mapped_locations_container** mlc
-    );
+init_ml_matches( struct ml_matches** matches );
 
 void
-free_mapped_locations_container(
-        mapped_locations_container* mlc
-    );
+free_ml_matches( struct ml_matches* matches, enum bool free_locations );
 
 void
-add_mapped_locations_to_mapped_locations_container(
-        mapped_locations* ml,
-        mapped_locations_container* mlc
-    );
+copy_ml_match_into_matches(
+        struct ml_match* match,
+        struct ml_matches* matches );
+
+/***** ml_match_stack *****/
+
+#define MAX_ML_MATCH_STACK_LEN 500
+struct ml_match_stack {
+    struct ml_match* stack[MAX_ML_MATCH_STACK_LEN];
+    int top;
+};
+
+void
+init_ml_match_stack(
+        struct ml_match_stack** stack );
+
+void
+free_ml_match_stack(
+        struct ml_match_stack* stack );
+
+enum bool
+ml_match_stack_is_empty(
+        struct ml_match_stack* stack );
+
+void
+ml_match_stack_push(
+        struct ml_match_stack* stack,
+        struct ml_match* match );
+
+struct ml_match*
+ml_match_stack_pop(
+        struct ml_match_stack* stack );
 
 #endif /* define MAPPED_LOCATION */

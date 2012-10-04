@@ -31,50 +31,53 @@ size_t
 size_of_locations_node( locations_node* node )
 {
     return sizeof( unsigned short ) 
-        + *((unsigned short*) node)*sizeof( GENOME_LOC_TYPE );
+        + *((unsigned short*) node)*sizeof( INDEX_LOC_TYPE );
 }
 
 locations_node*
 add_location_to_locations_node( locations_node* node,
-                                GENOME_LOC_TYPE loc )
+                                INDEX_LOC_TYPE loc )
 {
     /* allocate memory for the new location */
     int num_locations = *( (unsigned short*) node );
     node = realloc( node, sizeof(unsigned short)
-                    + (num_locations+1)*sizeof(GENOME_LOC_TYPE) );
+                    + (num_locations+1)*sizeof(INDEX_LOC_TYPE) );
     assert( node != NULL );
 
     /* add the new location */
-    GENOME_LOC_TYPE* locs = 
-        (GENOME_LOC_TYPE*) (((unsigned short*) node) + 1 );
+    INDEX_LOC_TYPE* locs = 
+        (INDEX_LOC_TYPE*) (((unsigned short*) node) + 1 );
     locs[ num_locations ] = loc;
-
+    assert( loc.is_maternal == 0 && loc.is_paternal == 0 );
+    
     /* increment the number of locations */
     *( (unsigned short*) node ) += 1;
 
     return node;
 }
 
- void
+void
 get_locations_from_locations_node( const locations_node* const node, 
                                    mapped_locations* results,
                                    const float penalty,
-                                   const enum STRAND strnd )
+                                   const enum STRAND strnd,
+                                   struct genome_data* genome )
 {
     int num_locations = *( (unsigned short*) node );
-    GENOME_LOC_TYPE* locs = 
-        (GENOME_LOC_TYPE*) (((unsigned short*) node) + 1 );
+    INDEX_LOC_TYPE* locs = 
+        (INDEX_LOC_TYPE*) (((unsigned short*) node) + 1 );
 
     int i;
     for( i = 0; i < num_locations; i++ )
     {
-        
-        add_new_mapped_location(
-            results, 
-            locs[i],
-            strnd,
-            penalty
-        );
+        assert( (locs + i)->is_maternal == 0 && (locs + i)->is_paternal == 0 );
+        add_and_expand_location_from_index(
+                results,
+                locs + i,
+                strnd,
+                penalty,
+                genome
+            );
     }
     
     return;
@@ -403,12 +406,12 @@ get_genome_locations_array_start( const sequences_node* const seqs,
     );
 }
 
- GENOME_LOC_TYPE* 
+ INDEX_LOC_TYPE* 
 get_overflow_genome_locations_array_start( 
     const sequences_node* const seqs, LEVEL_TYPE seq_num_letters
 )
 {
-    return (GENOME_LOC_TYPE*) (
+    return (INDEX_LOC_TYPE*) (
         /* start of the genome_locations array */
         (byte*) get_genome_locations_array_start( seqs, seq_num_letters )
         /* length of genome locations array */
@@ -572,7 +575,7 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
                                     /* the length of seq in this node */
                                     int seq_len,
                                     /* the locations of this sequence */
-                                    GENOME_LOC_TYPE loc  )
+                                    INDEX_LOC_TYPE loc  )
 {
     /* allocate the space - we need room for 1 sequence and 1 genome_loc */
     size_t curr_size = get_num_used_bytes( seqs );
@@ -655,7 +658,7 @@ add_duplicate_sequence_to_sequences_node(
     /* the length of seq in this node */
     LEVEL_TYPE seq_len,
     /* the locations of this sequence */
-    GENOME_LOC_TYPE new_loc  )
+    INDEX_LOC_TYPE new_loc  )
 {
     // DEBUG
     /*
@@ -676,7 +679,7 @@ add_duplicate_sequence_to_sequences_node(
     {
         /* we add 2 genome locations 1 for the old, and 1 for new gen location */
         size_t num_used_bytes = get_num_used_bytes(seqs);
-        size_t new_size = num_used_bytes + 2*sizeof(GENOME_LOC_TYPE);
+        size_t new_size = num_used_bytes + 2*sizeof(INDEX_LOC_TYPE);
         
         /* if necessary, realloc */
         if( new_size > get_num_allocated_bytes(seqs) )
@@ -701,8 +704,8 @@ add_duplicate_sequence_to_sequences_node(
          * Also, note that we havn't updated the used size yet so we
          * can use the get_used_bytes interface to find the end.
          */
-        GENOME_LOC_TYPE* of_locs = 
-            (GENOME_LOC_TYPE*) ( seqs + num_used_bytes );
+        INDEX_LOC_TYPE* of_locs = 
+            (INDEX_LOC_TYPE*) ( seqs + num_used_bytes );
         
         /* add the entries to the list */
         of_locs[0] = loc->loc;
@@ -719,7 +722,7 @@ add_duplicate_sequence_to_sequences_node(
 
         /* 
          * set the new locations array start to be the number of bytes after the
-         * full array divided by the size of GENOME_LOC_TYPE. This is really
+         * full array divided by the size of INDEX_LOC_TYPE. This is really
          * just the index of the first entry in the array.
          */
         size_t egla_len = bytes_after(
@@ -728,10 +731,10 @@ add_duplicate_sequence_to_sequences_node(
 
         loc->locs_array.locs_size = 2;
 
-        assert( egla_len % sizeof( GENOME_LOC_TYPE ) == 0 ); 
+        assert( egla_len % sizeof( INDEX_LOC_TYPE ) == 0 ); 
         
         loc->locs_array.locs_start = 
-            ( egla_len/sizeof(GENOME_LOC_TYPE) ) - 2;
+            ( egla_len/sizeof(INDEX_LOC_TYPE) ) - 2;
             
     } 
     /* this has already been converted to a pointer */
@@ -750,7 +753,7 @@ add_duplicate_sequence_to_sequences_node(
                 add_new_pseudo_location( ps_locs  );
 
             /* find the start */
-            GENOME_LOC_TYPE* of_locs = 
+            INDEX_LOC_TYPE* of_locs = 
                 get_overflow_genome_locations_array_start( seqs, seq_len )
                 + loc->locs_array.locs_start;
             
@@ -774,7 +777,7 @@ add_duplicate_sequence_to_sequences_node(
             /* 2) realloc to shrink used memory */
             size_t new_size = 
                 get_num_used_bytes(seqs) 
-                - (PSEUDO_LOC_MIN_SIZE-1)*sizeof(GENOME_LOC_TYPE);
+                - (PSEUDO_LOC_MIN_SIZE-1)*sizeof(INDEX_LOC_TYPE);
             seqs = realloc( seqs, new_size );
             set_num_allocated_bytes( seqs, new_size );
             set_num_used_bytes( seqs, new_size );
@@ -809,13 +812,16 @@ add_duplicate_sequence_to_sequences_node(
             /* unset the array bit */
             clear_bit( get_bitmap_start( seqs ), insert_loc );
             
-            loc->loc.read_type = 0;
+            /* convert the old location to a proper pseudo locations. This means
+               giving it the new pseudoloc_chr, the new pseudo position, and resetting
+               the diploid mapping flags. */
+            assert( psloc_index <= LOCATION_MAX );            
+            memset( &(loc->loc), 0, sizeof(INDEX_LOC_TYPE) );
             loc->loc.chr = PSEUDO_LOC_CHR_INDEX;
-            assert( psloc_index <= LOCATION_MAX );
             loc->loc.loc = psloc_index;
         } else {
             /* we add memory for the new genome location */
-            size_t new_size = get_num_used_bytes(seqs) + sizeof(GENOME_LOC_TYPE);
+            size_t new_size = get_num_used_bytes(seqs) + sizeof(INDEX_LOC_TYPE);
             
             if( new_size > get_num_allocated_bytes(seqs) )
             {
@@ -830,12 +836,12 @@ add_duplicate_sequence_to_sequences_node(
             
             /* the start of the new overflow locations - note that we havnt updated
                the used size yet. */
-            GENOME_LOC_TYPE* of_locs = 
+            INDEX_LOC_TYPE* of_locs = 
                 get_overflow_genome_locations_array_start( seqs, seq_len )
                 + loc->locs_array.locs_start;
             
             /* move memory to make space for the new location */
-            insert_memory( seqs, of_locs, sizeof(GENOME_LOC_TYPE), false );
+            insert_memory( seqs, of_locs, sizeof(INDEX_LOC_TYPE), false );
             
             /* set the new value */
             of_locs[0] = new_loc;
@@ -891,7 +897,7 @@ add_sequence_to_sequences_node(
     sequences_node* seqs, 
     LETTER_TYPE* new_seq,
     LEVEL_TYPE num_letters,
-    GENOME_LOC_TYPE loc )
+    INDEX_LOC_TYPE loc )
 {
     /* find the location in the seqs node that the new sequence should go */
     insert_location il = 
@@ -960,7 +966,9 @@ find_sequences_in_sequences_node(
         mapped_locations* results,
 
         /* the penalty array */
-        struct penalty_t* pa
+        struct penalty_t* pa,
+
+        struct genome_data* genome
     )
 {
 
@@ -1037,18 +1045,17 @@ find_sequences_in_sequences_node(
 
             if( !check_sequence_type_ptr(seqs, i) )
             {
-                /* add this location to the result set */
-                add_new_mapped_location(
-                    results, 
-                    loc.loc,
-                    strnd,
-                    cum_penalty
-                );
-
+                add_and_expand_location_from_index(
+                        results,
+                        &(loc.loc),
+                        strnd,
+                        cum_penalty,
+                        genome
+                    );
             } else 
             /* Add all of the locs in the referenced array */
             {
-                GENOME_LOC_TYPE* locs 
+                INDEX_LOC_TYPE* locs 
                     = get_overflow_genome_locations_array_start( 
                         seqs,  num_letters - node_level )
                     + loc.locs_array.locs_start;
@@ -1086,16 +1093,20 @@ find_sequences_in_sequences_node(
                      * call the function. 
                      */
                     /*
-                    GENOME_LOC_TYPE i_loc = *( 
-                        (GENOME_LOC_TYPE*)
-                        (((char*)locs) + j*sizeof(GENOME_LOC_TYPE))
+                    INDEX_LOC_TYPE i_loc = *( 
+                        (INDEX_LOC_TYPE*)
+                        (((char*)locs) + j*sizeof(INDEX_LOC_TYPE))
                     );
                     */
                     
-                    GENOME_LOC_TYPE tmp_loc = locs[j];
-                    add_new_mapped_location(
-                        results, tmp_loc, strnd, cum_penalty
-                    );
+                    INDEX_LOC_TYPE tmp_loc = locs[j];
+                    add_and_expand_location_from_index(
+                            results,
+                            &tmp_loc,
+                            strnd,
+                            cum_penalty,
+                            genome
+                        );
                 }
             }
         }
@@ -1159,7 +1170,7 @@ print_sequences_node( sequences_node* seqs, int seq_length )
                        locs[i].locs_array.locs_size
                 );
 
-                GENOME_LOC_TYPE* e_locs = 
+                INDEX_LOC_TYPE* e_locs = 
                     get_overflow_genome_locations_array_start( seqs, seq_length )
                     + locs[i].locs_array.locs_start;
 

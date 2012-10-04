@@ -9,9 +9,9 @@
 
 //struct penalty_array_t; // fwd declaration (?)
 
-#define POS_SINGLE_END 1
-#define POS_PAIRED_END_1 1
-#define POS_PAIRED_END_2 -1
+#define POS_SINGLE_END 0
+#define POS_PAIRED_END_1 0
+#define POS_PAIRED_END_2 1
 
 struct pos_in_template {
     int pos;
@@ -26,9 +26,16 @@ struct read_subtemplate {
     struct pos_in_template pos_in_template;
 };
 
-struct read {
-    char* name;
+struct prior_read_information {
+    int max_ref_insert_length;
+    int max_fragment_length;
     enum assay_type_t assay;
+};
+
+struct read {
+    readkey_t read_id;
+    char* name;
+    struct prior_read_information prior;
 
     struct read_subtemplate* subtemplates;
     int num_subtemplates;
@@ -71,7 +78,6 @@ filter_read(
 int
 get_next_read_from_rawread_db( 
         struct rawread_db_t* rdb,
-        readkey_t* readkey,
         struct read** r,
         long max_readkey
     );

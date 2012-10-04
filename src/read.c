@@ -143,36 +143,37 @@ filter_read(
        ( it's initialized to -1 ); */
     assert( min_num_hq_bps >= 0 );
 
-    int num_hq_bps = 0;
-
     // loop over the subtemplates, counting hq basepairs
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
+        int num_hq_bps = 0;
+        
         // get a pointer to the current subtemplate
         struct read_subtemplate* rst = &(r->subtemplates[i]);
 
         /* loop over each bp in the subtemplate */
-        int bp;
-        for( bp = 0; bp < rst->length; bp++ )
+        int pos;
+        for( pos = 0; pos < rst->length; pos++ )
         {
             /*
                compute the inverse probability of error (quality)
                NOTE when error_prb receieves identical bp's, it returns the
                inverse automatically
              */
-            double error = error_prb( rst->char_seq[bp], rst->char_seq[bp], 
-                                      rst->error_str[bp], i, error_model );
+            double error = error_prb( rst->char_seq[pos], rst->char_seq[pos], 
+                                      rst->error_str[pos], pos, error_model );
             double qual = pow(10, error );
             
             /* count the number of hq basepairs */
-            if( qual > 0.999 )
+            if( qual > 1 - HIGH_QUALITY_BP_ERROR_PRB )
                 num_hq_bps += 1;
         }
+
+        if ( num_hq_bps < min_num_hq_bps )
+            return true;
     }
 
-    if ( num_hq_bps < min_num_hq_bps )
-        return true;
         
     return false;
 }
@@ -201,7 +202,7 @@ build_read_from_rawreads(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                1,
+                POS_SINGLE_END,
                 num_reads_in_template
             );
     }
@@ -221,7 +222,7 @@ build_read_from_rawreads(
                 *r,
                 r1->char_seq, r1->error_str,
                 r1->length,
-                1,
+                POS_PAIRED_END_1,
                 num_reads_in_template
             );
 
@@ -229,7 +230,7 @@ build_read_from_rawreads(
                 *r,
                 r2->char_seq, r2->error_str,
                 r2->length,
-                -1,
+                POS_PAIRED_END_2,
                 num_reads_in_template
             );
     }
@@ -238,7 +239,6 @@ build_read_from_rawreads(
 int
 get_next_read_from_rawread_db( 
         struct rawread_db_t* rdb,
-        readkey_t* readkey,
         struct read** r,
         long max_readkey
     )
@@ -317,11 +317,15 @@ get_next_read_from_rawread_db(
         free_rawread( r2 );
     }
 
+    /***** Set the prior_read_information *****/
+    /* TODO Set the max lengths from config.h, for now */
+    (*r)->prior.max_ref_insert_length = REFERENCE_INSERT_LENGTH_MAX;
+    (*r)->prior.max_fragment_length = FRAGMENT_LENGTH_MAX;
     /* Set the assay type on the read from the rawread db */
-    (*r)->assay = rdb->assay;
+    (*r)->prior.assay = rdb->assay;
 
     /* increment the read counter */
-    *readkey = rdb->readkey;
+    (*r)->read_id = rdb->readkey;
     rdb->readkey += 1;
 
     unlock_rawread_db( rdb );

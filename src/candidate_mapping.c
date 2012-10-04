@@ -12,12 +12,9 @@
 #include "statmap.h"
 #include "read.h"
 #include "candidate_mapping.h"
-#include "mapped_read.h"
 #include "genome.h"
 #include "diploid_map_data.h"
 #include "util.h"
-
-struct mapped_read_t;
 
 /** 
     Some bastard code. I need this later on when I unpack the pseudo loc reads
@@ -41,7 +38,7 @@ modify_mapped_read_location_for_index_probe_offset(
         return -1;
     }
     
-    // If this is a pseudo chromosome, we need to do these checks later.
+    // Pseudo locations should already have been expanded
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
         perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
         return -1;
@@ -50,19 +47,21 @@ modify_mapped_read_location_for_index_probe_offset(
     /* first deal with reads that map to the 5' genome */
     if( strnd == FWD )
     {
-        /* if the mapping location of the probe is less than
-           the length of the probe offset, then the actual 
-           read is mapping before the start of the genome, which 
-           is clearly impossible 
+        /* if the mapping location of the probe is less than the length of the
+           probe offset, then the actual read is mapping before the start of
+           the genome, which is clearly impossible. We add the softclip length
+           here under the assumption that any soft clipped basepairs may not
+           have come from the genome (may have been part of a primer sequence,
+           etc.)
         */
-        if( read_location < subseq_offset ) 
+        if( read_location + softclip_len < subseq_offset ) 
         {
             return -1;
         } 
         /* we shift the location to the beggining of the sequence, 
            rather than the subseq that we looked at in the index  */
         else {
-            read_location -= subseq_offset;
+            read_location -= (subseq_offset - softclip_len);
         }
                 
         /* if the end of the read extends past the end of the genome
@@ -110,18 +109,18 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         }
-                
+
         /* this will actually be the read end in the 5' genome,
            so we check to make sure that it won't make the read extend
            past the end of the genome */                
         if( read_location > 
             (long) genome->chr_lens[chr]
-            - ( subseq_len + subseq_offset )
+            - ( subseq_len + subseq_offset - softclip_len )
             ) {
             return -1;
         }
                 
-        read_location += ( subseq_len + subseq_offset );             
+        read_location += ( subseq_len + subseq_offset );
                 
         /* now we subtract off the full read length, so that we have the 
            read *end* in the 5' genome. Which is what our coordinates are 
@@ -133,7 +132,7 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         } else {
-            read_location -= read_len;
+            read_location -= (read_len + softclip_len);
         }
     
     } else {
@@ -208,10 +207,8 @@ init_candidate_mappings( candidate_mappings** mappings )
 }
 
 candidate_mapping
-init_candidate_mapping_from_template(
-        struct read_subtemplate* rst,
-        float max_penalty_spread
-    )
+init_candidate_mapping_from_read_subtemplate(
+        struct read_subtemplate* rst )
 {
     /****** initialize the mapped_location info that we know  ******/
     /* copy the candidate map location template */
@@ -219,53 +216,34 @@ init_candidate_mapping_from_template(
     memset( &cand_map, 0, sizeof(cand_map) );
 
     /* Set the read length */
+    /* FIXME Unused... */
     cand_map.rd_len = rst->length;
 
-    /** Set the length of the subsequence. 
-     * This is the length of the sequence that we go to the index for. If it
-     * is not equal to read length, then we need to do a recheck.
-     */
-    /* TODO - allow for subsequences */        
-    /*
-    cand_map.subseq_len = indexed_seq_len;
-    cand_map.subseq_offset = rp->subseq_offset;
-    */
+    /* Initialize the values in READ_TYPE.
+     * These will be updated to be correct in update_read_type */
+    cand_map.rd_type.follows_ref_gap = false;
+    cand_map.rd_type.pos = -1;
 
-    /* if read length <= seq_length, then a recheck is unnecessary */
-    if( max_penalty_spread > -0.1 ) {
-        cand_map.recheck = RECHECK_PENALTY;
-    } else {
-        cand_map.recheck = VALID;
-    }
-    
-    /* set which type of read this is */
-    assert( rst->pos_in_template.number_of_reads_in_template == 1 ||
-            rst->pos_in_template.number_of_reads_in_template == 2 );
-    /* The number of reads in the tempate tells us whether this read
-     * subtemplate is from a single or paired end read */
-    if( rst->pos_in_template.number_of_reads_in_template == 1 )
-    {
-        assert( rst->pos_in_template.pos == POS_SINGLE_END );
-        cand_map.rd_type = SINGLE_END;
-    }
-    else if ( rst->pos_in_template.number_of_reads_in_template == 2 )
-    {
-        /* The position in the template tells us which end of the paired end
-         * read this subtemplate represents */
+    cand_map.trimmed_length = softclip_len;
 
-        assert( rst->pos_in_template.pos == POS_PAIRED_END_1 ||
-                rst->pos_in_template.pos == POS_PAIRED_END_2 );
-
-        if( rst->pos_in_template.pos == POS_PAIRED_END_1 )
-        {
-            cand_map.rd_type = PAIRED_END_1;
-        } else if ( rst->pos_in_template.pos == POS_PAIRED_END_2 )
-        {
-            cand_map.rd_type = PAIRED_END_2;
-        }
-    }
+    /* The cigar string is initialized by the initial call to memset */
+    cand_map.cigar_len = 0;
 
     return cand_map;
+}
+
+int
+get_length_from_cigar_string( candidate_mapping* mapping )
+{
+    int fragment_length = 0;
+
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
+    {
+        fragment_length += mapping->cigar[i].len;
+    }
+
+    return fragment_length;
 }
 
 void
@@ -307,17 +285,28 @@ free_candidate_mappings( candidate_mappings* mappings )
 }
 
 void
+print_candidate_mapping_cigar_string( candidate_mapping* mapping )
+{
+    printf("Cigar:        ");
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
+    {
+        printf("%c%i", mapping->cigar[i].op, mapping->cigar[i].len );
+    }
+    printf("\n");
+}
+
+void
 print_candidate_mapping( candidate_mapping* mapping )
 {
-    printf("Recheck:      %u\n", mapping->recheck);
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
-    printf("Read_type:    %u\n", mapping->rd_type);
     printf("Read Len:     %u\n", mapping->rd_len);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
-    // printf("Subseq Off:   %u\n", mapping->subseq_offset);
-    // printf("Subseq Len:   %u\n", mapping->subseq_len);
+
+    print_candidate_mapping_cigar_string( mapping );
+
     printf("\n");
     return;
 }
@@ -351,8 +340,8 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
      */ 
 
     /* first, sort by read type */
-    if( m1->rd_type != m2->rd_type )
-        return m1->rd_type - m2->rd_type;
+    if( m1->rd_type.pos != m2->rd_type.pos )
+        return m1->rd_type.pos - m2->rd_type.pos;
 
     /* next, sort by strand */
     if( m1->rd_strnd != m2->rd_strnd )

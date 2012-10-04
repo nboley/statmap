@@ -18,6 +18,7 @@
 #include "genome.h"
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
+#include "error_correction.h"
 
 /* a global pointer offset */
 /* This must be added to all pointers */
@@ -650,7 +651,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
             else 
             /* Add all of the locs in the referenced array */
             {
-                GENOME_LOC_TYPE* gen_locs 
+                INDEX_LOC_TYPE* gen_locs 
                     = get_overflow_genome_locations_array_start( 
                         qnode,  num_letters )
                     + loc.locs_array.locs_start;
@@ -703,14 +704,14 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
             else 
             /* Add all of the locs in the referenced array */
             {
-                GENOME_LOC_TYPE* gen_locs 
+                INDEX_LOC_TYPE* gen_locs 
                     = get_overflow_genome_locations_array_start( qnode,  num_letters )
                     + loc.locs_array.locs_start;
 
                 int j;
                 for(j = 0; j < loc.locs_array.locs_size; j++ )
                 {
-                    GENOME_LOC_TYPE loc = gen_locs[j];
+                    INDEX_LOC_TYPE loc = gen_locs[j];
 
                     *child_seqs = add_sequence_to_sequences_node(   
                         genome,
@@ -765,7 +766,7 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 void 
 add_sequence( struct genome_data* genome,
               LETTER_TYPE* seq, const int seq_length,
-              GENOME_LOC_TYPE genome_loc ) 
+              INDEX_LOC_TYPE genome_loc ) 
 {
     /* direct references to index and pseudo_locations */
     struct index_t* index = genome->index;
@@ -989,13 +990,11 @@ void
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 
-              float min_match_penalty,
-              /* 
-               * the maximum spread between the highest penalty 
-               * match and any other valid match 
-               */
-              float max_penalty_spread,
+
+              struct index_search_params* search_params,
               mapped_locations* results,
+
+              struct genome_data* genome,
 
               /* fwd stranded data  */
               LETTER_TYPE* fwd_seq, 
@@ -1013,6 +1012,10 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     )
 {
     const int num_letters = calc_num_letters( seq_length );
+
+    /* Unpack the search parameters */
+    float min_match_penalty = search_params->min_match_penalty;
+    float max_penalty_spread = search_params->max_penalty_spread;
 
     /* initialize the stack */
     potential_match_stack* stack;
@@ -1065,8 +1068,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          * a match.
          */
            
-        
-        
         /* check to make sure that this branch is still valid */
         /* avoid rounding errors with the small number - it is your fault
            if you put in a negative number for the max penalty spread */
@@ -1206,7 +1207,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 node, 
                 results,
                 curr_penalty,
-                strnd
+                strnd,
+                genome
             );
 
             /* 
@@ -1239,7 +1241,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 curr_penalty, min_match_penalty,
                 seq, seq_length, num_letters, node_level, strnd,
                 results,
-                penalties
+                penalties,
+                genome
             );
             
             
@@ -1297,9 +1300,10 @@ extern void
 find_matches_from_root(
         struct index_t* index,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct index_search_params* search_params,
         mapped_locations* results,
+
+        struct genome_data* genome,
 
         /* the length of the two reads ( below ) */
         const int read_len,
@@ -1322,9 +1326,12 @@ find_matches_from_root(
     return find_matches( (void*) root, 's', 0, 
                          index->seq_length,
                          
-                         0, min_match_penalty, 
-                         max_penalty_spread,
+                         0,
+                         
+                         search_params,
                          results,
+
+                         genome,
 
                          fwd_seq,
                          rev_seq,
@@ -1332,8 +1339,7 @@ find_matches_from_root(
                          fwd_penalties,
                          rev_penalties,
 
-                         only_find_unique_sequences
-    ); 
+                         only_find_unique_sequences ); 
 }
 
 size_t

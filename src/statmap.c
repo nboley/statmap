@@ -43,12 +43,19 @@
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
 int min_num_hq_bps = -1;
+int max_reference_insert_len = -1;
+/* TODO check for conflicts with variable name before removing leading underscore */
+enum assay_type_t _assay_type = UNKNOWN;
+/* TODO should this be global? */
+int softclip_len = 0;
 
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
 void set_num_threads(int n) { num_threads = n; }
 int get_min_num_hq_bps() { return min_num_hq_bps; }
 void set_min_num_hq_bps(int n) { min_num_hq_bps = n; }
+int get_max_reference_insert_len() { return max_reference_insert_len; }
+void set_max_reference_insert_len(int n) { max_reference_insert_len = n; }
 
 /*
  * Loads the binary genome file
@@ -113,45 +120,76 @@ map_marginal( struct args_t* args,
 {
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
+
+    /* Save the user-set mapping metaparameters in a struct */
+    struct mapping_metaparams mapping_metaparams;
+
+    /* TODO set the metaparameters - wait for error_model merge */
     
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
        enough to estiamte the errors
     */
-    // bootstrap_error_data
-
     struct error_model_t* error_model = NULL;
-    if( args->search_type == ESTIMATE_ERROR_MODEL )
+    if( args->error_model_type == ESTIMATED )
     {
         fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
         init_error_model( &error_model, ESTIMATED );
+        
+        fprintf( stderr, 
+                 "NOTICE      :  Setting bootstrap mismatch rates to %f and %f\n",
+                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+        mapping_metaparams.error_model_type = MISMATCH;
+        mapping_metaparams.error_model_params[0] = MAX_NUM_MM_RATE;
+        mapping_metaparams.error_model_params[1] = MAX_NUM_MM_SPREAD_RATE;
+        
         bootstrap_estimated_error_model( 
             genome,
             rdb,
             *mpd_rds_db,
+            &mapping_metaparams,
             error_model
         );
+
+        fprintf( stderr, 
+                 "NOTICE      :  Setting mapping metaparams to %f and %f\n",
+                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+        mapping_metaparams.error_model_type = ESTIMATED;
+        mapping_metaparams.error_model_params[0] = args->min_match_penalty;
+        mapping_metaparams.error_model_params[1] = args->max_penalty_spread;
         
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
-    } else if(args->search_type == PROVIDED_ERROR_MODEL) {
-        fprintf(stderr, "FATAL       :  PROVIDED_ERROR_MODEL is not implemented yet\n" );
+    } else if(args->error_model_type == FASTQ_MODEL) {
+        fprintf(stderr, "FATAL       :  FASTQ_MODEL (provided error scores) is not implemented yet\n" );
         exit( 1 );
-    } else if(args->search_type == MISMATCHES) {
+    } else if(args->error_model_type == MISMATCH) {
+        /* initialize the meta params */
+        mapping_metaparams.error_model_type = MISMATCH;
+        mapping_metaparams.error_model_params[0] = args->min_match_penalty;
+        mapping_metaparams.error_model_params[1] = args->max_penalty_spread;
+        
         init_error_model( &error_model, MISMATCH );
     } else {
         fprintf(stderr, "FATAL       :  Unrecognized index search type '%i'\n",
-            args->search_type);
+            args->error_model_type);
         exit( 1 );
     }
-    
+
     /* initialize the mapped reads db */
     if( false == is_nc )
     {
         open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_READS_DB_FNAME );
     } else {
         open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
+    }
+
+    /* if a fragment length distribution was provided, load it into the mapped
+     * reads db. This has to happen before mapping, so we can use the fl_dist
+     * to compute the penalties of joined candidate mappings. */
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
     }
     
     fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
@@ -160,9 +198,8 @@ map_marginal( struct args_t* args,
         genome,
         rdb,
         *mpd_rds_db,
-        error_model,
-        args->min_match_penalty,
-        args->max_penalty_spread
+        &mapping_metaparams,
+        error_model
     );
     
     free_error_model( error_model );
@@ -223,6 +260,14 @@ iterative_mapping( struct args_t* args,
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
+    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN )
+    {
+        fprintf( stderr,
+                 "FATAL     :  Cannot iteratively map data with unknown assay type.\n" );
+        assert( false );
+        exit(1);
+    }
+
     if( NULL != args->unpaired_reads_fnames 
         && args->assay_type == CHIP_SEQ
         && mpd_rds_db->fl_dist == NULL )
@@ -230,7 +275,7 @@ iterative_mapping( struct args_t* args,
         fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
         exit(-1);
     }
- 
+
     /* Do the iterative mapping */
     generic_update_mapping( mpd_rds_db,
                             genome, 
@@ -273,13 +318,13 @@ map_generic_data(  struct args_t* args )
     
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
-    
+
     if( args->frag_len_fp != NULL ) {
-        build_fl_dist_from_file( mpd_rds_db, args->frag_len_fp );
+        init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
     } else {
         build_fl_dist( args, mpd_rds_db );
     }
-
+    
     close_mapped_reads_db( &mpd_rds_db );
     
     free_genome( genome );
@@ -310,9 +355,9 @@ map_chipseq_data(  struct args_t* args )
     /* map the real ( IP ) data */
     struct mapped_reads_db* chip_mpd_rds_db = NULL;    
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
-    
+
     if( args->frag_len_fp != NULL ) {
-        build_fl_dist_from_file( chip_mpd_rds_db, args->frag_len_fp );
+        init_fl_dist_from_file( &(chip_mpd_rds_db->fl_dist), args->frag_len_fp );
     } else {
         build_fl_dist( args, chip_mpd_rds_db );
     }
@@ -331,7 +376,7 @@ map_chipseq_data(  struct args_t* args )
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
         if( args->frag_len_fp != NULL ) {
-            build_fl_dist_from_file( NC_mpd_rds_db, args->frag_len_fp );
+            init_fl_dist_from_file( &(NC_mpd_rds_db->fl_dist), args->frag_len_fp );
         } else {
             build_fl_dist( args, NC_mpd_rds_db );
         }
@@ -373,18 +418,6 @@ map_chipseq_data(  struct args_t* args )
        the negative control. 
     */
     else {
-        /* Iterative mapping */
-        /* mmap and index the necessary data */
-        fprintf(stderr, "NOTICE      :  mmapping mapped IP reads DB.\n" );
-        mmap_mapped_reads_db( chip_mpd_rds_db );
-        fprintf(stderr, "NOTICE      :  indexing mapped IP reads DB.\n" );
-        index_mapped_reads_db( chip_mpd_rds_db );
-
-        fprintf(stderr, "NOTICE      :  mmapping mapped NC reads DB.\n" );
-        mmap_mapped_reads_db( NC_mpd_rds_db );
-        fprintf(stderr, "NOTICE      :  indexing mapped NC reads DB.\n" );
-        index_mapped_reads_db( NC_mpd_rds_db );
-        
         /* open the file to store the meta info, and print out the header */
         FILE* s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
         fprintf( s_mi, "sample_number,log_lhd\n" );
@@ -442,23 +475,25 @@ main( int argc, char** argv )
     fclose( arg_fp  );
     
     /* intialize an R instance */
-    if( args.search_type == ESTIMATE_ERROR_MODEL )
+    if( args.error_model_type == ESTIMATED )
     {
         fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
         init_R( );        
         load_statmap_source( statmap_base_dir );
     }
-    
+
     if( args.assay_type == CHIP_SEQ )
     {
         map_chipseq_data( &args );
     } else {
         map_generic_data( &args );
     }
-       
+    
     goto cleanup;
     
 cleanup:
+    free( abs_path );
+
     close_rawread_db( args.rdb );
     
     if( args.NC_rdb != NULL )

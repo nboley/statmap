@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include "config.h"
 #include "util.h"
 
 void
@@ -118,3 +119,19 @@ safe_realloc( void* ptr, size_t size )
     return ra_ptr;
 }
 
+enum bool
+file_is_empty( FILE* fp )
+{
+    fseek( fp, 0, SEEK_END );
+    if( ftell( fp ) == 0)
+        return true;
+
+    rewind( fp );
+    return false;
+}
+
+int
+cmp_ints( const int* i1, const int* i2 )
+{
+    return *i1 - *i2;
+}

@@ -3,15 +3,26 @@
 #ifndef CONFIG
 #define CONFIG
 
+/****** verbosity options                       ******/
+/* how often we print out the mapping status */
+#define MAPPING_STATUS_GRANULARITY 100000
+
+
 /****** configuration options                   ******/
 
 #define N_DEBUG
 
 // Candidate Mappings
+#define MAX_NUM_MM_RATE 0.10
+#define MAX_NUM_MM_SPREAD_RATE 0.05
+
 #define DEFAULT_MIN_MATCH_PENALTY -7.0
 #define DEFAULT_MAX_PENALTY_SPREAD 2.1
+
+#define HIGH_QUALITY_BP_ERROR_PRB 1e-2
+
 // the num of reads that we map before updating the error estimates
-#define READS_STAT_UPDATE_STEP_SIZE 5000
+#define READS_STAT_UPDATE_STEP_SIZE 50000
 
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500
@@ -23,7 +34,6 @@
 #define MIN_TRACE_FNAME "min_trace.wig"
 
 // Samples output 
-
 #define SAM_MARGINAL_OFNAME "mapped_reads.sam"
 #define SAM_MARGINAL_NC_OFNAME "mapped_reads.nc.sam"
 
@@ -90,6 +100,7 @@
 #define EXPAND_PAIRED_PSEUDO_LOCATIONS true
 
 typedef unsigned char LEVEL_TYPE;
+/* TODO this probably isn't big enough - max read len of 255? */
 typedef unsigned char READ_POSITION;
 
 // the length of each index letter, in bps 
@@ -131,7 +142,8 @@ typedef char NODE_TYPE;
 enum assay_type_t {
     // UNKNOWN = 0,
     CAGE = 1,
-    CHIP_SEQ = 2
+    CHIP_SEQ = 2,
+    RNA_SEQ = 3
 };
 
 /* 
@@ -172,33 +184,6 @@ enum JUNCTION_TYPE
     NON_CANONICAL = 3
 };
 
-enum READ_TYPE
-{
-    /*  0 = 'Not Set' - it should be the initial setting */
-    SINGLE_END = 1,
-    /* Paired end, with an indeterminate end */
-    PAIRED_END = 2,
-    /* Paired end, but this is end 1 ( ie, KEY/1 in the read name ) */
-    PAIRED_END_1 = 3,
-    /* Paired end, but this is end 2 ( ie, KEY/2 in the read name ) */
-    PAIRED_END_2 = 4
-};
-
-enum RECHECK
-{
-    /* the default, it needs a full recheck */
-    RECHECK_FULL = 0,
-    /* recheck to make sure the penalties are above the min */
-    RECHECK_PENALTY = 1,
-    /* recheck against chr to make sure the penalty is correct */
-    RECHECK_LOCATION = 2,
-    /* all rechecks have been performed, and the loc is valid */
-    VALID = 3,
-    /* one or more rechecks failed */
-    INVALID = 4
-};
-
-
 /*
  * THIS SECTION IS OBSOLETE *************************************
  
@@ -236,16 +221,19 @@ enum RECHECK
     from a + read. So, we would add GGC here as a potential gene *end*
     for a *- strand gene* and CAA as a gene *start*
 */
-#define CHR_BITS 15
-#define CHR_NUM_MAX (32768 - 1) // 2**15 - 1
+#define CHR_BITS 14
+#define CHR_NUM_MAX (16384 - 1) // 2**14 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 29
-// MADE_SIGNED_REVERT
-#define LOCATION_MAX (536870912/2 - 1) // 2**29 = 536870912
+#define LOCATION_MIN 0
+#define LOCATION_MAX (536870912 - 1) // 2**29 = 536870912
 
 #define FRAGMENT_LENGTH_BITS 20
-#define FRAGMENT_LENGTH_MIN ( -524288 + 1 ) // 2**20 = 1048576
-#define FRAGMENT_LENGTH_MAX ( 524288 - 1 )
+#define FRAGMENT_LENGTH_MIN  0
+#define FRAGMENT_LENGTH_MAX ( 524288 - 1 ) // 2**20 = 1048576
+
+/* TODO this is an arbitrary default (doesn't matter for now) */
+#define REFERENCE_INSERT_LENGTH_MAX 500
 
 /* this needs to always be able to store up to LOCATION_MAX */
 #define SIGNED_LOC int
@@ -254,12 +242,9 @@ typedef struct __attribute__((__packed__))
 {
     unsigned is_paternal    :1;
     unsigned is_maternal    :1;
-
-    unsigned unused_space   :1;
     
-    /* read_type 0 = normal, 1 = junction */
-    unsigned read_type      :1;
-
+    unsigned unused_space   :3;
+    
     /* the chr that the read came from */
     unsigned chr            :CHR_BITS;
 
@@ -270,7 +255,7 @@ typedef struct __attribute__((__packed__))
      */
     unsigned loc            :LOCATION_BITS;
 
-} GENOME_LOC_TYPE;
+} INDEX_LOC_TYPE;
 
 enum CHR_SOURCE
 {
@@ -278,13 +263,6 @@ enum CHR_SOURCE
     REFERENCE = 1,
     PATERNAL  = 2,
     MATERNAL  = 3
-};
-
-enum SEARCH_TYPE
-{
-    PROVIDED_ERROR_MODEL  = 1,
-    ESTIMATE_ERROR_MODEL  = 2,
-    MISMATCHES            = 3
 };
 
 enum input_file_type_t {

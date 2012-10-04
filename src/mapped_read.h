@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "config.h"
+#include "statmap.h"
 #include "candidate_mapping.h"
 #include "rawread.h"
 
@@ -19,32 +20,6 @@ struct fragment_length_dist_t;
 struct genome_data;
 struct rawread_db_t;
 struct cond_prbs_db_t;
-
-/* defines copied from sam tools - these go into the 'flag' field */
-/* the read is paired in sequencing, no matter 
-   whether it is mapped in a pair */
-#define BAM_FPAIRED        1
-/* the read is mapped in a proper pair */
-#define BAM_FPROPER_PAIR   2
-/* the read itself is unmapped; conflictive with BAM_FPROPER_PAIR */
-#define BAM_FUNMAP         4
-/* the mate is unmapped */
-#define BAM_FMUNMAP        8
-/* the read is mapped to the reverse strand */
-#define BAM_FREVERSE      16
-/* the mate is mapped to the reverse strand */
-#define BAM_FMREVERSE     32
-/* this is read1 */
-#define BAM_FREAD1        64
-/* this is read2 */
-#define BAM_FREAD2       128
-/* not primary alignment */
-#define BAM_FSECONDARY   256
-/* QC failure */
-#define BAM_FQCFAIL      512
-/* optical or PCR duplicate */
-#define BAM_FDUP        1024
-
 
 /*************************************************************************
  *
@@ -56,8 +31,6 @@ struct cond_prbs_db_t;
 
 /* 
  * Determine whether or not to use the compact representation of ML_PRB_TYPE.
- * 
- *
  */
 
 #define NO_COMPACT_ML_PRB_TYPE
@@ -126,180 +99,329 @@ ML_PRB_TYPE_from_float( float value  )
 #endif
 }
 
-/* TODO - make this a bitfield */
+/*
+ * Compact representation of a full mapped read.
+ *
+ * We assume that each mapped_read_t has at least
+ * 1) 1 read_id_node (for now, it has *exactly* 1 read_id_node)
+ * 2) 1 mapped_read_location, which has at least
+ *    a) 1 subread
+ *
+ * Note that we use signed bitfields for except single-fit fields. Signed
+ * bitfields are much better for debugging, but signed 1-bit fields don't make
+ * any sense (two's complement means the only two values it can have are 0 and
+ * -1). 
+ *
+ *  Depending on the assay type, the sublocations may represent fragments in a
+ *  paired end assay (originating from read subtemplates) or junctions in
+ *  a gapped alignment (originating from indexable subtemplates). The
+ *  next_subread_is flags handle all possibilities.
+ *
+ */
 
-#define MRL_FLAG_TYPE unsigned char
+/*
+mapped_read_t {
+    // 4 bytes
+    struct {
+        signed read_id    :READ_ID_BITS;          // 31 bits
+        unsigned are_more :1;
+    } read_id_node;
+    // potentially more read ids
+    
+    // MIN 16 bytes ( 4 per extra read id, 6 per extra subtemplate )
+    struct mapped_read_location {
+        // 6 bytes
+        struct mapped_read_location_prologue{
+            unsigned chr            :CHR_BITS;      // 15 bits
+            unsigned strand         :1;
+            unsigned are_more       :1;
+            unsigned trimmed_length :6;
+            unsigned unused_bits    :2;             // total: 2 bytes
+        
+            ML_PRB_TYPE seq_error[NUM_READ_IDS];    // 4 bytes
+            // 1 sequencing error for each read id
+        }
+        
+        // 6 bytes
+        struct mapped_read_sublocation {
+            signed start_pos    :LOCATION_BITS; ( 29 )
+            unsigned length     :SUBTEMPLATE_LENGTH_BITS; ( 15 )
+
+            unsigned rev_comp                 :1; // 0 = no, 1 = yes
+            unsigned is_full_contig           :1; // unused for now
+            unsigned next_subread_is_gapped   :1; // gapped
+            unsigned next_subread_is_ungapped :1; // paired end
+        }
+        // potentially more sublocations
+    }
+    
+    // potentially more mapped read locations
+
+} __attribute__((__packed__));
+*/
+
+typedef void mapped_read_t;
+typedef void mapped_read_location;
+
 #define MRL_CHR_TYPE unsigned short
 #define MRL_START_POS_TYPE unsigned int
 #define MRL_STOP_POS_TYPE unsigned int
 #define MRL_FL_TYPE unsigned short
+#define MRL_TRIM_TYPE unsigned char
 
-/* Set if the read that contribute to this mapped location are paired */
-#define IS_PAIRED 1
-/* Set if the first read ( ie read_name/1 ) in the pair was rev 
-   complemented to map */
-#define FIRST_READ_WAS_REV_COMPLEMENTED 2
-/* Set if the first read ( ie read_name/1 ) maps to start_pos */
-#define FIRST_PAIR_IS_FIRST_IN_GENOME 4
-/* set if this is a pseudo read */
-#define FIRST_READ_IS_PSEUDO 32
-#define SECOND_READ_IS_PSEUDO 64
+#define SUBTEMPLATE_LENGTH_BITS 15
+#define MAX_SUBTEMPLATE_LENGTH 32767 // 2**15 - 1
 
-/* ACCESS THIS THROUGH THE BELOW FUNCTIONS */
+#define READ_ID_BITS 31
+#define MAX_READ_ID 1073741823 // 2**31 / 2 - 1 = 1073741823
 
-struct mapped_read_t;
+#define TRIMMED_LENGTH_MAX 63 // 2**6 - 1 = 63
+/*
+ * Structures used to access and manipulate the mapped_read_t and
+ * mapped_read_location pseudo structs
+ *
+ * Note - the following structures must all be aligned on byte boundaries so we
+ * can use sizeof and pointer arithmetic to work with the mapped_read_t pseudo
+ * structure
+ */
 
-struct mapped_read_location {
-    MRL_FLAG_TYPE flag;
+// 4 bytes
+typedef struct {
+    unsigned read_id  :READ_ID_BITS;
+    unsigned are_more :1;
+} read_id_node;
+
+// 6 bytes
+typedef struct {
+    unsigned chr            :CHR_BITS;
+    unsigned strand         :1;
+    unsigned are_more       :1;
+    unsigned trimmed_length :6;
+    unsigned unused_bits    :2;
+    /* For now, we assume that there is only 1 readid and therefore only
+     * 1 corresponding seq_error */
+    ML_PRB_TYPE seq_error;      
+} mapped_read_location_prologue;
+
+// 6 bytes
+typedef struct {
+    signed start_pos    :LOCATION_BITS;
+    unsigned length     :SUBTEMPLATE_LENGTH_BITS;
     
-    MRL_CHR_TYPE chr;
+    unsigned rev_comp                 :1;
+    unsigned is_full_contig           :1;
+    unsigned next_subread_is_gapped   :1;
+    unsigned next_subread_is_ungapped :1;
+} mapped_read_sublocation;
 
-    struct {
-        signed start_pos :LOCATION_BITS;
-        
-        /* THIS IS EXCLUSIVE, ie NOT including stop */
-        signed frag_len :FRAGMENT_LENGTH_BITS;
-    } position;
-    
-    ML_PRB_TYPE seq_error;
-} __attribute__((__packed__));
+/* Utility functions for accessing components of mapped_read_t */
+
+mapped_read_sublocation*
+get_start_of_sublocations_in_mapped_read_location(
+        const mapped_read_location* loc );
+
+int
+get_start_for_sublocations_group(
+        mapped_read_sublocation* group );
+
+int
+get_stop_for_sublocations_group(
+        mapped_read_sublocation* group );
+
+enum bool
+last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub );
+
+enum bool
+end_of_sublocations_group( mapped_read_sublocation* sub_loc );
 
 /* 
- * small, inline functions for setting and accessing the items
- * in mapped_read_location. These are how elements should be 
- * accessed - there is no guarantee that mapped_read_location 
- * will remain the same 
+ * small, inline functions for accessing the items in mapped_read_location.
+ * These are how elements should be accessed - there is no guarantee that
+ * mapped_read_location will remain the same 
  *
  * These are defined in the header so that they can be inlined.
  *
  */
 
-/** FLAG **/
-
-static inline MRL_FLAG_TYPE
-get_flag_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ return loc->flag; }
-
-static inline void
-set_flag_in_mapped_read_location( 
-    struct mapped_read_location* loc, MRL_FLAG_TYPE flag)
-{ loc->flag = flag; }
-
 /** CHR **/
 
 static inline MRL_CHR_TYPE
-get_chr_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ return loc->chr; }
-
-static inline void
-set_chr_in_mapped_read_location( 
-    struct mapped_read_location* loc, MRL_CHR_TYPE value )
-{ 
-    assert( value <= CHR_NUM_MAX );
-    loc->chr = value; 
+get_chr_from_mapped_read_location( const mapped_read_location* loc)
+{
+    mapped_read_location_prologue* prologue
+        = (mapped_read_location_prologue*) loc;
+    return (MRL_CHR_TYPE) prologue->chr;
 }
 
 /** FRAGMENT/READ COVERAGE **/
 
 static inline MRL_START_POS_TYPE
-get_start_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ return loc->position.start_pos; }
+get_start_from_mapped_read_location( const mapped_read_location* loc )
+{
+    /* The index of the first sublocation is the start of the mapped read
+     * location */
+    mapped_read_sublocation* first_subloc
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    MRL_START_POS_TYPE start = first_subloc->start_pos;
+
+    assert( start >= LOCATION_MIN );
+    assert( start <= LOCATION_MAX );
+
+    return start;
+}
 
 static inline MRL_STOP_POS_TYPE
-get_stop_from_mapped_read_location( const struct mapped_read_location* const loc)
-{ return loc->position.start_pos + loc->position.frag_len; }
+get_stop_from_mapped_read_location( const mapped_read_location* loc )
+{
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
 
-static inline float
-get_fl_from_mapped_read_location( struct mapped_read_location* loc )
-{   return loc->position.frag_len;   }
+    MRL_STOP_POS_TYPE stop = get_stop_for_sublocations_group( sl_start );
 
-static inline void
-set_start_and_stop_in_mapped_read_location( 
-    struct mapped_read_location* loc, 
-    int start,
-    int stop )
-{ 
-    assert( start >= 0 );
-    assert( start < LOCATION_MAX );
-    loc->position.start_pos = start;
-    
-    assert( stop >= 0 );
-    assert( stop < LOCATION_MAX );
-    
-    assert( (stop - start) > FRAGMENT_LENGTH_MIN );
-    assert( (stop - start) < FRAGMENT_LENGTH_MAX );
-    loc->position.frag_len = stop - start;
+    assert( stop >= LOCATION_MIN );
+    assert( stop <= LOCATION_MAX );
+
+    return stop;
 }
 
-/** SEQ ERROR **/
+static inline MRL_FL_TYPE
+get_fl_from_mapped_read_location( const mapped_read_location* loc )
+{
+    MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
+    MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc );
 
-static inline float
-get_seq_error_from_mapped_read_location( 
-    const struct mapped_read_location* const loc)
-{ 
-    //assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
-    return ML_PRB_TYPE_to_float( loc->seq_error );
+    assert( stop - start >= FRAGMENT_LENGTH_MIN );
+    assert( stop - start <= FRAGMENT_LENGTH_MAX );
+
+    return (MRL_FL_TYPE) stop - start;
 }
 
-static inline void
-set_seq_error_in_mapped_read_location( 
-    struct mapped_read_location* loc, float value )
-{ 
-    loc->seq_error = ML_PRB_TYPE_from_float( value );
-    assert( loc->seq_error > 0.0 && loc->seq_error <= 1.0 );
+/** SEQ_ERROR **/
+
+static inline ML_PRB_TYPE
+get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
+{
+    mapped_read_location_prologue* prologue
+        = (mapped_read_location_prologue*) loc;
+    return (ML_PRB_TYPE) prologue->seq_error;
 }
 
-/*
- * A full mapped read.
- *
- */
+static inline enum bool
+mapped_read_location_is_paired( const mapped_read_location* loc )
+{
+    /* if one sublocation has next_subread_is_ungapped set, then the
+     * mapped_read_location is from a paired end read */
 
-struct mapped_read_t {
-    MPD_RD_ID_T read_id;
-    MPD_RD_ID_T num_mappings;
-    /* the database that this read is in - useful because the 
-       DB often conatains meta data ( ie, frag len dist ) */
-    struct mapped_reads_db* rdb;
-    enum bool free_locations;
-    struct mapped_read_location* locations;
-}; // BUG WTF? weird segfault with this __attribute__((__packed__));
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
 
-typedef struct {
-    size_t size;
-    size_t allocated_size;
-    struct mapped_read_t* reads;
-} mapped_reads;
+    enum bool is_paired = false;
 
-unsigned char
-chr_index( char* chr_name );
+    char* ptr = (char*) sl_start;
+
+    while( !last_sublocation_in_mapped_read_location(
+                (mapped_read_sublocation*) ptr) )
+    {
+        mapped_read_sublocation* current_sl
+            = (mapped_read_sublocation *) ptr;
+
+        if( current_sl->next_subread_is_ungapped )
+        {
+            is_paired = true;
+            break;
+        }
+
+        ptr += sizeof( mapped_read_sublocation );
+    }
+
+    return is_paired;
+}
+
+/* TODO - make sure we're setting rev_comp on the mapped_read_sublocation */
+static inline enum bool
+first_read_in_mapped_read_location_is_rev_comp(
+        const mapped_read_location* loc )
+{
+    mapped_read_sublocation* sl_start
+        = get_start_of_sublocations_in_mapped_read_location( loc );
+
+    /* if the first sublocation is reverse complemented, then the first read is
+     * reverse complement (whether it was gapped or not - strand matches for all
+     * sublocations in a gapped read) */
+    if( sl_start->rev_comp == 0 ) {
+        return false;
+    }
+
+    return true;
+}
 
 void
-init_mapped_read( struct mapped_read_t** rd );
+init_mapped_read( mapped_read_t** rd );
 
 void
-free_mapped_read( struct mapped_read_t* rd );
+free_mapped_read( mapped_read_t* rd );
 
 void
-add_location_to_mapped_read( 
-    struct mapped_read_t* rd, struct mapped_read_location* loc );
+add_location_to_mapped_read( mapped_read_location* loc,
+                             mapped_read_t** rd );
+
+MPD_RD_ID_T
+get_read_id_from_mapped_read( mapped_read_t* rd );
 
 void
-reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd );
-                       
-void
-fprintf_mapped_read( FILE* fp, struct mapped_read_t* r );
+fprintf_mapped_read( FILE* fp, mapped_read_t* r );
 
 void
-build_mapped_read_from_candidate_mappings( 
-        struct mapped_read_t** mpd_rd,
-        candidate_mappings* mappings, 
-        MPD_RD_ID_T read_id
+advance_pointer_to_start_of_next_joined_candidate_mappings(
+        candidate_mapping*** current_mapping,
+        int current_set_index,
+        int num_sets );
+
+void
+join_candidate_mappings( candidate_mappings* mappings, 
+                         candidate_mapping*** joined_mappings, 
+                         float** penalties,
+                         int* joined_mappings_len );
+
+void
+filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
+                                  float** penalties,
+                                  int* joined_mappings_len,
+                                  
+                                  struct genome_data* genome,
+                                  struct read* r,
+                                  struct error_model_t* error_model,
+                                  struct fragment_length_dist_t* fl_dist,
+
+                                  struct mapping_params* mapping_params
     );
 
+mapped_read_t*
+build_mapped_read_from_joined_candidate_mappings(
+        MPD_RD_ID_T read_id,
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len,
+        float* penalties );
 
-int 
-write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  );
+size_t 
+write_mapped_read_to_file( mapped_read_t* read, FILE* of  );
 
+/***** mapped read index *****/
+
+typedef struct {
+    mapped_read_t* rd;
+    MPD_RD_ID_T read_id;
+    MPD_RD_ID_T num_mappings;
+    mapped_read_location** mappings;
+} mapped_read_index;
+
+void
+init_mapped_read_index( mapped_read_index** index,
+                        mapped_read_t* rd );
+
+void
+free_mapped_read_index( mapped_read_index* index );
 
 /*
  *  END Mapped Reads
@@ -319,12 +441,23 @@ struct mapped_reads_db_index_t {
 };
 
 struct mapped_reads_db {
-    FILE* fp;
+
+    /* A read may map, be considered unmappable, or be considered mappable but
+     * fail to map (nonmapping). These files store data about each type of
+     * read. */
+    FILE* mapped_fp;
+    MPD_RD_ID_T num_mapped_reads;
+    pthread_mutex_t* mapped_mutex;
+
+    FILE* unmappable_fp;
+    MPD_RD_ID_T num_unmappable_reads;
+    pthread_mutex_t* unmappable_mutex;
+
+    FILE* nonmapping_fp;
+    MPD_RD_ID_T num_nonmapping_reads;
+    pthread_mutex_t* nonmapping_mutex;
 
     char mode; // 'r' or 'w'
-    MPD_RD_ID_T num_mapped_reads;
-
-    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
@@ -343,12 +476,6 @@ struct mapped_reads_db {
     MPD_RD_ID_T current_read;
 };
 
-typedef struct {
-    /* the current position of the fp */
-    long int fpos;
-    struct mapped_reads_db* rdb;
-} mapped_reads_db_cursor;
-
 void
 open_mapped_reads_db_for_reading( struct mapped_reads_db** rdb, char* fname );
 
@@ -356,19 +483,22 @@ void
 open_mapped_reads_db_for_writing( struct mapped_reads_db** rdb, char* fname );
 
 void
-build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp );
-
-void
-build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename );
-
-void
 close_mapped_reads_db( struct mapped_reads_db** rdb );
 
 void
 add_read_to_mapped_reads_db( 
     struct mapped_reads_db* rdb,
-    struct mapped_read_t* rd
-);
+    mapped_read_t* rd );
+
+void
+add_unmappable_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db );
+
+void
+add_nonmapping_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db );
 
 void
 rewind_mapped_reads_db( struct mapped_reads_db* rdb );
@@ -377,12 +507,17 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb );
 int
 get_next_read_from_mapped_reads_db( 
     struct mapped_reads_db* rdb, 
-    struct mapped_read_t** rd
+    mapped_read_t** rd
 );
 
 void
-reset_all_read_cond_probs( 
-    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db );
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
+                       mapped_read_t* rd,
+                       struct mapped_reads_db* mpd_rds_db );
+                       
+void
+reset_all_read_cond_probs( struct mapped_reads_db* rdb,
+                           struct cond_prbs_db_t* cond_prbs_db );
 
 /*
  * this requires code from iterative mapping to write out the

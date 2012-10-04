@@ -23,8 +23,8 @@ realloc_CE( void* ptr, size_t size )
 }
 
 int
-cmp_genome_location( const GENOME_LOC_TYPE* loc1, 
-                     const GENOME_LOC_TYPE* loc2 )
+cmp_genome_location( const INDEX_LOC_TYPE* loc1, 
+                     const INDEX_LOC_TYPE* loc2 )
 {
     /* first test the chromosome identifier */
     if( loc1->chr > loc2->chr )
@@ -74,7 +74,7 @@ sort_pseudo_location( struct pseudo_location_t* loc )
 {
     qsort( loc->locs, 
            loc->num, 
-           sizeof(GENOME_LOC_TYPE), 
+           sizeof(INDEX_LOC_TYPE), 
            (int(*)( const void*, const void* ))cmp_genome_location 
     );
 
@@ -84,23 +84,23 @@ sort_pseudo_location( struct pseudo_location_t* loc )
 void
 add_diploid_loc_to_pseudo_location(
         struct pseudo_location_t* ps_loc,
-        const GENOME_LOC_TYPE* const loc,
+        const INDEX_LOC_TYPE* const loc,
         struct genome_data* genome
     )
 {
     ps_loc->num += 2;
-    ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
+    ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(INDEX_LOC_TYPE) );
 
     /* add the paternal loc. It is identical to the shared diploid
      * location, except only the is_paternal flag is on */
-    GENOME_LOC_TYPE tmp_paternal = *loc;
+    INDEX_LOC_TYPE tmp_paternal = *loc;
     tmp_paternal.is_paternal = 1;
     tmp_paternal.is_maternal = 0;
     ps_loc->locs[ps_loc->num-2] = tmp_paternal;
 
     /* add the maternal loc. Lookup the maternal chromosome and location,
      * and set the diploid flags */
-    GENOME_LOC_TYPE tmp_maternal = *loc;
+    INDEX_LOC_TYPE tmp_maternal = *loc;
     tmp_maternal.is_paternal = 0;
     tmp_maternal.is_maternal = 1;
 
@@ -118,7 +118,7 @@ add_diploid_loc_to_pseudo_location(
 void
 add_new_loc_to_pseudo_location( 
         struct pseudo_location_t* ps_loc,
-        const GENOME_LOC_TYPE* const loc,
+        const INDEX_LOC_TYPE* const loc,
         struct genome_data* genome )
 {
     /* if loc is a shared diploid location, expand it here */
@@ -127,7 +127,7 @@ add_new_loc_to_pseudo_location(
         add_diploid_loc_to_pseudo_location( ps_loc, loc, genome );
     } else {
         ps_loc->num += 1;
-        ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
+        ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(INDEX_LOC_TYPE) );
         ps_loc->locs[ps_loc->num-1] = *loc;
     }
 };
@@ -135,10 +135,10 @@ add_new_loc_to_pseudo_location(
 void
 add_loc_to_pseudo_location( 
         struct pseudo_location_t* ps_loc,
-        const GENOME_LOC_TYPE* const loc )
+        const INDEX_LOC_TYPE* const loc )
 {
     ps_loc->num += 1;
-    ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(GENOME_LOC_TYPE) );
+    ps_loc->locs = realloc_CE( ps_loc->locs, ps_loc->num*sizeof(INDEX_LOC_TYPE) );
     ps_loc->locs[ps_loc->num-1] = *loc;
 };
 
@@ -195,9 +195,9 @@ write_pseudo_locations_to_file( struct pseudo_locations_t* ps_locs, FILE* of )
         assert( rv == 1 );
         size_written += sizeof( int );
         
-        rv = fwrite( ps_locs->locs[i].locs, sizeof(GENOME_LOC_TYPE), ps_locs->locs[i].num, of );
+        rv = fwrite( ps_locs->locs[i].locs, sizeof(INDEX_LOC_TYPE), ps_locs->locs[i].num, of );
         assert( rv == ps_locs->locs[i].num );
-        size_written += ps_locs->locs[i].num*sizeof( GENOME_LOC_TYPE );
+        size_written += ps_locs->locs[i].num*sizeof( INDEX_LOC_TYPE );
     }
 
     /* seek back to the beggining and update the size written */
@@ -235,16 +235,16 @@ load_pseudo_locations_from_mmapped_data(
         (*ps_locs)->locs[i].num = *( (int*) data );
         data += sizeof(int);
 
-        // allocate memory for GENOME_LOC_TYPEs
-        (*ps_locs)->locs[i].locs = malloc( (*ps_locs)->locs[i].num * sizeof( GENOME_LOC_TYPE ) );
-        // copy GENOME_LOC_TYPEs
+        // allocate memory for INDEX_LOC_TYPEs
+        (*ps_locs)->locs[i].locs = malloc( (*ps_locs)->locs[i].num * sizeof( INDEX_LOC_TYPE ) );
+        // copy INDEX_LOC_TYPEs
         for( j = 0; j < (*ps_locs)->locs[i].num; j++ )
         {
-            memcpy( &((*ps_locs)->locs[i].locs[j]), data, sizeof( GENOME_LOC_TYPE ) );
-            data += sizeof( GENOME_LOC_TYPE );
+            memcpy( &((*ps_locs)->locs[i].locs[j]), data, sizeof( INDEX_LOC_TYPE ) );
+            data += sizeof( INDEX_LOC_TYPE );
         }
     }
-
+    
     return;
 }
 
@@ -317,8 +317,8 @@ load_pseudo_locations_from_text( FILE* fp, struct pseudo_locations_t** ps_locs )
                 exit( 1 );
             }
             
-            GENOME_LOC_TYPE loc;
-            memset( &loc, 0, sizeof( GENOME_LOC_TYPE ) );
+            INDEX_LOC_TYPE loc;
+            memset( &loc, 0, sizeof( INDEX_LOC_TYPE ) );
             loc.chr = chr;
             loc.loc = pos;
             add_loc_to_pseudo_location( &ps_loc, &loc );

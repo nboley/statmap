@@ -31,6 +31,9 @@ free_fl_dist( struct fragment_length_dist_t** fl_dist );
 void
 init_fl_dist_from_file( struct fragment_length_dist_t** fl_dist, FILE* fp );
 
+void
+build_fl_dist_from_filename( struct fragment_length_dist_t** fl_dist, char* filename );
+
 /* FWD declaration */
 struct mapped_reads_db;
 
@@ -42,6 +45,9 @@ build_chipseq_bs_density( struct fragment_length_dist_t* fl_dist );
 
 float
 get_fl_prb( struct fragment_length_dist_t* fl_dist, int fl );
+
+float
+get_fl_log_prb( struct fragment_length_dist_t* fl_dist, int fl );
 
 void
 fprint_fl_dist( FILE* fp, struct fragment_length_dist_t* fl_dist );

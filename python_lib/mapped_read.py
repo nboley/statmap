@@ -38,15 +38,38 @@ struct fragment_length_dist_t {
 
 MPD_RD_ID_T = c_int
 
+class c_mapped_reads_db_index_t(Structure):
+    """
+struct mapped_reads_db_index_t {
+    MPD_RD_ID_T read_id;
+    char* ptr;
+};
+    """
+    _fields_ = [
+        ("read_id", MPD_RD_ID_T),
+        ("ptr", c_char_p),
+    ]
+
 class c_mapped_reads_db_t(Structure):
     """
 struct mapped_reads_db {
-    FILE* fp;
+
+    /* A read may map, be considered unmappable, or be considered mappable but
+     * fail to map (nonmapping). These files store data about each type of
+     * read. */
+    FILE* mapped_fp;
+    MPD_RD_ID_T num_mapped_reads;
+    pthread_mutex_t* mapped_mutex;
+
+    FILE* unmappable_fp;
+    MPD_RD_ID_T num_unmappable_reads;
+    pthread_mutex_t* unmappable_mutex;
+
+    FILE* nonmapping_fp;
+    MPD_RD_ID_T num_nonmapping_reads;
+    pthread_mutex_t* nonmapping_mutex;
 
     char mode; // 'r' or 'w'
-    MPD_RD_ID_T num_mapped_reads;
-
-    pthread_mutex_t* mutex;
 
     /* mmap data */
     /* pointer to the mmapped data and its size in bytes */
@@ -55,8 +78,7 @@ struct mapped_reads_db {
     
     /* mmap index */
     struct mapped_reads_db_index_t* index;
-    // MPD_RD_ID_T num_indexed_reads;
-
+    
     /* store the number of times that each read has been
        iterated over, and found to be below the update threshold */
     char* num_succ_iterations;
@@ -67,17 +89,24 @@ struct mapped_reads_db {
 };
     """
     _fields_ = [
-        ("fp", c_void_p), # unused
+        ("mapped_fp", c_void_p),
+        ("num_mapped_reads", MPD_RD_ID_T ),
+        ("mapped_mutex", c_void_p),
+
+        ("unmappable_fp", c_void_p),
+        ("num_unmappable_reads", MPD_RD_ID_T ),
+        ("unmappable_mutex", c_void_p),
+
+        ("nonmapping_fp", c_void_p),
+        ("num_nonmapping_reads", MPD_RD_ID_T ),
+        ("nonmapping_mutex", c_void_p),
 
         ("mode", c_char),
-        ("num_mapped_reads", MPD_RD_ID_T),
-
-        ("access_lock", c_void_p), # unused (will this work?)
 
         ("mmapped_data", c_char_p),
         ("mmapped_data_size", c_size_t),
 
-        ("index", c_void_p),
+        ("index", POINTER(c_mapped_reads_db_index_t)),
         
         ("num_succ_iterations", c_char_p),
 
@@ -85,6 +114,8 @@ struct mapped_reads_db {
 
         ("current_read", MPD_RD_ID_T),
     ]
+
+ML_PRB_TYPE = c_float
 
 class c_cond_prbs_db_t(Structure):
     """
@@ -95,13 +126,9 @@ struct cond_prbs_db_t {
     MPD_RD_ID_T max_rd_id;
 };
     """
-    # note - as of Thu May 10 17:04:57 PDT 2012,
-    # ML_PRB_TYPE is float
-    # MPD_RD_ID_T is unsigned int
-    # If either of these changes, you will need to update definitions here
     _fields_ = [
-        ("cond_read_prbs", POINTER(POINTER(c_float))),
-        ("max_rd_id", c_uint),
+        ("cond_read_prbs", POINTER(POINTER(ML_PRB_TYPE))),
+        ("max_rd_id", MPD_RD_ID_T),
     ]
 
 def open_mapped_reads_db_for_reading( fname ):
@@ -117,9 +144,6 @@ def open_mapped_reads_db_for_writing( fname ):
             byref(c_mpd_rd_db_p), c_char_p(fname) )
     c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
     return c_mpd_rd_db_p
-
-def open_mapped_reads_db_for_writing( fname ):
-    c_mpd_rd
 
 def build_fl_dist_from_filename( mpd_rd_db_p, filename ):
     statmap_o.build_fl_dist_from_filename( mpd_rd_db_p, filename )
@@ -145,9 +169,7 @@ def test():
     '''
     Test the functions in this file
     '''
-    mpd_rd_db_p = open_mapped_reads_db( sys.argv[1] )
-    mmap_mapped_reads_db( mpd_rd_db_p )
-    index_mapped_reads_db( mpd_rd_db_p )
+    mpd_rd_db_p = open_mapped_reads_db_for_reading( sys.argv[1] )
     cp_db_p = init_cond_prbs_db_from_mpd_rdb( mpd_rd_db_p )
     reset_all_read_cond_probs( mpd_rd_db_p, cp_db_p )
 

@@ -59,10 +59,10 @@ struct index_t {
     """
     _fields_ = [
         ("index", c_void_p),
-        ("index_type", c_uint),
+        ("index_type", ENUM_TYPE),
         ("seq_length", c_int),
 
-        ("ps_locs", c_void_p), # unused
+        ("ps_locs", c_void_p),
 
         ("diploid_maps", POINTER(c_diploid_maps_t)),
     ]
@@ -73,9 +73,6 @@ struct genome_data {
     /* The index for this genome */
     struct index_t* index;
 
-    /* the pseudo locations info */
-    struct pseudo_locations_t* ps_locs;
-    
     /* The number of chromosomes */
     int num_chrs;
     /* The chromosome names - indexed by their keys */
@@ -93,15 +90,13 @@ struct genome_data {
     _fields_ = [
         ("index", POINTER(c_index_t)),
 
-        ("ps_locs", c_void_p), # unused
-
         ("num_chrs", c_int),
         ("chr_names", POINTER(c_char_p)),
         ("chrs", POINTER(c_char_p)),
         ("chr_lens", POINTER(c_int)),
-        ("chr_sources", POINTER(c_uint)), # enum CHR_SOURCE
+        ("chr_sources", POINTER(ENUM_TYPE)), # enum CHR_SOURCE
 
-        ("is_mmapped", c_uint), # enum bool
+        ("is_mmapped", ENUM_TYPE), # enum bool
     ]
 
 ### Functions ###

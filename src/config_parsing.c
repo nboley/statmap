@@ -25,6 +25,7 @@
 #include "rawread.h"
 #include "quality.h"
 #include "statmap.h"
+#include "error_correction.h"
 #include "util.h"
 
 /**** Handle different sources of reads ****/
@@ -123,45 +124,42 @@ guess_input_file_type( struct args_t* args )
     } else {
         // If the max quality is 104 it's a bit tougher.
         // because it can be either the new or old illumina format
-        if( max_qual > 74 ) {
-            if( max_qual < 104 )
-            {
-                /* If the maximum quality is less than 104 but greater than 73, it's probably the
-                   plus 64 version, but we can't be sure. However, assume that it is and print a 
-                   warning. 
-                */
-                fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
-                fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
-            }
-            /*
-             * If the shifted min quality is less than 0, then the
-             * format is almost certainly the log odds solexa version
-             */
-            if( min_qual < 64 )
-            {
-                input_file_type = SOLEXA_LOG_ODDS_FQ;
-            }
-            // If the min is less than 69, it is still most likely
-            // a log odds version, but we emit a warning anyways.
-            else if ( min_qual < 66 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = ILLUMINA_v13_FQ;
-            } else if ( min_qual < 70 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = ILLUMINA_v15_FQ;
-            } else if ( min_qual < 90 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = MARKS_SOLEXA;
-            } else if ( min_qual == 104 ) {
-                fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
-                input_file_type = TEST_SUITE_FORMAT;
-            } else {
-                fprintf( stderr, "ERROR       :  Could not automatically determine " );
-                fprintf( stderr, "input format. ( max=%i, min=%i  )\n",
-                         max_qual, min_qual );
-                exit( -1 );
-            }
-        }
+	if( max_qual < 104 )
+	{
+	    /* If the maximum quality is less than 104 but greater than 73, it's probably the
+	       plus 64 version, but we can't be sure. However, assume that it is and print a 
+	       warning. 
+	    */
+	    fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
+	    fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
+	}
+	/*
+	 * If the shifted min quality is less than 0, then the
+	 * format is almost certainly the log odds solexa version
+	 */
+	if( min_qual < 64 )
+	{
+	    input_file_type = SOLEXA_LOG_ODDS_FQ;
+	}
+	// If the min is less than 69, it is still most likely
+	// a log odds version, but we emit a warning anyways.
+	else if ( min_qual < 66 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = ILLUMINA_v13_FQ;
+	} else if ( min_qual < 70 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = ILLUMINA_v15_FQ;
+	} else if ( min_qual < 90 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = MARKS_SOLEXA;
+	} else if ( min_qual == 104 ) {
+	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    input_file_type = TEST_SUITE_FORMAT;
+	} else {
+	    fprintf( stderr, "ERROR       :  Could not automatically determine input format. ( max=%i, min=%i  )\n",
+		     max_qual, min_qual );
+	    exit( -1 );
+	}
     }
 
     set_global_quality_parameters_from_input_file_type( input_file_type );
@@ -188,18 +186,15 @@ set_input_file_type( char* arg, struct args_t* args )
             args->input_file_type = SOLEXA_v14_FQ;
             break;
         case 5:
-            args->input_file_type = ILLUMINA_v15_FQ;
-            break;
-        case 6:
             args->input_file_type = SOLEXA_LOG_ODDS_FQ;
             break;
-        case 7:
+        case 6:
             args->input_file_type = TEST_SUITE_FORMAT;
             break;
-        case 8:
+        case 7:
             args->input_file_type = MARKS_SOLEXA;
             break;
-        case 9:
+        case 8:
             args->input_file_type = ILLUMINA_v18_FQ;
             break;
         default:
@@ -262,7 +257,7 @@ static struct argp_option options[] =
     {"max-penalty-spread", 'm', "SPREAD", 0,
      "Upper bound of the difference of probabilities between the top matching sequence and the sequence of interest (in log10 probaiblity space)", 0},
     {"assay", 'a', "ASSAY", 0,
-     "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq and 'a' for CAGE", 0},
+     "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq or 'a' for CAGE. 'r' for stranded RNA-Seq is not implemented yet", 0},
     {"num-samples", 'n', "SAMPLES", 0,
      "In iterative mapping, number of samples to take from the mapping posterior", 0},
     {"threads", 't', "THREADS", 0,
@@ -279,9 +274,13 @@ static struct argp_option options[] =
      "(not implemented yet)", 0 },
     {"input-file-type", 'i', "TYPE", 0,
      "Type of sequencing platform used to generate the input reads. Valid "
-     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: SOLEXA_v14_FQ, 4: "
-     "ILLUMINA_v15_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
+     "options are 1: SANGER_FQ, 2: ILLUMINA_v13_FQ, 3: ILLUMINA_v15_FQ, 4: "
+     "SOLEXA_v14_FQ, 5: SOLEXA_LOG_ODDS_FQ, 6: TEST_SUITE_FORMAT, 7: "
      "MARKS_SOLEXA, 8: ILLUMINA_v18_FQ", 0 },
+    {"paired-end-reads-map-to-opposite-strands", 'P', NULL, 0,
+     "(not implemented yet)", 0 },
+    {"soft-clip-length", 'S', "LEN", 0,
+     "Number of basepair's to soft clip from the start of each read (default 0)", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -341,11 +340,18 @@ parse_opt( int key, char *arg, struct argp_state *state )
                 case 'i':
                     args->assay_type = CHIP_SEQ;
                     break;
+                case 'r':
+                    args->assay_type = RNA_SEQ;
+                    break;
                 default:
                     argp_failure( state, 1, 0, 
                             "FATAL       :  Unrecognized assay type: '%s'",
                             arg );
             }
+
+            /* Set the global assay type variable */
+            _assay_type = args->assay_type;
+
             break;
         case 'f':
             args->frag_len_fname = arg;
@@ -363,10 +369,10 @@ parse_opt( int key, char *arg, struct argp_state *state )
             switch( arg[0] )
             {
                 case 'e':
-                    args->search_type = ESTIMATE_ERROR_MODEL;
+                    args->error_model_type = ESTIMATED;
                     break;
                 case 'm':
-                    args->search_type = MISMATCHES;
+                    args->error_model_type = MISMATCH;
                     break;
                 default:
                     argp_failure( state, 1, 0,
@@ -376,8 +382,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
             break;
         case 'F':
             argp_failure( state, 1, 0,
-                    "FATAL       :  -F ( --is-full-fragment ) is not "
-                    "implemented yet." );
+                    "FATAL       :  -F ( --is-full-fragment ) is not implemented yet." );
             break;
         case 'i':
         {
@@ -391,6 +396,14 @@ parse_opt( int key, char *arg, struct argp_state *state )
             }
             break;
         }
+        case 'P':
+            argp_failure( state, 1, 0,
+                    "FATAL       :  -P ( --paired-end-reads-map-to-opposite-strands ) is not implemented yet." );
+            break;
+        case 'S':
+            args->softclip_len = atoi( arg );
+            softclip_len = args->softclip_len;
+            break;
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
@@ -448,7 +461,10 @@ parse_arguments( int argc, char** argv )
 
     args.sam_output_fname = NULL;
 
-    args.min_match_penalty = -1;
+    /* Since the min_match_penalty is a negative number, we use 1 as the
+     * "unset" value because -1 is a valid input */
+    args.min_match_penalty = 1;
+
     args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
@@ -456,9 +472,12 @@ parse_arguments( int argc, char** argv )
 
     args.num_threads = -1;
 
-    args.search_type = UNKNOWN;
+    args.error_model_type = UNKNOWN;
     args.input_file_type = UNKNOWN;
     args.assay_type = UNKNOWN;
+
+    args.max_reference_insert_len = -1;
+    args.softclip_len = 0;
 
     /* parse arguments with argp */
     argp_parse( &argp, argc, argv, 0, 0, &args );
@@ -554,7 +573,7 @@ parse_arguments( int argc, char** argv )
 
     /* Set defaults for numeric parameters */
 
-    if( args.min_match_penalty == -1 )
+    if( args.min_match_penalty == 1 )
     {
         args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
         fprintf(stderr,
@@ -650,10 +669,9 @@ parse_arguments( int argc, char** argv )
         }
     }
 
-    if( args.search_type == UNKNOWN )
+    if( args.error_model_type == UNKNOWN )
     {
-        /* set default to using the observed error rates */
-        args.search_type = ESTIMATE_ERROR_MODEL;
+        args.error_model_type = ESTIMATED;
     }
 
     /********* END CHECK REQUIRED ARGUMENTS ***********************************/
@@ -756,9 +774,20 @@ parse_arguments( int argc, char** argv )
                 args.min_num_hq_bps);
     }
 
+    /* Set the maximum allowed reference gap between indexable subtempaltes */
+    if( args.assay_type == RNA_SEQ )
+    {
+        /* For gapped assays, set this to the default in config.h */
+        args.max_reference_insert_len = REFERENCE_INSERT_LENGTH_MAX;
+    } else {
+        /* For ungapped assays, this should always be zero. */
+        args.max_reference_insert_len = 0;
+    }
+
     /* Set the global variables */
     num_threads = args.num_threads;
     min_num_hq_bps = args.min_num_hq_bps;
+    max_reference_insert_len = args.max_reference_insert_len;
 
     /* 
      * Dont allow penalty spreads greater than the min match penalty - 
@@ -828,10 +857,13 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
     
     fprintf( arg_fp, "num_threads:\t%i\n", args->num_threads );
 
-    fprintf( arg_fp, "search_type:\t%i\n", args->search_type );
+    fprintf( arg_fp, "error_model_type:\t%i\n", args->error_model_type );
 
     fprintf( arg_fp, "input_file_type:\t%i\n", args->input_file_type );
     fprintf( arg_fp, "assay_type:\t%i\n", args->assay_type );
+
+    fprintf( arg_fp, "max_reference_insert_len:\t%i\n",
+             args->max_reference_insert_len );
 
     return;
 }
@@ -871,6 +903,12 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 {
     *args = malloc( sizeof(struct args_t)  );
     FILE* arg_fp = fopen( fname, "r" );
+
+    if( arg_fp == NULL )
+    {
+        fprintf( stderr, "ERROR       :  Could not load config file '%s'\n", fname );
+        exit( -1 );
+    }
 
     fscanf_name_or_null( 
             arg_fp, "genome_fname", &((*args)->genome_fname) );
@@ -916,13 +954,16 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     fscanf( arg_fp, "num_threads:\t%i\n", 
             &((*args)->num_threads) );
 
-    fscanf( arg_fp, "search_type:\t%u\n",
-            &((*args)->search_type) );
+    fscanf( arg_fp, "error_model_type:\t%u\n",
+            &((*args)->error_model_type) );
 
     fscanf( arg_fp, "input_file_type:\t%u\n", 
             &( (*args)->input_file_type) );
     fscanf( arg_fp, "assay_type:\t%u\n", 
             &( (*args)->assay_type) );
+
+    fscanf( arg_fp, "max_reference_insert_len:\t%i\n",
+            &( (*args)->max_reference_insert_len ) );
 
     fclose( arg_fp  );
 

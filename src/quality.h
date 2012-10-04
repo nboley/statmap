@@ -34,7 +34,7 @@ error_prb(
 );
 
 /* 
-   the probability of observing obs given that the ref basepair is unobservable. 
+   the probability of observing obs given that the ref basepair is unobservable.
    this is just log10( 0.25 ) - the N gives us 0 information. 
 */
 static const double N_penalty = -0.60206;
@@ -52,8 +52,7 @@ struct penalty_t {
  */
 struct penalty_array_t {
     /* length of read */
-    int len;
-
+    int length;
     /* array of penalty structs, for each position in the read */
     struct penalty_t* array;
 };
@@ -67,9 +66,9 @@ free_penalty_array( struct penalty_array_t* pa );
 void
 build_penalty_array(
         struct penalty_array_t* pa,
+        int length,
         struct error_model_t* error_model,
-        char* error_str
-    );
+        char* error_str );
 
 void
 build_reverse_penalty_array(
@@ -117,9 +116,9 @@ float
 recheck_penalty(
         char* reference,
         char* observed,
-        const int seq_length,
-
-        struct penalty_array_t* pa
+        /* Pointer into an array of penalty_t */
+        struct penalty_t* pa,
+        const int seq_length
     );
 
 /* Compute the penalty form LETTER_TYPE sequences */

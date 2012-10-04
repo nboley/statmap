@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h> // memcpy()
 
 #include "mapped_location.h"
 #include "diploid_map_data.h"
@@ -24,10 +25,10 @@ cmp_mapped_locations_by_location( const mapped_location* loc1,
     if( loc1->strnd != loc2->strnd )
         return loc1->strnd - loc2->strnd;
     
-    if( loc1->location.chr != loc2->location.chr )
-        return loc1->location.chr - loc2->location.chr;
+    if( loc1->chr != loc2->chr )
+        return loc1->chr - loc2->chr;
     
-    return loc1->location.loc - loc2->location.loc;
+    return loc1->loc - loc2->loc;
 }
 
 int
@@ -65,9 +66,6 @@ sort_mapped_locations_by_penalty( mapped_locations* results )
   );
 }
 
-
-
-
 void
 init_mapped_locations(
         mapped_locations** results,
@@ -100,7 +98,8 @@ free_mapped_locations( mapped_locations* results )
 
 void
 add_new_mapped_location( mapped_locations* results, 
-                         GENOME_LOC_TYPE location, 
+                         unsigned int chr,
+                         unsigned int loc,
                          enum STRAND strnd,
                          float penalty )
 {
@@ -127,17 +126,21 @@ add_new_mapped_location( mapped_locations* results,
     }
 
     /* This should be optimized out */
-    mapped_location* loc = results->locations + results->length;
+    mapped_location* new_loc = results->locations + results->length;
 
     /* set the location */
-    loc->location = location;
-    assert( loc->location.loc >= 0 );
+    new_loc->chr = chr;
+    new_loc->loc = loc;
+    assert( new_loc->loc >= 0 );
     
     /* set the read strand */
-    loc->strnd = strnd;
+    new_loc->strnd = strnd;
 
     /* set the penalty */
-    loc->penalty = penalty;
+    new_loc->penalty = penalty;
+
+    /* set the free_with_match parameter - false unless explicitly set */
+    new_loc->free_with_match = false;
     
     /* add the new results to the end of the results set */
     results->length++;
@@ -153,78 +156,10 @@ add_mapped_location(
 )
 {
     add_new_mapped_location( locs,
-                             loc->location,
+                             loc->chr,
+                             loc->loc,
                              loc->strnd,
-                             loc->penalty
-        );
-}
-
-void
-expand_diploid_mapped_location(
-        mapped_location* loc,
-        mapped_locations* locs,
-        struct genome_data* genome
-    )
-{
-    assert( loc->location.is_paternal && loc->location.is_maternal );
-    /* This should only be called on real locations */
-    assert( loc->location.chr != PSEUDO_LOC_CHR_INDEX );
-
-    /* build the paternal location */
-    mapped_location paternal;
-    copy_mapped_location( &paternal, loc );
-    
-    /* Set the diploid flags */
-    paternal.location.is_paternal = 1;
-    paternal.location.is_maternal = 0;
-
-    /* Since the shared diploid location uses the chr and loc from the paternal
-     * copy, we don't need to change anything else */
-    add_mapped_location( &paternal, locs );
-
-    /* build the maternal location */
-    mapped_location maternal;
-    copy_mapped_location( &maternal, loc );
-    maternal.location.is_paternal = 0;
-    maternal.location.is_maternal = 1;
-    /* lookup the maternal location from the paternal location information
-     * used on the shared diploid location */
-
-    int paternal_chr = loc->location.chr;
-    int paternal_loc = loc->location.loc;
-
-    int maternal_chr = -1;
-    int maternal_loc = -1;
-    build_maternal_loc_from_paternal_loc(
-            &maternal_chr, &maternal_loc,
-            paternal_chr, paternal_loc,
-            genome
-        );
-
-    /* finished building the maternal mapped_location */
-    maternal.location.chr = maternal_chr;
-    maternal.location.loc = maternal_loc;
-    add_mapped_location( &maternal, locs );
-
-    return;
-}
-
-void
-add_and_expand_mapped_location(
-    mapped_location* loc,
-    mapped_locations* locs,
-    struct genome_data* genome
-)
-{
-    /* if this is a shared diploid location, expand it into the paternal and
-     * maternal copies */
-    if( loc->location.is_paternal && loc->location.is_maternal )
-    {
-        assert( genome != NULL );
-        expand_diploid_mapped_location( loc, locs, genome );
-    } else {
-        add_mapped_location( loc, locs );
-    }
+                             loc->penalty );
 }
 
 void
@@ -235,16 +170,85 @@ copy_mapped_location( mapped_location* dest, mapped_location* src )
 }
 
 void
+expand_diploid_index_location(
+        INDEX_LOC_TYPE* iloc,
+        mapped_locations* results,
+        enum STRAND strnd,
+        float penalty,
+        struct genome_data* genome
+    )
+{
+    /* This should only be called on a shared diploid location */
+    assert( iloc->is_paternal && iloc->is_maternal );
+    /* This should only be called on real locations */
+    // TODO ? really? or should we just skip them for now?
+    assert( iloc->chr != PSEUDO_LOC_CHR_INDEX );
+
+    /* add the paternal location.
+     * the shared diploid location uses the paternal chr and loc, so we don't
+     * need to do anything extra here */
+    add_new_mapped_location( results,
+                             iloc->chr,
+                             iloc->loc,
+                             strnd,
+                             penalty );
+
+    /* build the maternal location */
+    /* lookup the maternal location from the paternal location information
+     * stored on the shared diploid location */
+    int paternal_chr = iloc->chr;
+    int paternal_loc = iloc->loc;
+
+    int maternal_chr = -1;
+    int maternal_loc = -1;
+    build_maternal_loc_from_paternal_loc(
+            &maternal_chr, &maternal_loc,
+            paternal_chr, paternal_loc,
+            genome
+        );
+    assert( maternal_chr != -1 );
+    assert( maternal_loc != -1 );
+
+    add_new_mapped_location( results,
+                             maternal_chr,
+                             maternal_loc,
+                             strnd,
+                             penalty );
+    return;
+}
+
+void
+add_and_expand_location_from_index(
+        mapped_locations* results,
+        INDEX_LOC_TYPE* iloc,
+        enum STRAND strnd,
+        float penalty,
+        struct genome_data* genome
+    )
+{
+    if( iloc->is_paternal && iloc->is_maternal )
+    {
+        expand_diploid_index_location( iloc, results, strnd, penalty, genome );
+    } else {
+        add_new_mapped_location( results,
+                                 iloc->chr,
+                                 iloc->loc,
+                                 strnd,
+                                 penalty );
+    }
+}
+
+void
 print_mapped_locations( mapped_locations* results )
 {
     int i;
-    // printf("Num:\tPenalty\tLoc\n");
     
     for( i = 0; i < results->length; i++)
     {
-        printf("\t%i:%i\t%.6f\n", 
-               results->locations[i].location.chr,
-               results->locations[i].location.loc,
+        printf("\t%i:%i\t%d\t%.6f\n", 
+               results->locations[i].chr,
+               results->locations[i].loc,
+               results->locations[i].strnd,
                results->locations[i].penalty
         );
     }
@@ -257,47 +261,238 @@ print_mapped_locations( mapped_locations* results )
  *
  **************************************************************************/
 
+/***** ml_match *****/
 
-/*** Mapped locations container ***/
 void
-init_mapped_locations_container(
-        mapped_locations_container** mlc
-    )
+init_ml_match( struct ml_match** match, int match_len )
 {
-    *mlc = malloc( sizeof( mapped_locations_container ) );
+    *match = malloc( sizeof( struct ml_match ));
 
-    (*mlc)->container = NULL;
-    (*mlc)->length = 0;
+    /* Note - the length of the arrays will always be equal to the number of
+     * indexable subtemplates, since we must be able to match across all of the
+     * indexable subtemplates for a valid match. */
+    (*match)->len = match_len;
+
+    (*match)->locations = calloc( match_len, sizeof( mapped_location* ));
+    (*match)->subseq_lengths = calloc( match_len, sizeof( int ));
+    (*match)->subseq_offsets = calloc( match_len, sizeof( int ));
+
+    (*match)->cum_ref_gap = 0;
+    (*match)->cum_penalty = 0;
+
+    return;
+}
+
+struct ml_match*
+copy_ml_match( struct ml_match* match )
+{
+    /* Return a copy of match */
+    struct ml_match* match_copy;
+    init_ml_match( &match_copy, match->len );
+
+    /* copy the arrays */
+    memcpy( match_copy->locations, match->locations,
+            sizeof( mapped_location* )*match->len );
+    memcpy( match_copy->subseq_lengths, match->subseq_lengths,
+            sizeof( int )*match->len );
+    memcpy( match_copy->subseq_offsets, match->subseq_offsets,
+            sizeof( int )*match->len );
+
+    /* copy the cumulative reference gap */
+    match_copy->cum_ref_gap = match->cum_ref_gap;
+
+    /* copy the cumulative penalty */
+    match_copy->cum_penalty = match->cum_penalty;
+
+    return match_copy;
 }
 
 void
-free_mapped_locations_container(
-        mapped_locations_container* mlc
-    )
+free_ml_match( struct ml_match* match, enum bool free_locations )
 {
-    if( mlc == NULL ) return;
+    if( match == NULL ) return;
 
-    // free the mapped locations stored in this container
-    int i;
-    for( i = 0; i < mlc->length; i++ )
+    /* If any of the mapped locations were dynamically allocated (from a
+     * pseudo location, for example), free them here */
+    if( free_locations )
     {
-        free_mapped_locations( mlc->container[i] );
+        int i;
+        for( i = 0; i < match->len; i++ )
+        {
+            mapped_location* curr_loc = match->locations[i];
+            
+            if( curr_loc == NULL )
+                break;
+
+            if( curr_loc->free_with_match )
+                free( curr_loc );
+        }
     }
 
-    free( mlc->container );
+    free( match->locations );
+    free( match->subseq_lengths );
+    free( match->subseq_offsets );
 
-    free( mlc );
+    free( match );
+
+    return;
 }
 
 void
-add_mapped_locations_to_mapped_locations_container(
-        mapped_locations* ml,
-        mapped_locations_container* mlc
-    )
+add_location_to_ml_match(
+        mapped_location* location,
+        struct ml_match* match, 
+        int subseq_length,
+        int subseq_offset,
+        int location_index,
+        int cum_ref_gap )
 {
-    mlc->length += 1;
-    mlc->container = realloc( mlc->container,
-            sizeof( mapped_locations* ) * mlc->length );
+    assert( location_index < match->len );
 
-    mlc->container[ mlc->length-1 ] = ml;
+    match->locations[location_index] = location;
+    match->subseq_lengths[location_index] = subseq_length;
+    match->subseq_offsets[location_index] = subseq_offset;
+
+    match->cum_ref_gap = cum_ref_gap;
+
+    match->cum_penalty += location->penalty;
+
+    return;
+}
+
+enum bool
+ml_match_is_valid( struct ml_match* match )
+{
+    /* A match is valid if we have a mapped_location from each index probe */
+    enum bool is_valid = true;
+
+    int i;
+    for( i = 0; i < match->len; i++ )
+    {
+        if( match->locations[i] == NULL )
+        {
+            is_valid = false;
+            break;
+        }
+    }
+
+    return is_valid;
+}
+
+/***** ml_matches *****/
+
+void
+init_ml_matches( struct ml_matches** matches )
+{
+    *matches = malloc( sizeof( struct ml_matches ));
+
+    (*matches)->matches =
+        malloc( ML_MATCHES_GROWTH_FACTOR*sizeof(struct ml_match *) );
+    (*matches)->length = 0;
+    (*matches)->allocated_length = ML_MATCHES_GROWTH_FACTOR;
+
+    return;
+}
+
+void
+free_ml_matches( struct ml_matches* matches, enum bool free_locations )
+{
+    /* Free the individual ml_matches */
+    int i;
+    for( i = 0; i < matches->length; i++ )
+    {
+        free_ml_match( matches->matches[i], free_locations );
+    }
+
+    free( matches->matches );
+    free( matches );
+    return;
+}
+
+void
+copy_ml_match_into_matches(
+        struct ml_match* match,
+        struct ml_matches* matches )
+{
+    /* 
+     * test to see if there is enough allocated memory in results
+     * if there isn't then realloc
+     */
+    if( matches->length == matches->allocated_length )
+    {
+        matches->allocated_length *= ML_MATCHES_GROWTH_FACTOR;
+        matches->matches = realloc(
+                matches->matches,
+                matches->allocated_length*sizeof(struct ml_match*)
+            );
+
+        if( matches->matches == NULL )
+        {
+            fprintf( stderr, "FATAL       :  Failed realloc in add_ml_match\n");
+            assert(false);
+            exit(1);
+        }
+    }
+
+    /* copy the ml_match */
+    (matches->matches)[matches->length] = copy_ml_match( match );
+
+    /* Update the number of matches */
+    matches->length++;
+
+    return;
+}
+
+/***** ml_match_stack *****/
+
+void
+init_ml_match_stack(
+        struct ml_match_stack** stack )
+{
+    *stack = malloc( sizeof( struct ml_match_stack ));
+    (*stack)->top = -1; // empty
+    return;
+}
+
+void
+free_ml_match_stack(
+        struct ml_match_stack* stack )
+{
+    free( stack );
+    return;
+}
+
+enum bool
+ml_match_stack_is_empty(
+        struct ml_match_stack* stack )
+{
+    if( stack->top == -1 )
+        return true;
+
+    return false;
+}
+
+void
+ml_match_stack_push(
+        struct ml_match_stack* stack,
+        struct ml_match* match )
+{
+    /* Make sure we won't exceed the maximum size of the stack */
+    assert( (stack->top + 1) < MAX_ML_MATCH_STACK_LEN );
+
+    stack->top += 1;
+    stack->stack[stack->top] = match;
+
+    return;
+}
+
+struct ml_match*
+ml_match_stack_pop(
+        struct ml_match_stack* stack )
+{
+    /* Make sure we don't try to pop off an empty stack */
+    assert( !ml_match_stack_is_empty( stack ));
+
+    stack->top -= 1;
+    return stack->stack[stack->top + 1];
 }

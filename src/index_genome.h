@@ -8,9 +8,11 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "statmap.h"
 #include "genome.h"
 #include "sequences_node.h"
 #include "mapped_location.h"
+#include "error_correction.h"
 
 /* a hash to store chromosome name */
 char* chr_names[CHR_NUM_MAX+1];
@@ -223,7 +225,7 @@ find_child_index_in_static_node is done in add_sequence ( it's a simple hash )
 void 
 add_sequence( struct genome_data* genome,
               LETTER_TYPE* seq, const int seq_length,
-              GENOME_LOC_TYPE genome_loc );
+              INDEX_LOC_TYPE genome_loc );
 
 extern void
 add_junction_positions_from_chr_string( 
@@ -233,41 +235,14 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
-
-void 
-find_matches( void* node, NODE_TYPE node_type, int node_level, 
-              const int seq_length,
-              float curr_penalty, 
-              float min_match_penalty,
-              /* 
-               * the maximum spread between the highest penalty 
-               * match and any other valid match 
-               */
-              float max_penalty_spread,
-              mapped_locations* results,
-
-              /* fwd stranded data  */
-              LETTER_TYPE* fwd_seq, 
-              /* rev stranded data */
-              LETTER_TYPE* rev_seq, 
-
-              struct penalty_t* fwd_penalties,
-              struct penalty_t* rev_penalties,
-
-              /*
-                 we pass this flag all the way down to optimize the error data
-                 bootstrap by terminating early on multimappers
-               */
-              enum bool only_find_unique_sequences
-    );
-
 extern void
 find_matches_from_root(
         struct index_t* index,
 
-        float min_match_penalty,
-        float max_penalty_spread,
+        struct index_search_params* search_params,
         mapped_locations* results,
+
+        struct genome_data* genome,
 
         /* the length of the two reads ( below ) */
         const int read_len,
@@ -280,8 +255,7 @@ find_matches_from_root(
         struct penalty_t* fwd_penalties,
         struct penalty_t* rev_penalties,
 
-        enum bool only_find_unique_sequences
-    );
+        enum bool only_find_unique_sequences );
 
 size_t
 size_of_snode( );

@@ -20,8 +20,8 @@ GENOME_PATH = "/media/scratch/genomes/drosophila/Manuel_latest/genome.20.drosoph
 #GENOME_PATH = "/media/scratch/genomes/D.pseudoobscura/genome.20.D.pseudoobscura"
 
 # Performance configuration
-NUM_THREAD_PER_PROC = 7
-MAX_NUM_PROC = 4
+NUM_THREAD_PER_PROC = 4
+MAX_NUM_PROC = 7
 
 # value of Statmap -n parameter to use for iterative mapping
 NUM_STARTING_SAMPLES = 2
@@ -182,7 +182,7 @@ def main():
                 print proc.returncode, log_fp.name
         
         # empty out the finished processes
-        procs_to_remove = [ i for i, (proc, log_fp) in enumerate( running_procs )
+        procs_to_remove = [ i for i, (proc, log_fp) in enumerate(running_procs)
                             if proc.returncode != None  ]
         for proc_i in reversed(sorted( procs_to_remove )):
             running_procs[ proc_i ][1].close()

@@ -61,41 +61,25 @@ class StatmapOutput:
     Loads data structures into memory lazily. Defaults to only loading the
     genome - use load_ flags to load additional data structures.
     '''
-    def __init__(   self,
-                    output_directory,
-                    num_threads=0,
-                    load_mapped_reads=False,
-                    load_raw_reads=False,
-                    load_nc=False, ):
-
-        # change working directory to statmap output directory
-        try:
-            os.chdir( output_directory )
-        except IOError as e:
-            print "Could not change to directory : %s" % output_directory; raise
-
-        # load statmap run's configuration
-        self.config = load_config_from_file( CONFIG_FNAME )
-        
-        # set global variables in shared library
-        if num_threads < 1: # num_threads not set by caller
+    def _set_num_threads(self, num_threads):
+        if num_threads < 1: # num_threads not set by caller, uses default 0
             try:
                 # try to determine number of available threads from os
                 import multiprocessing
                 num_threads = multiprocessing.cpu_count()
-                # never set the number of threads to more than 8, by default */
-                if num_threads > 8: num_threads = 8
+                # never set the number of threads to more than 8
+                if num_threads > 8:
+                    num_threads = 8
             except NotImplementedError:
                 # if we can't determine the number of threads, set it to 1
                 num_threads = 1
             
+        # Set the number of threads used by the shared library code - allows us
+        # to specify the number of threads for C functions called by a utility
+        # to use
         statmap_o.set_num_threads( num_threads )
-        statmap_o.set_min_num_hq_bps(
-            self.config.contents.min_num_hq_bps ) # stored in config
 
-        # load genome
-        self.genome = load_genome_from_disk( GENOME_FNAME )
-
+    def _set_trace_update_fn(self):
         # set trace update function to use ( depends on assay type )
         if self.config.contents.assay_type == CAGE:
             self.trace_update_fn = \
@@ -104,37 +88,87 @@ class StatmapOutput:
             self.trace_update_fn = \
                 statmap_o.update_chipseq_trace_expectation_from_location
 
+    def _load_mapped_reads( self, load_nc ):
+        # load default mapped reads db
+        self.mpd_rdb = open_mapped_reads_db_for_reading(
+                MAPPED_READS_DB_FNAME )
+
+        # if the mapped reads db is empty, we can't do anything with it
+        if self.mpd_rdb.contents.num_mapped_reads == 0:
+            print >> sys.stderr, \
+                    "ERROR       :  Mapped reads db is empty (num_mapped_reads=%i)." \
+                    % ( self.mpd_rdb.contents.num_mapped_reads )
+            sys.exit(-1)
+
+        # load fl dist (if needed - depends on assay type)
+        if self.config.contents.assay_type == CHIP_SEQ:
+            build_fl_dist_from_filename( self.mpd_rdb, FL_DIST_FNAME )
+            build_chipseq_bs_density( self.mpd_rdb.contents.fl_dist )
+        
+        # load cond probs db
+        self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
+        reset_all_read_cond_probs( self.mpd_rdb, self.cond_prbs_db )
+        
+        if load_nc:
+            # load negative control reads
+            self.NC_mpd_rdb = open_mapped_reads_db_for_reading(
+                    MAPPED_NC_READS_DB_FNAME )
+
+            # if the mapped reads db is empty, we can't do anything with it
+            if self.NC_mpd_rdb.contents.num_mapped_reads == 0:
+                print >> sys.stderr, \
+                        "ERROR       :  Mapped reads db is empty (num_mapped_reads=%i)." \
+                        % ( self.NC_mpd_rdb.contents.num_mapped_reads )
+                sys.exit(-1)
+
+            # load the fragment length distribution estimate
+            build_fl_dist_from_filename( self.NC_mpd_rdb, FL_DIST_FNAME )
+            build_chipseq_bs_density( self.NC_mpd_rdb.contents.fl_dist )
+
+            self.NC_cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.NC_mpd_rdb )
+
+    def _load_rawreads(self, load_nc ):
+        # Note: if loading rawread db does not work, None is returned (NULL ptr)
+        self.rawread_db = populate_rawread_db( *RAWREADS_FNAMES )
+        if load_nc:
+            self.NC_rawread_db = populate_rawread_db( *NC_RAWREADS_FNAMES )
+
+    def __init__(   self,
+                    output_directory,
+                    num_threads=0,
+                    load_mapped_reads=False,
+                    load_raw_reads=False,
+                    load_nc=False, ):
+
+        # change working directory to Statmap output directory
+        try:
+            os.chdir( output_directory )
+        except IOError as e:
+            print "Could not change to directory : %s" % output_directory; raise
+
+        # load statmap run's configuration
+        self.config = load_config_from_file( CONFIG_FNAME )
+
+        # These values are saved in the configuration and should not be changed
+        statmap_o.set_min_num_hq_bps(
+            self.config.contents.min_num_hq_bps )
+        statmap_o.set_max_reference_insert_len(
+            self.config.contents.max_reference_insert_len )
+
+        self._set_num_threads( num_threads )
+
+        self._set_trace_update_fn()
+        
+        # load genome
+        self.genome = load_genome_from_disk( GENOME_FNAME )
+
         # load mapped reads
         if load_mapped_reads:
-            # load default mapped reads db
-            self.mpd_rdb = open_mapped_reads_db_for_reading(
-                    MAPPED_READS_DB_FNAME )
-
-            # load fl dist (if needed - depends on assay type)
-            if self.config.contents.assay_type == CHIP_SEQ:
-                build_fl_dist_from_filename( self.mpd_rdb, FL_DIST_FNAME )
-                build_chipseq_bs_density( self.mpd_rdb.contents.fl_dist )
-
-            # load cond probs db
-            self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
-
-            if load_nc:
-                # load negative control reads
-                self.NC_mpd_rdb = open_mapped_reads_db_for_reading(
-                        MAPPED_NC_READS_DB_FNAME )
-
-                # load the fragment length distribution estimate
-                build_fl_dist_from_filename( self.NC_mpd_rdb, FL_DIST_FNAME )
-                build_chipseq_bs_density( self.NC_mpd_rdb.contents.fl_dist )
-
-                self.NC_cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.NC_mpd_rdb )
+            self._load_mapped_reads( load_nc )
 
         # load the rawread db (if requested)
         if load_raw_reads:
-            # Note: if loading rawread db does not work, None is returned (NULL ptr)
-            self.rawread_db = populate_rawread_db( *RAWREADS_FNAMES )
-            if load_nc:
-                self.NC_rawread_db = populate_rawread_db( *NC_RAWREADS_FNAMES )
+            self._load_rawreads( load_nc )
 
 def test():
     """test code in this file"""
@@ -157,6 +191,7 @@ def test():
     print "==== GLOBALS ===="
     print "num_threads:", statmap_o.get_num_threads()
     print "min_num_hq_bps:", statmap_o.get_min_num_hq_bps()
+    print "max_reference_insert_len:", statmap_o.get_max_reference_insert_len()
 
     # did genome load properly?
     print "==== GENOME ===="

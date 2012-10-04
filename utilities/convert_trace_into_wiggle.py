@@ -5,7 +5,7 @@ import os
 
 # add python_lib to sys.path (at the front, since there's a trace module in 
 # the standard library )
-sys.path.insert(0, "../python_lib/" )
+sys.path.insert(0, os.path.join( os.path.dirname( __file__ ), "../python_lib/" ) )
 
 from trace import *
 from wiggle import *

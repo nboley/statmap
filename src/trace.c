@@ -334,10 +334,15 @@ close_traces( struct trace_t* traces )
                a warning so Im keeping it */
             free( (void*) traces->locks[i][j] );
         }
-        free( traces->chr_names[i] );
+        //free( traces->chr_names[i] );
         free( traces->track_names[i] );
         free( traces->traces[i] );                          
         free( traces->locks[i] );
+    }
+
+    for( j = 0; j < traces->num_chrs; j++ )
+    {
+        free( traces->chr_names[j] );
     }
 
     free( traces->chr_names );
@@ -434,7 +439,6 @@ zero_traces( struct trace_t* traces )
 void
 set_trace_to_uniform( struct trace_t* traces, double value )
 {
-    /* Zero out the trace for the update */
     int i, j;
     unsigned int k;
     for( i = 0; i < traces->num_tracks; i++ )

@@ -11,6 +11,9 @@
 #include <limits.h>
 #include <assert.h>
 
+#include "read.h"
+#include "genome.h"
+
 struct freqs_array {
     int max_qual_score;
     int max_position;
@@ -58,6 +61,58 @@ update_error_model_from_error_data(
 
 void
 free_error_model( struct error_model_t* error_model );
+
+/* This code is preparation for future merge of error_correction branch */
+/* Mapping metaparameters are set by the user and fixed. They are used by the
+ * error model code as guides to set more fine grained parameters. */
+struct mapping_metaparams {
+    enum error_model_type_t error_model_type;
+    /* Static struct (for now) */
+    float error_model_params[10];
+};
+
+/*
+ * Store separate mapping parameters For
+ *  a) index search
+ *  b) the final recheck.
+ *
+ * For now, use the command line parameters for the recheck penalties and
+ * generate the index search penalties from the error model.
+ */
+struct index_search_params
+{
+    float min_match_penalty;
+    float max_penalty_spread;
+};
+
+struct mapping_params {
+    struct mapping_metaparams* metaparams;
+    
+    int num_penalty_arrays;
+    struct penalty_array_t** fwd_penalty_arrays;
+    struct penalty_array_t** rev_penalty_arrays;
+    
+    float recheck_min_match_penalty;
+    float recheck_max_penalty_spread;
+};
+
+void
+init_mapping_params_for_read(
+        struct mapping_params** p,
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model
+    );
+
+void
+init_index_search_params(
+        struct index_search_params** isp,
+        struct indexable_subtemplates* ists,
+        struct mapping_params* mapping_params );
+
+void
+free_mapping_params( struct mapping_params* p );
+
 
 /*
  *  Functions for saving error information

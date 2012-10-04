@@ -20,476 +20,1161 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+/** MAPPED READ SUBLOCATIONS **/
+mapped_read_sublocation*
+get_start_of_sublocations_in_mapped_read_location(
+        const mapped_read_location* loc )
+{
+    // skip the location prologue
+    char* ptr = (char*) loc;
+    ptr += sizeof(mapped_read_location_prologue);
+
+    return (mapped_read_sublocation*) ptr;
+}
+
+int
+get_start_for_sublocations_group(
+        mapped_read_sublocation* group )
+{
+    /* simply return the start of the first sublocation in the group */
+    return group->start_pos;
+}
+
+int
+get_stop_for_sublocations_group(
+        mapped_read_sublocation* group )
+{
+    /* loop through to the last sublocation, and return its
+     * start + length */
+
+    char* ptr = (char*) group;
+
+    while( true )
+    {
+        if( end_of_sublocations_group( (mapped_read_sublocation*) ptr ) )
+            break;
+
+        ptr += sizeof( mapped_read_sublocation );
+    }
+
+    mapped_read_sublocation* final_sublocation
+        = (mapped_read_sublocation*) ptr;
+
+    return final_sublocation->start_pos + final_sublocation->length;
+}
+
+enum bool
+last_sublocation_in_mapped_read_location( mapped_read_sublocation* sub )
+{
+    if( !sub->next_subread_is_ungapped &&
+        !sub->next_subread_is_gapped )
+    {
+        /* then there is no "next" subread, and this is the last sublocation in
+         * the mapped_read_location */
+        return true;
+    }
+
+    return false;
+}
+
+enum bool
+end_of_sublocations_group( mapped_read_sublocation* sub_loc )
+{
+    /* Sublocations are grouped by consecutive gapped sublocations.
+     *
+     * If a sublocation is either
+     * 1) The last sublocation in a group of gapped sublocations
+     * 2) The last sublocation in a mapped_read_location
+     *
+     * it is at the end of a group of sublocations.
+     */
+    if( sub_loc->next_subread_is_ungapped ||
+            last_sublocation_in_mapped_read_location( sub_loc ))
+        return true;
+
+    return false;
+}
 
 /*************************************************************************
  *
  *  Mapped Reads
  * 
  *  Reads that have been joined, but unlike mapped reads proper have not
- *  had the 'extra' read inforamtion attached.
+ *  had the 'extra' read information attached.
  *
  */
 
-void
-init_mapped_read( struct mapped_read_t** rd )
+char*
+skip_read_id_nodes_in_mapped_read( char* ptr )
 {
-    (*rd) = malloc(sizeof(struct mapped_read_t));
-    (*rd)->read_id = 0;
-    (*rd)->num_mappings = 0;
-    (*rd)->rdb = NULL;
-    (*rd)->free_locations = true;
-    (*rd)->locations = NULL;
-    return;
+    /* Given a pointer to the start of a mapped_read_t, this returns a pointer
+     * to the start of the mapped_read_locations (after any read_id_nodes) */
+
+    /* loop over read_id_nodes */
+    while(true)
+    {
+        read_id_node* curr_node = (read_id_node *) ptr;
+        /* Save this read_id_node's are_more flag */
+        int are_more = curr_node->are_more;
+
+        /* Move the pointer */
+        ptr += sizeof( read_id_node );
+
+        /* If this was the last read id node, break */
+        if( !are_more ) {
+            break;
+        }
+    }
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_sublocations_in_mapped_read_location( char* ptr )
+{
+    /* Loop over each mapped_read_sublocation
+     * (we assume there is at least one) */
+    while(true)
+    {
+        mapped_read_sublocation* curr_subloc = (mapped_read_sublocation*) ptr;
+
+        /* If both next_subread flags are false, then there are no more
+         * mapped_read_sublocations for this mapped_read_location */
+        enum bool more_sublocs = true;
+        if( !( curr_subloc->next_subread_is_gapped ||
+               curr_subloc->next_subread_is_ungapped ) )
+        {
+            more_sublocs = false;
+        }
+
+        /* Skip this sub location */
+        ptr += sizeof( mapped_read_sublocation );
+
+        if( !more_sublocs )
+            break;
+    }
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_location_in_mapped_read_locations( char* ptr )
+{
+    ptr += sizeof( mapped_read_location_prologue );
+    ptr = skip_mapped_read_sublocations_in_mapped_read_location( ptr );
+
+    return ptr;
+}
+
+char*
+skip_mapped_read_locations_in_mapped_read_t( char* ptr )
+{
+    /* Loop over each mapped_read_location
+     * (we assume there is at least one) */
+    while(true)
+    {
+        /* Save the value of are_more for this mapped_read_location */
+        mapped_read_location_prologue* curr_loc_prologue =
+            (mapped_read_location_prologue*) ptr;
+
+        int more_locs = curr_loc_prologue->are_more;
+
+        ptr = skip_mapped_read_location_in_mapped_read_locations( ptr );
+
+        if( !more_locs )
+            break;
+    }
+
+    return ptr;
+}
+
+size_t
+get_size_of_mapped_read_location(
+        mapped_read_location* loc )
+{
+    assert( loc != NULL );
+
+    /* Get a pointer we can use to iterate bytewise over the mapped_read_location */
+    char* ptr = (char*) loc;
+
+    /* Skip the prologue */
+    ptr += sizeof( mapped_read_location_prologue );
+    /* Skip the sublocations */
+    ptr = skip_mapped_read_sublocations_in_mapped_read_location( ptr );
+
+    return (size_t) (ptr - (char*) loc);
+}
+
+size_t
+get_size_of_mapped_read( mapped_read_t* rd )
+{
+    /*
+     * ASSUMPTIONS
+     *
+     * This code assumes that each mapped_read_t has at least
+     * 1) 1 read_id_node
+     * 2) 1 mapped_read_location, which has at least
+     *     a) 1 mapped_read_sublocation
+     */
+
+    char* ptr = (char*) rd;
+    ptr = skip_read_id_nodes_in_mapped_read( ptr );
+    ptr = skip_mapped_read_locations_in_mapped_read_t( ptr );
+
+    return (size_t)(ptr - (char*) rd);
 }
 
 void
-free_mapped_read( struct mapped_read_t* rd )
+free_mapped_read( mapped_read_t* rd )
 {
     if( rd == NULL )
         return;
-    
-    if( true == rd->free_locations ) {
-        free( rd->locations );
-        rd->locations = NULL;
-    }
     
     free( rd );
     return;
 }
 
-void
-add_location_to_mapped_read( 
-    struct mapped_read_t* rd, struct mapped_read_location* loc )
+size_t 
+write_mapped_read_to_file( mapped_read_t* read, FILE* of  )
 {
-    assert( (rd->num_mappings + 1) > rd->num_mappings );
-    
-    /* Allocate new space for the location */
-    rd->num_mappings += 1;
-    
-    rd->locations = realloc( 
-        rd->locations, (rd->num_mappings)*sizeof(struct mapped_read_location)  );
-    if( rd->locations == NULL )
-    {
-        fprintf(stderr, "FATAL       :  Memory allocation error ( size %zu )\n", (rd->num_mappings)*sizeof(struct mapped_read_location) );
-        assert( false );
-        exit( -1 );
-    }
+    size_t num_written = 0;
+    size_t num_allocated = get_size_of_mapped_read( read );
 
-    rd->locations[rd->num_mappings - 1] = *loc; 
-    
-    return;
-}
+    num_written = fwrite( read, sizeof(char), num_allocated, of );
+    if( num_written != num_allocated )
+        return -num_written;
 
-
-void
-reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db, struct mapped_read_t* rd )
-{
-    struct fragment_length_dist_t* fl_dist = NULL;
-    if( rd->rdb != NULL )
-        fl_dist = rd->rdb->fl_dist;
-    
-    if( 0 == rd->num_mappings )
-        return;
-    
-    float *prbs = calloc( rd->num_mappings, sizeof(float)  );
-    
-    /* prevent divide by zero */
-    double prb_sum = ML_PRB_MIN;
-    MPD_RD_ID_T i;
-    for( i = 0; i < rd->num_mappings; i++ )
-    {
-        struct mapped_read_location* loc = rd->locations + i;
-        float cond_prob = get_seq_error_from_mapped_read_location( loc );
-        if( get_flag_from_mapped_read_location( loc )&IS_PAIRED )
-            cond_prob *= get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
-        prbs[i] = cond_prob;
-        prb_sum += cond_prob;
-    }
-    assert( rd->num_mappings == 0 || prb_sum > ML_PRB_MIN );
-
-    for( i = 0; i < rd->num_mappings; i++ )
-    {
-        set_cond_prb( cond_prbs_db, rd->read_id, i, prbs[i]/prb_sum );
-        
-        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= -0.001 );
-    }
-    
-    free( prbs );
-    
-    return;
-};
-
-int 
-write_mapped_read_to_file( struct mapped_read_t* read, FILE* of  )
-{
-    size_t num = 0;
-
-    num = fwrite( &(read->read_id), sizeof( read->read_id ), 1, of );
-    if( num != 1 )
-        return -num;
-
-    num = fwrite( &(read->num_mappings), sizeof( read->num_mappings ), 1, of );
-    if( num != 1 )
-        return -num;
-
-    num = fwrite( read->locations, 
-                  sizeof( struct mapped_read_location ), 
-                  read->num_mappings, 
-                  of );
-    if( (int)num != read->num_mappings )
-        return -num;
-    
     return 0;
 }
 
-/* returns 1 for success, 0 for failure */
-static inline int
-convert_unpaired_candidate_mapping_into_mapped_read( 
-    candidate_mapping* cm,
-    struct mapped_read_location* loc    
-)
+MPD_RD_ID_T
+get_read_id_from_mapped_read( mapped_read_t* rd )
 {
-    /* Ensure all of the flags are turned off */
-    MRL_FLAG_TYPE flag = 0;
-
-    /* deal with pseudo location */
-    set_chr_in_mapped_read_location( loc, cm->chr );
-    if( PSEUDO_LOC_CHR_INDEX == cm->chr )
-    {
-        flag |= FIRST_READ_IS_PSEUDO;
-    }
- 
-    /* Add the location */
-    if( BKWD == cm->rd_strnd )
-        flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
-   
-    set_start_and_stop_in_mapped_read_location (
-        loc, cm->start_bp, cm->start_bp + cm->rd_len );
+    /* for now, assume each mapped_read_t has only one read_id_node.
+     * Just take the first read id node and return the stored read id */
+    char* rd_ptr = (char*) rd;
     
-    set_seq_error_in_mapped_read_location( 
-        loc, pow( 10, cm->penalty ) );
-    assert( loc->seq_error >= 0.0 && loc->seq_error <= 1.0 );
-    
-    set_flag_in_mapped_read_location( loc, flag  );
-    
-    return 1;
+    /* cast to read_id_node to dereference */
+    read_id_node *node = (read_id_node*) rd_ptr;
+    return node->read_id;
 }
 
+/*************************************************************************
+ *
+ *  Mapped Read Index
+ *
+ */
 
-/* returns 1 for success, 0 for failure */
-static inline int
-join_two_candidate_mappings( 
-    candidate_mapping* first_read,
-    candidate_mapping* second_read,
-    struct mapped_read_location* loc    
-)
+void
+index_mapped_read( mapped_read_t* rd,
+                   mapped_read_index* index )
 {
-    /* Ensure all of the flags are turned off */
-    MRL_FLAG_TYPE flag = IS_PAIRED;
-    
-    /* Set the appropriate flags */
-    if( first_read->start_bp < second_read->start_bp )
-        flag |= FIRST_PAIR_IS_FIRST_IN_GENOME;
-    
-    if( FWD == first_read->rd_strnd )
-        flag |= FIRST_READ_WAS_REV_COMPLEMENTED;
-    
-    if( PSEUDO_LOC_CHR_INDEX == first_read->chr )
-        flag |= FIRST_READ_IS_PSEUDO;
-    
-    if( PSEUDO_LOC_CHR_INDEX == second_read->chr )
-        flag |= SECOND_READ_IS_PSEUDO;
-    
-    /* Set the chr */
-    set_chr_in_mapped_read_location( loc, first_read->chr );
-    assert( first_read->chr == second_read->chr);
-    
-    if( first_read->start_bp < second_read->start_bp )
-    {
-        set_start_and_stop_in_mapped_read_location (
-            loc,
-            first_read->start_bp,
-            second_read->start_bp + second_read->rd_len
-        );
-    } else {
-        set_start_and_stop_in_mapped_read_location (
-            loc,
-            second_read->start_bp,
-            first_read->start_bp + first_read->rd_len
-        );
-    }
-    
-    set_seq_error_in_mapped_read_location( 
-        loc, pow( 10, first_read->penalty + second_read->penalty ) );
-    
-    set_flag_in_mapped_read_location( loc, flag );
-    
-    /* ignore reads with zero probability ( possible with FL dist ) */
-    if( get_seq_error_from_mapped_read_location( loc ) > 2*ML_PRB_MIN ) {
-        return 1;
-    }
-    
-    return 0;
-}
+    const int REALLOC_BLOCK_SIZE = 1000;
 
-static inline double
-mapped_read_from_candidate_mapping_arrays( 
-    candidate_mapping* r1_array,
-    int r1_array_len,
-    candidate_mapping* r2_array,
-    int r2_array_len,
-    struct mapped_read_t* mpd_rd
-)
-{
-    struct mapped_read_location loc;
-    
-    double prob_sum = 0;
-    
-    int i;
-    for( i = 0; i < r1_array_len; i++ )
+    /* initialize array of pointers to mapped_read_location's */
+    int num_allocated_locations = REALLOC_BLOCK_SIZE;
+    index->mappings = malloc( num_allocated_locations *
+                              sizeof(mapped_read_location*) );
+
+    int num_mapped_locations = 0;
+
+    /* Locate the start of the mapped read locations in this mapped read. */
+    char* loc_ptr = skip_read_id_nodes_in_mapped_read( (char*) rd );
+
+    /* index and count the mapped_read_location(s) */
+    while(true)
     {
-        int j;
-        for( j = 0; j < r2_array_len; j++ )
+        /* Note - this assumes there is at least one mapped_read_location for
+         * this mapped_read_t */
+
+        /* resize index */
+        if( num_mapped_locations + 1 == num_allocated_locations )
         {
-            /* if the chrs mismatch, since these are sorted, we know that
-             * there is no need to continue */
-            if( r2_array[j].chr > r1_array[i].chr )
-                break;
-            
-            if( r2_array[j].chr != r1_array[i].chr )
-                continue;
-            
-            /* Determine which of the candidate mappings corresponds 
-               with the first pair */
-            candidate_mapping* first_read = NULL;
-            candidate_mapping* second_read = NULL;
-            if( PAIRED_END_1 == r1_array[i].rd_type ) {
-                first_read = r1_array + i;
-                second_read = r2_array + j;
-            } else {
-                assert( PAIRED_END_1 == r2_array[j].rd_type );
-                first_read = r2_array + j;
-                second_read = r1_array + i;
-            }
-            
-            assert( first_read->chr == second_read->chr );
-            
-            int rv = join_two_candidate_mappings( first_read, second_read, &loc );
-            /* if the location is valid ( non-zero probability ) */
-            if( rv == 1 )
-            {
-                add_location_to_mapped_read( mpd_rd, &loc );
-                prob_sum += get_seq_error_from_mapped_read_location( &loc );
-            }
+            num_allocated_locations += REALLOC_BLOCK_SIZE;
+            index->mappings = realloc( index->mappings,
+                                       num_allocated_locations*
+                                       sizeof(mapped_read_location*));
+        }
+
+        index->mappings[num_mapped_locations] = (mapped_read_location*) loc_ptr;
+        num_mapped_locations += 1;
+
+        /* cast read pointer to mapped_read_location_prologue */
+        mapped_read_location_prologue* prologue =
+            (mapped_read_location_prologue *) loc_ptr;
+
+        /* if this was the last mapped_read_location, we're done counting */
+        if( !( prologue->are_more ) )
+        {
+            break;
+        }
+
+        /* move rd_ptr to the start of the next mapped_read_location */
+        loc_ptr = skip_mapped_read_location_in_mapped_read_locations( loc_ptr );
+    }
+
+    /* reclaim any wasted memory */
+    index->mappings = realloc( index->mappings,
+                               num_mapped_locations*
+                               sizeof(mapped_read_location*) );
+
+    /* save number of mapped locations */
+    index->num_mappings = num_mapped_locations;
+
+    return;
+}
+
+void
+init_mapped_read_index( mapped_read_index** index,
+                        mapped_read_t* rd )
+{
+    *index = malloc( sizeof( mapped_read_index ));
+
+    (*index)->rd = rd;
+    (*index)->read_id = get_read_id_from_mapped_read( rd );
+    (*index)->num_mappings = 0;
+    (*index)->mappings = NULL;
+
+    /* Index the locations in this mapped read */
+    index_mapped_read( rd, *index );
+
+    return;
+}
+
+void
+free_mapped_read_index( mapped_read_index* index )
+{
+    if( index == NULL ) return;
+
+    if( index->mappings != NULL ) {
+        free( index->mappings );
+    }
+
+    free( index );
+
+    return;
+}
+
+void
+join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
+                                        candidate_mapping*** joined_mappings, 
+                                        float** penalties,
+                                        int* joined_mappings_len )
+{
+    /* Allocate memory */
+    /* For the single end case, there are N potential mappings. Allocate N*2
+     * pointers for the NULL delimiters */
+    *joined_mappings = malloc( sizeof(candidate_mapping*) * mappings->length * 2 );
+    *penalties = malloc( sizeof(float) * mappings->length );
+
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        /* second to last pointer is the pointer to the current candidate
+         * mapping */
+        (*joined_mappings)[(i+1)*2-2] = mappings->mappings + i;
+        /* last pointer is NULL pointer indicating the end of this set of
+         * joined candidate mappings */
+        (*joined_mappings)[(i+1)*2-1] = NULL;
+
+        (*penalties)[i] = mappings->mappings[i].penalty;
+    }
+
+    *joined_mappings_len = mappings->length;
+
+    return;
+}
+
+void
+join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
+                                        candidate_mapping*** joined_mappings, 
+                                        float** penalties,
+                                        int* joined_mappings_len )
+{
+    int pair_1_start = 0;
+    int pair_2_start = -1;
+
+    int num_pair_1 = 0;
+    int num_pair_2 = 0;
+
+    /* find the start of the second pair candidate mappings */
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* mapping = mappings->mappings + i;
+
+        if( mapping->rd_type.pos == 1 && pair_2_start == -1 )
+        {
+            pair_2_start = i;
+            num_pair_1 = i-1;
         }
     }
-    
-    return prob_sum;
-}
 
-double
-add_paired_candidate_mappings_to_mapped_read(
-    candidate_mapping* cm1,
-    candidate_mapping* cm2,
-    struct mapped_read_t* mpd_rd
-)
-{
-    /* if the chrs mismatch, this match is impossible continue */
-    double prob_sum = 0;
-    if( cm1->chr != cm2->chr )
-        return prob_sum;
-
-    /*
-     * Determine which of the candidate mappings corresponds 
-     * with the first pair
-     * since pair is a property of the read, the original candidate
-     * mapping results still holds, even if it is a pseudo loc
-     */
-       
-    candidate_mapping* first_read = NULL;
-    candidate_mapping* second_read = NULL;
-
-    if( PAIRED_END_1 == cm1->rd_type ) {
-        first_read = cm1;
-        second_read = cm2;
-    } else {
-        assert( PAIRED_END_1 == cm2->rd_type );
-        first_read = cm2;
-        second_read = cm1;
-    }
-
-    struct mapped_read_location loc;
-    int rv = join_two_candidate_mappings( first_read, second_read, &loc );
-    loc.position.start_pos -= cm1->subseq_offset; // ?
-
-    /* if the location is valid ( non-zero probability ) */
-    if( rv == 1 )
+    if( pair_2_start == -1 )
     {
-        add_location_to_mapped_read( mpd_rd, &loc );
-        prob_sum = get_seq_error_from_mapped_read_location( &loc );
+        /* Don't build a mapped read if there are no second pair reads */
+        return;
     }
+    /* sanity check */
+    assert( pair_2_start > pair_1_start );
 
-    return prob_sum;
-}
+    num_pair_2 = (i-1) - pair_2_start;
 
-/* returns the sum of sequencing error probabilities - used for renormalization */
-static inline double
-build_mapped_read_from_paired_candidate_mappings( 
-        struct mapped_read_t* mpd_rd,
-        candidate_mappings* mappings
-    )
-{
-    double prob_sum = 0;
-    
-    assert( mappings->length > 0 );
-    assert( mappings->mappings[0].rd_type > SINGLE_END ); 
-
-    int p2_start = -1;
-
-    /* 
-     * Find the start of the pair 2 mapped reads
-     */
-    int i;
-    for( i=0; i < mappings->length; i++ )
+    /* Count the number of valid joined combinations of reads */
+    int num_joined_mappings = 0;
+    int j;
+    for( i = pair_1_start; i < pair_2_start; i++ )
     {
-        if( mappings->mappings[i].rd_type == PAIRED_END_2 )
+        for( j = pair_2_start; j < mappings->length; j++ )
         {
-            p2_start = i;
+            candidate_mapping* pair_1_mapping = mappings->mappings + i;
+            candidate_mapping* pair_2_mapping = mappings->mappings + j;
+
+            /* If the chrs mismatch, since these are sorted we know there is no 
+             * need to continue. */
+            if( pair_2_mapping->chr > pair_1_mapping->chr )
+                break;
+
+            if( pair_2_mapping->chr < pair_1_mapping->chr )
+                continue;
+
+            assert( pair_1_mapping->chr == pair_2_mapping->chr );
+
+            num_joined_mappings++;
+        }
+    }
+
+    /* Allocate memory.
+     * We have counted the number of valid ways to join paired end reads for
+     * this set of candidate mappings. For each set of joined mappings, we need
+     * to allocate 3 pointers - one for the first mapping, one for the second
+     * mapping, and one for the NULL delimiter. */
+    *joined_mappings = malloc(
+            sizeof(candidate_mapping*) * (num_joined_mappings*3));
+    *penalties = malloc( sizeof(float) * num_joined_mappings );
+
+    int joined_mappings_index = 0;
+    int penalties_index = 0;
+
+    for( i = pair_1_start; i < pair_2_start; i++ )
+    {
+        for( j = pair_2_start; j < mappings->length; j++ )
+        {
+            candidate_mapping* pair_1_mapping = mappings->mappings + i;
+            candidate_mapping* pair_2_mapping = mappings->mappings + j;
+
+            /* If the chrs mismatch, since these are sorted we know there is no 
+             * need to continue. */
+            if( pair_2_mapping->chr > pair_1_mapping->chr )
+                break;
+
+            if( pair_2_mapping->chr < pair_1_mapping->chr )
+                continue;
+
+            assert( pair_1_mapping->chr == pair_2_mapping->chr );
+
+            /* third to last pointer is 1st candidate mapping */
+            (*joined_mappings)[joined_mappings_index] = pair_1_mapping;
+
+            /* second to last pointer is 2nd candidate mapping */
+            (*joined_mappings)[joined_mappings_index + 1] = pair_2_mapping;
+
+            /* last pointer is NULL pointer indicating the end of this set of
+             * joined candidate mappings */
+            (*joined_mappings)[joined_mappings_index + 2] = NULL;
+
+            /* add the penalty for this (joined) candidate mapping. Simply
+             * add the penalties from both candidate mappings (since these are
+             * log probabilities, adding is equivalent to the product of the
+             * marginal probabilities) */
+            (*penalties)[penalties_index]
+                = pair_1_mapping->penalty
+                + pair_2_mapping->penalty;
+
+            /* Update the array indices */
+            joined_mappings_index += 3;
+            penalties_index += 1;
+        }
+    }
+
+    *joined_mappings_len = num_joined_mappings;
+
+    return;
+}
+
+void
+join_candidate_mappings( candidate_mappings* mappings, 
+                         candidate_mapping*** joined_mappings, 
+                         float** penalties,
+                         int* joined_mappings_len )
+{
+    /* joined_mappings is a list of pointers to candidate_mappings. Each
+     * "joined mapping" is a list of pointers to candidate_mappings separated
+     * by NULL poiners */
+
+    /* sort the candidate_mappings for efficiency */
+    sort_candidate_mappings( mappings );
+
+    /* TODO special case single end and paired end reads joining, for now */
+
+    enum bool paired_end = false;
+    int i;
+    for( i = 0; i < mappings->length; i++ )
+    {
+        candidate_mapping* mapping = mappings->mappings + i;
+
+        if( mapping->rd_type.pos == 1 )
+        {
+            paired_end = true;
             break;
         }
     }
-    
-    /* If there were no paired end 2 reads, then we say no reads mapped */
-    if( -1 == p2_start ) {
-        /* make sure that the number of reads is 0 */
-        assert( mpd_rd->num_mappings == 0);
-        return 0;
-    }
 
-    prob_sum += mapped_read_from_candidate_mapping_arrays(
-        mappings->mappings,
-        p2_start,
-        mappings->mappings + p2_start,
-        mappings->length - p2_start,
-        mpd_rd
-    );
-
-    return prob_sum;
-}
-
-/* returns the sum of sequencing error probabilities - used for renormalization */
-static inline double
-build_mapped_read_from_unpaired_candidate_mappings( 
-        struct mapped_read_t* mpd_rd,
-        candidate_mappings* mappings
-    )
-{
-    double prob_sum = 0;
-
-    /* store local read location data */
-    struct mapped_read_location loc;
-    
-    int i;    
-    for( i = 0; i < mappings->length; i++ )
-    {        
-        /* we expect a read to be either paired end or not - never both */
-        assert( mappings->mappings[i].rd_type == SINGLE_END );
-
-        /* if the mapping hasnt been determined to be valid, ignore it */
-        if( (mappings->mappings)[i].recheck != VALID )
-            continue;
-
-        int rv = 
-            convert_unpaired_candidate_mapping_into_mapped_read( 
-                mappings->mappings + i, &loc );
-        
-        /* if the conversion succeeded */
-        if( 1 == rv )
-        {
-            assert( loc.seq_error >= 0.0 && loc.seq_error <= 1.0 );
-            prob_sum += get_seq_error_from_mapped_read_location( &loc );
-            add_location_to_mapped_read( mpd_rd, &loc );
-        }
-    }
-
-    return prob_sum;
-}
-
-void
-build_mapped_read_from_candidate_mappings( 
-        struct mapped_read_t** mpd_rd,
-        candidate_mappings* mappings, 
-        MPD_RD_ID_T read_id
-    )
-{
-    /* 
-     * Building mapped reads has several components:
-     * First, the normal reads
-     * Second, the paired end reads
-     *    Paired end read can match iff:
-     *    1) They are from the same read
-     *    2) They are on opposite strands
-     *    3) They are on the same chromosome
-     *
-     *    Luckily, every passed candidate is from the same
-     *    read, so (1) is established automatically. Second, 
-     *    the candidates are sorted ( in cmp_candidate_mappings )
-     *    by read_type, strand, chr, bp_position. So, the plan is
-     *
-     * 1) Get and print all of the single ended reads ( rd_type == SINGLE_END )
-     * 2) Find the Start of the PAIRED_END_1 and PAIRED_END_2 reads
-     * 3) Merge join them 
-     * 
-     */
-    
-    /* Initialize the packed mapped read */
-    init_mapped_read( mpd_rd );
-    (*mpd_rd)->read_id = read_id;
-
-    if( mappings->length == 0 )
-        return;
-    
-    /* store the sum of the marginal probabilities */
-    double prob_sum;
-
-    /* this assumes all reads are either paired or not */
-    if( mappings->mappings[0].rd_type == SINGLE_END )
+    if( paired_end )
     {
-        prob_sum = build_mapped_read_from_unpaired_candidate_mappings( 
-            *mpd_rd, mappings );
+        join_candidate_mappings_for_paired_end( mappings,
+                                                joined_mappings,
+                                                penalties,
+                                                joined_mappings_len );
     } else {
-        prob_sum = build_mapped_read_from_paired_candidate_mappings( 
-            *mpd_rd, mappings );
-    }    
-    
-    /* If there are no proper mappings ( this can happen if, 
-       for instance, only one pair maps ) free the read and return */
-    if( 0 == prob_sum )
-    {
-        free_mapped_read( *mpd_rd );
-        *mpd_rd = NULL;
-        return;
+        join_candidate_mappings_for_single_end( mappings,
+                                                joined_mappings,
+                                                penalties,
+                                                joined_mappings_len );
     }
-    
+
     return;
 }
 
+void
+recheck_candidate_mapping(
+        candidate_mapping* mapping,
+
+        struct read_subtemplate* rst,
+        struct genome_data* genome,
+
+        struct error_model_t* error_model )
+{
+    float rechecked_penalty = 0;
+
+    /* build penalty arrays from the underlying read subtemplate */
+    struct penalty_array_t fwd_pa, rev_pa;
+    build_penalty_array( &fwd_pa, rst->length,
+            error_model, rst->error_str );
+    build_reverse_penalty_array( &rev_pa, &fwd_pa );
+
+    /* Get the entire region of the genome covered by this fragment */
+    int full_fragment_length = get_length_from_cigar_string( mapping);
+    char* genome_seq = find_seq_ptr( genome, mapping->chr, mapping->start_bp, 
+            full_fragment_length );
+    assert( genome_seq != NULL );
+
+    /* Build the sequence to compare and a pick a penalty array
+     * depending on strand */
+    char* mapped_seq = calloc( full_fragment_length+1, sizeof(char) );
+    assert( mapped_seq != NULL );
+
+    struct penalty_array_t* mapped_pa;
+
+    if( mapping->rd_strnd == FWD )
+    {
+        memcpy( mapped_seq, genome_seq, full_fragment_length );
+        mapped_pa = &fwd_pa;
+    } else {
+        rev_complement_read( genome_seq, mapped_seq, full_fragment_length );
+        mapped_pa = &rev_pa;
+    }
+
+    /* loop over the entries in this candidate mapping's cigar string */
+    int seq_pos = mapping->trimmed_length;
+
+    int i;
+    for( i = 0; i < mapping->cigar_len; i++ )
+    {
+        struct CIGAR_ENTRY entry = mapping->cigar[i];
+
+        if( entry.op == 'M' )
+        {
+            rechecked_penalty += recheck_penalty(
+                    mapped_seq,
+                    rst->char_seq + seq_pos,
+                    mapped_pa->array + seq_pos,
+                    entry.len
+                );
+        }
+
+        /* For other sequence types (S, N) generated by Statmap, just advance
+         * the sequence pointer to skip these regions */
+        seq_pos += entry.len;
+    }
+
+    mapping->penalty = rechecked_penalty;
+
+    /* cleanup memory */
+    free( mapped_seq );
+    free_penalty_array( &fwd_pa );
+    free_penalty_array( &rev_pa );
+
+    return;
+}
+
+int
+get_fl_for_joined_candidate_mappings(
+        candidate_mapping** group_start )
+{
+    /* There must be at least one candidate mapping in the joined group */
+    assert( (*group_start) != NULL );
+
+    /* Loop over the candidate mappings in the group until we get to the last
+     * one */
+    candidate_mapping** current_mapping = group_start;
+    while( *(current_mapping + 1) != NULL )
+        current_mapping++;
+
+    /* The fragment length for the joined candidate mappings is the difference
+     * between the start of the first cm and the start of the last cm, plus the
+     * length given by the cigar string of the last candidate mapping. The
+     * difference between the starts of the first and last cm's also includes
+     * any gaps represented by the cigar strings of intervening
+     * candidate_mapping's */
+
+    /* TODO this might not be valid for all assay types. Verify */
+    candidate_mapping* first_read = *group_start;
+    candidate_mapping* last_read = *current_mapping;
+
+    int frag_len = 0;
+    int i;
+    if( first_read->start_bp < last_read->start_bp )
+    {
+        frag_len = last_read->start_bp - first_read->start_bp;
+
+        /* Add the length encoded in the last candidate mapping's cigar string */
+        for( i = 0; i < last_read->cigar_len; i++ )
+        {
+            frag_len += last_read->cigar[i].len;
+        }
+    } else {
+        frag_len = first_read->start_bp - last_read->start_bp;
+
+        /* Add the length encoded in the first candidate mapping's cigar string */
+        for( i = 0; i < first_read->cigar_len; i++ )
+        {
+            frag_len += first_read->cigar[i].len;
+        }
+    }
+
+    return frag_len;
+}
+
+void
+recheck_joined_candidate_mappings(
+        candidate_mapping** group_start,
+        float* penalty,
+        
+        struct genome_data* genome,
+        struct read* r,
+        struct error_model_t* error_model,
+        struct fragment_length_dist_t* fl_dist )
+{
+    float rechecked_group_penalty = 0;
+
+    candidate_mapping** current_mapping = group_start;
+    while( (*current_mapping) != NULL )
+    {
+        /* each candidate_mapping in a joined group corresponds to a read
+         * subtemplate. Get a reference to this cm's read subtemplate */
+        struct read_subtemplate* rst
+            = r->subtemplates + (*current_mapping)->rd_type.pos;
+
+        recheck_candidate_mapping( *current_mapping, rst, genome, error_model );
+
+        /* Add the log probability (equivalent to product) */
+        rechecked_group_penalty += (*current_mapping)->penalty;
+
+        /* Move pointer to the next candidate mapping in the group */
+        current_mapping++;
+    }
+
+    /* Get the probability of the given fragment length from the fragment
+     * length distribution */
+    int fl = get_fl_for_joined_candidate_mappings( group_start );
+    float fl_penalty = get_fl_log_prb( fl_dist, fl );
+
+    /* Save the rechecked group penalty in penalty */
+    *penalty = rechecked_group_penalty + fl_penalty;
+}
+
+void
+advance_pointer_to_start_of_next_joined_candidate_mappings(
+        candidate_mapping*** current_mapping,
+        int current_set_index,
+        int num_sets )
+{
+    /* skip the rest of the candidate_mappings in the current group */
+    while( **current_mapping != NULL )
+        (*current_mapping)++;
+
+    /* unless we know we're in the last set of joined candidate mappings,
+     * move to the pointer to the start of the next set. This check avoids
+     * accessing uninitialized memory after the last set. */
+    if( current_set_index < num_sets - 1 )
+    {
+        /* skip any NULL markers until we get to the start of the next set of
+         * candidate_mappings */
+        while( **current_mapping == NULL )
+            (*current_mapping)++;
+    }
+}
+
+void
+remove_candidate_mapping_group(
+        candidate_mapping** current_mapping )
+{
+    /* loop over the candidate mappings in this group (delimited by a NULL
+     * pointer), and setting their pointers to NULL to remove them from the list
+     * of joined candidate_mappings */
+
+    while( *current_mapping != NULL )
+    {
+        /* remove the reference to the invalid candidate_mapping */
+        *current_mapping = NULL;
+        /* advance the pointer to the next candidate mapping pointer */
+        current_mapping++;
+    }
+}
+
+void
+filter_joined_mapping_penalties( 
+    float** joined_mapping_penalties, int joined_mappings_len )
+{
+    /* Rewrite the penalties array with just the penalties from the filtered
+     * mappings */
+    int num_filtered_penalties = 0;
+
+    int i;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        if( (*joined_mapping_penalties)[i] != 1 ) {
+            num_filtered_penalties++;
+        }
+    }
+
+    float* filtered_penalties = malloc( sizeof(float)*num_filtered_penalties );
+    int fp_index = 0;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        if( (*joined_mapping_penalties)[i] != 1 )
+        {
+            filtered_penalties[fp_index] = (*joined_mapping_penalties)[i];
+            fp_index++;
+        }
+    }
+
+    /* Free the original penalties array and replace it with a pointer to the
+     * new, filtered penalties array */
+    free( *joined_mapping_penalties );
+    *joined_mapping_penalties = filtered_penalties;
+
+    return;
+}
+
+void
+filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
+                                  float** joined_mapping_penalties,
+                                  int* joined_mappings_len,
+                                  
+                                  struct genome_data* genome,
+                                  struct read* r,
+                                  struct error_model_t* error_model,
+                                  struct fragment_length_dist_t* fl_dist,
+
+                                  struct mapping_params* mapping_params
+    )
+{
+    /* Unpack the search parameters for the recheck */
+    float min_match_penalty = mapping_params->recheck_min_match_penalty;
+    float max_penalty_spread = mapping_params->recheck_max_penalty_spread;
+
+    /* Initialize the max penalty to the smallest allowable penalty */
+    float max_penalty = min_match_penalty;
+
+    /* Pointer to the start of the current set of joined candidate_mappings */
+    candidate_mapping** current_mapping = *joined_mappings;
+
+    int i;
+    /* recheck the locations, updating joined_mapping_penalties, 
+       and find the max penalty */
+    for( i = 0; i < *joined_mappings_len; i++ )
+    {
+        recheck_joined_candidate_mappings( 
+            current_mapping, (*joined_mapping_penalties) + i,
+            genome, r, error_model, fl_dist 
+        );
+
+        /* we may need to update the max penalty */
+        if( (*joined_mapping_penalties)[i] > max_penalty ) {
+            max_penalty = (*joined_mapping_penalties)[i];
+        }
+
+        advance_pointer_to_start_of_next_joined_candidate_mappings(
+                &current_mapping, i, *joined_mappings_len );
+    }
+
+    /* Reset the pointer to the start of the joined mappings */
+    current_mapping = (*joined_mappings);
+
+    /* To filter mappings, we simply replace their pointers with NULL pointers
+     * and update the joined_mappings_len appropriately */
+    int filtered_mappings_len = *joined_mappings_len;
+
+    // int i declared earlier
+    for( i = 0; i < *joined_mappings_len; i++ )
+    {
+        enum bool filter_current_group = false;
+
+        /* 
+         * We always need to do this because of the way the search queue
+         * handles poor branches. If our branch prediction fails we could
+         * add a low probability read, and then go back and find a very 
+         * good read which would invalidate the previous. Then, the read
+         * may not belong, but it isn't removed in the index searching method.
+         */
+
+        /* we check max_penalty_spread > -0.00001 to make sure that the
+           likelihood ratio threshold is actually active */
+
+        /* I set the safe bit to 1e-6, which is correct for most floats */
+        if( max_penalty_spread > 1e-6 )
+        {
+            if( (*joined_mapping_penalties)[i] 
+                < ( max_penalty - max_penalty_spread ) )
+            {
+                filter_current_group = true;
+            }
+        }
+
+        /* Make sure that the penalty isn't too low */
+        if( (*joined_mapping_penalties)[i] < min_match_penalty )
+        {
+            filter_current_group = true;
+        }
+
+        /* if either test failed, filter the current group */
+        if( filter_current_group )
+        {
+            remove_candidate_mapping_group( current_mapping );
+            /* Mark the invalid penalty with 1 - since the 
+             * joined_mapping_penalties are log probabilities, any value > 0
+             * is invalid. */
+            (*joined_mapping_penalties)[i] = 1;
+            filtered_mappings_len -= 1;
+        }
+
+        advance_pointer_to_start_of_next_joined_candidate_mappings(
+                &current_mapping, i, *joined_mappings_len );
+    }
+
+    filter_joined_mapping_penalties( 
+        joined_mapping_penalties, *joined_mappings_len );
+
+    *joined_mappings_len = filtered_mappings_len;
+
+    return;
+}
+
+size_t
+calculate_mapped_read_space_from_joined_candidate_mappings(
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len )
+{
+    size_t size = 0;
+
+    /* loop over the joined_mappings, counting the amount of space needed for
+     * mapped_read_location's, mapped_read_sublocation's, etc. */
+    candidate_mapping** current_mapping = joined_mappings;
+
+    /* move the current_mapping pointer to the start of the first set of joined
+     * candidate_mappings */
+    while( *current_mapping == NULL )
+        current_mapping++;
+
+    int i;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        /* Every set of joined candidate mappings corresponds to
+         * a mapped_read_location. We add the size of the mapped read location
+         * prologue here */
+
+        size += sizeof( mapped_read_location_prologue );
+
+        /* for each candidate mapping in the current set of candidate mappings,
+         * we will add a sublocation. */
+        while( *current_mapping != NULL )
+        {
+            /* add a sublocation for every M entry in a candidate mapping's
+             * cigar string. These correspond to alignments around a gap in
+             * a gapped assay. Since every candidate mapping has at least one
+             * M entry, this code is correct for both gapped and ungapped
+             * assays. */
+            int j;
+            for( j = 0; j < (*current_mapping)->cigar_len; j++ )
+            {
+                if( (*current_mapping)->cigar[j].op == 'M' )
+                {
+                    size += sizeof( mapped_read_sublocation );
+                }
+            }
+
+            current_mapping++;
+        }
+
+        if( i < joined_mappings_len - 1 )
+        {
+            /* skip any NULL markers until we get to the start of the next set
+             * of candidate_mappings */
+            while( *current_mapping == NULL )
+                current_mapping++;
+        }
+    }
+
+    return size;
+}
+
+void
+init_new_mapped_read_from_single_read_id( mapped_read_t** rd,
+                                          MPD_RD_ID_T read_id,
+                                          size_t mapped_read_size )
+{
+    /* Allocate memory for the mapped read */
+    //*rd = malloc( mapped_read_size );
+    /* Using calloc avoids an error in valgrind - 
+     * "Syscall param write(buf) points to uninitialised byte(s)" */
+    *rd = calloc( mapped_read_size, 1 );
+
+    /* Add the read_id_node. For now, we assume there is only one */
+    read_id_node* node = (read_id_node*) *rd;
+    node->read_id = read_id;
+    node->are_more = 0;
+}
+
+void
+populate_mapped_read_sublocations_from_candidate_mappings(
+        candidate_mapping*** cm_ptr,
+        char** rd_ptr )
+{
+    /* Get a pointer to the current candidate mapping */
+    candidate_mapping* current_mapping = **cm_ptr;
+
+    while( current_mapping != NULL )
+    {
+        /* Keep track of the start position of each mapped location (including
+         * the cumulative offset from gaps) */
+        int start_pos = current_mapping->start_bp;
+
+        /* Add a sublocation for each M region in each candidate mappings in
+         * the set of joined candidate mappings */
+        int j;
+        for( j = 0; j < current_mapping->cigar_len; j++ )
+        {
+            struct CIGAR_ENTRY cigar_entry = current_mapping->cigar[j];
+
+            if( cigar_entry.op == 'M' )
+            {
+                mapped_read_sublocation* subloc = 
+                    (mapped_read_sublocation*) *rd_ptr;
+
+                subloc->start_pos = start_pos;
+                subloc->length = cigar_entry.len;
+
+                if( current_mapping->rd_strnd == FWD )
+                {
+                    subloc->rev_comp = 0;
+                } else if( current_mapping->rd_strnd == BKWD ) {
+                    subloc->rev_comp = 1;
+                } else {
+                    assert( current_mapping->rd_strnd == FWD ||
+                            current_mapping->rd_strnd == BKWD );
+                }
+
+                /* TODO unused for now */
+                subloc->is_full_contig = 0;
+
+                /* Look ahead in the cigar string to set the
+                 * next_subread_is_gapped is flag */
+                if( j == current_mapping->cigar_len - 1 )
+                {
+                    /* if there is no next entry in the cigar string */
+                    subloc->next_subread_is_gapped = 0;
+                } else if ( current_mapping->cigar[j+1].op == 'N' ) {
+                    /* if the next entry is a gap */
+                    subloc->next_subread_is_gapped = 1;
+                } else {
+                    assert( false );
+                }
+
+                /* Look ahead in the set of joined candidate mappings to set
+                 * the next_subread_is_ungapped flag */
+                candidate_mapping* next_mapping = *(*cm_ptr + 1);
+                if( next_mapping == NULL )
+                {
+                    subloc->next_subread_is_ungapped = 0;
+                } else {
+                    /* Only set this flag on the last subread in a set of
+                     * gapped subreads */
+                    if( j == current_mapping->cigar_len - 1 ) {
+                        subloc->next_subread_is_ungapped = 1;
+                    }
+                }
+
+                /* Advance pointer in mapped_read_t to the next sublocation to
+                 * fill in */
+                *rd_ptr += sizeof( mapped_read_sublocation );
+            }
+
+            /* Move the start position to the start of the next entry in the
+             * cigar string */
+            start_pos += cigar_entry.len;
+        }
+
+        /* Advance the candidate mapping pointers to the next candidate mapping
+         * in the set of joined candidate mappings */
+        (*cm_ptr)++;
+        current_mapping = **cm_ptr;
+    }
+
+    return;
+}
+
+void
+populate_mapped_read_locations_from_joined_candidate_mappings(
+        mapped_read_t** rd,
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len,
+        float* joined_mapping_penalties )
+{
+    /* loop over the joined candidate mappings, adding mapped locations as we
+     * go */
+
+    /* skip the read_id_nodes at the start of the mapped read to get to the
+     * start of the first mapped_read_location */
+    char* rd_ptr = skip_read_id_nodes_in_mapped_read( (char*) *rd );
+
+    candidate_mapping** current_mapping = joined_mappings;
+
+    /* move the current_mapping pointer to the start of the first set of joined
+     * candidate_mappings */
+    while( *current_mapping == NULL )
+        current_mapping++;
+
+    int i;
+    for( i = 0; i < joined_mappings_len; i++ )
+    {
+        /* Add the mapped location prologue */
+        mapped_read_location_prologue* prologue = 
+            (mapped_read_location_prologue*) rd_ptr;
+
+        prologue->chr = (*current_mapping)->chr;
+
+        /* The strand of a mapped_read_location (which may be built from
+         * multiple candidate mappings with different strands) is determined by
+         * the first candidate mapping (first read) in the joined set. */
+        if( (*current_mapping)->rd_strnd == FWD ) {
+            prologue->strand = 0;
+        } else if ( (*current_mapping)->rd_strnd == BKWD ) {
+            prologue->strand = 1;
+        } else {
+            assert( (*current_mapping)->rd_strnd == FWD ||
+                    (*current_mapping)->rd_strnd == BKWD );
+        }
+
+        if( i == joined_mappings_len - 1 )
+        {
+            /* If this is the last set of joined mappings, this is the last
+             * mapped_read_location we will add. Set are_more to 0 */
+            prologue->are_more = 0;
+        } else {
+            /* There are more mapped_read_location's, set are_more to 1 */
+            prologue->are_more = 1;
+        }
+
+        /* Set the mapped_read_location's trimmed_length from the first
+         * candidate mapping
+         * (corresponding to the first read in the fragment) */
+        assert( (*current_mapping)->trimmed_length >= 0 );
+        assert( (*current_mapping)->trimmed_length <= TRIMMED_LENGTH_MAX );
+        prologue->trimmed_length = (*current_mapping)->trimmed_length;
+
+        /* unused_bits are initialized to 0 by the calloc in
+         * init_new_mapped_read_from_single_read_id */
+
+        /* Convert the sum of the log joined_mapping_penalties to a probability
+         * in standard [0,1] probability space */
+        prologue->seq_error = pow( 10, joined_mapping_penalties[i] );
+        assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
+
+        rd_ptr += sizeof( mapped_read_location_prologue );
+
+        populate_mapped_read_sublocations_from_candidate_mappings(
+                &current_mapping, &rd_ptr );
+
+        if( i < joined_mappings_len - 1 )
+        {
+            /* skip any NULL markers until we get to the start of the next set of
+             * candidate_mappings */
+            while( *current_mapping == NULL )
+                current_mapping++;
+        }
+    }
+}
+
+mapped_read_t*
+build_mapped_read_from_joined_candidate_mappings(
+        MPD_RD_ID_T read_id,
+        candidate_mapping** joined_mappings,
+        int joined_mappings_len,
+        float* joined_mapping_penalties )
+{
+    if( joined_mappings_len == 0 )
+        return NULL;
+    
+    mapped_read_t* rd = NULL;
+    
+    /* TODO for now, assume there is only one read_id_node */
+    size_t mapped_read_size = sizeof( read_id_node );
+    mapped_read_size +=
+        calculate_mapped_read_space_from_joined_candidate_mappings(
+                joined_mappings, joined_mappings_len );
+    
+    init_new_mapped_read_from_single_read_id( &rd, read_id, mapped_read_size );
+    
+    populate_mapped_read_locations_from_joined_candidate_mappings(
+           &rd, joined_mappings, joined_mappings_len, joined_mapping_penalties);
+    
+    return rd;
+}
 
 /*****************************************************************************
  *
- * Mapped Reads DB Code
+ * Mapped Reads DB
  *
  ***************************************************************************/
-
-
 
 static void
 init_mapped_reads_db( 
     struct mapped_reads_db** rdb, char* fname, const char* mode )
 {
     *rdb = malloc(sizeof(struct mapped_reads_db));
-    (*rdb)->fp = fopen( fname, mode );
-    if( (*rdb)->fp == NULL )
+
+    /* Generic mutex attributes - used for all mutexes */
+    /* we use a mutex because these operations are IO bound, plus it eliminates
+     * the spurious helgrind warnings that we got when using a spinlock */
+    pthread_mutexattr_t mta;
+    pthread_mutexattr_init(&mta);
+
+    /***** Mapped reads *****/
+
+    (*rdb)->mapped_fp = fopen( fname, mode );
+    if( (*rdb)->mapped_fp == NULL )
     {
         perror("FATAL       :  Could not open mapped reads file");
         assert( false );
@@ -499,17 +1184,47 @@ init_mapped_reads_db(
     /* number of mapped reads in the DB */
     (*rdb)->num_mapped_reads = 0;
     
+    (*rdb)->mapped_mutex = malloc( sizeof(pthread_mutex_t) );
+    pthread_mutex_init( (*rdb)->mapped_mutex, &mta );
+
+    /***** Unmappable reads *****/
+
+    char fname_buffer[255];
+
+    sprintf( fname_buffer, "%s.unmappable", fname );
+    (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
+    if( (*rdb)->unmappable_fp == NULL )
+    {
+        perror("FATAL       :  Could not open unmappable reads file");
+        assert(false);
+        exit(-1);
+    }
+
+    (*rdb)->num_unmappable_reads = 0;
+
+    (*rdb)->unmappable_mutex = malloc( sizeof( pthread_mutex_t ) );
+    pthread_mutex_init( (*rdb)->unmappable_mutex, &mta );
+
+    /***** Nonmapping reads *****/
+
+    sprintf( fname_buffer, "%s.nonmapping", fname );
+    (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
+    if( (*rdb)->nonmapping_fp == NULL )
+    {
+        perror("FATAL       :  Could not open nonmapping reads file");
+        assert(false);
+        exit(-1);
+    }
+
+    (*rdb)->num_nonmapping_reads = 0;
+
+    (*rdb)->nonmapping_mutex = malloc( sizeof( pthread_mutex_t ));
+    pthread_mutex_init( (*rdb)->nonmapping_mutex, &mta );
+    
     /* Initialize the mode to 0, this will be set by
        the mode specific init function */
     (*rdb)->mode = 0;
 
-    /* use a mutex to eliminate the spurious helgrind warnings that we got
-       when using a spinlock */
-    pthread_mutexattr_t mta;
-    pthread_mutexattr_init(&mta);
-    (*rdb)->mutex = malloc( sizeof(pthread_mutex_t) );
-    pthread_mutex_init( (*rdb)->mutex, &mta );
-    
     /* mmapped data */
     (*rdb)->mmapped_data = NULL;    
     (*rdb)->mmapped_data_size = 0;
@@ -558,43 +1273,18 @@ open_mapped_reads_db_for_writing(
 {
     init_mapped_reads_db( rdb, fname, "w+" );
 
-    /* write placeholder for size of mapped reads db, this 
-       will be updated when we close the mapped read db*/
+    /* write placeholder for the number of mapped reads in the mapped reads db,
+     * this will be updated when we close the mapped read db. */
     MPD_RD_ID_T placeholder = 0;
-    fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->fp );
+    fwrite( &placeholder, sizeof(MPD_RD_ID_T), 1, (*rdb)->mapped_fp );
     
     (*rdb)->mode = 'w';
-}
-
-void
-build_fl_dist_from_file( struct mapped_reads_db* rdb, FILE* fl_fp )
-{
-    init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
-    return;
-}
-
-void
-build_fl_dist_from_filename( struct mapped_reads_db* rdb, char* filename )
-{
-    FILE* fl_fp = fopen( filename, "r" );
-    if( fl_fp == NULL )
-    {
-        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename);
-        exit(-1);
-    }
-    init_fl_dist_from_file( &(rdb->fl_dist), fl_fp );
-    fclose( fl_fp );
 }
 
 void
 close_reading_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb)
 {
     munmap_mapped_reads_db( rdb );
-
-    if( rdb->fl_dist != NULL ) {
-        free_fl_dist( &(rdb->fl_dist) );
-        rdb->fl_dist = NULL;
-    }
 
     if( rdb->index != NULL ) {
         free( rdb->index );
@@ -609,11 +1299,14 @@ close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
 {
     /* update the number of reads that we have written since the 
        file was opened. */
-    fseek( rdb->fp, 0, SEEK_SET );
-    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->fp );
+    fseek( rdb->mapped_fp, 0, SEEK_SET );
+    fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->mapped_fp );
     
-    fclose( rdb->fp );
-    
+    /* close the file pointers */
+    fclose( rdb->mapped_fp );
+    fclose( rdb->unmappable_fp );
+    fclose( rdb->nonmapping_fp );
+
     return;
 }
 
@@ -629,13 +1322,22 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
-        perror( "Unrecognized mode for open mapped read db." );
+        fprintf( stderr,
+                "FATAL       :  Unrecognized mode '%c' for open mapped reads db.\n",
+                (*rdb)->mode );
         assert( false );
         exit( -1 );
     }
     
-    pthread_mutex_destroy( (*rdb)->mutex );
-    free( (*rdb)->mutex );
+    /* clean up the mutexes */
+    pthread_mutex_destroy( (*rdb)->mapped_mutex );
+    free( (*rdb)->mapped_mutex );
+
+    pthread_mutex_destroy( (*rdb)->unmappable_mutex);
+    free( (*rdb)->unmappable_mutex );
+
+    pthread_mutex_destroy( (*rdb)->nonmapping_mutex );
+    free( (*rdb)->nonmapping_mutex );
     
     free( *rdb );
     *rdb = NULL;
@@ -646,7 +1348,7 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
 void
 add_read_to_mapped_reads_db( 
     struct mapped_reads_db* rdb,
-    struct mapped_read_t* rd)
+    mapped_read_t* rd)
 {
     if ( rdb->mode == 'r' )
     {
@@ -657,12 +1359,10 @@ add_read_to_mapped_reads_db(
 
     int error;
 
-    rd->rdb = rdb;
-    
-    pthread_mutex_lock( rdb->mutex );
-    error = write_mapped_read_to_file( rd, rdb->fp );
+    pthread_mutex_lock( rdb->mapped_mutex );
+    error = write_mapped_read_to_file( rd, rdb->mapped_fp );
     rdb->num_mapped_reads += 1;
-    pthread_mutex_unlock( rdb->mutex );
+    pthread_mutex_unlock( rdb->mapped_mutex );
 
     if( error < 0 )
     {
@@ -672,6 +1372,36 @@ add_read_to_mapped_reads_db(
     }
     
     return;
+}
+
+void
+add_unmappable_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db )
+{
+    /* lock the mutex for the corresponding file pointer */
+    pthread_mutex_lock( db->unmappable_mutex );
+
+    /* just write out the read id on one line */
+    fprintf( db->unmappable_fp, "%d\n", r->read_id );
+    db->num_unmappable_reads += 1;
+
+    pthread_mutex_unlock( db->unmappable_mutex );
+}
+
+void
+add_nonmapping_read_to_mapped_reads_db(
+        struct read* r,
+        struct mapped_reads_db* db )
+{
+    /* lock the mutex for the corresponding file pointer */
+    pthread_mutex_lock( db->nonmapping_mutex );
+
+    /* just write out the read id on one line */
+    fprintf( db->nonmapping_fp, "%d\n", r->read_id );
+    db->num_nonmapping_reads += 1;
+
+    pthread_mutex_unlock( db->nonmapping_mutex );
 }
 
 void
@@ -693,12 +1423,9 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 int
 get_next_read_from_mapped_reads_db( 
     struct mapped_reads_db* rdb, 
-    struct mapped_read_t** rd
+    mapped_read_t** rd
 )
 {
-    init_mapped_read( rd );
-    (*rd)->rdb = rdb;
-
     /* Make sure the db is open for reading */
     if( rdb->mode != 'r' )
     {
@@ -708,58 +1435,84 @@ get_next_read_from_mapped_reads_db(
     }
 
     /** Get the next read **/
-    pthread_mutex_lock( rdb->mutex );
+    pthread_mutex_lock( rdb->mapped_mutex );
     /* if we have read every read */
     if( rdb->current_read == rdb->num_mapped_reads )
     {
-        pthread_mutex_unlock( rdb->mutex );
-        free_mapped_read( *rd );
+        pthread_mutex_unlock( rdb->mapped_mutex );
         *rd = NULL;
         return EOF;
     }
     
     MPD_RD_ID_T current_read_id = rdb->current_read;
     rdb->current_read += 1;
-    pthread_mutex_unlock( rdb->mutex );
+    pthread_mutex_unlock( rdb->mapped_mutex );
 
-    assert( current_read_id < rdb->num_mapped_reads );
-    assert( sizeof(char) == 1 );
-    
-    /* get a pointer to the current read */
-    char* read_start = rdb->index[current_read_id].ptr;
-    
-    /* read a mapping into the struct */
-    (*rd)->read_id = *((MPD_RD_ID_T*) read_start);
+    /* Set mapped_read_t to be a pointer into the mmapped mapped reads db */
+    *rd = rdb->index[current_read_id].ptr;
 
-    read_start += sizeof(MPD_RD_ID_T);
-    (*rd)->num_mappings = *((MPD_RD_ID_T*) read_start);
-
-    read_start += sizeof(MPD_RD_ID_T);
-
-    (*rd)->locations = (struct mapped_read_location*) read_start;
-    (*rd)->free_locations = false;
-        
     return 0;
 }
 
+void
+reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
+                       mapped_read_t* rd,
+                       struct mapped_reads_db* mpd_rds_db )
+{
+    assert( mpd_rds_db != NULL );
+    struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
+    
+    /* build an index for this mapped_read */
+    mapped_read_index* rd_index = NULL;
+    init_mapped_read_index( &rd_index, rd );
+
+    if( 0 == rd_index->num_mappings )
+        return;
+    
+    float *prbs = calloc( rd_index->num_mappings, sizeof(float) );
+    
+    /* prevent divide by zero */
+    double prb_sum = ML_PRB_MIN;
+    MPD_RD_ID_T i;
+    for( i = 0; i < rd_index->num_mappings; i++ )
+    {
+        mapped_read_location* loc = rd_index->mappings[i];
+
+        float cond_prob = get_seq_error_from_mapped_read_location( loc );
+
+        if( mapped_read_location_is_paired( loc) )
+            cond_prob *= get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
+
+        prbs[i] = cond_prob;
+        prb_sum += cond_prob;
+    }
+    assert( rd_index->num_mappings == 0 || prb_sum > ML_PRB_MIN );
+
+    for( i = 0; i < rd_index->num_mappings; i++ )
+    {
+        set_cond_prb( cond_prbs_db, rd_index->read_id, i, prbs[i]/prb_sum );
+        
+        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= -0.001 );
+    }
+    
+    free( prbs );
+    free_mapped_read_index( rd_index );
+    
+    return;
+}
 
 void
-reset_all_read_cond_probs( 
-    struct mapped_reads_db* rdb, struct cond_prbs_db_t* cond_prbs_db )
-                           
+reset_all_read_cond_probs( struct mapped_reads_db* rdb,
+                           struct cond_prbs_db_t* cond_prbs_db )
 {
     rewind_mapped_reads_db( rdb );
-    struct mapped_read_t* r;
+    mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
     {
-        reset_read_cond_probs( cond_prbs_db, r );
-        free_mapped_read( r );
+        reset_read_cond_probs( cond_prbs_db, r, rdb );
     }
-    
-    free_mapped_read( r );
 }
-
 
 
 /* use this for wiggles */
@@ -772,22 +1525,26 @@ update_traces_from_read_densities(
 {    
     zero_traces( traces );
 
-    struct mapped_read_t* r;
+    mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-            /* Update the trace from this mapping */
-        MPD_RD_ID_T j;
+        mapped_read_index* rd_index;
+        init_mapped_read_index( &rd_index, r );
+
+        /* Update the trace from this mapping */
+        MPD_RD_ID_T i;
         double cond_prob_sum = 0;
-        for( j = 0; j < r->num_mappings; j++ )
+        for( i = 0; i < rd_index->num_mappings; i++ )
         {
             MRL_CHR_TYPE chr_index 
-                = get_chr_from_mapped_read_location( r->locations + j );
+                = get_chr_from_mapped_read_location( rd_index->mappings + i );
             MRL_START_POS_TYPE start
-                = get_start_from_mapped_read_location( r->locations + j );
+                = get_start_from_mapped_read_location( rd_index->mappings + i );
             MRL_START_POS_TYPE stop
-                = get_stop_from_mapped_read_location( r->locations + j );
-            float cond_prob = get_cond_prb( cond_prbs_db, r->read_id, j );
+                = get_stop_from_mapped_read_location( rd_index->mappings + i );
+
+            float cond_prob = get_cond_prb( cond_prbs_db, rd_index->read_id, i );
             cond_prob_sum += cond_prob;
             
             assert( cond_prob >= -0.0001 );
@@ -795,14 +1552,16 @@ update_traces_from_read_densities(
             assert( chr_index < traces->num_chrs );
             assert( traces->chr_lengths[chr_index] >= stop );
 
-            unsigned int k = 0;
-            for( k = start; k < stop; k++ )
+            unsigned int j = 0;
+            for( j = start; j < stop; j++ )
             {
                 /* update the trace */
-                traces->traces[0][chr_index][k] 
+                traces->traces[0][chr_index][j] 
                     += (1.0/(stop-start))*cond_prob;
             }
         }
+
+        free_mapped_read_index( rd_index );
     }
     
     return;
@@ -812,21 +1571,21 @@ void
 mmap_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     /* get the file descriptor for the file we wish to mmap */
-    int fdin = fileno( rdb->fp );
+    int fdin = fileno( rdb->mapped_fp );
     
     /* make sure the entire file has been written to disk */
-    fflush( rdb->fp );
+    fflush( rdb->mapped_fp );
 
     /* check that the file is not empty before trying to mmap */
-    fseek(rdb->fp, 0L, SEEK_END);   // seek to end
-    long fp_size = ftell(rdb->fp);  // tell() to get size
+    fseek(rdb->mapped_fp, 0L, SEEK_END);   // seek to end
+    long fp_size = ftell(rdb->mapped_fp);  // tell() to get size
     if( fp_size == 0 )
     {
         fprintf( stderr,
                  "FATAL       :  Cannot mmap empty mapped reads db.\n" );
         exit( 1 );
     }
-    rewind( rdb->fp ); // reset fp
+    rewind( rdb->mapped_fp ); // reset fp
 
     /* find the size of the opened file */
     struct stat buf;
@@ -834,7 +1593,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     rdb->mmapped_data_size = buf.st_size;
     
     #ifdef MALLOC_READS_DB
-    fseek( rdb->fp, 0, SEEK_SET );
+    fseek( rdb->mapped_fp, 0, SEEK_SET );
 
     fprintf( stderr, 
              "NOTICE        : Allocating %zu bytes for the mapped reads db.", 
@@ -848,7 +1607,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
         exit( 1 );
     }
     
-    fread( rdb->mmapped_data, buf.st_size, 1, rdb->fp );
+    fread( rdb->mmapped_data, buf.st_size, 1, rdb->mapped_fp );
            
     #else
     /* mmap the file */
@@ -921,40 +1680,53 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     /* Copy the reads data pointer (adding the offset from num_mapped_reads) */
     /* we use a char just to have a byte indexed memory block, meaning that we
        can use pointer ariuthmetic with sizeof */
-    char* read_start = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
+    char* ptr = rdb->mmapped_data + sizeof(MPD_RD_ID_T);
     
     /* count mmapped reads to check they match the saved mapped reads count */
     MPD_RD_ID_T num_indexed_reads = 0;
 
     /* Loop through all of the reads */
-    while( ( (size_t)read_start - (size_t)rdb->mmapped_data ) 
-           < rdb->mmapped_data_size )
+    while( ((size_t)ptr - (size_t)rdb->mmapped_data)
+            < rdb->mmapped_data_size )
     {
-        /* if the array is full */
-        if( rdb->num_mapped_reads + 1 == num_allcd_reads )
+        /* start of a mapped_read_t */
+
+        /* index the read_id_node's for this mapped_read_t */
+        /* note - this assumes there is at least one read_id_node for each
+         * mapped_read_t */
+        while(true)
         {
-            num_allcd_reads += REALLOC_BLOCK_SIZE;
-            rdb->index = realloc(rdb->index,
-                    num_allcd_reads*sizeof(struct mapped_reads_db_index_t) );
+            /* if necessary, resize the index */
+            if( num_indexed_reads + 1 == num_allcd_reads )
+            {
+                num_allcd_reads += REALLOC_BLOCK_SIZE;
+                rdb->index = realloc(rdb->index,
+                        num_allcd_reads*sizeof(struct mapped_reads_db_index_t) );
+            }
+            assert( num_indexed_reads < num_allcd_reads );
+
+            /* cast current location to read_id_node so it can be examined */
+            read_id_node* node = (read_id_node*) ptr;
+
+            /* add the read_id_node to the index */
+            rdb->index[num_indexed_reads].read_id = node->read_id;
+            rdb->index[num_indexed_reads].ptr = ptr;
+
+            num_indexed_reads += 1;
+
+            if( !(node->are_more) )
+            {
+                /* increment pointer to the start of the mapped read locations,
+                 * and break */
+                ptr += sizeof( read_id_node );
+                break;
+            }
+
+            ptr += sizeof( read_id_node );
         }
-        assert( num_indexed_reads < num_allcd_reads );
-        
-        /* add the new index element */
-        MPD_RD_ID_T read_id = *((MPD_RD_ID_T*) read_start);
-        rdb->index[num_indexed_reads].read_id = read_id;
-        rdb->index[num_indexed_reads].ptr = read_start;
 
-        num_indexed_reads += 1;
-
-        /* skip over the mapped read in the mmapped memory */
-
-        /* skip the read ID */
-        assert( 1 == sizeof(char) );
-        read_start += sizeof(MPD_RD_ID_T);
-        MPD_RD_ID_T num_mappings = *((MPD_RD_ID_T*) read_start);
-        read_start += sizeof(MPD_RD_ID_T);
-        /* skip the array of mapped locations */
-        read_start += num_mappings*sizeof(struct mapped_read_location);
+        /* skip over the rest of the mapped_read_t in the mmapped memory */ 
+        ptr = skip_mapped_read_locations_in_mapped_read_t( ptr );
     }
 
     /* reclaim any wasted memory */
@@ -975,6 +1747,9 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
         fprintf( stderr, 
                  "FATAL           :  The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.", 
                  num_indexed_reads, rdb->num_mapped_reads );
+
+        assert(false);
+        exit(-1);
     }
     
     return;
@@ -1020,15 +1795,13 @@ init_cond_prbs_db_from_mpd_rdb(
     
     /* find the maximum readid */
     MPD_RD_ID_T max_rd_id = 0;
-    struct mapped_read_t* mapped_rd;
+    mapped_read_t* mapped_rd;
     while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
     {
-        max_rd_id = MAX( max_rd_id, mapped_rd->read_id );
-        free_mapped_read( mapped_rd );
+        MPD_RD_ID_T read_id = get_read_id_from_mapped_read( mapped_rd );
+        max_rd_id = MAX( max_rd_id, read_id );
     }
     (*cond_prbs_db)->max_rd_id = max_rd_id;
-    
-    free_mapped_read( mapped_rd );
     
     /* allocate space for the prb start pointers */
     (*cond_prbs_db)->cond_read_prbs = calloc( max_rd_id+1, sizeof(ML_PRB_TYPE*) );
@@ -1037,12 +1810,14 @@ init_cond_prbs_db_from_mpd_rdb(
     rewind_mapped_reads_db( mpd_rdb );
     while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
     {
-        (*cond_prbs_db)->cond_read_prbs[mapped_rd->read_id] 
-            = calloc( mapped_rd->num_mappings, sizeof( ML_PRB_TYPE  )  );
-        free_mapped_read( mapped_rd );
-    }
+        mapped_read_index* rd_index;
+        init_mapped_read_index( &rd_index, mapped_rd );
 
-    free_mapped_read( mapped_rd );
+        (*cond_prbs_db)->cond_read_prbs[rd_index->read_id] 
+            = calloc( rd_index->num_mappings, sizeof( ML_PRB_TYPE  )  );
+
+        free_mapped_read_index( rd_index );
+    }
 
     return;
 }
