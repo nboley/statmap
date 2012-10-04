@@ -712,6 +712,8 @@ build_candidate_mapping_from_match(
                 cm.rd_len, genome );
 
     /* HACK */
+    /* TODO - update modify_mapped_read_location_for_index_probe_offset to
+     * handle this case */
     if( match->len > 1 && base->strnd == BKWD ) {
         read_location = match->locations[match->len-1]->loc;
     }

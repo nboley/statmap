@@ -594,7 +594,14 @@ recheck_candidate_mapping(
     int i;
     for( i = 0; i < mapping->cigar_len; i++ )
     {
-        struct CIGAR_ENTRY entry = mapping->cigar[i];
+        int cigar_index;
+        if( mapping->rd_strnd == FWD ) {
+            cigar_index = i;
+        } else {
+            cigar_index = mapping->cigar_len - i - 1;
+        }
+
+        struct CIGAR_ENTRY entry = mapping->cigar[cigar_index];
 
         if( entry.op == 'M' )
         {
