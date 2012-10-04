@@ -202,7 +202,7 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
     start_pos = int(mapped_read[3])
 
     # parse the cigar string into a list of entries
-    cigar_re = r'([0-9]+)([MN])'
+    cigar_re = r'([0-9]+)([MNS])'
     cigar_string = mapped_read[5]
     cigar_entries = re.findall( cigar_re, cigar_string )
 
@@ -239,34 +239,29 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
          read_id in categorized_fragments['probe_overlaps_intron'] ):
         max_allowed_mismatches = 3 # empirically chosen
 
-    # Keep track of the location in the genome to compare to matched sequences
-    # (accounting for gaps)
     genome_pos = start_pos
-    if rev_comp:
-        seq_pos = len(read_seq)
-    else:
-        seq_pos = 0
+    read_pos = 0
 
     for entry in cigar_entries:
         entry_len = int( entry[0] )
+        entry_op = entry[1]
 
-        if entry[1] == 'M':
+        # Note: the recheck algorithm in mapped_read.c needed to reverse
+        # complement the genome sequence for comparison, since it was comparing
+        # it to the original read's sequence. When we print a reverse
+        # complement read out to SAM, we print the reverse complemented
+        # sequence, so now we can just compare directly to the genome.
+
+        if entry_op == 'M':
             genome_segment = genome[truth[0]][genome_pos:genome_pos+entry_len]
+            read_segment = read_seq[read_pos:read_pos+entry_len]
 
-            if rev_comp:
-                seq_pos -= entry_len
-            read_segment = read_seq[seq_pos:seq_pos+entry_len]
+            num_mismatches = count_mismatches( genome_segment.upper(),
+                    read_segment.upper() )
 
-            if rev_comp:
-                # reverse complement the genome sequence for comparison
-                genome_segment = sc.reverse_complement( genome_segment )
-
-            # Normalize sequence to upper case
-            num_mismatches = count_mismatches( read_segment.upper(),
-                    genome_segment.upper() )
             if( num_mismatches > max_allowed_mismatches ):
-                print "ERROR       :  Mapped read %i match segment does not match genome" \
-                        % read_id
+                print "ERROR       :  Mapped read %i match segment does not match genome (with %i mismatches)" \
+                        % (read_id, num_mismatches)
                 print "Truth:  ", truth
                 print "Introns:", introns
                 print "Mapped Read :", read_segment
@@ -280,19 +275,19 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
                 else:
                     sys.exit(1)
 
-            # update the position in the underlying mapped read_len
-            if not rev_comp:
-                seq_pos += entry_len
+            # Update pointers into sequence
+            genome_pos += entry_len
+            read_pos += entry_len
 
-        elif entry[1] == 'N':
-            pass
+        elif entry_op == 'N':
+            genome_pos += entry_len # skip the intron (in the genome sequence)
+        elif entry_op == 'S':
+            read_pos += entry_len # skip the soft clipped bases (in the read)
         else:
-            print "ERROR       :  Unexpected cigar op %s in read id %i" \
-                    % ( entry[1], read_id )
+            print "ERROR : Invalid CIGAR entry op '%c'" % entry_op
             sys.exit(1)
 
-        # Update the position in the genome to compare to
-        genome_pos += entry_len
+    return
 
 def check_statmap_output( output_directory, genome, transcriptome, introns,
         fragments, read_len, indexed_seq_len ):
