@@ -13,40 +13,56 @@ Website:      http://encodestatistics.org/statmap/
 Contact:      Nathan Boley ( nboley (AT) berkeley.edu )
 Mailing List: http://groups.google.com/group/statmap
 
+Installing Statmap
+==================
+
+Statmap needs to be built from source, and has several dependencies. In ubuntu,
+run
+
+> sudo apt-get install clang r-base-dev python-matplotlib
+
+and then run 
+
+> make clean; make; make check;
+
+from the base directory to build statmap and run the unit tests. The statmap
+binary will be copied to the $STATMAP_SRC/bin/. 
+
 Using Statmap
 =============
 
 Statmap maps reads in the FASTQ format to a reference genome in a binary genome
-format. You can use a pre-built binary genome, or build one from FASTA files with
-the build_index utility.
+format. You can use a pre-built binary genome, or build one from FASTA files
+with the build_index utility.
 
 build_index
 -----------
 
-utilities/build_index can build a binary genome for a haploid or diploid data set,
-or a combination of the two. The arguments for build_index are
+utilities/build_index can build a binary genome for a haploid or diploid data
+set, or a combination of the two. The arguments for build_index are
 
     ./build_index indexed_seq_len output_filename genome.fa(s) [diploid.map(s)]
 
 indexed_seq_len is the length of the index probe that Statmap uses to search the
-genome. It should be less than or equal to the length of the shortest read you plan
-to map. CAGE experiments need indexes that have probe lengths at least 3 basepairs
-shorter than the shortest CAGE sequence, to account for untemplated G's.
+genome. It should be less than or equal to the length of the shortest read you 
+plan to map. CAGE experiments need indexes that have probe lengths at least 3 
+basepairs shorter than the shortest CAGE sequence, to account for untemplated 
+G's.
 
 For a haploid data set, you can simply specify any number of FASTA files. For a
-diploid data set, you need to specify 3 files for each chromosome you wish to index:
-the paternal fasta, the maternal fasta, and a MAP file. SNPs are inferred by comparing
-the MAP file entries to the actual genome sequence. All of the datasets from the
-1000 Genomes project, for example, provide these files. You may specify input files
-in any order - build_index infers their relationships based on their filenames and
-FASTA identifiers.
+diploid data set, you need to specify 3 files for each chromosome you wish to 
+index: the paternal fasta, the maternal fasta, and a MAP file. SNPs are inferred
+by comparing the MAP file entries to the actual genome sequence. All of the 
+datasets from the 1000 Genomes project, for example, provide these files. You 
+may specify input files in any order - build_index infers their relationships 
+based on their filenames and FASTA identifiers.
 
-FInally, for diploid, Statmap requires a consistent naming scheme to correctly group
-FASTAs with their associated MAP files, since the MAP file format does not contain a
-sequence specifier at this time. We require that all FASTA files and MAP files
-begin with the name of the chromosome followed by an underscore, and then optionally
-other text. We require that this name match the prefix of the identifier in each
-associated FASTA file.
+FInally, for diploid, Statmap requires a consistent naming scheme to correctly 
+group FASTAs with their associated MAP files, since the MAP file format does 
+not contain a sequence specifier at this time. We require that all FASTA files 
+and MAP files begin with the name of the chromosome followed by an underscore, 
+and then optionally other text. We require that this name match the prefix of 
+the identifier in each associated FASTA file.
 
 Input
 =====
@@ -110,9 +126,9 @@ duplicate reads with 1 high quality mismatch.
 
 -a : The type of the underlying assay.
 
-The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this argument
-is set, then the data will be mapped iteratively. If not, then only the marginal mappings
-will be produced.
+The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this 
+argument is set, then the data will be mapped iteratively. If not, then only 
+the marginal mappings will be produced.
 
 -s : The type of marginal mapping search
 
@@ -122,25 +138,19 @@ These options determine the method Statmap uses to map reads to the reference.
 -n : the number of samples to take
 
 This is the number of samples to take from the mapping posterior. This defaults
-to 0 - Statmap will set up the iterative mapping framework, but will not actually
-iteratively map unless this parameter is set to non-zero. You can always do iterative
-mapping later with sample_mapping. Empirically, 10 has been a reasonable default.
+to 0 - Statmap will set up the iterative mapping framework, but will not 
+actually iteratively map unless this parameter is set to non-zero. You can 
+always do iterative mapping later with sample_mapping. Empirically, 10 has been 
+a reasonable default.
 
 -t : Number of threads
 
-Defaults to all available threads.
-
--q : Min number of HQ basepairs
-
-We require a certain number of HQ ( above 99% prob correct ) before we try and map 
-a read. This ends up being necessary for computational reasons, but there is no 
-limit on how low it can be set. This defaults to MAX( 12, (8 + indexed_seq_len/2) ),
-which, empirically, gives a reasonable mix of performance and thoroughness.
+Defaults to 8 or all available threads, whichever is less.
 
 -f : The fragment length distribution. 
 
-The fragment length density, as a tab delimited file with no header. The 
-first  entry in each line should be a length, and the second the fraction of fragments
+The fragment length density, as a tab delimited file with no header. The first  
+entry in each line should be a length, and the second the fraction of fragments
 that one expects to be this length. ie
 
 100   0.01
@@ -150,50 +160,52 @@ that one expects to be this length. ie
 
 Would be uniform in 100-199.  
 
-We need this for single end chip-seq reads to iteratively map, and any paired end 
-reads. However, For paired end reads, the default is to use uniquely mapping reads to 
-infer the  fragment length distribution. However, for rna-seq, this is not 
-necessarily correct - so be careful. 
+We need this for single end chip-seq reads to iteratively map, and any paired 
+end reads. However, For paired end reads, the default is to use uniquely 
+mapping reads to infer the  fragment length distribution. However, for rna-seq, 
+this is not necessarily correct - so be careful. 
 
 In addition, there is a script for generating this file in utilities.
 
 Output
 ======
 
-Statmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min ), in
-which it stores all of the mapping results. The list of saved output depends on the 
-command line parameters. 
+Statmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min )
+in which it stores all of the mapping results. The list of saved output depends 
+on the command line parameters. 
 
 ** STATMAP USES LOTS OF DISK SPACE **
-If you are trying to map a full human experiment without a terrabyte of free storage,
-you could very well run into problems several days into mapping. DONT TRY - DISKS ARE
-CHEAP. For drosophila, 150GB or so is probably good.
+If you are trying to map a full human experiment without a terrabyte of free 
+storage, you could very well run into problems several days into mapping. DONT 
+TRY - DISKS ARE CHEAP. For drosophila, 150GB or so is probably good.
 ** STATMAP USES LOTS OF DISK SPACE **
 
 The ouput files can be divided into several categories:
 
 WIGGLE:
 
-Wiggle tracks are assay dependent. For instance, CAGE reads returns two tracks - 
-a forward stranded track and a reverse stranded track, whereas paired chip-seq just
-returns read densities on one strand. 
+Wiggle tracks are assay dependent. For instance, CAGE reads returns two tracks -
+a forward stranded track and a reverse stranded track, whereas paired chip-seq 
+just returns read densities on one strand. 
 
 marginal_mapping_(fwd/bkwd).wig - 
 
 Stores an estimate of the expectation of the posterior read density under the 
-uniform prior assumption on the reference genome. That is, if a read maps equally
-well to two positions, we set the 'probability' that it came from each to 0.5
+uniform prior assumption on the reference genome. That is, if a read maps 
+equally well to two positions, we set the 'probability' that it came from each 
+to 0.5
 
 starting_samples/sample_X.wig -
 
-When we try and sample from the space of all 'plausible' mappings, the first step
-is to look for a random, but plausible, starting location. This directory stores
-each of these starting locations as a wiggle. They can be useful if one wants to 
-visualize the the read dependence, but they are probably not terribly useful for
-most. However, they are probably worth keeping for the publication run because, 
-since the sampling is random, the results are only truely reproducible with the
-random starting locations ( although, of course, if you are getting different 
-results from different runs, you are not sampling deeply enough. )
+When we try and sample from the space of all 'plausible' mappings, the first 
+step is to look for a random, but plausible, starting location. This directory 
+stores each of these starting locations as a wiggle. They can be useful if one 
+wants to  visualize the the read dependence, but they are probably not terribly 
+useful for most. However, they are probably worth keeping for the publication 
+run because, since the sampling is random, the results are only truely 
+reproducible with the random starting locations ( although, of course, if you 
+are getting different results from different runs, you are not sampling deeply 
+enough. )
 
 starting_samples/meta_info.csv -
 
@@ -203,11 +215,12 @@ likelihood.
 samples/sample_X.wig -
 
 These are the relaxed mappings for each starting sample. If one is interested in
-exploring the variance of biological conclusions, then the best way ( if feasible ) 
-is to make inference about each of these samples, and then weight by their respective
-likelihoods. For instance, if one is interested in assessing the variation in 
-called peaks, a good approach might be to run the peak caller on each wiggle file
-and then report confidence as the percentage of times that a given peak was called. 
+exploring the variance of biological conclusions, then the best way ( if 
+feasible ) is to make inference about each of these samples, and then weight by 
+their respective likelihoods. For instance, if one is interested in assessing 
+the variation in called peaks, a good approach might be to run the peak caller 
+on each wiggle file and then report confidence as the percentage of times that 
+a given peak was called. 
 
 samples/meta_info.csv -
 
@@ -218,7 +231,7 @@ bootstrap_samples/all_traces/sampleX/bssampleY.wig
 Stores a bootstrap sample from local maximum X, bootstrap sample Y.
 
 
-============ GENERATE THESE WITH ./utilities/build_aggregates.py =====================
+============ GENERATE THESE WITH ./utilities/build_aggregates.py ===============
 
 bootstrap_samples/(min/max)_traces
 
@@ -226,17 +239,17 @@ Store wiggles aggregated over each of the bootstrap samples.
 
 min_read_density.wig - 
 
-Stores the minimum over all samples. This is a very conservative lower bound on the 
-read density.
+Stores the minimum over all samples. This is a very conservative lower bound on 
+the read density.
 
 max_read_density.wig - 
 
-Stores the maximum over all samples. This is a very conservative upper bound on the 
-read density.
+Stores the maximum over all samples. This is a very conservative upper bound on 
+the read density.
 
-======================================================================================
+================================================================================
 
-============ GENERATE SAM WITH mapped_reads_into_sam =================================
+============ GENERATE SAM WITH mapped_reads_into_sam ===========================
 
 WARNING - SAM files can get very big WARNING
 
@@ -253,26 +266,27 @@ accurate estiatmes, so I've added two optional columns:
 XQ - stores the probability of observing a read ( or read pair ), given that it
      came from the position at that line. 
 
-XP - stores the probability, after relaxation, that a read came from this location
-     given that it came from somewhere in the reference genome.
+XP - stores the probability, after relaxation, that a read came from this 
+     location given that it came from somewhere in the reference genome.
 
 Furthermore, for paired end reads, statmap only reports reads that can be paired.
-( This is, at least, against the spirit of the SAM format, but I dont really see the
-  point of retaining unpaired reads ).
+( This is, at least, against the spirit of the SAM format, but I dont really see
+  the point of retaining unpaired reads ).
 
-=====================================================================================
+================================================================================
 
 OUTPUT THAT YOU PROBABLY DONT CARE ABOUT-
 
 mapped_reads.db - 
 
-A binary file with all of the mapped reads. The SAM stores the same information. 
+A binary file with all of the mapped reads. The SAM stores the same information.
 
 cand_mappings/*.mapped -
 
-Binary files containing all of the canidate mappings ( unpaired, un-updated reads ).
+Binary files containing all of the canidate mappings ( unpaired, un-updated 
+reads ).
 
-===== Testing Statmap ===============================================================
+===== Testing Statmap ==========================================================
 
 Test.py:
 
@@ -295,21 +309,11 @@ CLEANUP - remove the test file generated by each test.
 If one is interested in testing various options, set CLEANUP to false, run
 the test of interest, and then you can re-run statmap on the data files. 
 
-Furthermore, there are several functions that can be called to run specific tests.
-
-    test_fivep_sequence_finding()
-    test_threep_sequence_finding()
-    test_paired_end_sequence_finding( )
-    test_repeat_sequence_finding()
-    test_mutated_read_finding()
-    test_multithreaded_mapping()
-    test_lots_of_repeat_sequence_finding()
-
 simulate_chipseq.py:
 
-This simulates to explore the variance estimates by simulating a chip-seq experiment, 
-with a paralog and plotting the starting location and updated read densities in 
-bootstrap_samples.png.
+This simulates to explore the variance estimates by simulating a chip-seq 
+experiment, with a paralog and plotting the starting location and updated read 
+densities in bootstrap_samples.png.
 
 
 
