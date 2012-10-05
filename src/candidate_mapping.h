@@ -37,9 +37,6 @@ modify_mapped_read_location_for_index_probe_offset(
  */
 
 struct READ_TYPE {
-    /* Whether this candidate mapping follows a gap in the reference genome
-     * (such as an intron) */
-    enum bool follows_ref_gap;
     /* Position of this candidate mapping in the underlying template.
      * This is equal to the index of the underlying read subtemplate */
     int pos;
@@ -54,7 +51,7 @@ struct CIGAR_ENTRY {
  * cigar string */
 #define MAX_CIGAR_STRING_ENTRIES 5
 
-typedef struct __attribute__((packed))__{
+typedef struct {
     /*** Info relating to the location ***/
     /* the chromosome code */
     short chr;
@@ -65,7 +62,7 @@ typedef struct __attribute__((packed))__{
     /* If this is a normal, or paired end read */
     struct READ_TYPE rd_type;
     /* the full length in bp's of the underlying read */
-    READ_POSITION rd_len;
+    READ_POSITION mapped_length;
     
     /*** Info related to the mapped read ***/
     /* 
@@ -84,12 +81,20 @@ typedef struct __attribute__((packed))__{
     /* Length of the read that was soft clipped */
     int trimmed_length;
 
+    /* Number of possibly untemplated Gs soft clipped by trimmed_length */
+    int num_untemplated_gs;
+
     /* cigar string */
     struct CIGAR_ENTRY cigar[MAX_CIGAR_STRING_ENTRIES];
     int cigar_len;
 
 } candidate_mapping;
 
+candidate_mapping
+init_candidate_mapping();
+
+int
+get_length_from_cigar_string( candidate_mapping* mapping );
 
 #define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
 typedef struct {
@@ -98,18 +103,14 @@ typedef struct {
     candidate_mapping* mappings;
 } candidate_mappings;
 
-/* Deal with candidate mappings arrays */
-
-/* Initialize the array */
 void
 init_candidate_mappings( candidate_mappings** mappings );
 
-candidate_mapping
-init_candidate_mapping_from_read_subtemplate(
-        struct read_subtemplate* rst );
-
-int
-get_length_from_cigar_string( candidate_mapping* mapping );
+void
+copy_candidate_mappings(
+        candidate_mappings* dst,
+        candidate_mappings* src
+    );
 
 /* add a copy of a candidate mapping */
 void

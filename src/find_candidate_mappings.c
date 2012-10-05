@@ -207,7 +207,7 @@ can_be_used_to_update_error_data(
     assert( mappings->length >= 1 );
     
     candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = loc->rd_len;
+    int mapped_length = loc->mapped_length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -260,10 +260,10 @@ update_error_data_record_from_candidate_mappings(
         return;
     
     // emphasize the array aspect with the + 0
-    // but, since aal of the sequence is identical,
+    // but, since all of the sequence is identical,
     // we only need to deal with this read
     candidate_mapping* cm = mappings->mappings + 0;         
-    int mapped_length = cm->rd_len;
+    int mapped_length = cm->mapped_length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -651,7 +651,7 @@ build_candidate_mapping_cigar_string_from_match(
     if( cm->cigar_len == 1 )
     {
         cm->cigar[0].op = 'M';
-        cm->cigar[0].len = cm->rd_len;
+        cm->cigar[0].len = cm->mapped_length;
     }
 
     return;
@@ -706,11 +706,11 @@ build_candidate_mapping_from_match(
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
-    cm.rd_len = rst->length - softclip_len;
+    cm.mapped_length = rst->length - softclip_len;
     int read_location = modify_mapped_read_location_for_index_probe_offset(
                 base->loc, base->chr, base->strnd,
                 match->subseq_offsets[0], match->subseq_lengths[0],
-                cm.rd_len, genome );
+                cm.mapped_length, genome );
 
     /* HACK */
     if( match->len > 1 && base->strnd == BKWD ) {
@@ -1368,7 +1368,7 @@ build_gapped_candidate_mappings_for_candidate_mapping(
     }
 
     /* The full length of the fragment, including any gaps */
-    int gapped_length = gapped_cm.rd_len + gapped_cm.cigar[2].len;
+    int gapped_length = gapped_cm.mapped_length + gapped_cm.cigar[2].len;
 
     /* Get a pointer to the genome sequence this read maps to. This is the
      * whole genome sequence it covers, including the intron. */
