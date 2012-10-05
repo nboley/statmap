@@ -455,6 +455,8 @@ def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
             num_untemplated_gs = random.randint(1,3) \
                     if random.random() < untemplated_gs_perc else 0
             prefix = 'g'*num_untemplated_gs
+            # trim off start of seq so all reads are the same length
+            seq = seq[num_untemplated_gs:]
 
         seq = prefix + seq
 
@@ -598,8 +600,8 @@ def check_sequence_match( mapped_read, truth, genome ):
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
-        untemplated_gs_perc=0.0, search_type="m", min_penalty=-1.0,
-        max_penalty_spread=1, num_samples=0, assay=None, random_prefix_len=0 ):
+        untemplated_gs_perc=0.0, search_type="m", min_penalty=None,
+        max_penalty_spread=None, num_samples=0, assay=None, random_prefix_len=0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -644,6 +646,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay, 
             search_type=search_type, num_samples=num_samples,
+            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread,
             softclip_len=softclip_len )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -705,7 +708,8 @@ def test_untemplated_g_finding( ):
     #rls = [ 15, 25, 50, 75  ]
     rls = [ 25, ]
     for rl in rls:
-        test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25 )
+        test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25,
+                min_penalty=0.05, max_penalty_spread=0.05 )
         print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_threep_sequence_finding( ):
@@ -964,7 +968,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
                       min_penalty = 0.20, max_penalty_spread=0.05,
-                      indexed_seq_len = read_len - 2,
+                      indexed_seq_len = read_len - 3,
                       num_threads = n_threads,
                       assay=assay, num_samples=num_samples ) # read_len = read_len - 2
     
