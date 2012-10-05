@@ -549,11 +549,10 @@ join_candidate_mappings( candidate_mappings* mappings,
 void
 recheck_candidate_mapping(
         candidate_mapping* mapping,
-
         struct read_subtemplate* rst,
         struct genome_data* genome,
-
-        struct error_model_t* error_model )
+        struct error_model_t* error_model
+    )
 {
     float rechecked_penalty = 0;
 
@@ -608,7 +607,11 @@ recheck_candidate_mapping(
         seq_pos += entry.len;
     }
 
-    mapping->penalty = rechecked_penalty;
+    /* The rechecked penalty is the total penalty of any match (M) segments,
+     * plus the marginal probability for any untemplated G's (which are soft
+     * clipped, but recorded in mapping->num_untemplated_gs) */
+    mapping->penalty = rechecked_penalty + 
+        (mapping->num_untemplated_gs*UNTEMPLATED_G_MARGINAL_LOG_PRB);
 
     /* cleanup memory */
     free( mapped_seq );
