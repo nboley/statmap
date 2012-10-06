@@ -10,6 +10,8 @@
 #include "quality.h"
 #include "genome.h"
 #include "error_correction.h"
+#include "find_candidate_mappings.h"
+#include "statmap.h"
 
 /*
  *  Code to estiamte error frequencies. Calls R.
@@ -376,6 +378,14 @@ init_mapping_params_for_read(
         
          //metaparams->error_model_params[0];
         (*p)->recheck_max_penalty_spread = 2.1; //metaparams->error_model_params[1];
+    }
+
+    if( _assay_type == CAGE )
+    {
+        /* FIXME - for now, increase the penalty so we can at least map perfect
+         * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
+        (*p)->recheck_min_match_penalty +=
+            (MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
     }
     
     return;

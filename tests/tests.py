@@ -709,7 +709,7 @@ def test_untemplated_g_finding( ):
     rls = [ 25, ]
     for rl in rls:
         test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25,
-                min_penalty=0.05, max_penalty_spread=0.05 )
+                search_type='e' )
         print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_threep_sequence_finding( ):
