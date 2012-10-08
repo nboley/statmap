@@ -409,7 +409,7 @@ struct update_mapped_reads_param {
     
 };
 
-void*
+void
 update_mapped_reads_from_trace_worker( void* params )
 {
     struct trace_t* traces = ( (struct update_mapped_reads_param*) params)->traces;

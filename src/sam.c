@@ -261,8 +261,10 @@ fprintf_sam_line_from_sublocations_group(
         strand = BKWD;
     }
 
+    /* Unused - we use the mapped length instead
     int rd_len = MAX( start, stop )
                - MIN( start, stop );
+    */
 
     /* print the query name */
     fprintf( sam_fp, "%s\t", read->name );

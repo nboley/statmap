@@ -296,6 +296,9 @@ void free_error_model( struct error_model_t* error_model )
 double
 calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
 {
+    /* Unused - assert added to prevent compiler warning (for now) */
+    assert( exp_miss_frac > 0 );
+
     double mean = 0;
     double var = 0;
     

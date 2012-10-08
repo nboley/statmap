@@ -1715,8 +1715,7 @@ void
 add_candidate_mappings_for_untemplated_gs(
         candidate_mappings* assay_corrected_mappings,
         candidate_mapping* cm,
-        struct read* r,
-        struct genome_data* genome
+        struct read* r
     )
 {
     /** Add additional mappings if there is a G (that could be untemplated) in
@@ -1760,8 +1759,7 @@ void
 make_cage_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r,
-        struct genome_data* genome
+        struct read* r
     )
 {
     int i;
@@ -1809,7 +1807,7 @@ make_cage_specific_corrections(
          * candidate mappings if it possible that they could have untemplated
          * G's */
         add_candidate_mappings_for_untemplated_gs( assay_corrected_mappings,
-                &corrected_cm, r, genome );
+                &corrected_cm, r );
     }
 
     return;
@@ -1819,15 +1817,13 @@ void
 make_assay_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r,
-        struct genome_data* genome
+        struct read* r
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
-        make_cage_specific_corrections( mappings, assay_corrected_mappings, r,
-                genome );
+        make_cage_specific_corrections( mappings, assay_corrected_mappings, r );
     } else {
         /* Copy the original set of mappings to the corrected set (without
          * alteration, since this assay type does not require corrections) */
@@ -1861,9 +1857,7 @@ build_mapped_read_from_candidate_mappings(
      * */
     candidate_mappings* assay_corrected_mappings = NULL;
     init_candidate_mappings( &assay_corrected_mappings );
-    make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
-            genome );
-
+    make_assay_specific_corrections( mappings, assay_corrected_mappings, r );
     /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,
