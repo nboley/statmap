@@ -105,33 +105,15 @@ except AttributeError:
         err_str = property(itemgetter(1))        
         seq = property(itemgetter(2))
 
-def map_with_statmap( read_fnames, output_dir, 
-                      indexed_seq_len,
-                      min_penalty=None, max_penalty_spread=None, 
-                      num_threads=1, 
-                      search_type="m",
-                      assay=None,
-                      genome_fnames=["*.fa",],
-                      num_samples=0,
-                      softclip_len=0,
-        ):
+def map_with_statmap( read_fnames, output_dir, indexed_seq_len,
+        mapping_metaparameter=None, num_threads=1, search_type="m", assay=None,
+        genome_fnames=["*.fa",], num_samples=0, softclip_len=0 ):
+
     if not P_STATMAP_OUTPUT:
         stderr.seek( 0 )
         stderr.truncate()
         stdout.seek( 0 )
         stdout.truncate()
-    
-    if min_penalty == None:
-        if search_type == 'm':
-            min_penalty = 0.01
-        else:
-            min_penalty = -7.0
-    
-    if max_penalty_spread == None:
-        if search_type == 'm':
-            max_penalty_spread = 0.01
-        else:
-            max_penalty_spread = 2.1
     
     # build the input fnames str
     assert len( read_fnames ) in (1,2)
@@ -156,8 +138,11 @@ def map_with_statmap( read_fnames, output_dir,
             % str( ret_code )
 
     # run statmap
-    call = "%s -g tmp.genome.fa.bin %s -o %s -p %.2f -m %.2f -t %i -q 0" \
-        % ( STATMAP_PATH, read_fname_str, output_dir, min_penalty, max_penalty_spread, num_threads )
+    call = "%s -g tmp.genome.fa.bin %s -o %s -t %i -q 0" \
+        % ( STATMAP_PATH, read_fname_str, output_dir, num_threads )
+
+    if mapping_metaparameter != None:
+        call += " -p %.2f " % mapping_metaparameter
 
     if assay != None:
         call += " -a " + assay
@@ -600,8 +585,8 @@ def check_sequence_match( mapped_read, truth, genome ):
 # should all be short reads that we can map uniquely. We will test this over a variety of
 # sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
-        untemplated_gs_perc=0.0, search_type="m", min_penalty=None,
-        max_penalty_spread=None, num_samples=0, assay=None, random_prefix_len=0 ):
+        untemplated_gs_perc=0.0, search_type="m", mapping_metaparameter=None,
+        num_samples=0, assay=None, random_prefix_len=0 ):
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
@@ -644,9 +629,9 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     softclip_len = random_prefix_len if untemplated_gs_perc == 0 else 3
 
     map_with_statmap( read_fnames, output_directory,
-            indexed_seq_len=indexed_seq_len, assay=assay, 
+            indexed_seq_len=indexed_seq_len, assay=assay,
             search_type=search_type, num_samples=num_samples,
-            min_penalty=min_penalty, max_penalty_spread=max_penalty_spread,
+            mapping_metaparameter=mapping_metaparameter,
             softclip_len=softclip_len )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -927,10 +912,10 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
+def test_dirty_reads( read_len, n_threads=1, nreads=100,
         fasta_prefix=None, assay=None, num_samples=0 ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%i_%s" \
-        % ( read_len, min_penalty, n_threads, nreads, str(fasta_prefix) )
+    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
+        % ( read_len, n_threads, nreads, str(fasta_prefix) )
     
     rl = read_len
 
@@ -967,10 +952,8 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
 
     read_fnames = ( "tmp.fastq", )
     map_with_statmap( read_fnames, output_directory,
-                      min_penalty = 0.20, max_penalty_spread=0.05,
-                      indexed_seq_len = read_len - 3,
-                      num_threads = n_threads,
-                      assay=assay, num_samples=num_samples ) # read_len = read_len - 2
+            indexed_seq_len = read_len - 3, num_threads = n_threads,
+            assay=assay, num_samples=num_samples )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1072,7 +1055,7 @@ def test_dirty_reads( read_len, min_penalty=-30, n_threads=1, nreads=100,
 def test_mutated_read_finding( ):
     rls = [ 50, 75  ]
     for rl in rls:
-        test_dirty_reads( rl, n_threads=1, min_penalty=-30 ) 
+        test_dirty_reads( rl ) 
         print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
 
 def test_multithreaded_mapping( ):
@@ -1579,29 +1562,6 @@ def test_sam_output():
         os.remove("./tmp.genome.fa")
         os.remove("./tmp.fastq")
         shutil.rmtree(output_directory)
-
-if False:
-    num_repeats = 1
-    num_chrs = 1
-    frag_len = 200
-    paired = False
-    chr_sizes = [450]*num_chrs
-    chr_names = [ "chr%i" % i for i in xrange( num_chrs )  ]
-    
-    assert all( frag_len < chr_len for chr_len in chr_sizes )
-    
-    r_genome = build_random_genome( chr_sizes, chr_names )
-    truth = sample_uniformly_from_genome( r_genome, nsamples=1000, frag_len=frag_len )
-    reads = build_reads_from_fragments( r_genome, truth, paired_end=paired )
-    
-    sample_file = gzip.open( 'clean_error_strs.fastq.gz' )
-    error_strs = get_error_strs_from_fastq( sample_file )
-    sample_file.close()
-    mutated_reads = mutate_reads( reads, error_strs )
-    
-    test_dirty_reads( mutated_reads, r_genome, truth, \
-                      num_chr_repeats=1, \
-                      min_penalty=-10, max_penalty_spread=2 )
 
 def test_softclipped_read_finding():
     rl = 20

@@ -29,8 +29,8 @@ struct args_t {
 
     char* sam_output_fname;
     
-    float min_match_penalty;
-    float max_penalty_spread;
+    float mapping_metaparameter;
+
     int min_num_hq_bps;
 
     int num_starting_locations;

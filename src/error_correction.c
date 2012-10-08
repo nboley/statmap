@@ -377,10 +377,12 @@ init_mapping_params_for_read(
     else {
         assert( metaparams->error_model_type == ESTIMATED );
         (*p)->recheck_min_match_penalty 
-            = calc_min_match_penalty( (*p)->fwd_penalty_arrays[0], 0.01 );
+            = calc_min_match_penalty( (*p)->fwd_penalty_arrays[0],
+                    1 - metaparams->error_model_params[0] );
         
          //metaparams->error_model_params[0];
-        (*p)->recheck_max_penalty_spread = 2.1; //metaparams->error_model_params[1];
+        (*p)->recheck_max_penalty_spread = log10(
+                1 - metaparams->error_model_params[0] );
     }
 
     if( _assay_type == CAGE )
@@ -413,10 +415,15 @@ init_index_search_params(
         int length = ists->container[i].subseq_length;
         
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
+
             min_match_penalty = -(int)(
                 mapping_params->metaparams->error_model_params[0]*length)-1;
+
+            /* Let the mismatch spread be 1/2 the allowed mismatch rate (for
+             * now */
             max_penalty_spread = (int)(
-                mapping_params->metaparams->error_model_params[1]*length)+1;
+                mapping_params->metaparams->error_model_params[0]*0.5*length)+1;
+
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
             min_match_penalty = mapping_params->recheck_min_match_penalty;

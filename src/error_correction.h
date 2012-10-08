@@ -62,7 +62,6 @@ update_error_model_from_error_data(
 void
 free_error_model( struct error_model_t* error_model );
 
-/* This code is preparation for future merge of error_correction branch */
 /* Mapping metaparameters are set by the user and fixed. They are used by the
  * error model code as guides to set more fine grained parameters. */
 struct mapping_metaparams {

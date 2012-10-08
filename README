@@ -4,8 +4,8 @@ Statmap is a fast alignment tool designed for mapping short reads to a reference
 genome under a probability model. The probability model allows statmap to do many 
 things that other mapping tools cannot, including
 
-1) Mapping to uncertain reference  genome
-2) Estimating mapping probabilities for  multi-mappers and then intelligently 
+1) Mapping to uncertain reference genome
+2) Estimating mapping probabilities for multi-mappers and then intelligently 
    placing them under an assay specific model
 3) Estimating confidence bounds on mapped read density.
 
@@ -105,43 +105,43 @@ OR
 Optional arguments
 ------------------
 
--o : directory to write output to.
+-o : directory to write output to
 
--p : The minimum match penalty.
+The default is statmap_ouput_month_day_date_hour_min.
 
-This sets the lower bound, in log10 probability space, that we will match 
-too. That is, statmap guarantees to return all of the locations in the 
-reference genome such that the log of the probability of observing the seq
-at the reference genome location is greater than the value passed to -p. It
-defaults to -7, which is sufficient to map reads with 3 high quality mismatches.
+-s : marginal mapping search type
 
--m : The maximum penalty spread.
+The two valid options are 'e' (estimated error model) and 'm' (mismatches).
+These options determine the method Statmap uses to map reads to the reference.
+The default is 'e'.
 
-This sets the upper bound, in log10 probability, of the difference of the 
-probabilities of the top matching sequence, to the sequence of interest. 
-That is, if we find a sequence with a match penalty of -6, but we have already
-observed a sequence with a match penalty of -2, then we will only return the
-new sequence if -m is >= 4. It defaults to 2.1, which is sufficient to map  
-duplicate reads with 1 high quality mismatch.
+-p : mapping metaparameter
+
+The meaning of this parameter depends on the marginal mapping search type.
+
+For the estimated error model, this is the % of the input reads that Statmap
+will attempt to map. It guides Statmap in adjusting the index search parameters
+based on observed data that is bootstrapped from a subset of the input reads.
+The default is 0.99.
+
+For the mismatch search type, this is the fraction of bases in each read that 
+are allowed to be mismatches in a mapping. For a 100bp read, a setting of 0.1
+means that we will find mappings with up to 10 mismatches. The default is 0.1.
 
 -a : The type of the underlying assay.
 
-The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). If this 
-argument is set, then the data will be mapped iteratively. If not, then only 
-the marginal mappings will be produced.
-
--s : The type of marginal mapping search
-
-The two valid options are 'e' (observed error data) and 'm' (mismatches).
-These options determine the method Statmap uses to map reads to the reference.
+The two valid options are 'i' ( for chip_seq ) and 'a' ( for cage ). This must
+be set in order to use Statmap's iterative mapping functionality, as the kernel
+is assay-specific.
 
 -n : the number of samples to take
 
 This is the number of samples to take from the mapping posterior. This defaults
 to 0 - Statmap will set up the iterative mapping framework, but will not 
 actually iteratively map unless this parameter is set to non-zero. You can 
-always do iterative mapping later with sample_mapping. Empirically, 10 has been 
-a reasonable default.
+always do iterative mapping later with sample_mapping.
+
+Empirically, 10 has been a reasonable default.
 
 -t : Number of threads
 
@@ -170,9 +170,8 @@ In addition, there is a script for generating this file in utilities.
 Output
 ======
 
-Statmap creates a directory ( -o DEFAULT statmap_ouput_month_day_date_hour_min )
-in which it stores all of the mapping results. The list of saved output depends 
-on the command line parameters. 
+Statmap creates a directory in which it stores all of the mapping results. The
+list of saved output depends on the command line parameters. 
 
 ** STATMAP USES LOTS OF DISK SPACE **
 If you are trying to map a full human experiment without a terrabyte of free 
@@ -251,7 +250,7 @@ the read density.
 
 ============ GENERATE SAM WITH mapped_reads_into_sam ===========================
 
-WARNING - SAM files can get very big WARNING
+** WARNING - SAM files can get very big **
 
 SAM:
 
@@ -281,20 +280,15 @@ mapped_reads.db -
 
 A binary file with all of the mapped reads. The SAM stores the same information.
 
-cand_mappings/*.mapped -
-
-Binary files containing all of the canidate mappings ( unpaired, un-updated 
-reads ).
-
 ===== Testing Statmap ==========================================================
 
-Test.py:
+test.py:
 
 Statmap has been built with a test suite that checks several aspects of
 it's operation. The fields and data require python and numpy to run,
 and can be found in the 'tests' sub directory.
 
-To run the tests, run 'make test' from the root directory. However,
+To run the tests, run 'make check' from the root directory. However,
 for finer control over the tests, and to try out statmap, it may be 
 worth looking at the tests individually.
 
@@ -314,8 +308,3 @@ simulate_chipseq.py:
 This simulates to explore the variance estimates by simulating a chip-seq 
 experiment, with a paralog and plotting the starting location and updated read 
 densities in bootstrap_samples.png.
-
-
-
-
-

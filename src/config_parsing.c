@@ -252,8 +252,8 @@ static struct argp_option options[] =
 
     /* optional arguments */
     {0, 0, 0, 0, "Optional Arguments:", 0},
-    {"min-match-penalty", 'p', "PENALTY", 0,
-     "Lower bound that we will map to (in log10 probability space)", 0},
+    {"mapping-metaparameter", 'p', "PARAM", 0,
+     "Fraction of reads to try to map (estimated error model) or number of mismatches allowed as fraction of read length (mismatch error model)", 0},
     {"max-penalty-spread", 'm', "SPREAD", 0,
      "Upper bound of the difference of probabilities between the top matching sequence and the sequence of interest (in log10 probaiblity space)", 0},
     {"assay", 'a', "ASSAY", 0,
@@ -322,10 +322,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
 
             /* Optional arguments */
         case 'p':
-            args->min_match_penalty = atof(arg);
-            break;
-        case 'm':
-            args->max_penalty_spread = atof(arg);
+            args->mapping_metaparameter = atof(arg);
             break;
         case 'o':
             args->output_directory = arg;
@@ -376,7 +373,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
                     break;
                 default:
                     argp_failure( state, 1, 0,
-                            "FATAL       :  Unrecognized search type '%s'",
+                            "FATAL       :  Invalid search type '%s'",
                             arg );
             }
             break;
@@ -461,11 +458,8 @@ parse_arguments( int argc, char** argv )
 
     args.sam_output_fname = NULL;
 
-    /* Since the min_match_penalty is a negative number, we use 1 as the
-     * "unset" value because -1 is a valid input */
-    args.min_match_penalty = 1;
+    args.mapping_metaparameter = -1;
 
-    args.max_penalty_spread = -1;
     args.min_num_hq_bps = -1;
 
     args.num_starting_locations = -1;
@@ -571,22 +565,42 @@ parse_arguments( int argc, char** argv )
     args.genome_index_fname = calloc( PATH_MAX - 6, sizeof(char) );
     sprintf( args.genome_index_fname, "%s.index", args.genome_fname );
 
-    /* Set defaults for numeric parameters */
-
-    if( args.min_match_penalty == 1 )
+    /* Set default for search type (necessary so we know what defaults to use
+     * for mapping parameters) */
+    if( args.error_model_type == UNKNOWN )
     {
-        args.min_match_penalty = DEFAULT_MIN_MATCH_PENALTY;
-        fprintf(stderr,
-                "NOTICE      :  Setting the min_match_penalty (-p) to %.3f\n",
-                DEFAULT_MIN_MATCH_PENALTY );
+        args.error_model_type = ESTIMATED;
     }
 
-    if( args.max_penalty_spread == -1 )
+    /* Set defaults for numeric parameters */
+
+    if( args.mapping_metaparameter == -1 )
     {
-        args.max_penalty_spread = DEFAULT_MAX_PENALTY_SPREAD;
-        fprintf(stderr,
-                "NOTICE      :  Setting the max_penalty_spread (-m) to %.3f\n",
-                DEFAULT_MAX_PENALTY_SPREAD );
+        if( args.error_model_type == ESTIMATED )
+        {
+            args.mapping_metaparameter = DEFAULT_ESTIMATED_ERROR_METAPARAMETER;
+            fprintf(stderr,
+                    "NOTICE      :  Setting the mapping metaparameter (-p) (for the estimated error model) to %.3f\n",
+                    DEFAULT_ESTIMATED_ERROR_METAPARAMETER );
+        }
+        else if( args.error_model_type == MISMATCH )
+        {
+            args.mapping_metaparameter = DEFAULT_MISMATCH_METAPARAMTER;
+            fprintf(stderr,
+                    "NOTICE      :  Setting the mapping metaparameter (-p) (for the mismatch error model) to %.3f\n",
+                    DEFAULT_MISMATCH_METAPARAMTER );
+        }
+    }
+
+    /* Make sure the metaparameter value is valid. We expect a fraction in the
+     * range [0,1] */
+    if( args.mapping_metaparameter< 0 || args.mapping_metaparameter > 1 )
+    {
+        fprintf( stderr,
+                 "FATAL       :  The mapping metaparameter (-p) must be in the range [0,1] got %.3f\n",
+                 args.mapping_metaparameter );
+        assert( false );
+        exit(1);
     }
 
     /***** Copy the reads file into the output directory ****/
@@ -667,11 +681,6 @@ parse_arguments( int argc, char** argv )
             "FATAL       :  CHIPSEQ assay mappings requires a fragment length distirbution (-f)\n" );
             exit( -1 );
         }
-    }
-
-    if( args.error_model_type == UNKNOWN )
-    {
-        args.error_model_type = ESTIMATED;
     }
 
     /********* END CHECK REQUIRED ARGUMENTS ***********************************/
@@ -789,14 +798,6 @@ parse_arguments( int argc, char** argv )
     min_num_hq_bps = args.min_num_hq_bps;
     max_reference_insert_len = args.max_reference_insert_len;
 
-    /* 
-     * Dont allow penalty spreads greater than the min match penalty - 
-     * they are worthless and mess up my search heuristics 
-     *
-     */
-    if( args.max_penalty_spread + args.min_match_penalty + 0.00001 > 0 )
-        args.max_penalty_spread = -1;
-
     return args;
 }
 
@@ -849,8 +850,8 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
     fprintf_name_or_null( 
         arg_fp, "sam_output_fname", args->sam_output_fname );
     
-    fprintf( arg_fp, "min_match_penalty:\t%.4f\n", args->min_match_penalty );
-    fprintf( arg_fp, "max_penalty_spread:\t%.4f\n", args->max_penalty_spread );
+    fprintf( arg_fp, "mapping_metaparameter:\t%.4f\n", args->mapping_metaparameter );
+
     fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
 
     fprintf( arg_fp, "num_starting_locations:\t%i\n", args->num_starting_locations );
@@ -941,10 +942,9 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     fscanf_name_or_null( 
         arg_fp, "sam_output_fname", &((*args)->sam_output_fname) );
     
-    fscanf( arg_fp, "min_match_penalty:\t%f\n", 
-            &((*args)->min_match_penalty) );
-    fscanf( arg_fp, "max_penalty_spread:\t%f\n", 
-            &((*args)->max_penalty_spread) );
+    fscanf( arg_fp, "mapping_metaparameter:\t%f\n",
+            &((*args)->mapping_metaparameter) );
+
     fscanf( arg_fp, "min_num_hq_bps:\t%i\n", 
             &((*args)->min_num_hq_bps) );
 

@@ -140,6 +140,7 @@ map_marginal( struct args_t* args,
         fprintf( stderr, 
                  "NOTICE      :  Setting bootstrap mismatch rates to %f and %f\n",
                  MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+
         mapping_metaparams.error_model_type = MISMATCH;
         mapping_metaparams.error_model_params[0] = MAX_NUM_MM_RATE;
         mapping_metaparams.error_model_params[1] = MAX_NUM_MM_SPREAD_RATE;
@@ -155,9 +156,9 @@ map_marginal( struct args_t* args,
         fprintf( stderr, 
                  "NOTICE      :  Setting mapping metaparams to %f and %f\n",
                  MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+
         mapping_metaparams.error_model_type = ESTIMATED;
-        mapping_metaparams.error_model_params[0] = args->min_match_penalty;
-        mapping_metaparams.error_model_params[1] = args->max_penalty_spread;
+        mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
         
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
@@ -167,13 +168,13 @@ map_marginal( struct args_t* args,
     } else if(args->error_model_type == MISMATCH) {
         /* initialize the meta params */
         mapping_metaparams.error_model_type = MISMATCH;
-        mapping_metaparams.error_model_params[0] = args->min_match_penalty;
-        mapping_metaparams.error_model_params[1] = args->max_penalty_spread;
+        mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
         
         init_error_model( &error_model, MISMATCH );
     } else {
-        fprintf(stderr, "FATAL       :  Unrecognized index search type '%i'\n",
+        fprintf(stderr, "FATAL       :  Invalid index search type '%i'\n",
             args->error_model_type);
+        assert( false );
         exit( 1 );
     }
 

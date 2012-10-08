@@ -1387,7 +1387,8 @@ build_gapped_candidate_mappings_for_candidate_mapping(
             gapped_length
         );
 
-    /* Start by computing the penalty of a candidate mapping where the exon is
+    /* *
+     * Start by computing the penalty of a candidate mapping where the exon is
      * the first num_intron_configurations bp's in the read.
      * 
      * This corresponds to 

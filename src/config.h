@@ -7,17 +7,18 @@
 /* how often we print out the mapping status */
 #define MAPPING_STATUS_GRANULARITY 100000
 
-
 /****** configuration options                   ******/
 
 #define N_DEBUG
 
-// Candidate Mappings
+/* Try to map 99% of the input reads with the estimated error model */
+#define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.99
+/* Allow up to 10% of the bp's in a read to be mismatches in a mapping */
+#define DEFAULT_MISMATCH_METAPARAMTER 0.1
+
+/* Mismatch rates for the estimated error model bootstrap */
 #define MAX_NUM_MM_RATE 0.10
 #define MAX_NUM_MM_SPREAD_RATE 0.05
-
-#define DEFAULT_MIN_MATCH_PENALTY -7.0
-#define DEFAULT_MAX_PENALTY_SPREAD 2.1
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
 
