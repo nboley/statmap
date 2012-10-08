@@ -14,7 +14,7 @@ from utils import *
 from ctypes import *
 
 ### CONSTANTS - from config.h ###
-MAX_NUM_EM_ITERATIONS           = 30
+MAX_NUM_EM_ITERATIONS           = 500
 MAX_PRB_CHANGE_FOR_CONVERGENCE  = 1e-2
 LHD_RATIO_STOP_VALUE            = 1.50
 

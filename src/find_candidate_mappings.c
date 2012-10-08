@@ -24,10 +24,6 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 
-#define MAX_NUM_UNTEMPLATED_GS 3
-
-const float untemplated_g_marginal_log_prb = -1.30103;
-
 float
 subseq_penalty(
         struct read_subtemplate* rst,
@@ -188,9 +184,8 @@ search_index(
 */
 static inline enum bool
 can_be_used_to_update_error_data(
-    struct genome_data* genome,
     candidate_mappings* mappings,
-    struct read_subtemplate* rst
+    struct genome_data* genome
 )
 {
     /* skip empty mappings */
@@ -207,7 +202,7 @@ can_be_used_to_update_error_data(
     assert( mappings->length >= 1 );
     
     candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = rst->length;
+    int mapped_length = loc->mapped_length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -227,11 +222,12 @@ can_be_used_to_update_error_data(
     {
         /* this is guaranteed at the start of the function */
         assert( mappings->length == 2 );
+
         char* genome_seq_2 = find_seq_ptr( 
             genome, 
             mappings->mappings[1].chr, 
             mappings->mappings[1].start_bp, 
-            rst->length
+            mapped_length
         );
         
         /* if the sequences aren't identical, then return */
@@ -250,7 +246,7 @@ update_error_data_record_from_candidate_mappings(
     struct error_data_record_t* error_data_record
 )
 {
-    if( !can_be_used_to_update_error_data( genome, mappings, rst ) )
+    if( !can_be_used_to_update_error_data( mappings, genome ) )
         return;
     
     /* we need at least one valid mapping ( although this case should be handled
@@ -259,10 +255,10 @@ update_error_data_record_from_candidate_mappings(
         return;
     
     // emphasize the array aspect with the + 0
-    // but, since aal of the sequence is identical,
+    // but, since all of the sequence is identical,
     // we only need to deal with this read
     candidate_mapping* cm = mappings->mappings + 0;         
-    int mapped_length = cm->rd_len;
+    int mapped_length = cm->mapped_length;
     
     char* genome_seq = find_seq_ptr( 
         genome, 
@@ -343,6 +339,19 @@ build_indexable_subtemplate(
             subseq_offset = 0;
         } else {
             subseq_offset = range_length - subseq_length;
+        }
+    } else if( _assay_type == CAGE ) {
+        /* FIXME this will work for now but the value saved in config.data
+         * (which is currently unused) will be wrong if we make the adjustment
+         * here. */
+        if( softclip_len < MAX_NUM_UNTEMPLATED_GS ) {
+            fprintf( stderr,
+                     "WARNING     :  Specified soft clip length (%i) for CAGE assay type is less than the maximum number of untemplated G's (%i)\n",
+                     softclip_len, MAX_NUM_UNTEMPLATED_GS );
+            fprintf( stderr,
+                     "NOTICE      :  Setting soft clip length to maxmimum number of untemplated G's (minimum required for mapping CAGE)\n" );
+
+            softclip_len = MAX_NUM_UNTEMPLATED_GS;
         }
     } else {
         subseq_offset = find_optimal_subseq_offset(
@@ -650,7 +659,7 @@ build_candidate_mapping_cigar_string_from_match(
     if( cm->cigar_len == 1 )
     {
         cm->cigar[0].op = 'M';
-        cm->cigar[0].len = cm->rd_len;
+        cm->cigar[0].len = cm->mapped_length;
     }
 
     return;
@@ -681,8 +690,7 @@ build_candidate_mapping_from_match(
     /* build a candidate mapping from the base location, then build a cigar
      * string representing all the locations in the match */
 
-    candidate_mapping cm
-        = init_candidate_mapping_from_read_subtemplate( rst );
+    candidate_mapping cm = init_candidate_mapping();
 
     assert( match->len > 0 );
     mapped_location* base = match->locations[0];
@@ -705,11 +713,11 @@ build_candidate_mapping_from_match(
 
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
-    cm.rd_len = rst->length - softclip_len;
+    cm.mapped_length = rst->length - softclip_len;
     int read_location = modify_mapped_read_location_for_index_probe_offset(
                 base->loc, base->chr, base->strnd,
                 match->subseq_offsets[0], match->subseq_lengths[0],
-                cm.rd_len, genome );
+                cm.mapped_length, genome );
 
     /* HACK */
     /* TODO - update modify_mapped_read_location_for_index_probe_offset to
@@ -1369,7 +1377,7 @@ build_gapped_candidate_mappings_for_candidate_mapping(
     }
 
     /* The full length of the fragment, including any gaps */
-    int gapped_length = gapped_cm.rd_len + gapped_cm.cigar[2].len;
+    int gapped_length = gapped_cm.mapped_length + gapped_cm.cigar[2].len;
 
     /* Get a pointer to the genome sequence this read maps to. This is the
      * whole genome sequence it covers, including the intron. */
@@ -1707,166 +1715,121 @@ find_candidate_mappings_for_read(
 
 void
 add_candidate_mappings_for_untemplated_gs(
+        candidate_mappings* assay_corrected_mappings,
         candidate_mapping* cm,
-        struct read* r,
-        candidate_mappings* mappings
+        struct read* r
     )
 {
-    /* Since CAGE is always single-ended, we can assume there is only one
-     * candidate mapping in each joined group */
-
+    /** Add additional mappings if there is a G (that could be untemplated) in
+     * the read sequence **/
     struct read_subtemplate* rst = r->subtemplates + cm->rd_type.pos;
 
     int i;
-    for( i = 1;
-         i <= softclip_len &&
-         i <= MAX_NUM_UNTEMPLATED_GS;
-         i++ )
+    for( i = 0; i < MAX_NUM_UNTEMPLATED_GS; i++ )
     {
-        /* As long as the soft clipped bases are *consecutive* G's, they could
-         * be untemplated G's. Add candidate mappings for each possible mapping
-         * with untemplated G's. */
-        char soft_clipped = rst->char_seq[ softclip_len - i ];
+        /* Get the BP we're looking at (after any soft clipped bases) */
+        char bp = rst->char_seq[ cm->trimmed_length + i ];
 
-        if( soft_clipped == 'G' || soft_clipped == 'g' )
+        if( bp == 'G' || bp == 'g' )
         {
-            /* build a new candidate mapping, including the untemplated G's */
-            candidate_mapping new_cm = *cm;
+            candidate_mapping cm_copy = *cm;
 
-            /* Adjust the entries in the cigar string to account for soft
-             * clipping adjacent to the matches. */
-            if( cm->rd_strnd == FWD )
+            /* Soft clip the possibly untemplated G */
+            cm_copy.mapped_length -= i+1;
+            cm_copy.trimmed_length += i+1;
+
+            if( cm_copy.rd_strnd == FWD )
             {
-                new_cm.start_bp -= i;
-                /* update cm's cigar */
-                assert( new_cm.cigar[0].op == 'M' );
-                new_cm.cigar[0].len += i;
-            } else { // BKWD
-                assert( new_cm.cigar[cm->cigar_len-1].op == 'M' );
-                new_cm.cigar[cm->cigar_len-1].len += i;
+                cm_copy.start_bp += i+1;
+                cm_copy.cigar[0].len -= i+1;
+            } else {
+                cm_copy.cigar[cm_copy.cigar_len-1].len -= i+1;
             }
 
-            new_cm.rd_len += i;
-            new_cm.trimmed_length -= i;
-            new_cm.penalty += i*untemplated_g_marginal_log_prb;
+            cm_copy.num_untemplated_gs += i+1;
 
-            add_candidate_mapping( mappings, &new_cm );
-
+            add_candidate_mapping( assay_corrected_mappings, &cm_copy );
         } else {
             break;
         }
     }
-}
-
-void
-append_candidate_mappings_to_joined_mappings(
-        candidate_mappings* assay_specific_mappings,
-        candidate_mapping*** joined_mappings,
-        float** penalties,
-        int* joined_mappings_len,
-        int original_mappings_length
-    )
-{
-    if( assay_specific_mappings->length == 0 )
-        return;
-
-    /* The joined mappings structures were originally allocated to have enough
-     * sets of matched pointers for each mapping in the original set of
-     * mappings. *joined_mappings_len does not represent this value, as it
-     * includes any reads that were filtered. In order to reallocate this
-     * memory, we have to use the length of the original set of mappings. */
-
-    *joined_mappings = realloc( *joined_mappings,
-            sizeof(candidate_mapping*) * 
-            (original_mappings_length + assay_specific_mappings->length) * 2 );
-    assert( *joined_mappings != NULL );
-
-    *penalties = realloc( *penalties,
-            sizeof(float) *
-            (original_mappings_length + assay_specific_mappings->length) );
-    assert( *penalties != NULL);
-
-    /* Add the additional candidate mappings */
-    int i;
-    for( i = 0; i < assay_specific_mappings->length; i++ )
-    {
-        /* Start adding pointers to additional candidate mappings after the
-         * originally allocated set of pointers. This boundary is reflected by
-         * the original mappings length (not *joined_mappings_len, which was
-         * updated during filtering) */
-        (*joined_mappings)[ (original_mappings_length + (i+1))*2 - 2 ]
-            = assay_specific_mappings->mappings + i;
-        (*joined_mappings)[ (original_mappings_length + (i+1))*2 - 1 ]
-            = NULL;
-
-        /* The penalties array was resized to only contain penalties from
-         * filtered joined sets, so here the correct offset is provided by
-         * *joined_mappings_len */
-        (*penalties)[ *joined_mappings_len + i ] 
-            = assay_specific_mappings->mappings[i].penalty;
-    }
-
-    /* update the length of the joined mappings */
-    *joined_mappings_len += assay_specific_mappings->length;
 
     return;
 }
 
 void
 make_cage_specific_corrections(
-        candidate_mapping*** joined_mappings,
-        float** penalties,
-        int* joined_mappings_len,
-        int original_mappings_length,
-
-        struct read* r,
-        candidate_mappings* assay_specific_mappings
+        candidate_mappings* mappings,
+        candidate_mappings* assay_corrected_mappings,
+        struct read* r
     )
 {
-    /* For each candidate mapping that passed the recheck, build additional
-     * candidate mappings for any possible mappings with untemplated g's */
-
-    /* Pointer to the start of the current set of joined candidate_mappings */
-    candidate_mapping** current_mapping = *joined_mappings;
-    
-    /* move the current_mapping pointer to the start of the first set of joined
-     * candidate_mappings */
-    while( *current_mapping == NULL )
-        current_mapping++;
-
     int i;
-    for( i = 0; i < *joined_mappings_len; i++ )
+    for( i = 0; i < mappings->length; i++ )
     {
-        add_candidate_mappings_for_untemplated_gs( *current_mapping, r,
-                assay_specific_mappings );
-        advance_pointer_to_start_of_next_joined_candidate_mappings(
-                &current_mapping, i, *joined_mappings_len );
-    }
+        candidate_mapping* cm = mappings->mappings + i;
 
-    append_candidate_mappings_to_joined_mappings( assay_specific_mappings,
-            joined_mappings, penalties, joined_mappings_len,
-            original_mappings_length );
+        /* Add initial candidate mapping with no untemplated G's */
+        candidate_mapping corrected_cm = *cm;
+
+        /* Make sure we soft clipped enough bases when searching the index to be
+         * able to make this adjustment */
+        assert( corrected_cm.trimmed_length >= MAX_NUM_UNTEMPLATED_GS );
+
+        /* Check that the candidate mapping isn't so close to a contig boundary
+         * that this adjustment would cause it to cross over */
+        if( corrected_cm.start_bp - MAX_NUM_UNTEMPLATED_GS < 0 ) {
+            /* FIXME what's the right thing to do here? (skipping it for now) */
+            /* Run the same algorithm with as many bp's as we can spare? */
+            continue;
+        }
+
+        corrected_cm.mapped_length += MAX_NUM_UNTEMPLATED_GS;
+        corrected_cm.trimmed_length -= MAX_NUM_UNTEMPLATED_GS;
+
+        /* Adjust the entries in the cigar string to account for soft
+         * clipping adjacent to the matches. */
+        if( corrected_cm.rd_strnd == FWD )
+        {
+            /* Also adjust the start position of reads that map to the forward
+             * strand */
+            corrected_cm.start_bp -= MAX_NUM_UNTEMPLATED_GS;
+
+            assert( corrected_cm.cigar[0].op == 'M' );
+            corrected_cm.cigar[0].len += MAX_NUM_UNTEMPLATED_GS;
+
+        } else { // corrected_cm.rd_strnd == BKWD
+            assert( corrected_cm.cigar[corrected_cm.cigar_len-1].op == 'M' );
+            corrected_cm.cigar[corrected_cm.cigar_len-1].len += MAX_NUM_UNTEMPLATED_GS;
+        }
+
+        add_candidate_mapping( assay_corrected_mappings, &corrected_cm );
+
+        /* This candidate mapping is now the basis for adding additional
+         * candidate mappings if it possible that they could have untemplated
+         * G's */
+        add_candidate_mappings_for_untemplated_gs( assay_corrected_mappings,
+                &corrected_cm, r );
+    }
 
     return;
 }
 
 void
 make_assay_specific_corrections(
-        candidate_mapping*** joined_mappings,
-        float** penalties,
-        int* joined_mappings_len,
-        int original_mappings_length,
-
-        struct read* r,
-        candidate_mappings* assay_specific_mappings
+        candidate_mappings* mappings,
+        candidate_mappings* assay_corrected_mappings,
+        struct read* r
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
-        make_cage_specific_corrections( joined_mappings, penalties,
-                joined_mappings_len, original_mappings_length, r,
-                assay_specific_mappings );
+        make_cage_specific_corrections( mappings, assay_corrected_mappings, r );
+    } else {
+        /* Copy the original set of mappings to the corrected set (without
+         * alteration, since this assay type does not require corrections) */
+        copy_candidate_mappings( assay_corrected_mappings, mappings );
     }
         
     return;
@@ -1887,8 +1850,19 @@ build_mapped_read_from_candidate_mappings(
     candidate_mapping** joined_mappings = NULL;
     float* joined_mapping_penalties = NULL;
     mapped_read_t* rd = NULL;
+
+    /* Build additional candidate mappings to make corrections for known
+     * problems in the assay (e.g. untemplated G's in CAGE).
+     *
+     * For now, we assume these corrections all take places on the level of
+     * a read subtemplate / candidate mapping.
+     * */
+    candidate_mappings* assay_corrected_mappings = NULL;
+    init_candidate_mappings( &assay_corrected_mappings );
+    make_assay_specific_corrections( mappings, assay_corrected_mappings, r );
+    /* the original set of candidate mappings is freed in the calling fn */
     
-    join_candidate_mappings( mappings,
+    join_candidate_mappings( assay_corrected_mappings,
                              &joined_mappings,
                              &joined_mapping_penalties,
                              &joined_mappings_len );
@@ -1904,24 +1878,10 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       mapping_params );
 
-    /* Build additional candidate mappings to make corrections for known
-     * problems in the assay (e.g. untemplated G's in CAGE).
-     *
-     * This set of mappings is declared here because joined_mappings is a set
-     * of pointers - we need to be able to free the original mappings *after*
-     * they've been used to build the mapped read. */
-    candidate_mappings* assay_specific_mappings = NULL;
-    init_candidate_mappings( &assay_specific_mappings );
-    make_assay_specific_corrections( &joined_mappings,
-            &joined_mapping_penalties, &joined_mappings_len, mappings->length,
-            r, assay_specific_mappings );
-
-    /* TODO should joined candidate mappings be sorted? */
-
     rd = build_mapped_read_from_joined_candidate_mappings( r->read_id,
             joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
-    free_candidate_mappings( assay_specific_mappings );
+    free_candidate_mappings( assay_corrected_mappings );
     
     free( joined_mappings );
     free( joined_mapping_penalties );

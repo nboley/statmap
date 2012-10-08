@@ -9,6 +9,9 @@
 #include "candidate_mapping.h"
 #include "mapped_location.h"
 
+#define MAX_NUM_UNTEMPLATED_GS 1
+#define UNTEMPLATED_G_MARGINAL_LOG_PRB -1.30103
+
 struct single_map_thread_data {
     int thread_id;
     struct genome_data* genome;

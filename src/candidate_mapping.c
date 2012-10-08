@@ -188,48 +188,22 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
     return cm;
 }
 
-
 /*********************************************************************************
  *
  * Candidate Mapping Code
  *
  *********************************************************************************/
 
-void
-init_candidate_mappings( candidate_mappings** mappings )
-{
-    *mappings = malloc( sizeof(candidate_mappings) );
-    (*mappings)->mappings =
-        malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
-    (*mappings)->length = 0;
-    (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;
-    return;
-}
-
 candidate_mapping
-init_candidate_mapping_from_read_subtemplate(
-        struct read_subtemplate* rst )
+init_candidate_mapping()
 {
-    /****** initialize the mapped_location info that we know  ******/
-    /* copy the candidate map location template */
-    candidate_mapping cand_map;
-    memset( &cand_map, 0, sizeof(cand_map) );
+    candidate_mapping cm;
+    memset( &cm, 0, sizeof(candidate_mapping) );
 
-    /* Set the read length */
-    /* FIXME Unused... */
-    cand_map.rd_len = rst->length;
+    /* FIXME I don't like using a global variable for this */
+    cm.trimmed_length = softclip_len;
 
-    /* Initialize the values in READ_TYPE.
-     * These will be updated to be correct in update_read_type */
-    cand_map.rd_type.follows_ref_gap = false;
-    cand_map.rd_type.pos = -1;
-
-    cand_map.trimmed_length = softclip_len;
-
-    /* The cigar string is initialized by the initial call to memset */
-    cand_map.cigar_len = 0;
-
-    return cand_map;
+    return cm;
 }
 
 int
@@ -244,6 +218,47 @@ get_length_from_cigar_string( candidate_mapping* mapping )
     }
 
     return fragment_length;
+}
+
+/*********************************************************************************
+ *
+ * Candidate Mappings Code
+ *
+ *********************************************************************************/
+void
+init_candidate_mappings( candidate_mappings** mappings )
+{
+    *mappings = malloc( sizeof(candidate_mappings) );
+    (*mappings)->mappings =
+        malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
+    (*mappings)->length = 0;
+    (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;
+    return;
+}
+
+void
+copy_candidate_mappings(
+        candidate_mappings* dst,
+        candidate_mappings* src
+    )
+{
+    /* assumes dst is initialized */
+    assert( dst != NULL );
+
+    dst->length = src->length;
+    dst->allocated_length = src->allocated_length;
+
+    /* Allocate new memory equivalent to the amount allocated in the original
+     * struct. We need to realloc since dst has been initialized and already
+     * has memory allocated for mappings. */
+    dst->mappings = realloc( dst->mappings,
+            dst->allocated_length * sizeof(candidate_mapping) );
+    assert( dst->mappings != NULL );
+
+    /* Copy the candidate mappings */
+    memcpy( dst->mappings, src->mappings, src->length * sizeof(candidate_mapping) );
+
+    return;
 }
 
 void
@@ -301,7 +316,7 @@ print_candidate_mapping( candidate_mapping* mapping )
 {
     printf("Chr:          %u\n", mapping->chr);
     printf("Start BP:     %u\n", mapping->start_bp);
-    printf("Read Len:     %u\n", mapping->rd_len);
+    printf("Read Len:     %u\n", mapping->mapped_length);
     printf("Read Strand:  %u\n", mapping->rd_strnd);
     printf("Penalty:      %.2f\n", mapping->penalty);
 

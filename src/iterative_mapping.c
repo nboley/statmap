@@ -409,7 +409,7 @@ struct update_mapped_reads_param {
     
 };
 
-void*
+void
 update_mapped_reads_from_trace_worker( void* params )
 {
     struct trace_t* traces = ( (struct update_mapped_reads_param*) params)->traces;
@@ -425,7 +425,6 @@ update_mapped_reads_from_trace_worker( void* params )
                                      const mapped_read_t* const r  )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
-
 
     mapped_read_t* r;
 
@@ -443,6 +442,19 @@ update_mapped_reads_from_trace_worker( void* params )
         ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
     }
 
+    return;
+}
+
+void*
+update_mapped_reads_from_trace_thread_worker( void* params )
+{
+    /* call the real worker function, and exit the thread when it returns.
+     *
+     * Wrapping update_mapped_reads_from_trace_worker allows us to use it
+     * unmodified in the single thread case. We must wrap it to make the call
+     * to pthread_exit because calling pthread_exit in the only thread in
+     * a process is equivalent to calling exit (see `man pthread_exit`) */
+    update_mapped_reads_from_trace_worker( params );
     pthread_exit( NULL );
 }
 
@@ -502,7 +514,7 @@ update_mapped_reads_from_trace(
             
             rc = pthread_create( thread + t, 
                                  attrs + t, 
-                                 update_mapped_reads_from_trace_worker, 
+                                 update_mapped_reads_from_trace_thread_worker, 
                                  (void *)(tds + t) 
                 ); 
             if (rc) {
@@ -792,14 +804,14 @@ sample_random_trace(
         update_trace_expectation_from_location,
         update_mapped_read_prbs
      );
-        
+
     if( SAVE_STARTING_SAMPLES )
     {
         char buffer[100];
         sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, sample_index+1 );
             
         write_trace_to_file( sample_trace, buffer );
-                        
+
         double log_lhd = calc_log_lhd( 
             rdb, cond_prbs_db, sample_trace, update_mapped_read_prbs );
         fprintf( ss_mi, "%i,%e\n", sample_index+1, log_lhd );
@@ -814,7 +826,7 @@ sample_random_trace(
         update_trace_expectation_from_location,
         update_mapped_read_prbs
     );
-        
+
     if( SAVE_SAMPLES )
     {
         char buffer[100];
@@ -1726,7 +1738,7 @@ take_cage_sample(
         update_CAGE_trace_expectation_from_location,
         update_CAGE_mapped_read_prbs
     );
-    
+
     free( track_names );
     free_cond_prbs_db( cond_prbs_db );
     
