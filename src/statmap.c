@@ -282,7 +282,7 @@ iterative_mapping( struct args_t* args,
                             args->assay_type,
                             args->num_starting_locations, 
                             MAX_PRB_CHANGE_FOR_CONVERGENCE );
-        
+
     return;
 }
 
@@ -324,11 +324,11 @@ map_generic_data(  struct args_t* args )
     } else {
         build_fl_dist( args, mpd_rds_db );
     }
-    
+
     close_mapped_reads_db( &mpd_rds_db );
     
     free_genome( genome );
-    
+
     return;
 }
 
@@ -488,7 +488,7 @@ main( int argc, char** argv )
     } else {
         map_generic_data( &args );
     }
-    
+
     goto cleanup;
     
 cleanup:
