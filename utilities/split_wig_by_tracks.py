@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 
 track_name = sys.argv[1]
