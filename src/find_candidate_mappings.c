@@ -1863,9 +1863,8 @@ build_mapped_read_from_candidate_mappings(
     init_candidate_mappings( &assay_corrected_mappings );
     make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
             genome );
-    /* free the original set of candidate mappings */
-    // leave them alone for now; they'll be freed in the calling function
-    //free_candidate_mappings( mappings );
+
+    /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,
                              &joined_mappings,

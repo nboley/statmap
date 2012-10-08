@@ -620,10 +620,10 @@ write_reads_from_read_id_list_to_fastq(
     int i;
     for( i = 0; i < num_read_ids; i++ )
     {
-	int read_id;
-	rv = fscanf( read_ids_fp, "%i\n", &read_id );
-	assert( rv == 1 );
-	read_ids[i] = read_id;
+        int read_id;
+        rv = fscanf( read_ids_fp, "%i\n", &read_id );
+        assert( rv == 1 );
+        read_ids[i] = read_id;
     }
 
     /* rewind the fp, in case we need it again later */
@@ -644,23 +644,27 @@ write_reads_from_read_id_list_to_fastq(
      * and make just one pass through the raw reads db. */
     for( i = 0; i < num_read_ids; i++ )
     {
-	int read_id = read_ids[i];
+        int read_id = read_ids[i];
 
-	while( rd->read_id < read_id )
-	{
-	    free_read( rd );
-	    get_next_read_from_rawread_db(
-		rdb, &rd, -1 );
-	    assert( rd != NULL );
-	}
+        while( rd->read_id < read_id )
+        {
+            free_read( rd );
+            rd = NULL;
+            get_next_read_from_rawread_db(rdb, &rd, -1 );
+            assert( rd != NULL );
+        }
 
-	assert( rd->read_id == read_id );
+        assert( rd->read_id == read_id );
 
         write_nonmapping_read_to_fastq( rd,
                 single_end_fp,
                 paired_end_1_fp,
-                paired_end_2_fp );
+                paired_end_2_fp
+            );
     }
+
+    /* Free the last allocated read */
+    free_read( rd );
 
     free( read_ids );
 }

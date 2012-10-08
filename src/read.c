@@ -26,6 +26,8 @@ init_read(
 
     (*r)->subtemplates = NULL;
     (*r)->num_subtemplates = 0;
+
+    return;
 }
 
 void
@@ -39,6 +41,7 @@ free_read_subtemplate( struct read_subtemplate* st )
 
     /* Don't free the read subtemplate itself - it is allocated as part of a
      * contiguous array. */
+    return;
 }
 
 void
@@ -48,11 +51,10 @@ free_read( struct read* r )
 
     free( r->name );
 
-    // free the read subtemplates
-    int st_index;
-    for( st_index = 0; st_index < r->num_subtemplates; st_index++ )
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ )
     {
-        free_read_subtemplate( &(r->subtemplates[st_index]) );
+        free_read_subtemplate( r->subtemplates + i );
     }
     free( r->subtemplates );
 

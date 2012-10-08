@@ -249,8 +249,11 @@ copy_candidate_mappings(
     dst->allocated_length = src->allocated_length;
 
     /* Allocate new memory equivalent to the amount allocated in the original
-     * struct */
-    dst->mappings = malloc( dst->allocated_length * sizeof(candidate_mapping) );
+     * struct. We need to realloc since dst has been initialized and already
+     * has memory allocated for mappings. */
+    dst->mappings = realloc( dst->mappings,
+            dst->allocated_length * sizeof(candidate_mapping) );
+    assert( dst->mappings != NULL );
 
     /* Copy the candidate mappings */
     memcpy( dst->mappings, src->mappings, src->length * sizeof(candidate_mapping) );
