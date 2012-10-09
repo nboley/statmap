@@ -167,7 +167,7 @@ copy_ml_match_into_matches(
 
 /***** ml_match_stack *****/
 
-#define MAX_ML_MATCH_STACK_LEN 500
+#define MAX_ML_MATCH_STACK_LEN 5000
 struct ml_match_stack {
     struct ml_match* stack[MAX_ML_MATCH_STACK_LEN];
     int top;
