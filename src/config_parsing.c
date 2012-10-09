@@ -771,7 +771,8 @@ parse_arguments( int argc, char** argv )
         if( args.num_threads > 8 )
             args.num_threads = 8;
         
-        fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n", num_threads);
+        fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n",
+                args.num_threads);
     }
 
     /* set the min num hq basepairs if it's unset */
