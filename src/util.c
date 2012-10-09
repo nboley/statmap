@@ -94,7 +94,9 @@ open_check_error( char* fname, char* file_mode )
     tmp = fopen( fname, file_mode );
     if( tmp == NULL )
     {
-        fprintf( stderr, "Error opening '%s\n'", fname );
+        fprintf( stderr, "Error opening '%s\n' with mode '%s'\n", fname,
+                file_mode );
+        assert( false );
         exit( -1 );
     }
     return tmp;

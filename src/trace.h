@@ -1,5 +1,6 @@
 #ifndef TRACE_H
 #define TRACE_H 
+
 #define TRACE_TYPE float
 
 #define TRACE_MAGIC_NUMBER "BTRACE"
@@ -8,7 +9,7 @@
 /* How many basepairs are grouped together for a single lock */
 #define TM_GRAN 5000
 
-struct genome_data;
+#include "genome.h"
 
 // define this to use mutexes, otherwise use spinlocks
 // #define USE_MUTEX

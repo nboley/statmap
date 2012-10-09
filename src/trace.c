@@ -15,20 +15,7 @@
 #include "config.h"
 #include "trace.h"
 #include "genome.h"
-
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        assert( false );
-        exit( -1 );
-    }
-    return tmp;
-}
+#include "util.h"
 
 /* get the correct mutex index to access the specified position */
 /* this is slow - it should probably be done as a macro in hot areas */
@@ -603,17 +590,8 @@ write_wiggle_from_trace( struct trace_t* traces,
                          const char* output_fname,                           
                          const double filter_threshold )
 {    
-    FILE* wfp = fopen( output_fname, "a" );
-    if( wfp == NULL )
-    {
-        perror( "FATAL        : Could not open wiggle file for writing " );
-        fprintf( stderr, "Filename: %s\n", output_fname );
-        assert( 0 );
-        exit( -1 );
-    }
-    
+    FILE* wfp = open_check_error( output_fname, "a" );
     write_wiggle_from_trace_to_stream( traces, wfp, filter_threshold );
-    
     fclose( wfp );
 }
 
@@ -761,7 +739,7 @@ write_trace_to_stream( struct trace_t* trace, FILE* os )
 void
 write_trace_to_file( struct trace_t* trace, char* fname )
 {
-    FILE* fp = fopen( fname, "w" );
+    FILE* fp = open_check_error( fname, "w" );
     write_trace_to_stream( trace, fp );
     fclose(fp);
 }
