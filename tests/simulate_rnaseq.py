@@ -188,7 +188,7 @@ def cigar_match( mapped_read, fragments, introns ):
     return False
 
 def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
-        introns, genome ):
+        introns, genome, num_mutations=0 ):
     # Extract useful information about the mapped read
     # find the source fragment
     read_id = int(mapped_read[0])
@@ -235,10 +235,10 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
     # If the read overlaps the intron, there may be multiple mappings found
     # with sequences that are close, but not exact matches with the original
     # genome. This is allowed.
-    max_allowed_mismatches = 0
+    max_allowed_mismatches = num_mutations
     if ( read_id in categorized_fragments['overlaps_intron'] or
          read_id in categorized_fragments['probe_overlaps_intron'] ):
-        max_allowed_mismatches = 3 # empirically chosen
+        max_allowed_mismatches += 3 # empirically chosen
 
     genome_pos = start_pos
     read_pos = 0
@@ -291,7 +291,7 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
     return
 
 def check_statmap_output( output_directory, genome, transcriptome, introns,
-        fragments, read_len, indexed_seq_len ):
+        fragments, read_len, indexed_seq_len, num_mutations ):
 
     # Categorize the genome fragments by how they overlap the intron
     categorized_fragments = categorize_fragments( genome,
@@ -331,7 +331,7 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
         # each mapping for the readid
         for mapped_read in mapped_reads:
             check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
-                    introns, genome )
+                    introns, genome, num_mutations )
             if cigar_match( mapped_read, fragments, introns ):
                 cigar_matched = True
 
@@ -349,6 +349,27 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
                         % ( read_id, build_cigar_string_for_fragment(
                                 fragments[read_id], introns ) )
                 print "               Fragment had index probe overlapping an intron, so this was probably unavoidable."
+
+def randomly_mutate_reads( reads, num_mutations ):
+    mutated_reads = []
+
+    for seq in reads:
+        # pick num_mutations bp's to mutate
+        mut_indices = random.sample( xrange(len(seq)), num_mutations )
+        mut_seq = list(seq)
+
+        for mut_index in mut_indices:
+            orig_bp = mut_seq[mut_index]
+            mut_seq[mut_index] = random.choice( list(
+                    sc.bps_set.difference( set( [orig_bp, orig_bp.swapcase()] )
+                )))
+
+        mut_seq = ''.join(mut_seq)
+        error_str = 'h'*len(mut_seq) # FOR NOW - doesn't matter to mismatch search type
+
+        mutated_reads.append( sc.mut_read_t( mut_seq, error_str, seq ) )
+
+    return mutated_reads
 
 def main():
     output_directory = "smo_rnaseq_sim"
@@ -375,10 +396,8 @@ def main():
             rev_comp=True,
             paired_end=False )
 
-    with gzip.open( './data/dirty_error_strs.fastq.gz' ) as sample_file:
-        error_strs = sc.get_error_strs_from_fastq( sample_file )
-
-    mutated_reads = sc.mutate_reads( reads, error_strs )
+    num_mutations=1
+    mutated_reads = randomly_mutate_reads( reads, num_mutations=num_mutations )
 
     # Write out the test files
     genome_fnames = ( "tmp.genome.fa", )
@@ -396,6 +415,6 @@ def main():
                          genome_fnames=genome_fnames )
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
-            fragments, read_len, indexed_seq_len )
+            fragments, read_len, indexed_seq_len, num_mutations )
 
 if __name__ == "__main__": main()
