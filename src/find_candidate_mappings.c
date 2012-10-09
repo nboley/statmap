@@ -477,17 +477,31 @@ find_start_of_pseudo_mapped_locations_for_strand(
         enum STRAND strand
     )
 {
+    /* Optimization depends on pseudo chromosome being sorted to appear before
+     * all other chromosomes */
+    assert( PSEUDO_LOC_CHR_INDEX == 0 );
+
     int start = -1; // Use -1 to signal no locations with given strand
 
     int i;
+    /* Linear search - mapped locations are sorted by strand, then chr */
     for( i = 0; i < sorted_mapped_locs->length; i++ )
     {
-        /* Assumes the sorted_mapped_locs are, indeed, sorted by
-         * sort_mapped_locations_by_location */
-        if( sorted_mapped_locs->locations[i].strnd == strand )
+        mapped_location* curr_loc = sorted_mapped_locs->locations + i;
+
+        if( curr_loc->strnd == strand )
         {
-            start = i;
-            break;
+            if( curr_loc->chr == PSEUDO_LOC_CHR_INDEX )
+            {
+                start = i;
+                break;
+            } else {
+                /* Since pseudo chromosomes are sorted to come before all other
+                 * chromosomes, if this first location with matching strand is
+                 * not a pseudo location, none of the following locations will
+                 * be either. */
+                break;
+            }
         }
     }
 
