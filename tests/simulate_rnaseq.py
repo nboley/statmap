@@ -2,6 +2,7 @@ import sys
 import random
 from itertools import izip
 import re
+import gzip
 
 import tests as sc # for genome building and sampling functions
 
@@ -374,17 +375,21 @@ def main():
             rev_comp=True,
             paired_end=False )
 
+    with gzip.open( './data/dirty_error_strs.fastq.gz' ) as sample_file:
+        error_strs = sc.get_error_strs_from_fastq( sample_file )
+
+    mutated_reads = sc.mutate_reads( reads, error_strs )
+
     # Write out the test files
-    with open("tmp.genome.fa", "w") as genome_fp:
+    genome_fnames = ( "tmp.genome.fa", )
+    with open( genome_fnames[0], "w" ) as genome_fp:
         sc.write_genome_to_fasta( genome, genome_fp, 1 )
 
-    with open("tmp.fastq", "w") as reads_fp:
-        sc.build_single_end_fastq_from_seqs( reads, reads_fp,
-                untemplated_gs_perc=0 )
+    read_fnames = ( "tmp.fastq", )
+    with open( read_fnames[0], "w" ) as reads_fp:
+        sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_fp )
 
     # Map the data with Statmap
-    read_fnames = [ "tmp.fastq", ]
-    genome_fnames = [ "tmp.genome.fa" ]
     sc.map_with_statmap( read_fnames, output_directory,
                          indexed_seq_len=indexed_seq_len,
                          assay='r',
