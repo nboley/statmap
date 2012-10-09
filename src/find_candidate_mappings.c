@@ -438,27 +438,23 @@ search_index_for_indexable_subtemplates(
         enum bool only_collect_error_data
     )
 {
-    int ist_index;
-    for( ist_index = 0; ist_index < ists->length; ist_index++ )
+    int i;
+    for( i = 0; i < ists->length; i++ )
     {
-        // reference to current indexable subtemplate
-        struct indexable_subtemplate* ist = ists->container + ist_index;
-
-        /**** go to the index for mapping locations */
         mapped_locations *results = NULL;
 
         search_index(
                 genome,
-                ist,
-                index_search_params + ist_index,
+                ists->container + i,
+                index_search_params + i,
                 &results,
                 only_collect_error_data
             );
 
-        /* add the results for this indexable subtemplate to the array of
-         * all the search results */
-        search_results[ist_index] = results;
+        search_results[i] = results;
     }
+
+    return;
 }
 
 int
@@ -1359,25 +1355,20 @@ void
 build_gapped_candidate_mappings_for_candidate_mapping(
         candidate_mapping* cm,
         candidate_mappings* gapped_mappings,
-        int num_intron_configurations,
         struct read_subtemplate* rst,
         struct genome_data* genome,
         struct penalty_array_t* fwd_pa,
         struct penalty_array_t* rev_pa )
 {
-    /* Build the initial proposed gapped candidate mapping and compute its
-     * penalty (all of the remaining sequence is appened to the first index
-     * probe) */
+    /* Build the initial proposed gapped candidate mapping. */
     candidate_mapping gapped_cm = *cm;
 
-    /* Update the tmp mapping's cigar string with the proposed probe lengths */
     assert( gapped_cm.cigar_len == 5 );
     assert( gapped_cm.cigar[1].op == 'U' && gapped_cm.cigar[3].op == 'U' );
-    gapped_cm.cigar[1].len = num_intron_configurations;
+    gapped_cm.cigar[1].len = rst->length;
     gapped_cm.cigar[3].len = 0;
 
-    /* Build a copy of the sequence that was actually mapped to use in
-     * comparing to the genome */
+    /* Get the sequence that was actually mapped to compare to the genome */
     char* mapped_seq = calloc( rst->length+1, sizeof(char) );
     assert( mapped_seq != NULL );
     struct penalty_array_t* penalty_array;
@@ -1390,7 +1381,7 @@ build_gapped_candidate_mappings_for_candidate_mapping(
         penalty_array = rev_pa;
     }
 
-    /* The full length of the fragment, including any gaps */
+    /* The full length of the fragment, including the gap */
     int gapped_length = gapped_cm.mapped_length + gapped_cm.cigar[2].len;
 
     /* Get a pointer to the genome sequence this read maps to. This is the
@@ -1403,7 +1394,7 @@ build_gapped_candidate_mappings_for_candidate_mapping(
 
     /* *
      * Start by computing the penalty of a candidate mapping where the exon is
-     * the first num_intron_configurations bp's in the read.
+     * rst->length bp's in the read.
      * 
      * This corresponds to 
      * 
@@ -1432,11 +1423,11 @@ build_gapped_candidate_mappings_for_candidate_mapping(
      * match penalty. could potentially optimize further by breaking once
      * penalties start climbing again (assumes approximately normal
      * distribution around the intron). */
-    gapped_cm.penalty = cm->penalty + exon1_penalty + exon2_penalty;
+    gapped_cm.penalty = exon1_penalty + exon2_penalty;
     add_candidate_mapping( gapped_mappings, &gapped_cm );
 
     int i;
-    for( i = 1; i < num_intron_configurations; i++ )
+    for( i = 1; i < rst->length; i++ )
     {
         gapped_cm.cigar[1].len -= 1;
         gapped_cm.cigar[3].len += 1;
@@ -1454,17 +1445,15 @@ build_gapped_candidate_mappings_for_candidate_mapping(
 
         float exon2_bp_penalty = recheck_penalty(
                 genome_seq + gapped_length - gapped_cm.cigar[3].len,
-                mapped_seq + num_intron_configurations - gapped_cm.cigar[3].len,
-                penalty_array->array + num_intron_configurations - gapped_cm.cigar[3].len,
+                mapped_seq + rst->length - gapped_cm.cigar[3].len,
+                penalty_array->array + rst->length - gapped_cm.cigar[3].len,
                 1
             );
 
         exon1_penalty -= exon1_bp_penalty;
         exon2_penalty += exon2_bp_penalty;
 
-        /* Update the cm penalty (sum of log probs is product of probs)
-         * and add the candidate mapping to the list of gapped mappings */
-        gapped_cm.penalty = cm->penalty + exon1_penalty + exon2_penalty;
+        gapped_cm.penalty = exon1_penalty + exon2_penalty;
         add_candidate_mapping( gapped_mappings, &gapped_cm );
     }
 
@@ -1495,8 +1484,6 @@ find_potential_gapped_candidate_mappings(
     assert( num_gaps == 1 );
     assert( ists->length == 2 );
 
-    int num_intron_configurations = rst->length;
-
     /* Allocate memory to store the potential gapped candidate mappings */
     candidate_mappings* potential_gapped_mappings;
     init_candidate_mappings( &potential_gapped_mappings );
@@ -1504,29 +1491,15 @@ find_potential_gapped_candidate_mappings(
     build_gapped_candidate_mappings_for_candidate_mapping(
             cm,
             potential_gapped_mappings,
-            num_intron_configurations,
             rst,
             genome,
             fwd_pa, rev_pa
         );
 
-    // DEBUG
-    // print out the penalties of the potential gapped mappings so we can see
-    // if we're getting the kind of distribution we expect
-    /*
-    fprintf(stderr, "===============================================\n");
-    int pi;
-    for( pi = 0; pi < potential_gapped_mappings->length; pi++ )
-    {
-        fprintf( stderr, "%f\n", potential_gapped_mappings->mappings[pi].penalty );
-    }
-    */
-
-    /* Unpack the search parameters */
+    /* Only return gapped mappings that have a penalty over the minimum. The
+     * rechecked penalty will be at least the gapped mapping's penalty. */
     float min_match_penalty = mapping_params->recheck_min_match_penalty;
 
-    /* If a potential gapped mapping has penalty above the minimum, add it to
-     * the final set of gapped mappings. */
     int i;
     for( i = 0; i < potential_gapped_mappings->length; i++ )
     {
