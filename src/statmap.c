@@ -153,10 +153,6 @@ map_marginal( struct args_t* args,
             error_model
         );
 
-        fprintf( stderr, 
-                 "NOTICE      :  Setting mapping metaparams to %f and %f\n",
-                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
-
         mapping_metaparams.error_model_type = ESTIMATED;
         mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
         
