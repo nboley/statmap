@@ -294,7 +294,8 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
-calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
+calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
+                        float exp_miss_frac )
 {
     /* Unused - assert added to prevent compiler warning (for now) */
     assert( exp_miss_frac > 0 );
@@ -303,9 +304,12 @@ calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
     double var = 0;
     
     int i;
-    for( i = 0; i < p->length; i++ )
+    for( i = 0; i < penalties_len; i++ )
     {
-        double penalty = p->array[i].penalties[0][1];
+        /* we take [0][1] because this is a guaranteed mismatch,
+           but this is wrong when we move to using actual by base
+           mutation rates. */
+        double penalty = penalties[i].penalties[0][1];
         double mm_prb = pow( 10, penalty );
         mean += mm_prb*penalty;
         mean += (1-mm_prb)*log10((1-mm_prb));
@@ -315,6 +319,52 @@ calc_min_match_penalty( struct penalty_array_t* p, float exp_miss_frac )
     
     return mean - 4*sqrt( var );
 }
+
+int
+calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
+{
+    double mean = 0;
+    int i;
+    for( i = 0; i < penalties_len; i++ )
+    {
+        /* we take [0][1] because this is a guaranteed mismatch,
+           but this is wrong when we move to using actual by base
+           mutation rates. */
+        double mm_prb = pow( 10, penalties[i].penalties[0][1] );
+        mean += mm_prb;
+    }
+    
+    return (int) ((double)penalties_len - mean);
+}
+
+enum bool
+filter_read(
+        struct read* r,
+        struct mapping_params* mapping_params,
+        struct genome_data* genome
+    )
+{
+    int genome_len = 1e6;
+    
+    // loop over the subtemplates, counting hq basepairs
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ )
+    {
+        int effective_seq_len = calc_effective_sequence_length(
+            mapping_params->fwd_penalty_arrays[i]->array,
+            mapping_params->fwd_penalty_arrays[i]->length );
+        
+        if (pow(4, effective_seq_len)/2 <= genome_len/100 ) {
+            fprintf( stderr, "Filtering Read: %e %e\n", 
+                     pow(4, effective_seq_len)/2, genome_len/100 );
+            return true;
+        }
+    }
+
+        
+    return false;
+}
+
 
 void
 init_mapping_params_for_read(
@@ -376,9 +426,15 @@ init_mapping_params_for_read(
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
-        (*p)->recheck_min_match_penalty 
-            = calc_min_match_penalty( (*p)->fwd_penalty_arrays[0],
-                    1 - metaparams->error_model_params[0] );
+        (*p)->recheck_min_match_penalty = 0;
+        int j;
+        for( j = 0; j < (*p)->num_penalty_arrays; j++ ) 
+        {
+            (*p)->recheck_min_match_penalty += 
+                calc_min_match_penalty( (*p)->fwd_penalty_arrays[j]->array,
+                                        (*p)->fwd_penalty_arrays[j]->length,
+                                        1 - metaparams->error_model_params[0] );
+        }
         
          //metaparams->error_model_params[0];
         (*p)->recheck_max_penalty_spread = log10(
@@ -412,8 +468,7 @@ init_index_search_params(
     {
         float min_match_penalty = 1;
         float max_penalty_spread = -1;
-        int length = ists->container[i].subseq_length;
-        
+        int length = ists->container[i].subseq_length;        
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
 
             min_match_penalty = -(int)(
@@ -426,7 +481,15 @@ init_index_search_params(
 
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
-            min_match_penalty = mapping_params->recheck_min_match_penalty;
+            float expected_map_rate = 
+                mapping_params->metaparams->error_model_params[0];
+            
+            min_match_penalty 
+                = calc_min_match_penalty( 
+                    ists->container[i].fwd_penalties,
+                    ists->container[i].subseq_length,
+                    1 - expected_map_rate );
+            
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }        
         

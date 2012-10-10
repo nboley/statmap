@@ -128,58 +128,6 @@ fprintf_read( FILE* fp, struct read* r )
     fprintf(fp, "\n\n");
 }
 
-enum bool
-filter_read(
-        struct read* r,
-        struct error_model_t* error_model
-    )
-{
-    /***************************************************************
-     * check to make sure this read is mappable
-     * we consider a read 'mappable' if:
-     * 1) There are enough hq bps
-     *
-     */
-
-    /* Make sure the global option has been set 
-       ( it's initialized to -1 ); */
-    assert( min_num_hq_bps >= 0 );
-
-    // loop over the subtemplates, counting hq basepairs
-    int i;
-    for( i = 0; i < r->num_subtemplates; i++ )
-    {
-        int num_hq_bps = 0;
-        
-        // get a pointer to the current subtemplate
-        struct read_subtemplate* rst = &(r->subtemplates[i]);
-
-        /* loop over each bp in the subtemplate */
-        int pos;
-        for( pos = 0; pos < rst->length; pos++ )
-        {
-            /*
-               compute the inverse probability of error (quality)
-               NOTE when error_prb receieves identical bp's, it returns the
-               inverse automatically
-             */
-            double error = error_prb( rst->char_seq[pos], rst->char_seq[pos], 
-                                      rst->error_str[pos], pos, error_model );
-            double qual = pow(10, error );
-            
-            /* count the number of hq basepairs */
-            if( qual > 1 - HIGH_QUALITY_BP_ERROR_PRB )
-                num_hq_bps += 1;
-        }
-
-        if ( num_hq_bps < min_num_hq_bps )
-            return true;
-    }
-
-        
-    return false;
-}
-
 void
 build_read_from_rawreads(
         struct read** r,

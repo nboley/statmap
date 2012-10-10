@@ -1957,7 +1957,7 @@ find_candidate_mappings( void* params )
         init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
         
         // Make sure this read has "enough" HQ bps before trying to map it
-        if( filter_read( r, error_model ) )
+        if( filter_read( r, mapping_params, genome ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );

@@ -63,13 +63,6 @@ fprintf_read_subtemplate_to_fastq(
         struct read_subtemplate* st
     );
 
-/* determine whether reads are mappable */
-enum bool
-filter_read(
-        struct read* r,
-        struct error_model_t* error_model
-    );
-
 /* 
    if the next readkey would be greater than maqx readkey, then
    dont return anything. negative values indicate that this should
