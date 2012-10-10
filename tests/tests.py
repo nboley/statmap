@@ -542,41 +542,36 @@ def check_sequence_match( mapped_read, truth, genome ):
     cigar_string = mapped_read[5]
     cigar_entries = re.findall( cigar_re, cigar_string )
 
-    mapped_fragment_len = 0
+    mapping_seq = mapped_read[2]
+    mapping_start = int(mapped_read[1])
+
+    genome_pos = mapping_start
+    mapping_pos = 0
+
     for entry in cigar_entries:
-        mapped_fragment_len += int( entry[0] )
+        entry_len = int( entry[0] )
+        entry_op = entry[1]
 
-    # The SAM spec defines the POS entry as the
-    # "1-based leftmost mapping POSition of the first matching base"
-    #
-    # so if there are any non-M entries in the cigar string before the first
-    # M segment, we must subtract their length from the start position given in
-    # the SAM to get the full fragment
-    mapped_fragment_start = mapped_read[1]
-    for entry in cigar_entries:
-        if entry[1] == 'M': break
-        mapped_fragment_start -= int( entry[0] )
+        if entry_op == 'M':
+            genome_segment = genome[truth[0]][genome_pos:genome_pos+entry_len]
+            mapping_segment = mapping_seq[mapping_pos:mapping_pos+entry_len]
 
-    mapped_fragment = genome[mapped_read[0]][mapped_fragment_start:\
-            mapped_fragment_start+mapped_fragment_len]
-
-    # loop over the entries in the cigar string, comparing the sequence of the
-    # mapped read to the genome
-    seq_pos = 0
-    for entry in cigar_entries:
-
-        if entry[1] == 'M':
-
-            original = mapped_fragment[seq_pos:seq_pos + int( entry[0] )]
-            mapped = mapped_read[2][seq_pos:seq_pos + int( entry[0] )]
-
-            if original.upper() != mapped.upper():
-                print "Original:", original
-                print "Mapped  :", mapped
+            if genome_segment.upper() != mapping_segment.upper():
+                print "Original:", genome_segment
+                print "Mapped  :", mapping_segment
                 raise ValueError, "Mapped sequence in read_id %i does not match the genome" \
                         % (mapped_read[4])
 
-        seq_pos += int( entry[0] )
+            genome_pos += entry_len
+            mapping_pos += entry_len
+
+        elif entry_op == 'N':
+            genome_pos += entry_len # skip the intron (in the genome sequence)
+        elif entry_op == 'S':
+            mapping_pos += entry_len # skip the soft clipped bases (in the read)
+        else:
+            print "ERROR : Invalid CIGAR entry op '%c'" % entry_op
+            sys.exit(1)
 
     return
     
