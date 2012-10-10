@@ -222,8 +222,8 @@ enum JUNCTION_TYPE
     from a + read. So, we would add GGC here as a potential gene *end*
     for a *- strand gene* and CAA as a gene *start*
 */
-#define CHR_BITS 14
-#define CHR_NUM_MAX (16384 - 1) // 2**14 - 1
+#define CHR_BITS 16
+#define CHR_NUM_MAX (65536 - 1) // 2**16 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
 #define LOCATION_BITS 29
 #define LOCATION_MIN 0
