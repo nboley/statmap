@@ -81,6 +81,7 @@ get_next_read_from_rawread_db(
  */
 struct indexable_subtemplate
 {
+    /* the offset in the read subtemplate that this index probe refers to */
     int subseq_length;
     int subseq_offset;
 
@@ -89,6 +90,7 @@ struct indexable_subtemplate
     char* char_seq;
 
     /* pointers into penalty_array_t->array */
+    /* these have already accounted for the subseq_offset */
     struct penalty_t* fwd_penalties;
     struct penalty_t* rev_penalties;
 };

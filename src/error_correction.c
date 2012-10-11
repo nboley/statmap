@@ -334,7 +334,26 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
         mean += mm_prb;
     }
     
-    return (int) ((double)penalties_len - mean);
+    return penalties_len - (int)mean - 1;
+}
+
+enum bool
+filter_penalty_array( 
+    struct penalty_t* penalties, int penalties_len,
+    double effective_genome_len)
+{
+    int effective_seq_len = calc_effective_sequence_length(
+        penalties, penalties_len );
+                
+    if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
+        fprintf( stderr, "Filtering Read: %i %i - %e %e\n", 
+                 effective_seq_len, penalties_len, 
+                 pow(4, effective_seq_len)/2, effective_genome_len );
+            
+        return true;
+    }
+    
+    return false;
 }
 
 enum bool
@@ -344,27 +363,56 @@ filter_read(
         struct genome_data* genome
     )
 {
-    int genome_len = 1e6;
+    if( MISMATCH == mapping_params->metaparams->error_model_type )
+    {
+        return false;
+    }
+    
+    int effective_genome_len = calc_genome_len( genome );
     
     // loop over the subtemplates, counting hq basepairs
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
-        int effective_seq_len = calc_effective_sequence_length(
-            mapping_params->fwd_penalty_arrays[i]->array,
-            mapping_params->fwd_penalty_arrays[i]->length );
-        
-        if (pow(4, effective_seq_len)/2 <= genome_len/100 ) {
-            fprintf( stderr, "Filtering Read: %e %e\n", 
-                     pow(4, effective_seq_len)/2, genome_len/100 );
+        if( filter_penalty_array( 
+                mapping_params->fwd_penalty_arrays[i]->array, 
+                mapping_params->fwd_penalty_arrays[i]->length,
+                effective_genome_len) ) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+enum bool
+filter_indexable_subtemplates(
+    struct indexable_subtemplates* ists,
+    struct mapping_params* mapping_params,
+    struct genome_data* genome
+)
+{
+    if( MISMATCH == mapping_params->metaparams->error_model_type )
+    {
+        return false;
+    }
+    
+    int effective_genome_len = calc_genome_len( genome );
+    
+    int i;
+    for( i = 0; i < ists->length; i++ )
+    {
+        struct indexable_subtemplate* ist = ists->container + i;
+
+        if( filter_penalty_array( 
+                ist->fwd_penalties, ist->subseq_length, effective_genome_len ) )
+        {
             return true;
         }
     }
 
-        
     return false;
 }
-
 
 void
 init_mapping_params_for_read(
