@@ -130,6 +130,12 @@ filter_read(
         struct genome_data* genome
     );
 
+enum bool
+filter_indexable_subtemplates(
+    struct indexable_subtemplates* ists,
+    struct mapping_params* mapping_params,
+    struct genome_data* genome
+    );
 
 
 /*

@@ -1584,7 +1584,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
     return;
 }
 
-void
+int
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         candidate_mappings* final_mappings,
@@ -1616,7 +1616,7 @@ find_candidate_mappings_for_read_subtemplate(
     if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
     {
         free_indexable_subtemplates( ists );
-        return;
+        return CANT_BUILD_READ_SUBTEMPLATES;
     }
     
     /* Stores the results of the index search for each indexable subtemplate */
@@ -1672,7 +1672,7 @@ find_candidate_mappings_for_read_subtemplate(
             scratch_error_data_record
         );
     
-    return;
+    return 0;
 }
 
 void
@@ -1687,7 +1687,8 @@ update_read_type_pos(
     }
 }
 
-void
+/* returns 0 on success */
+int
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1701,6 +1702,7 @@ find_candidate_mappings_for_read(
     )
 {
     assert( NULL != error_model );
+    int rv = -1;
     
     int rst_index;
     for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
@@ -1713,7 +1715,7 @@ find_candidate_mappings_for_read(
         candidate_mappings* rst_mappings = NULL;
         init_candidate_mappings( &rst_mappings );
 
-        find_candidate_mappings_for_read_subtemplate(
+        rv = find_candidate_mappings_for_read_subtemplate(
                 rst,
                 rst_mappings,
                 genome,
@@ -1723,7 +1725,7 @@ find_candidate_mappings_for_read(
 
                 mapping_params
             );
-
+        
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
         update_read_type_pos( rst_mappings, rst_index );
@@ -1733,7 +1735,14 @@ find_candidate_mappings_for_read(
         append_candidate_mappings( read_mappings, rst_mappings );
 
         free_candidate_mappings( rst_mappings );
+        
+        if( rv != 0 )
+        {
+            return rv;
+        }
     }
+    
+    return 0;
 }
 
 void
@@ -2004,15 +2013,23 @@ find_candidate_mappings( void* params )
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
         
-        find_candidate_mappings_for_read(
-                r,
-                mappings,
-                genome,
-                error_model,
-                scratch_error_data_record,
-                only_collect_error_data,
-                mapping_params
+        int rv = find_candidate_mappings_for_read(
+                    r,
+                    mappings,
+                    genome,
+                    error_model,
+                    scratch_error_data_record,
+                    only_collect_error_data,
+                    mapping_params
             );
+        
+        if( rv != 0 )
+        {
+            assert(rv == CANT_BUILD_READ_SUBTEMPLATES);
+            free_read( r );
+            free_mapping_params( mapping_params );
+            continue; // skip the unmappable read            
+        }
         
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
