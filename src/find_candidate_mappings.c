@@ -370,7 +370,7 @@ build_indexable_subtemplate(
      * an optimal subseq offset greater than the soft clip length, that will be
      * used instead. */
     subseq_offset = MAX( subseq_offset, softclip_len );
-        
+
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
             fwd_penalty_array, rev_penalty_array );
@@ -403,7 +403,7 @@ build_indexable_subtemplates_from_read_subtemplate(
         ist = build_indexable_subtemplate(
                 rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                0, rst->length / 2
+                0, ceil((float)rst->length / 2)
             ); 
         if( ist == NULL ) {
             goto error_cleanup;
@@ -417,7 +417,7 @@ build_indexable_subtemplates_from_read_subtemplate(
         ist = build_indexable_subtemplate(
                 rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                rst->length / 2, rst->length
+                ceil((float)rst->length / 2), rst->length
             );
         if( ist == NULL ) {
             goto error_cleanup;
