@@ -22,6 +22,7 @@
 #include <argp.h>
 
 #include "config_parsing.h"
+#include "find_candidate_mappings.h"
 #include "rawread.h"
 #include "quality.h"
 #include "statmap.h"
@@ -399,7 +400,6 @@ parse_opt( int key, char *arg, struct argp_state *state )
             break;
         case 'S':
             args->softclip_len = atoi( arg );
-            softclip_len = args->softclip_len;
             break;
 
             /* utility options */
@@ -784,7 +784,7 @@ parse_arguments( int argc, char** argv )
                 args.min_num_hq_bps);
     }
 
-    /* Set the maximum allowed reference gap between indexable subtempaltes */
+    /* Set the maximum allowed reference gap between indexable subtemplates */
     if( args.assay_type == RNA_SEQ )
     {
         /* For gapped assays, set this to the default in config.h */
@@ -798,6 +798,14 @@ parse_arguments( int argc, char** argv )
     num_threads = args.num_threads;
     min_num_hq_bps = args.min_num_hq_bps;
     max_reference_insert_len = args.max_reference_insert_len;
+    softclip_len = args.softclip_len;
+
+    /* Additionally soft clip by MAX_NUM_UNTEMPLATED_GS so we can go back
+     * and handle them when we do the assay specific corrections */
+    if( args.assay_type == CAGE )
+    {
+        softclip_len += MAX_NUM_UNTEMPLATED_GS;
+    }
 
     return args;
 }

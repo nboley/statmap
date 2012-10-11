@@ -315,21 +315,13 @@ build_indexable_subtemplate(
         exit(1);
     }
 
-    /* Finding the optimal subsequence offset is desirable for ungapped assays,
-     * but is not best for gapped assays (where we want the ists to be as far
-     * apart as possible to avoid overlapping with potential introns).
-     *
-     * For now, we manually set the ists to the first and last subsequences of
-     * the read of length subseq_length, which will work well for both types of
-     * assays. */
-
-    int subseq_offset = 0;
-
     /* Our strategy for choosing indexable subtemplates depends on the type of
      * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
      * between probes in order to optimize intron finding. For ungapped assays,
      * we want to use the highest quality subsequence in the read for the index
      * search. */
+    int subseq_offset = 0;
+
     if( _assay_type == RNA_SEQ ) // Gapped assay
     {
         /* FIXME soft clipping for gapped assays? */
@@ -339,19 +331,6 @@ build_indexable_subtemplate(
             subseq_offset = 0;
         } else {
             subseq_offset = range_length - subseq_length;
-        }
-    } else if( _assay_type == CAGE ) {
-        /* FIXME this will work for now but the value saved in config.data
-         * (which is currently unused) will be wrong if we make the adjustment
-         * here. */
-        if( softclip_len < MAX_NUM_UNTEMPLATED_GS ) {
-            fprintf( stderr,
-                     "WARNING     :  Specified soft clip length (%i) for CAGE assay type is less than the maximum number of untemplated G's (%i)\n",
-                     softclip_len, MAX_NUM_UNTEMPLATED_GS );
-            fprintf( stderr,
-                     "NOTICE      :  Setting soft clip length to maxmimum number of untemplated G's (minimum required for mapping CAGE)\n" );
-
-            softclip_len = MAX_NUM_UNTEMPLATED_GS;
         }
     } else {
         subseq_offset = find_optimal_subseq_offset(

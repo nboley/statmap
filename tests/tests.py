@@ -621,7 +621,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     if assay == None:
         assay = None if untemplated_gs_perc == 0.0 else 'a'
 
-    softclip_len = random_prefix_len if untemplated_gs_perc == 0 else 3
+    softclip_len = random_prefix_len
 
     map_with_statmap( read_fnames, output_directory,
             indexed_seq_len=indexed_seq_len, assay=assay,
