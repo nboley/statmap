@@ -39,13 +39,17 @@ subseq_penalty(
     for( pos = offset; pos < subseq_len; pos++ )
     {
         int bp = rst->char_seq[pos];
+
         if( bp == 'N' || bp == 'n' )
         {
             penalty += N_penalty;
         } else {
-            int bpc = bp_code( bp );
-            /* take the match penalty for this bp */
-            penalty += penalty_array->array[pos].penalties[bpc][bpc];
+            /* take the match penalty for this bp - assuming we can find
+             * a perfact match to a given subsequence in the genome, which
+             * match would then have the best penalty (considering what we know
+             * about error rates in positions, for the error scores, etc. from
+             * the error model) */
+            penalty += penalty_array->array[pos].penalties[bp_code(bp)];
         }
     }
 
@@ -75,8 +79,8 @@ find_optimal_subseq_offset(
     assert( (region_start + region_length - subseq_len) >= 0 );
     
     /*
-       Remember: error_prb returns the inverse log probability of
-       error: log10(1 - P(error)) for matches
+       error_prb returns the inverse log probability of error:
+       log10(1 - P(error)) for matches
     */
     int min_offset = 0;
     float max_so_far = -FLT_MAX;
@@ -368,13 +372,8 @@ build_indexable_subtemplate(
     subseq_offset = MAX( subseq_offset, softclip_len );
         
     struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist,
-            subseq_length,
-            subseq_offset,
-            rst->char_seq,
-            fwd_penalty_array,
-            rev_penalty_array
-        );
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
+            fwd_penalty_array, rev_penalty_array );
 
     return ist;
 }

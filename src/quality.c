@@ -9,6 +9,7 @@
 #include "quality.h"
 #include "rawread.h"
 #include "error_correction.h"
+#include "util.h"
 
 /*
  *  This determines whether we consider the quality scores to 
@@ -125,6 +126,10 @@ error_prb(
         struct error_model_t* error_model
     )
 {
+    /* normalize to upper case */
+    ref = toupper(ref);
+    obs = toupper(obs);
+
     switch ( error_model->error_model_type ) 
     {
     case MISMATCH:
@@ -146,18 +151,18 @@ error_prb(
 void
 init_penalty_array( struct penalty_array_t* pa, int length )
 {
-    /* Set dimensions of array */
+    assert( length > 0 );
     pa->length = length;
-
-    /* Allocate memory for array of len penalty_t structs */
-    pa->array = malloc( length * sizeof(struct penalty_t) );
+    pa->array = safe_malloc( length * sizeof(struct penalty_t) );
 }
 
 void
 free_penalty_array( struct penalty_array_t* pa )
 {
-    if( pa == NULL ) return;
+    if( pa == NULL )
+        return;
 
+    /* free dynamically allocated memory */
     free( pa->array );
 }
 
@@ -167,18 +172,9 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
     int i;
     for( i = 0; i < pa->length; i++ )
     {
-        fprintf(fp, "%i: ", i); // index
-        int x, y;
-        for( x = 0; x < 4; x++ )
-        {
-            for( y = 0; y < 4; y++ )
-            {
-                fprintf(fp, "%f ", pa->array[i].penalties[x][y]);
-            }
-            if( x < 3 )
-                fprintf(fp, "| ");
-        }
-        fprintf(fp, "\n");
+        fprintf( fp, "%i: { %f, %f, %f, %f }\n",
+                 i, pa->array[i].penalties[0], pa->array[i].penalties[1],
+                 pa->array[i].penalties[2], pa->array[i].penalties[3] );
     }
 }
 
@@ -186,32 +182,28 @@ fprintf_penalty_array( FILE* fp, struct penalty_array_t* pa )
 void
 build_penalty_array(
         struct penalty_array_t* pa,
-        int length,
-        struct error_model_t* error_model,
-        char* error_str )
+        struct read_subtemplate* rst,
+        struct error_model_t* error_model
+    )
 {
-    init_penalty_array( pa, length );
+    init_penalty_array( pa, rst->length );
 
-    int pos, ref_bp, seq_bp;
-    /* for each position in the rawread */
+    int pos, bp;
+    /* for each position in the read sequence */
     for( pos = 0; pos < pa->length; pos++ )
     {
-        /* for each possible basepair (A,C,G,T) in the reference sequence */
-        for( ref_bp = 0; ref_bp < 4; ref_bp++ )
+        /* for each possible basepair (A,C,G,T) it could match against */
+        for( bp = 0; bp < 4; bp++ )
         {
-            /* for each possible basepair (A,C,G,T) in the observed sequence */
-            for( seq_bp = 0; seq_bp < 4; seq_bp++ )
-            {
-                /* estimate error probability based on observed sequence and
-                   error data */
-                pa->array[pos].penalties[ref_bp][seq_bp] = error_prb(
-                        code_bp(ref_bp),
-                        code_bp(seq_bp),
-                        error_str[pos],
+            /* estimate error probability based on observed sequence and
+               error data */
+            pa->array[pos].penalties[bp] = error_prb(
+                        rst->char_seq[pos],
+                        code_bp(bp),
+                        rst->error_str[pos],
                         pos,
                         error_model
                     );
-            }
         }
     }
 }
@@ -221,19 +213,33 @@ build_penalty_array(
 void
 build_reverse_penalty_array(
         struct penalty_array_t* rev_pa,
-        struct penalty_array_t* fwd_pa
+        struct read_subtemplate* rst,
+        struct error_model_t* error_model
     )
 {
-    init_penalty_array( rev_pa, fwd_pa->length );
+    init_penalty_array( rev_pa, rst->length );
 
-    // the underlying penalty arrays must be the same length
-    assert( fwd_pa->length == rev_pa->length );
+    /* reverse complement the read sequence */
+    char* rev_seq = calloc( rst->length+1, sizeof(char) );
+    rev_complement_read( rst->char_seq, rev_seq, rst->length );
 
-    int i;
-    for( i = 0; i < fwd_pa->length; i++ )
+    int pos, bp;
+    /* for each position in the (reverse complemented) read sequence */
+    for( pos = 0; pos < rst->length; pos++ )
     {
-        rev_pa->array[rev_pa->length-1-i] = fwd_pa->array[i];
+        for( bp = 0; bp < 4; bp++ )
+        {
+            rev_pa->array[pos].penalties[bp] = error_prb(
+                    rev_seq[pos],
+                    code_bp(bp),
+                    rst->error_str[ rst->length - pos - 1 ],
+                    pos,
+                    error_model
+                );
+        }
     }
+
+    free( rev_seq );
 }
 
 double
@@ -278,7 +284,6 @@ convert_into_quality_string( float* mutation_probs, char* quality, int seq_len )
 float 
 multiple_letter_penalty(
         const LETTER_TYPE* const reference,
-        const LETTER_TYPE* const observed,
 
         const int start_position,
         const int seq_length,
@@ -294,13 +299,8 @@ multiple_letter_penalty(
     for( j = 0; j < num_letters - start_position; j++ )
     {
         /* determine the penalty contribution from letter j in seq i */ 
-        float added_penalty = compute_penalty(
-                reference[j], observed[j],
-                start_position + j,
-                seq_length,
-                min_penalty - cum_penalty,
-                pa
-            );
+        float added_penalty = compute_penalty( reference[j],
+                start_position + j, seq_length, min_penalty - cum_penalty, pa);
         
         /* 
          * if the penalty is > 0, then that indicates that it exceeded the
@@ -341,7 +341,7 @@ recheck_penalty(
         {
             penalty += N_penalty;
         } else {
-            penalty += pa[i].penalties[bp_code(ref)][bp_code(obs)];
+            penalty += pa[i].penalties[bp_code(ref)];
         }
     }
 
@@ -351,11 +351,10 @@ recheck_penalty(
 float
 compute_penalty(
         /* 
-         * these aren't const because they are copies. I bit shift
+         * not const because it is a copy. I bit shift
          * them while calculating the penalty.
          */
         LETTER_TYPE ref,
-        LETTER_TYPE obs,
 
         /* the position in the sequence - this should be
            zero indexed */
@@ -378,13 +377,14 @@ compute_penalty(
            make sure we haven't run off the string
            (happens if seq_length is not divisible by LETTER_LEN)
         */
-        if( LETTER_LEN*position + i >= seq_length ) break;
+        if( LETTER_LEN*position + i >= seq_length )
+            break;
 
         /* 
            add penalty
-           NOTE - penalty_t float array and LETTER_TYPE must use same encoding
+           NOTE penalty_t float array and LETTER_TYPE must use same encoding
         */
-        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)][(obs&3)];  
+        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)];  
 
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 
@@ -399,7 +399,6 @@ compute_penalty(
 
         /* Shift the bits down to consider the next basepair */
         ref = ref >> 2;
-        obs = obs >> 2;
     }
 
     return penalty;

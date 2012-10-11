@@ -1090,12 +1090,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     continue;
 
                 /* this should be optimized out */
-                float penalty_addition = compute_penalty(
-                    letter, seq[node_level], 
-                    node_level, seq_length,
-                    min_match_penalty - curr_penalty,
-                    penalties
-                );
+                float penalty_addition = compute_penalty( letter, node_level,
+                        seq_length, min_match_penalty - curr_penalty,
+                        penalties );
 
                 /* if this letter exceeds the max, continue */
                 if( penalty_addition > 0 ) {
@@ -1137,12 +1134,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* this should be optimized out */
                 LETTER_TYPE letter = children[i].letter;
 
-                float penalty_addition = compute_penalty(
-                    letter, seq[node_level], 
-                    node_level, seq_length,
-                    min_match_penalty - curr_penalty,
-                    penalties
-                );
+                float penalty_addition = compute_penalty( letter, node_level,
+                        seq_length, min_match_penalty - curr_penalty,
+                        penalties);
 
                 /* 
                  * If compute_penalty returns a value >= 1

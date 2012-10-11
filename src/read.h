@@ -7,7 +7,7 @@
 #include "rawread.h"
 #include "quality.h"
 
-//struct penalty_array_t; // fwd declaration (?)
+struct penalty_array_t; // fwd declaration (?)
 
 #define POS_SINGLE_END 0
 #define POS_PAIRED_END_1 0
@@ -104,10 +104,10 @@ struct indexable_subtemplates
 void
 init_indexable_subtemplate(
         struct indexable_subtemplate** ist,
+        struct read_subtemplate* rst,
 
         int subseq_length,
         int subseq_offset,
-        char* char_seq,
 
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array

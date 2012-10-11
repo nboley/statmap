@@ -294,6 +294,20 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
+get_min_penalty( struct penalty_t* penalty_array )
+{
+    double min_penalty = 0;
+
+    int i;
+    for( i = 0; i < 4; i++ )
+    {
+        min_penalty = MIN( penalty_array->penalties[i], min_penalty );
+    }
+
+    return min_penalty;
+}
+
+double
 calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
                         float exp_miss_frac )
 {
@@ -306,10 +320,11 @@ calc_min_match_penalty( struct penalty_t* penalties, int penalties_len,
     int i;
     for( i = 0; i < penalties_len; i++ )
     {
-        /* we take [0][1] because this is a guaranteed mismatch,
-           but this is wrong when we move to using actual by base
-           mutation rates. */
-        double penalty = penalties[i].penalties[0][1];
+        /* Use the penalty of a mismatch, which we get by taking the min over
+         * the four penalty values (since penalties are negative, this will be
+         * the "highest" penalty score. This is wrong when we move to using
+         * actual by base mutation rates. */
+        double penalty = get_min_penalty( penalties + i );
         double mm_prb = pow( 10, penalty );
         mean += mm_prb*penalty;
         mean += (1-mm_prb)*log10((1-mm_prb));
@@ -330,7 +345,7 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
         /* we take [0][1] because this is a guaranteed mismatch,
            but this is wrong when we move to using actual by base
            mutation rates. */
-        double mm_prb = pow( 10, penalties[i].penalties[0][1] );
+        double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
         mean += mm_prb;
     }
     
@@ -440,16 +455,15 @@ init_mapping_params_for_read(
         (*p)->fwd_penalty_arrays[i] = calloc( 
             sizeof(struct penalty_array_t), r->subtemplates[i].length );
         build_penalty_array( (*p)->fwd_penalty_arrays[i],
-                             r->subtemplates[i].length, 
-                             error_model, 
-                             r->subtemplates[i].error_str );
+                             r->subtemplates + i, 
+                             error_model );
         
         (*p)->rev_penalty_arrays[i] = calloc( 
             sizeof(struct penalty_array_t), r->subtemplates[i].length );        
         build_reverse_penalty_array( 
             (*p)->rev_penalty_arrays[i], 
-            (*p)->fwd_penalty_arrays[i]
-        );
+            r->subtemplates + i,
+            error_model );
     }
 
     /* calculate the total read length. This is just the sum of the read 
