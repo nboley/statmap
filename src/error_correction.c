@@ -346,10 +346,11 @@ filter_penalty_array(
         penalties, penalties_len );
                 
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
+        /*
         fprintf( stderr, "Filtering Read: %i %i - %e %e\n", 
                  effective_seq_len, penalties_len, 
                  pow(4, effective_seq_len)/2, effective_genome_len );
-            
+        */
         return true;
     }
     
