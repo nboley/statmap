@@ -9,13 +9,13 @@ def test_error_rate_estimation( ):
         0.01 + (pos/read_len)*0.04
         
     Error rate from char string:
-        ?: +0.05
+        ?: +0.65
         a: +0.03
         d: +0.02
         f: +0.01
         h: +0.00
     """
-    error_char_mappings = dict(zip('?adfh', [0.05, 0.03, 0.02, 0.01, 0.00] ))
+    error_char_mappings = dict(zip('?adfh', [0.65, 0.03, 0.02, 0.01, 0.00] ))
     
     rl = read_len = 50
     indexed_seq_len = 20
@@ -38,11 +38,19 @@ def test_error_rate_estimation( ):
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
     
+    def build_error_str(read):
+        # return a complete shit read 10% of the time
+        if random.random() < 0.10:
+            return "?"*len(read)
+        
+        return "".join( random.choice('?adfh') #'?adfh') 
+                        for i in xrange(len(read)) )
+        
+    
     # mutate the reads according to some simple eror model
     def iter_mutated_reads( reads ):
         for read in reads:
-            error_str = "".join( random.choice('?adfh') #'?adfh') 
-                                 for i in xrange(len(read)) )
+            error_str = build_error_str(read)
             error_rates = [ 0.01 + 0.03*float(i)/len(read)
                             + error_char_mappings[char]
                             for i, char in enumerate( error_str ) ]
