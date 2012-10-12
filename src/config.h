@@ -244,7 +244,7 @@ typedef struct __attribute__((__packed__))
     unsigned is_paternal    :1;
     unsigned is_maternal    :1;
     
-    unsigned unused_space   :3;
+    unsigned unused_space   :1;
     
     /* the chr that the read came from */
     unsigned chr            :CHR_BITS;
