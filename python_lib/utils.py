@@ -53,6 +53,8 @@ NC_RAWREADS_FNAMES          = [
                                 "reads.NC.pair2",
                               ]
 
+EOF = -1
+
 class StatmapOutput:
     '''
     Loads all configuration information from a Statmap output directory so it

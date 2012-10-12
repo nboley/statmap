@@ -1199,7 +1199,7 @@ init_mapped_reads_db(
     (*rdb)->mapped_fp = fopen( fname, mode );
     if( (*rdb)->mapped_fp == NULL )
     {
-        perror("FATAL       :  Could not open mapped reads file");
+        fprintf(stderr, "FATAL       :  Could not open mapped reads file %s\n", fname );
         assert( false );
         exit(-1);
     }
@@ -1218,7 +1218,7 @@ init_mapped_reads_db(
     (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
     if( (*rdb)->unmappable_fp == NULL )
     {
-        perror("FATAL       :  Could not open unmappable reads file");
+        fprintf(stderr, "FATAL       :  Could not open unmappable reads file %s\n", fname_buffer );
         assert(false);
         exit(-1);
     }
@@ -1234,7 +1234,7 @@ init_mapped_reads_db(
     (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
     if( (*rdb)->nonmapping_fp == NULL )
     {
-        perror("FATAL       :  Could not open nonmapping reads file");
+        fprintf(stderr, "FATAL       :  Could not open nonmapping reads file %s\n", fname_buffer);
         assert(false);
         exit(-1);
     }

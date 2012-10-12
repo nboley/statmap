@@ -145,6 +145,17 @@ def open_mapped_reads_db_for_writing( fname ):
     c_mpd_rd_db_p = cast( c_mpd_rd_db_p, POINTER(c_mapped_reads_db_t) )
     return c_mpd_rd_db_p
 
+def close_mapped_reads_db( rdb ):
+    statmap_o.close_mapped_reads_db( byref(rdb) )
+
+def get_next_read_from_mapped_reads_db( rdb, rd ):
+    # When db is empty, returns EOF (rv == -1)
+    rv = statmap_o.get_next_read_from_mapped_reads_db( rdb, rd )
+    return rv
+
+def add_read_to_mapped_reads_db( rdb, rd ):
+    statmap_o.add_read_to_mapped_reads_db( rdb, rd )
+
 def build_fl_dist_from_filename( mpd_rd_db_p, filename ):
     statmap_o.build_fl_dist_from_filename( mpd_rd_db_p, filename )
 
