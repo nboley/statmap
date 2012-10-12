@@ -217,8 +217,6 @@ def test():
     # did config load properly?
     print "==== CONFIG ===="
     print "genome_fname:", smo.config.contents.genome_fname
-    print "min_match_penalty:", smo.config.contents.min_match_penalty
-    print "max_penalty_spread:", smo.config.contents.max_penalty_spread
 
     # did global variables get set properly?
     print "==== GLOBALS ===="
