@@ -43,7 +43,26 @@ def check_configs( smo_dirs ):
                 % genome_fnames
         sys.exit(1)
 
+    ### Check the assay types
+
+    # The reads must originated from the same assay for it to make sense for us
+    # to merge their mappings.
+    assays = [ config.contents.assay_type for config in configs ]
+    assays_match = [ assay == assays[0] for assay in assays ]
+    if not all(assays_match):
+        print "FATAL : One of more assay types in the given Statmap output directories do not match."
+        sys.exit(1)
+
     return
+
+def copy_config( smo_dirs ):
+    # FIXME - this is rough. At the moment, the only information we really
+    # *need* from the config is the assay type. Since we've checked that the
+    # assay type matches among all the input directories, we just copy the
+    # first input dirs config file.
+    #
+    # REVISE if we need to use additional values from the config later.
+    shutil.copyfile( os.path.join( smo_dirs[0], CONFIG_FNAME ), CONFIG_FNAME )
 
 def copy_genome_symlinks( smo_dirs ):
     # Since check_configs made sure all of the mappings were built from the
@@ -221,6 +240,7 @@ def merge_mappings( output_dir, smo_dirs ):
 "ERROR : Failed to create or change to given output directory %s" % output_dir
         raise e
 
+    copy_config( smo_dirs )
     copy_genome_symlinks( smo_dirs )
     make_iterative_mapping_directories()
 
