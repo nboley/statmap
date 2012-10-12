@@ -33,12 +33,20 @@ try:
 except AttributeError:
     del FILE_ptr
 
-### StatmapOutput ###
+### Definitions from config.h ###
 
 CONFIG_FNAME                = "config.dat"
+
 GENOME_FNAME                = "genome.bin"
+GENOME_INDEX_FNAME          = "genome.bin.index"
+GENOME_INDEX_PSLOCS_FNAME   = "genome.bin.index.pslocs"
+GENOME_INDEX_DIPLOID_MAP_FNAME  = "genome.bin.index.dmap"
+
 MAPPED_READS_DB_FNAME       = "mapped_reads.db"
 MAPPED_NC_READS_DB_FNAME    = "mapped_NC_reads.db"
+NONMAPPING_READS_DB_FNAME   = "mapped_reads.db.nonmapping"
+UNMAPPABLE_READS_DB_FNAME   = "mapped_reads.db.unmappable"
+
 FL_DIST_FNAME               = "estimated_fl_dist.txt"
 
 RAWREADS_FNAMES             = [
@@ -54,6 +62,29 @@ NC_RAWREADS_FNAMES          = [
                               ]
 
 EOF = -1
+
+SAVE_STARTING_SAMPLES       = True
+STARTING_SAMPLES_PATH       = "./starting_samples/"
+STARTING_SAMPLES_META_INFO_FNAME = "./starting_samples/meta_info.csv"
+
+SAVE_SAMPLES                = True
+RELAXED_SAMPLES_PATH        = "./samples/"
+RELAXED_SAMPLES_META_INFO_FNAME = "./samples/meta_info.csv"
+
+SAVE_BOOTSTRAP_SAMPLES      = True
+SAVE_AGGREGATED_BOOTSTRAP_SAMPLES = False and SAVE_BOOTSTRAP_SAMPLES
+
+BOOTSTRAP_SAMPLES_PATH      = "./bootstrap_samples/"
+BOOTSTRAP_SAMPLES_MAX_PATH  = "./bootstrap_samples/max_traces/"
+BOOTSTRAP_SAMPLES_MIN_PATH  = "./bootstrap_samples/min_traces/"
+BOOTSTRAP_SAMPLES_ALL_PATH  = "./bootstrap_samples/all_traces/"
+
+CALL_PEAKS                  = True
+CALLED_PEAKS_OUTPUT_DIRECTORY = "./called_peaks/"
+JOINED_CALLED_PEAKS_FNAME   = "./called_peaks/peaks.wig"
+CALLED_PEAK_REGIONS_FNAME   = "./called_peaks/peaks.bed"
+
+### StatmapOutput ###
 
 class StatmapOutput:
     '''
