@@ -403,7 +403,7 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     {
         candidate_mapping* mapping = mappings->mappings + i;
 
-        if( mapping->rd_type.pos == 1 && pair_2_start == -1 )
+        if( mapping->pos_in_template == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
             num_pair_1 = i-1;
@@ -523,7 +523,7 @@ join_candidate_mappings( candidate_mappings* mappings,
     {
         candidate_mapping* mapping = mappings->mappings + i;
 
-        if( mapping->rd_type.pos == 1 )
+        if( mapping->pos_in_template == 1 )
         {
             paired_end = true;
             break;
@@ -705,7 +705,7 @@ recheck_joined_candidate_mappings(
         /* each candidate_mapping in a joined group corresponds to a read
          * subtemplate. Get a reference to this cm's read subtemplate */
         struct read_subtemplate* rst
-            = r->subtemplates + (*current_mapping)->rd_type.pos;
+            = r->subtemplates + (*current_mapping)->pos_in_template;
 
         recheck_candidate_mapping( *current_mapping, rst, genome, error_model );
 

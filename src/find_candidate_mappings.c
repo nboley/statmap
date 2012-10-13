@@ -1655,14 +1655,14 @@ find_candidate_mappings_for_read_subtemplate(
 }
 
 void
-update_read_type_pos(
+update_pos_in_template(
         candidate_mappings* mappings,
         int rst_index )
 {
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        mappings->mappings[i].rd_type.pos = rst_index;
+        mappings->mappings[i].pos_in_template = rst_index;
     }
 }
 
@@ -1698,16 +1698,14 @@ find_candidate_mappings_for_read(
                 rst,
                 rst_mappings,
                 genome,
-                
                 scratch_error_data_record,
                 only_collect_error_data,
-
                 mapping_params
             );
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
-        update_read_type_pos( rst_mappings, rst_index );
+        update_pos_in_template( rst_mappings, rst_index );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
@@ -1734,7 +1732,7 @@ add_candidate_mappings_for_untemplated_gs(
 {
     /** Add additional mappings if there is a G (that could be untemplated) in
      * the read sequence **/
-    struct read_subtemplate* rst = r->subtemplates + cm->rd_type.pos;
+    struct read_subtemplate* rst = r->subtemplates + cm->pos_in_template;
 
     int i;
     for( i = 0; i < MAX_NUM_UNTEMPLATED_GS; i++ )

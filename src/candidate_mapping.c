@@ -354,9 +354,9 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
      * > 0 if m1 > m2 
      */ 
 
-    /* first, sort by read type */
-    if( m1->rd_type.pos != m2->rd_type.pos )
-        return m1->rd_type.pos - m2->rd_type.pos;
+    /* first, sort by subtemplate index (single or paired end) */
+    if( m1->pos_in_template != m2->pos_in_template )
+        return m1->pos_in_template - m2->pos_in_template;
 
     /* next, sort by strand */
     if( m1->rd_strnd != m2->rd_strnd )

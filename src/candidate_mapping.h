@@ -30,17 +30,7 @@ modify_mapped_read_location_for_index_probe_offset(
  *
  *  Candidate Mapping
  *
- *  These are after a read has gone to the index,  had the read
- *  information extracted, and probably gone through any necessary recheck.
- *  However, they have not been paired to make them mapped_read's.
- *
  */
-
-struct READ_TYPE {
-    /* Position of this candidate mapping in the underlying template.
-     * This is equal to the index of the underlying read subtemplate */
-    int pos;
-};
 
 struct CIGAR_ENTRY {
     char op;
@@ -59,9 +49,10 @@ typedef struct {
     int start_bp;
 
     /*** Info related to the read ***/
-    /* If this is a normal, or paired end read */
-    struct READ_TYPE rd_type;
-    /* the full length in bp's of the underlying read */
+    /* Position of this candidate mapping in the underlying template.
+     * This is equal to the index of the underlying read subtemplate */
+    int pos_in_template;
+    /* the full length in bp's of what was mapped */
     READ_POSITION mapped_length;
     
     /*** Info related to the mapped read ***/
