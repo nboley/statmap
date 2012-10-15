@@ -39,13 +39,17 @@ subseq_penalty(
     for( pos = offset; pos < subseq_len; pos++ )
     {
         int bp = rst->char_seq[pos];
+
         if( bp == 'N' || bp == 'n' )
         {
             penalty += N_penalty;
         } else {
-            int bpc = bp_code( bp );
-            /* take the match penalty for this bp */
-            penalty += penalty_array->array[pos].penalties[bpc][bpc];
+            /* take the match penalty for this bp - assuming we can find
+             * a perfact match to a given subsequence in the genome, which
+             * match would then have the best penalty (considering what we know
+             * about error rates in positions, for the error scores, etc. from
+             * the error model) */
+            penalty += penalty_array->array[pos].penalties[bp_code(bp)];
         }
     }
 
@@ -75,8 +79,8 @@ find_optimal_subseq_offset(
     assert( (region_start + region_length - subseq_len) >= 0 );
     
     /*
-       Remember: error_prb returns the inverse log probability of
-       error: log10(1 - P(error)) for matches
+       error_prb returns the inverse log probability of error:
+       log10(1 - P(error)) for matches
     */
     int min_offset = 0;
     float max_so_far = -FLT_MAX;
@@ -291,10 +295,9 @@ update_error_data_record_from_candidate_mappings(
     return;
 }
 
-void
+struct indexable_subtemplate*
 build_indexable_subtemplate(
         struct read_subtemplate* rst,
-        struct indexable_subtemplates* ists,
         struct index_t* index,
 
         struct penalty_array_t* fwd_penalty_array,
@@ -348,61 +351,86 @@ build_indexable_subtemplate(
     subseq_offset = MAX( subseq_offset, softclip_len );
 
     struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist,
-            subseq_length,
-            subseq_offset,
-            rst->char_seq,
-            fwd_penalty_array,
-            rev_penalty_array
-        );
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
+            fwd_penalty_array, rev_penalty_array );
 
-    // copy indexable subtemplate into set of indexable subtemplates
-    add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-
-    // free working copy
-    free_indexable_subtemplate( ist );
+    return ist;
 }
 
-void
+struct indexable_subtemplates*
 build_indexable_subtemplates_from_read_subtemplate(
-        struct indexable_subtemplates* ists,
         struct read_subtemplate* rst,
         struct index_t* index,
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array
     )
 {
+   struct indexable_subtemplates* ists = NULL;
+   init_indexable_subtemplates( &ists );
+   
     /*
        TODO for now, we build 2 indexable subtemplates if the index sequence
        length is <= the read subtemplate length / 2. Otherwise build a single
        indexable subtemplate
      */
     int subseq_length = index->seq_length;
-
+    struct indexable_subtemplate* ist = NULL;
+    
     if( subseq_length <= rst->length / 2 )
     {
         /* we can build 2 non-overlapping indexable subtemplates */
-        build_indexable_subtemplate(
-                rst, ists, index,
+        ist = build_indexable_subtemplate(
+                rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                0, rst->length / 2
-            );
+                0, ceil((float)rst->length / 2)
+            ); 
+        if( ist == NULL ) {
+            goto error_cleanup;
+        }
+        
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
 
-        build_indexable_subtemplate(
-                rst, ists, index,
+        ist = build_indexable_subtemplate(
+                rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                rst->length / 2, rst->length
+                ceil((float)rst->length / 2), rst->length
             );
+        if( ist == NULL ) {
+            goto error_cleanup;
+        }
+        
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
     }
     else
     {
         /* build a single indexable subtemplate */
-        build_indexable_subtemplate(
-                rst, ists, index,
+        ist = build_indexable_subtemplate(
+                rst, index,
                 fwd_penalty_array, rev_penalty_array,
                 0, rst->length
             );
+
+        if( ist == NULL ) {
+            goto error_cleanup;
+        }
+        
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
     }
+    
+    return ists;
+    
+error_cleanup:
+    free_indexable_subtemplates( ists );
+    return NULL;
 }
 
 void
@@ -1535,7 +1563,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
     return;
 }
 
-void
+int
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         candidate_mappings* final_mappings,
@@ -1547,16 +1575,28 @@ find_candidate_mappings_for_read_subtemplate(
         struct mapping_params* mapping_params
     )
 {
+    /* build candidate mappings from matching subsets of the mapped_locations
+     * for each indexable_subtemplate returned by the index search */
+    candidate_mappings* mappings = NULL;
+    init_candidate_mappings( &mappings );
+
+    /* the index of the read subtemplate that we are using */
     int rst_pos = rst->pos_in_template.pos;
     
     // build a set of indexable subtemplates from this read subtemplate
-    struct indexable_subtemplates* ists = NULL;
-    init_indexable_subtemplates( &ists );
-    build_indexable_subtemplates_from_read_subtemplate(
-            ists, rst, genome->index,
-            mapping_params->fwd_penalty_arrays[rst_pos],
-            mapping_params->rev_penalty_arrays[rst_pos]
-        );
+    struct indexable_subtemplates* ists = 
+       build_indexable_subtemplates_from_read_subtemplate(
+           rst, genome->index,
+           mapping_params->fwd_penalty_arrays[rst_pos],
+           mapping_params->rev_penalty_arrays[rst_pos]
+       );
+    
+    /* if the set of probe's is too low quality, don't try and map this read */
+    if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
+    {
+        free_indexable_subtemplates( ists );
+        return CANT_BUILD_READ_SUBTEMPLATES;
+    }
     
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
@@ -1577,11 +1617,6 @@ find_candidate_mappings_for_read_subtemplate(
 
     free( index_search_params );
     
-    /* build candidate mappings from matching subsets of the mapped_locations
-     * for each indexable_subtemplate returned by the index search */
-    candidate_mappings* mappings = NULL;
-    init_candidate_mappings( &mappings );
-
     build_candidate_mappings_from_search_results(
             mappings, search_results, search_results_length,
             rst, genome, mapping_params );
@@ -1616,7 +1651,7 @@ find_candidate_mappings_for_read_subtemplate(
             scratch_error_data_record
         );
     
-    return;
+    return 0;
 }
 
 void
@@ -1631,7 +1666,8 @@ update_read_type_pos(
     }
 }
 
-void
+/* returns 0 on success */
+int
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1645,6 +1681,7 @@ find_candidate_mappings_for_read(
     )
 {
     assert( NULL != error_model );
+    int rv = -1;
     
     int rst_index;
     for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
@@ -1657,7 +1694,7 @@ find_candidate_mappings_for_read(
         candidate_mappings* rst_mappings = NULL;
         init_candidate_mappings( &rst_mappings );
 
-        find_candidate_mappings_for_read_subtemplate(
+        rv = find_candidate_mappings_for_read_subtemplate(
                 rst,
                 rst_mappings,
                 genome,
@@ -1667,7 +1704,7 @@ find_candidate_mappings_for_read(
 
                 mapping_params
             );
-
+        
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
         update_read_type_pos( rst_mappings, rst_index );
@@ -1677,7 +1714,14 @@ find_candidate_mappings_for_read(
         append_candidate_mappings( read_mappings, rst_mappings );
 
         free_candidate_mappings( rst_mappings );
+        
+        if( rv != 0 )
+        {
+            return rv;
+        }
     }
+    
+    return 0;
 }
 
 void
@@ -1936,7 +1980,7 @@ find_candidate_mappings( void* params )
         init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
         
         // Make sure this read has "enough" HQ bps before trying to map it
-        if( filter_read( r, error_model ) )
+        if( filter_read( r, mapping_params, genome ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
@@ -1948,15 +1992,23 @@ find_candidate_mappings( void* params )
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
         
-        find_candidate_mappings_for_read(
-                r,
-                mappings,
-                genome,
-                error_model,
-                scratch_error_data_record,
-                only_collect_error_data,
-                mapping_params
+        int rv = find_candidate_mappings_for_read(
+                    r,
+                    mappings,
+                    genome,
+                    error_model,
+                    scratch_error_data_record,
+                    only_collect_error_data,
+                    mapping_params
             );
+        
+        if( rv != 0 )
+        {
+            assert(rv == CANT_BUILD_READ_SUBTEMPLATES);
+            free_read( r );
+            free_mapping_params( mapping_params );
+            continue; // skip the unmappable read            
+        }
         
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )

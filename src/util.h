@@ -13,9 +13,9 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
 FILE* 
 open_check_error( char* fname, char* file_mode );
 
-/*
-   Wrapper for realloc that checks return value
-*/
+void*
+safe_malloc( size_t num_bytes );
+
 void*
 safe_realloc( void* ptr, size_t size );
 

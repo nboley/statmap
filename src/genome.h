@@ -49,8 +49,12 @@ struct genome_data {
     enum bool is_mmapped;
 };
 
+long
+calc_genome_len( struct genome_data* genome );
+
 void
-add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, enum CHR_SOURCE chr_source, struct genome_data* gen ); 
+add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, 
+                   enum CHR_SOURCE chr_source, struct genome_data* gen ); 
 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );

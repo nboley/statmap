@@ -17,6 +17,21 @@
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
 
+long
+calc_genome_len( struct genome_data* genome )
+{
+    long genome_len = 0;
+    
+    int i;
+    for( i = 0; i < genome->num_chrs; i++ )
+    {
+        genome_len += genome->chr_lens[i];
+    }
+    
+    return genome_len;
+}
+
+
 /**** ON DISK Code **********************************************************************/
 
 /* returns size written to disk */

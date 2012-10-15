@@ -44,7 +44,7 @@ else:
     stdout = sys.stdout
     stderr = sys.stderr
 
-CLEANUP = True
+CLEANUP = False
     
 ### END verbosity level information  ############################################################
 
@@ -603,7 +603,7 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=rev_comp, paired_end=False )
-    
+
     ###### Write out the test files, and run statmap ################################
     # write genome
     genome_of = open("tmp.genome.fa", "w")
@@ -1598,8 +1598,8 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
-    #print "Start test_multiple_indexable_subtemplate_for_threep()"
-    #test_multiple_indexable_subtemplate_for_threep()
+    print "Start test_multiple_indexable_subtemplate_for_threep()"
+    test_multiple_indexable_subtemplate_for_threep()
     print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"
     test_multiple_indexable_subtemplates_for_repeat_sequences()
     print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"

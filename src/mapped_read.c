@@ -556,11 +556,14 @@ recheck_candidate_mapping(
 {
     float rechecked_penalty = 0;
 
-    /* build penalty arrays from the underlying read subtemplate */
-    struct penalty_array_t fwd_pa, rev_pa;
-    build_penalty_array( &fwd_pa, rst->length,
-            error_model, rst->error_str );
-    build_reverse_penalty_array( &rev_pa, &fwd_pa );
+    /* build penalty array from the underlying read subtemplate.
+     *
+     * Since we actually reverse complement the full *genome*
+     * sequence in the recheck (to simplify the algorithm when rechecking
+     * gapped reads), the read is being compared to the sequence that it mapped
+     * to. Therefore, we only need to build the fwd penalty array. */
+    struct penalty_array_t pa;
+    build_penalty_array( &pa, rst, error_model );
 
     /* Get the entire region of the genome covered by this fragment */
     int full_fragment_length = get_length_from_cigar_string( mapping);
@@ -573,15 +576,11 @@ recheck_candidate_mapping(
     char* mapped_seq = calloc( full_fragment_length+1, sizeof(char) );
     assert( mapped_seq != NULL );
 
-    struct penalty_array_t* mapped_pa;
-
     if( mapping->rd_strnd == FWD )
     {
         memcpy( mapped_seq, genome_seq, full_fragment_length );
-        mapped_pa = &fwd_pa;
     } else {
         rev_complement_read( genome_seq, mapped_seq, full_fragment_length );
-        mapped_pa = &rev_pa;
     }
 
     /* loop over the entries in this candidate mapping's cigar string */
@@ -607,7 +606,7 @@ recheck_candidate_mapping(
             rechecked_penalty += recheck_penalty(
                     mapped_seq + ref_pos,
                     rst->char_seq + read_pos,
-                    mapped_pa->array + read_pos,
+                    pa.array + read_pos,
                     entry.len
                 );
 
@@ -635,8 +634,7 @@ recheck_candidate_mapping(
 
     /* cleanup memory */
     free( mapped_seq );
-    free_penalty_array( &fwd_pa );
-    free_penalty_array( &rev_pa );
+    free_penalty_array( &pa );
 
     return;
 }

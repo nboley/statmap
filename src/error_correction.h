@@ -112,6 +112,31 @@ init_index_search_params(
 void
 free_mapping_params( struct mapping_params* p );
 
+/*
+ *  Functions for determining read mappability.
+ *
+ */
+
+
+int
+calc_effective_sequence_length( 
+    struct penalty_t* penalties, int penalties_len );
+
+/* determine whether reads are mappable */
+enum bool
+filter_read(
+        struct read* r,
+        struct mapping_params* mapping_params,
+        struct genome_data* genome
+    );
+
+enum bool
+filter_indexable_subtemplates(
+    struct indexable_subtemplates* ists,
+    struct mapping_params* mapping_params,
+    struct genome_data* genome
+    );
+
 
 /*
  *  Functions for saving error information

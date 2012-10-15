@@ -100,12 +100,32 @@ open_check_error( char* fname, char* file_mode )
     return tmp;
 }
 
+void*
+safe_malloc( size_t num_bytes )
+{
+    assert( num_bytes > 0 );
+
+    void* ma_ptr = malloc( num_bytes );
+
+    if( ma_ptr == NULL )
+    {
+        fprintf(stderr, "FATAL       :  Error malloc'ing %zi bytes\n",
+                num_bytes );
+        assert( false );
+        exit(-1);
+    }
+
+    return ma_ptr;
+}
+
 /*
    Wrapper for realloc that checks return value
 */
 void*
 safe_realloc( void* ptr, size_t size )
 {
+    assert( size > 0 );
+
     void* ra_ptr;
     ra_ptr = realloc( ptr, size );
 
@@ -113,7 +133,8 @@ safe_realloc( void* ptr, size_t size )
     if( ra_ptr == NULL && size != 0 )
     {
         fprintf(stderr, "FATAL       :  Error realloc'ing %zi bytes.\n", size);
-        exit( -1 );
+        assert( false );
+        exit(-1);
     }
 
     return ra_ptr;

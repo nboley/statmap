@@ -376,12 +376,12 @@ def main():
 
     # Parameters
     # In order to test RNASeq, indexed_seq_len*2 < read_len - max_intron_len
-    genome_len = 1000
+    genome_len = 10000
     frag_len = 100
     read_len = 100
     indexed_seq_len = 20
     max_intron_len = 50
-    n_reads  = 100
+    n_reads  = 100000
 
     genome = sc.build_random_genome( [genome_len,], ["1",] )
     introns, transcriptome = splice_introns_from_genome( genome,
@@ -411,7 +411,7 @@ def main():
     # Map the data with Statmap
     sc.map_with_statmap( read_fnames, output_directory,
                          indexed_seq_len=indexed_seq_len,
-                         assay='r',
+                         assay='r', search_type='e',
                          genome_fnames=genome_fnames )
 
     check_statmap_output( output_directory, genome, transcriptome, introns,

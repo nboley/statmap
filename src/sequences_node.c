@@ -1003,8 +1003,6 @@ find_sequences_in_sequences_node(
         float cum_penalty = multiple_letter_penalty(
             /* the start of the current seq in the array */
             seq_array_start + i*(num_letters-node_level), 
-            /* the start of the subseq in the reference sequence */
-            seq+node_level, 
             node_level, 
             seq_length, 
             num_letters,

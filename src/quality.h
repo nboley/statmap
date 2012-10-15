@@ -12,6 +12,9 @@
  */
 
 #include "dna_sequence.h"
+#include "read.h"
+
+struct read_subtemplate; // fwd declaration (?)
 
 extern enum bool ARE_LOG_ODDS;
 extern int QUAL_SHIFT;
@@ -40,10 +43,10 @@ error_prb(
 static const double N_penalty = -0.60206;
 
 /* Stores the penalty data for a single character at a specific position
-   in a read */
+   in a read. This is the penalty addition to make for each possible bp if it
+   matches to the given bp at this position in the read. */
 struct penalty_t {
-    /* 4x4 array of penalties - ref bp x obs bp */
-    float penalties[4][4];
+    float penalties[4];
 };
 
 /*
@@ -51,9 +54,7 @@ struct penalty_t {
    length of read * ref bp * obs bp
  */
 struct penalty_array_t {
-    /* length of read */
     int length;
-    /* array of penalty structs, for each position in the read */
     struct penalty_t* array;
 };
 
@@ -66,14 +67,15 @@ free_penalty_array( struct penalty_array_t* pa );
 void
 build_penalty_array(
         struct penalty_array_t* pa,
-        int length,
-        struct error_model_t* error_model,
-        char* error_str );
+        struct read_subtemplate* rst,
+        struct error_model_t* error_model
+    );
 
 void
 build_reverse_penalty_array(
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa
+        struct penalty_array_t* rev_pa,
+        struct read_subtemplate* rst,
+        struct error_model_t* error_model
     );
 
 /* convert a solexa quality score into a mutation probability */
@@ -101,7 +103,6 @@ struct error_data_t;
 float 
 multiple_letter_penalty(
         const LETTER_TYPE* const reference,
-        const LETTER_TYPE* const observed,
 
         const int start_position,
         const int seq_length,
@@ -125,11 +126,10 @@ recheck_penalty(
 float
 compute_penalty(
         /* 
-         * these aren't const because they are copies. I bit shift
+         * not const because it is a copy. I bit shift
          * them while calculating the penalty.
          */
         LETTER_TYPE ref,
-        LETTER_TYPE obs,
 
         /* the position in the sequence - this should be
            zero indexed */

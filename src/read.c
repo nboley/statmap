@@ -128,58 +128,6 @@ fprintf_read( FILE* fp, struct read* r )
     fprintf(fp, "\n\n");
 }
 
-enum bool
-filter_read(
-        struct read* r,
-        struct error_model_t* error_model
-    )
-{
-    /***************************************************************
-     * check to make sure this read is mappable
-     * we consider a read 'mappable' if:
-     * 1) There are enough hq bps
-     *
-     */
-
-    /* Make sure the global option has been set 
-       ( it's initialized to -1 ); */
-    assert( min_num_hq_bps >= 0 );
-
-    // loop over the subtemplates, counting hq basepairs
-    int i;
-    for( i = 0; i < r->num_subtemplates; i++ )
-    {
-        int num_hq_bps = 0;
-        
-        // get a pointer to the current subtemplate
-        struct read_subtemplate* rst = &(r->subtemplates[i]);
-
-        /* loop over each bp in the subtemplate */
-        int pos;
-        for( pos = 0; pos < rst->length; pos++ )
-        {
-            /*
-               compute the inverse probability of error (quality)
-               NOTE when error_prb receieves identical bp's, it returns the
-               inverse automatically
-             */
-            double error = error_prb( rst->char_seq[pos], rst->char_seq[pos], 
-                                      rst->error_str[pos], pos, error_model );
-            double qual = pow(10, error );
-            
-            /* count the number of hq basepairs */
-            if( qual > 1 - HIGH_QUALITY_BP_ERROR_PRB )
-                num_hq_bps += 1;
-        }
-
-        if ( num_hq_bps < min_num_hq_bps )
-            return true;
-    }
-
-        
-    return false;
-}
-
 void
 build_read_from_rawreads(
         struct read** r,
@@ -339,10 +287,10 @@ get_next_read_from_rawread_db(
 void
 init_indexable_subtemplate(
         struct indexable_subtemplate** ist,
+        struct read_subtemplate* rst,
 
         int subseq_length,
         int subseq_offset,
-        char* char_seq,
 
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array
@@ -352,10 +300,18 @@ init_indexable_subtemplate(
 
     (*ist)->subseq_length = subseq_length;
     (*ist)->subseq_offset = subseq_offset;
-    (*ist)->char_seq = char_seq + subseq_offset;
+
+    (*ist)->char_seq = rst->char_seq + subseq_offset;
 
     (*ist)->fwd_penalties = fwd_penalty_array->array + subseq_offset;
-    (*ist)->rev_penalties = rev_penalty_array->array + subseq_offset;
+
+    /* The reverse penalty array is built from the reverse complemented read
+     * sequence. Since subseq_offset is the distance of the offset from the 5'
+     * start of the read, subseq_offset will actually be at the end of the
+     * penalty array. The offset we want then is the length of the subsequence
+     * plus the length of the offset subtracted from the total read length. */
+    (*ist)->rev_penalties = rev_penalty_array->array
+        + ( rst->length - (subseq_offset + subseq_length));
 }
 
 void
