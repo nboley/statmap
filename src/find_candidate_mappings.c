@@ -465,16 +465,6 @@ search_index_for_indexable_subtemplates(
 }
 
 int
-choose_mapped_locations_base_index( int search_results_length )
-{
-    assert( search_results_length > 0 );
-
-    /* TODO for now, use the first set of mapped locations, which corresponds
-     * to the search results for the first (5'-most) indexable subtemplate */
-    return 0;
-}
-
-int
 find_start_of_pseudo_mapped_locations_for_strand(
         mapped_locations* sorted_mapped_locs,
         enum STRAND strand
@@ -810,17 +800,6 @@ build_candidate_mappings_from_matches(
     }
 }
 
-mapped_locations*
-mapped_locations_template( struct indexable_subtemplate* indexable_probe )
-{
-    /* construct an empty set of mapped_locations with the metadata
-     * (original indexable_subtemplate) from template */
-    mapped_locations* locs = NULL;
-    init_mapped_locations( &locs, indexable_probe );
-
-    return locs;
-}
-
 void
 add_pseudo_loc_to_mapped_locations(
         INDEX_LOC_TYPE* gen_loc,
@@ -868,14 +847,15 @@ expand_pseudo_location_into_mapped_locations(
     return;
 }
 
-void
+mapped_locations*
 expand_base_mapped_locations(
         mapped_location* base_loc,
-        mapped_locations* expanded_locs,
+        struct indexable_subtemplate* index_probe,
         struct genome_data* genome
     )
 {
-    /* we assume that expanded_locs has already been initalize */
+    mapped_locations* expanded_locs = NULL;
+    init_mapped_locations( &expanded_locs, index_probe );
     
     /* if base_loc is a pseudo location, expand it and add all of its
      * potential mapped_location's */
@@ -891,7 +871,7 @@ expand_base_mapped_locations(
     /* sort in order to use binary search later */
     sort_mapped_locations_by_location( expanded_locs );
 
-    return;
+    return expanded_locs;
 }
 
 void
@@ -1281,13 +1261,13 @@ build_candidate_mappings_from_search_results(
     candidate_mappings* mappings = NULL;
     init_candidate_mappings( &mappings );
 
-    /* sort each mapped_locations in order to binary search later */
+    /* sort each mapped_locations in order to use optimized merge algorithm */
     sort_search_results( search_results, search_results_length );
 
-    /* pick a mapped_locations to use as the basis for matching */
-    int base_locs_index = choose_mapped_locations_base_index(
-            search_results_length );
-    mapped_locations* base_locs = search_results[base_locs_index];
+    /* Always use the mapped locations from the first indexable subtemplate as
+     * the basis for building matches across the whole read subtemplate. We
+     * always build matches from 5' -> 3' */
+    mapped_locations* base_locs = search_results[0];
     
     /* consider each base location */
     int i, j;
@@ -1295,25 +1275,24 @@ build_candidate_mappings_from_search_results(
     {
         mapped_location* base_loc = base_locs->locations + i;
 
-        /* If the base_loc is a diploid or pseudo location, build a set of all
-         * possible expansions to consider for matching */
-        mapped_locations* expanded_base =
-            mapped_locations_template( base_locs->probe );
-
-        expand_base_mapped_locations( base_loc, expanded_base, genome );
+        /* If the base_loc is a pseudo location, build a set of all its
+         * possible expansions to consider for matching. Otherwise, returns the
+         * original location */
+        mapped_locations* expanded_base_locs = expand_base_mapped_locations(
+                base_loc, base_locs->probe, genome );
 
         /* match across each of the expanded locations */
-        for( j = 0; j < expanded_base->length; j++ )
+        for( j = 0; j < expanded_base_locs->length; j++ )
         {
-            mapped_location* base = expanded_base->locations + j;
+            mapped_location* match_base = expanded_base_locs->locations + j;
 
-            build_candidate_mappings_from_base_mapped_location( base,
-                    base_locs_index, base_locs->probe, search_results,
+            build_candidate_mappings_from_base_mapped_location( match_base,
+                    0, expanded_base_locs->probe, search_results,
                     search_results_length, genome, rst, mappings,
                     mapping_params);
         }
 
-        free_mapped_locations( expanded_base );
+        free_mapped_locations( expanded_base_locs );
     }
 
     return mappings;
