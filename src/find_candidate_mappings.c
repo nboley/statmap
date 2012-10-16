@@ -1270,15 +1270,17 @@ sort_search_results(
     return;
 }
 
-void
+candidate_mappings*
 build_candidate_mappings_from_search_results(
-        candidate_mappings* rst_mappings,
         mapped_locations** search_results,
         int search_results_length,
         struct read_subtemplate* rst,
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
+    candidate_mappings* mappings = NULL;
+    init_candidate_mappings( &mappings );
+
     /* sort each mapped_locations in order to binary search later */
     sort_search_results( search_results, search_results_length );
 
@@ -1305,17 +1307,16 @@ build_candidate_mappings_from_search_results(
         {
             mapped_location* base = expanded_base->locations + j;
 
-            build_candidate_mappings_from_base_mapped_location(
-                    base, base_locs_index, base_locs->probe,
-                    search_results, search_results_length,
-                    genome,
-                    rst, rst_mappings,
-                    mapping_params
-                );
+            build_candidate_mappings_from_base_mapped_location( base,
+                    base_locs_index, base_locs->probe, search_results,
+                    search_results_length, genome, rst, mappings,
+                    mapping_params);
         }
 
         free_mapped_locations( expanded_base );
     }
+
+    return mappings;
 }
 
 void
@@ -1575,11 +1576,6 @@ find_candidate_mappings_for_read_subtemplate(
         struct mapping_params* mapping_params
     )
 {
-    /* build candidate mappings from matching subsets of the mapped_locations
-     * for each indexable_subtemplate returned by the index search */
-    candidate_mappings* mappings = NULL;
-    init_candidate_mappings( &mappings );
-
     /* the index of the read subtemplate that we are using */
     int rst_pos = rst->pos_in_template.pos;
     
@@ -1616,10 +1612,10 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     free( index_search_params );
-    
-    build_candidate_mappings_from_search_results(
-            mappings, search_results, search_results_length,
-            rst, genome, mapping_params );
+
+    candidate_mappings* mappings
+        = build_candidate_mappings_from_search_results( search_results,
+                search_results_length, rst, genome, mapping_params );
 
     /* NOTE search_results contains references to memory allocated in the
      * indexable_subtemplates. search_results must be freed before ists */
