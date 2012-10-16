@@ -3,6 +3,9 @@
 #ifndef CONFIG
 #define CONFIG
 
+/****** version options                         *******/
+#define GENOME_FILE_FORMAT_VERSION   0
+
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
 #define MAPPING_STATUS_GRANULARITY 100000
@@ -177,51 +180,10 @@ enum READ_END {
 /* this should be used for NULL, in the below as commented */
 #define UNKNOWN 0
 
-enum JUNCTION_TYPE
-{
-    /*  0 = 'Not Set' - it should be the initial setting */
-    PRE_INTRON = 1,
-    POST_INTRON = 2,
-    NON_CANONICAL = 3
-};
-
 /*
- * THIS SECTION IS OBSOLETE *************************************
- 
-   Store potential junctions
-   We just keep track of which strand the gene that could
-   have been at this location could have come from.
-
-   ie, if the genome location seq is CCCGT|AGTTT, then this read 
-   could have been on the + strand ( assuming, of course, that 
-   the genomic sequence was 5' -> 3' ) and if the genomic seq
-   was AGTTT, then the read CCCTTT could have mapped in the
-   positive direction. 
-   
-   So, when we observe the sequence CCCGT in chr 0 at bp 0, 
-   the corresponding genome location is given by 
-       gene_strnd = 1
-       intron_start = 1 // before the intron
-       chr = 0
-       bp = 0
-       seq = CCC
-   
-   In addition, when we observe AGTTT  we add the end  
-       gene_strnd = 1
-       intron_start = 0 // after the intron
-       chr = 0
-       bp = 0 + 3 + intron_length
-       seq = TTT
-    
-    sequence is 
-    
-    5'+  GGC|CT|AC|CAA 3'
-    3'-  CCG|GA|TG|GTT 5'
-
-    then observing GGCCAA corresponds with observing a - strand gene 
-    from a + read. So, we would add GGC here as a potential gene *end*
-    for a *- strand gene* and CAA as a gene *start*
-*/
+ * if CHR_BITS or LOCATION_BITS are changed, INDEX_LOC_TYPE and the
+ * mapped_read_t pseudo structure should be updated so they remain byte-aligned
+ */
 #define CHR_BITS 16
 #define CHR_NUM_MAX (65536 - 1) // 2**16 - 1
 #define PSEUDO_LOC_CHR_INDEX 0
@@ -239,6 +201,9 @@ enum JUNCTION_TYPE
 /* this needs to always be able to store up to LOCATION_MAX */
 #define SIGNED_LOC int
 
+/* if this structure is changed, GENOME_FILE_FORMAT_VERSION should be
+ * incremented to reflect backwards incompatible changes in the binary
+ * genome/index format */
 typedef struct __attribute__((__packed__))
 {
     unsigned is_paternal    :1;

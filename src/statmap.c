@@ -62,50 +62,26 @@ void set_max_reference_insert_len(int n) { max_reference_insert_len = n; }
  */
 void load_genome( struct genome_data** genome, struct args_t* args )
 {
-    int rv;
+    /* copy the genome into the output directory */
+    safe_link_into_output_directory( 
+        args->genome_fname, "./", GENOME_FNAME );
+    /* copy genome index into the output directory */
+    safe_link_into_output_directory( 
+        args->genome_index_fname, "./", GENOME_INDEX_FNAME );
+    
+    /* copy pseudo_locs into the output directory */
+    char pseudo_loc_ofname[500];
+    sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
+    safe_link_into_output_directory( 
+        pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
 
-    /* test for a correctly converted binary genome */
-    FILE* genome_fp = fopen( args->genome_fname, "r" );
-    if( NULL == genome_fp )
-    {
-        fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
-        exit( 1 );
-    }
-
-    char magic_number[9];
-    rv = fread( magic_number, sizeof(char), 9, genome_fp );
-    assert( rv == 9 );
-    fclose( genome_fp );
-
-    if( 0 == strncmp( magic_number, "SM_OD_GEN", 9 ) )
-    {
-        /* copy the genome into the output directory */
-        safe_link_into_output_directory( 
-            args->genome_fname, "./", GENOME_FNAME );
-        /* copy genome index into the output directory */
-        safe_link_into_output_directory( 
-            args->genome_index_fname, "./", GENOME_INDEX_FNAME );
-        
-        /* copy pseudo_locs into the output directory */
-        char pseudo_loc_ofname[500];
-        sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
-        safe_link_into_output_directory( 
-            pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
-
-        /* copy diploid map data into the output directory */
-        char dmap_ofname[500];
-        sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
-        safe_link_into_output_directory(
-            dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
-        
-        load_genome_from_disk( genome, GENOME_FNAME );
-    }
-    else
-    {
-        fprintf(stderr, "FATAL      :  Genome file '%s' is not in the correct format.\n", args->genome_fname);
-        exit(1);
-    }
-
+    /* copy diploid map data into the output directory */
+    char dmap_ofname[500];
+    sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
+    safe_link_into_output_directory(
+        dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
+    
+    load_genome_from_disk( genome, GENOME_FNAME );
     load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
 
     return;

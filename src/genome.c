@@ -40,6 +40,9 @@ write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
 {
     int rv;
     fprintf( fp, "SM_OD_GEN" );
+
+    rv = fwrite( &(header->format_version), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
     
     rv = fwrite( &(header->size), sizeof(size_t), 1, fp );
     assert( rv == 1 );
@@ -47,14 +50,6 @@ write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
     rv = fwrite( &(header->genome_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
 
-    rv = fwrite( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-
-    /* // keep the index in a separate file
-    rv = fwrite( &(header->index_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-    */
-    
     return ( 9*sizeof(char) + 3*sizeof(size_t) );
 }
 
@@ -66,17 +61,24 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
     char magic_number[9];
     rv = fread( magic_number, sizeof(unsigned char), 9, fp );
 
-    #ifdef DEBUG
-    fprintf( stderr, "DEBUG       :  Genome Magic Number - %.9s\n", magic_number );
-    #endif
-
     assert( rv == 9 );
     if( 0 != memcmp( magic_number, "SM_OD_GEN", 9 ) )
     {
         fprintf( stderr, "FATAL       :  Genome Magic Number ('%.9s') is incorrect ( it should be 'SM_OD_GEN' - cmp %i  ) \n", 
                  magic_number, memcmp( magic_number, "SM_OD_GEN", 9 ) );
         fprintf( stderr, "HINT        :  Is this a fasta file? Fasta files need to be converted with build_index.\n" );
-        exit( 1 );
+        exit(-1);
+    }
+
+    rv = fread( &(header->format_version), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    if( header->format_version != GENOME_FILE_FORMAT_VERSION )
+    {
+        fprintf( stderr, "FATAL       :  Genome file format version is incompatible with this release of Statmap (found %zu, require %zu)\n",
+                 header->format_version, GENOME_FILE_FORMAT_VERSION );
+        fprintf( stderr, "HINT        :  Rebuild the binary genome/index with this release's build_index.py\n" );
+        exit(-1);
     }
 
     rv = fread( &(header->size), sizeof(size_t), 1, fp );
@@ -84,14 +86,6 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
 
     rv = fread( &(header->genome_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
-
-    rv = fread( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-
-    /* // keep the index in a separate file
-    rv = fread( &(header->index_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-    */
     
     return;
 }
@@ -221,6 +215,7 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     if( ofp == NULL )
     {
         fprintf( stderr, "Can not open '%s' for writing.", fname );
+        assert( false );
         exit( 1 );
     }
       
@@ -228,16 +223,15 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     
     /** write the header  */
     /* 
-       we dont actually know what any of these values are, so we write 
-       them to allocate the sapce, then we will go back and make them 
-       correct 
+       we don't actually know what the values of size or genome_offset are yet,
+       so we write them to allocate the space, then we will go back and make
+       them correct 
     */
     struct genome_header header;
     
+    header.format_version = GENOME_FILE_FORMAT_VERSION;
     header.size = 0;
     header.genome_offset = 0;
-    header.pseudo_locs_offset = 0;
-    // header.index_offset = 0;
 
     size_written = write_reference_data_header_to_disk( &header, ofp );
     header.size += size_written;
@@ -246,8 +240,6 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     size_written = write_standard_genome_to_file( gen, ofp  );
     header.size += size_written;
     
-    header.pseudo_locs_offset = header.genome_offset + size_written;
-
     /* write the updated header */
     fseek( ofp, 0, SEEK_SET );
     size_written = write_reference_data_header_to_disk( &header, ofp );

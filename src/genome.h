@@ -12,6 +12,10 @@
  *
  */
 
+/* if any of these structures are changed, GENOME_FILE_FORMAT_VERSION in
+ * config.h should be incremented to reflect backwards incompatible changes in
+ * the binary genome format */
+
 enum INDEX_TYPE {
     TREE = 1
 };
@@ -91,10 +95,9 @@ void
 free_genome( struct genome_data* gen );
 
 struct genome_header {
+    size_t format_version;
     size_t size;
     size_t genome_offset;
-    size_t pseudo_locs_offset;
-    size_t index_offset;
 };
 
 void
