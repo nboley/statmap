@@ -382,11 +382,20 @@ find_diploid_chr_index(
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
-              int chr_index, unsigned int loc, 
+              int chr_index, int start_bp, 
               int read_len )
 {
     assert( chr_index < genome->num_chrs );
-    
+
+    /* We can get negative locs from the assay specific correction code if the
+     * original mapping is close to a contig boundary. */
+    if( start_bp < 0 )
+    {
+        return NULL;
+    }
+
+    unsigned int loc = (unsigned int) start_bp;
+
     if( chr_index != PSEUDO_LOC_CHR_INDEX 
         && ( 
             loc + read_len > genome->chr_lens[chr_index]

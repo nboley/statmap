@@ -1728,7 +1728,8 @@ void
 add_candidate_mappings_for_untemplated_gs(
         candidate_mappings* assay_corrected_mappings,
         candidate_mapping* cm,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     /** Add additional mappings if there is a G (that could be untemplated) in
@@ -1759,7 +1760,13 @@ add_candidate_mappings_for_untemplated_gs(
 
             cm_copy.num_untemplated_gs += i+1;
 
-            add_candidate_mapping( assay_corrected_mappings, &cm_copy );
+            /* Add this soft clipped variation on the base candidate mapping if
+             * it is a valid mapping */
+            if( NULL != find_seq_ptr( genome, cm_copy.chr, cm_copy.start_bp,
+                        cm_copy.mapped_length ) )
+            {
+                add_candidate_mapping( assay_corrected_mappings, &cm_copy );
+            }
         } else {
             break;
         }
@@ -1772,29 +1779,20 @@ void
 make_cage_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        candidate_mapping* cm = mappings->mappings + i;
-
-        /* Add initial candidate mapping with no untemplated G's */
-        candidate_mapping corrected_cm = *cm;
+        /* Start by adjusting the mapping to be an initial candidate mapping
+         * with no untemplated G's */
+        candidate_mapping corrected_cm = mappings->mappings[i];
 
         /* Make sure we soft clipped enough bases when searching the index to be
          * able to make this adjustment */
         assert( corrected_cm.trimmed_length >= MAX_NUM_UNTEMPLATED_GS );
-
-        /* Check that the candidate mapping isn't so close to a contig boundary
-         * that this adjustment would cause it to cross over */
-        if( corrected_cm.start_bp - MAX_NUM_UNTEMPLATED_GS < 0 ) {
-            /* FIXME what's the right thing to do here? (skipping it for now) */
-            /* Run the same algorithm with as many bp's as we can spare? */
-            continue;
-        }
-
         corrected_cm.mapped_length += MAX_NUM_UNTEMPLATED_GS;
         corrected_cm.trimmed_length -= MAX_NUM_UNTEMPLATED_GS;
 
@@ -1808,19 +1806,28 @@ make_cage_specific_corrections(
 
             assert( corrected_cm.cigar[0].op == 'M' );
             corrected_cm.cigar[0].len += MAX_NUM_UNTEMPLATED_GS;
-
         } else { // corrected_cm.rd_strnd == BKWD
             assert( corrected_cm.cigar[corrected_cm.cigar_len-1].op == 'M' );
             corrected_cm.cigar[corrected_cm.cigar_len-1].len += MAX_NUM_UNTEMPLATED_GS;
         }
 
-        add_candidate_mapping( assay_corrected_mappings, &corrected_cm );
+        /* If a soft clipped read maps near the boundary of a contig, it is
+         * possible that this adjusted candidate mapping will be beyond the
+         * boundary and thus invalid. However, soft clipped variations on the
+         * mapping may be valid - so we don't add this to the set of corrected
+         * mappings, but do use it as a basis to build possible valid soft
+         * clipped mappings. */
+        if( NULL != find_seq_ptr( genome, corrected_cm.chr,
+                    corrected_cm.start_bp, corrected_cm.mapped_length ) )
+        {
+            add_candidate_mapping( assay_corrected_mappings, &corrected_cm );
+        }
 
         /* This candidate mapping is now the basis for adding additional
          * candidate mappings if it possible that they could have untemplated
          * G's */
         add_candidate_mappings_for_untemplated_gs( assay_corrected_mappings,
-                &corrected_cm, r );
+                &corrected_cm, r, genome );
     }
 
     return;
@@ -1830,16 +1837,22 @@ void
 make_assay_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
-        make_cage_specific_corrections( mappings, assay_corrected_mappings, r );
+        make_cage_specific_corrections( mappings, assay_corrected_mappings, r,
+                genome );
     } else {
         /* Copy the original set of mappings to the corrected set (without
          * alteration, since this assay type does not require corrections) */
+
+        /* FIXME can just return pointer to original mappings, eliminating
+         * unnecessary memcpy. However, freeing the correct memory then becomes
+         * a bit tricky. Revisit. */
         copy_candidate_mappings( assay_corrected_mappings, mappings );
     }
         
@@ -1870,7 +1883,8 @@ build_mapped_read_from_candidate_mappings(
      * */
     candidate_mappings* assay_corrected_mappings = NULL;
     init_candidate_mappings( &assay_corrected_mappings );
-    make_assay_specific_corrections( mappings, assay_corrected_mappings, r );
+    make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
+            genome );
     /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,

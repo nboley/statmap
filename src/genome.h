@@ -79,7 +79,7 @@ int get_map_data_index_from_chr_index(
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
-              int chr_index, unsigned int loc, 
+              int chr_index, int start_bp, 
               int read_len );
 
 extern void
