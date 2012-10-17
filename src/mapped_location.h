@@ -31,7 +31,6 @@ typedef struct {
     unsigned int loc; // maybe put some unified types in config.h?
     enum STRAND strnd;
     float penalty;
-    enum bool free_with_match;
 } mapped_location;
 
 typedef struct {
@@ -105,10 +104,11 @@ print_mapped_locations( mapped_locations* results );
 
 /* Stores a matching set of mapped_locations */
 struct ml_match {
-    mapped_location** locations;
+    mapped_location* locations;
     int* subseq_lengths;
     int* subseq_offsets;
     int len;
+    int matched;
 
     /* The cumulative length of gaps in the reference genome for this set of
      * matched mapped_locations */
@@ -130,7 +130,7 @@ struct ml_match*
 copy_ml_match( struct ml_match* match );
 
 void
-free_ml_match( struct ml_match* match, enum bool free_locations );
+free_ml_match( struct ml_match* match );
 
 /* TODO - compute the ref gap inside this function? */
 void
@@ -139,11 +139,7 @@ add_location_to_ml_match(
         struct ml_match* match, 
         int subseq_length,
         int subseq_offset,
-        int location_index,
         int cum_ref_gap );
-
-enum bool
-ml_match_is_valid( struct ml_match* match );
 
 /***** ml_matches ******/
 
@@ -158,7 +154,7 @@ void
 init_ml_matches( struct ml_matches** matches );
 
 void
-free_ml_matches( struct ml_matches* matches, enum bool free_locations );
+free_ml_matches( struct ml_matches* matches );
 
 void
 copy_ml_match_into_matches(

@@ -139,9 +139,6 @@ add_new_mapped_location( mapped_locations* results,
     /* set the penalty */
     new_loc->penalty = penalty;
 
-    /* set the free_with_match parameter - false unless explicitly set */
-    new_loc->free_with_match = false;
-    
     /* add the new results to the end of the results set */
     results->length++;
 
@@ -272,8 +269,9 @@ init_ml_match( struct ml_match** match, int match_len )
      * indexable subtemplates, since we must be able to match across all of the
      * indexable subtemplates for a valid match. */
     (*match)->len = match_len;
+    (*match)->matched = 0;
 
-    (*match)->locations = calloc( match_len, sizeof( mapped_location* ));
+    (*match)->locations = calloc( match_len, sizeof( mapped_location ));
     (*match)->subseq_lengths = calloc( match_len, sizeof( int ));
     (*match)->subseq_offsets = calloc( match_len, sizeof( int ));
 
@@ -289,10 +287,11 @@ copy_ml_match( struct ml_match* match )
     /* Return a copy of match */
     struct ml_match* match_copy;
     init_ml_match( &match_copy, match->len );
+    match_copy->matched = match->matched;
 
     /* copy the arrays */
     memcpy( match_copy->locations, match->locations,
-            sizeof( mapped_location* )*match->len );
+            sizeof( mapped_location )*match->len );
     memcpy( match_copy->subseq_lengths, match->subseq_lengths,
             sizeof( int )*match->len );
     memcpy( match_copy->subseq_offsets, match->subseq_offsets,
@@ -300,7 +299,6 @@ copy_ml_match( struct ml_match* match )
 
     /* copy the cumulative reference gap */
     match_copy->cum_ref_gap = match->cum_ref_gap;
-
     /* copy the cumulative penalty */
     match_copy->cum_penalty = match->cum_penalty;
 
@@ -308,26 +306,10 @@ copy_ml_match( struct ml_match* match )
 }
 
 void
-free_ml_match( struct ml_match* match, enum bool free_locations )
+free_ml_match( struct ml_match* match )
 {
-    if( match == NULL ) return;
-
-    /* If any of the mapped locations were dynamically allocated (from a
-     * pseudo location, for example), free them here */
-    if( free_locations )
-    {
-        int i;
-        for( i = 0; i < match->len; i++ )
-        {
-            mapped_location* curr_loc = match->locations[i];
-            
-            if( curr_loc == NULL )
-                break;
-
-            if( curr_loc->free_with_match )
-                free( curr_loc );
-        }
-    }
+    if( match == NULL )
+        return;
 
     free( match->locations );
     free( match->subseq_lengths );
@@ -344,39 +326,20 @@ add_location_to_ml_match(
         struct ml_match* match, 
         int subseq_length,
         int subseq_offset,
-        int location_index,
         int cum_ref_gap )
 {
-    assert( location_index < match->len );
+    assert( match->matched < match->len );
 
-    match->locations[location_index] = location;
-    match->subseq_lengths[location_index] = subseq_length;
-    match->subseq_offsets[location_index] = subseq_offset;
+    match->locations[match->matched] = *location;
+    match->subseq_lengths[match->matched] = subseq_length;
+    match->subseq_offsets[match->matched] = subseq_offset;
 
     match->cum_ref_gap = cum_ref_gap;
-
     match->cum_penalty += location->penalty;
 
+    match->matched++;
+
     return;
-}
-
-enum bool
-ml_match_is_valid( struct ml_match* match )
-{
-    /* A match is valid if we have a mapped_location from each index probe */
-    enum bool is_valid = true;
-
-    int i;
-    for( i = 0; i < match->len; i++ )
-    {
-        if( match->locations[i] == NULL )
-        {
-            is_valid = false;
-            break;
-        }
-    }
-
-    return is_valid;
 }
 
 /***** ml_matches *****/
@@ -395,13 +358,13 @@ init_ml_matches( struct ml_matches** matches )
 }
 
 void
-free_ml_matches( struct ml_matches* matches, enum bool free_locations )
+free_ml_matches( struct ml_matches* matches )
 {
     /* Free the individual ml_matches */
     int i;
     for( i = 0; i < matches->length; i++ )
     {
-        free_ml_match( matches->matches[i], free_locations );
+        free_ml_match( matches->matches[i] );
     }
 
     free( matches->matches );

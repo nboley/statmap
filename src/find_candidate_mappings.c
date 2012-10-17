@@ -612,11 +612,11 @@ build_candidate_mapping_cigar_string_from_match(
 
             if( cm->rd_strnd == FWD )
             {
-                ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
-                        - (match->locations[i-1]->loc - match->subseq_offsets[i-1]);
+                ref_gap = (match->locations[i].loc - match->subseq_offsets[i])
+                        - (match->locations[i-1].loc - match->subseq_offsets[i-1]);
             } else {
-                ref_gap = (match->locations[i-1]->loc + match->subseq_offsets[i-1])
-                        - (match->locations[i]->loc + match->subseq_offsets[i]);
+                ref_gap = (match->locations[i-1].loc + match->subseq_offsets[i-1])
+                        - (match->locations[i].loc + match->subseq_offsets[i]);
             }
 
             if( ref_gap > 0 )
@@ -681,7 +681,7 @@ compute_candidate_mapping_penalty_from_match(
     int i;
     for( i = 0; i < match->len; i++ ) {
         /* the product of the marginal (log) probabilites */
-        cum_penalty += match->locations[i]->penalty;
+        cum_penalty += match->locations[i].penalty;
     }
 
     return cum_penalty;
@@ -700,7 +700,7 @@ build_candidate_mapping_from_match(
     candidate_mapping cm = init_candidate_mapping();
 
     assert( match->len > 0 );
-    mapped_location* base = match->locations[0];
+    mapped_location* base = match->locations + 0;
 
     /* set the strand */
     assert( base->strnd == FWD || base->strnd == BKWD ); // XXX correct?
@@ -730,7 +730,7 @@ build_candidate_mapping_from_match(
     /* TODO - update modify_mapped_read_location_for_index_probe_offset to
      * handle this case */
     if( match->len > 1 && base->strnd == BKWD ) {
-        read_location = match->locations[match->len-1]->loc;
+        read_location = match->locations[match->len-1].loc;
     }
 
     if( read_location < 0 ) // the read location was invalid; skip this matched set
@@ -885,7 +885,7 @@ add_matches_from_pseudo_locations_to_stack(
         struct mapping_params* mapping_params )
 {
     /* Get a reference to the base mapped location for the strand */
-    mapped_location* base = match->locations[0];
+    mapped_location* base = match->locations + 0;
 
     /* Assume the pseudo chr is sorted to come before the rest of the chrs */
     assert( PSEUDO_LOC_CHR_INDEX == 0 );
@@ -968,22 +968,16 @@ add_matches_from_pseudo_locations_to_stack(
                 tmp->chr = iloc->chr;
                 tmp->loc = iloc->loc;
 
-                /* Since we're building this mapped_location dynamically to
-                 * represent a pseudo location, it won't be free with the rest
-                 * of the mapped_locations pointers from search_results.
-                 * For now, we set an explicit flag to distinguish these
-                 * different types of mapped locations. */
-                tmp->free_with_match = true;
-
                 struct ml_match* new_match = copy_ml_match( match );
                 add_location_to_ml_match( tmp,
                         new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset,
-                        match_index,
                         candidate_cum_ref_gap );
 
                 ml_match_stack_push( stack, new_match );
+
+                free( tmp );
             } else {
                 break;
             }
@@ -1002,7 +996,7 @@ add_matches_from_locations_to_stack(
         struct ml_match_stack* stack,
         struct mapping_params* mapping_params )
 {
-    mapped_location* base = match->locations[0];
+    mapped_location* base = match->locations + 0;
 
     /* try to continue building match with each location in the
      * candidate_locs. Since each set of mapped_locations is sorted by start
@@ -1052,7 +1046,6 @@ add_matches_from_locations_to_stack(
                     new_match,
                     candidate_locs->probe->subseq_length,
                     candidate_locs->probe->subseq_offset,
-                    match_index,
                     candidate_cum_ref_gap );
 
             ml_match_stack_push( stack, new_match );
@@ -1070,32 +1063,6 @@ add_matches_from_locations_to_stack(
     return;
 }
 
-int
-find_index_of_next_indexable_subtemplate_to_match(
-        struct ml_match* match )
-{
-    int match_index = 0;
-    /*
-     * find the index of the next set of index subtemplate search results
-     * to consider. Since match is a partially built set of matched locations,
-     * the index is the first entry in it's mapped_locations array that is NULL.
-     */
-    int i;
-    for( i = 0; i < match->len; i++ )
-    {
-        if( match->locations[i] == NULL )
-        {
-            match_index = i;
-            break;
-        }
-    }
-    /* Since we initialize match with the base matched location, this index
-     * should always be greater than zero */
-    assert( match_index > 0 );
-
-    return match_index;
-}
-
 void
 add_potential_matches_to_stack(
         struct ml_match* match,
@@ -1104,21 +1071,20 @@ add_potential_matches_to_stack(
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
-    int match_index =
-        find_index_of_next_indexable_subtemplate_to_match( match );
+    int match_index = match->matched;
 
     mapped_locations* candidate_locs = search_results[match_index];
 
     /* Compute the true start (loc - subseq_offset) of the last mapped
      * location in the match */
     int prev_matched_location_start;
-    mapped_location* base = match->locations[0];
+    mapped_location* base = match->locations + 0;
     if( base->strnd == FWD )
     {
-        prev_matched_location_start = match->locations[match_index - 1]->loc
+        prev_matched_location_start = match->locations[match_index - 1].loc
                                     - match->subseq_offsets[match_index - 1];
     } else {
-        prev_matched_location_start = match->locations[match_index - 1]->loc
+        prev_matched_location_start = match->locations[match_index - 1].loc
                                     + match->subseq_offsets[match_index - 1];
     }
 
@@ -1165,8 +1131,8 @@ find_matching_mapped_locations(
         struct ml_match* curr_match = ml_match_stack_pop( stack );
 
         /* if this is a completed, valid match object (i.e. it contains a
-         * matched mapped location from each indexable subtemplate */
-        if( ml_match_is_valid( curr_match ) )
+         * matched mapped location from each indexable subtemplate ) */
+        if( curr_match->matched == curr_match->len )
         {
             /* then add it to the list of found matches */
             copy_ml_match_into_matches( curr_match, matches );
@@ -1183,7 +1149,7 @@ find_matching_mapped_locations(
                 );
         }
 
-        free_ml_match( curr_match, false );
+        free_ml_match( curr_match );
     }
 
     free_ml_match_stack( stack );
@@ -1210,9 +1176,8 @@ build_candidate_mappings_from_base_mapped_location(
     /* Initialize the match object for all matches from this base location */
     struct ml_match* base_match = NULL;
     init_ml_match( &base_match, search_results_length );
-    add_location_to_ml_match( base, base_match,
-            base_probe->subseq_length, base_probe->subseq_offset,
-            base_locs_index, 0 );
+    add_location_to_ml_match( base, base_match, base_probe->subseq_length,
+            base_probe->subseq_offset, 0 );
 
     /* Initialize container for complete, valid matches to this base location */
     struct ml_matches* matches = NULL;
@@ -1233,7 +1198,7 @@ build_candidate_mappings_from_base_mapped_location(
         );
     
     /* cleanup memory */
-    free_ml_matches( matches, true );
+    free_ml_matches( matches );
 }
 
 void
