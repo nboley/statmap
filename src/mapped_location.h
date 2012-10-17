@@ -110,10 +110,6 @@ struct ml_match {
     int len;
     int matched;
 
-    /* The cumulative length of gaps in the reference genome for this set of
-     * matched mapped_locations */
-    int cum_ref_gap;
-
     /* The cumulative penalty from the mapped locations in this match.
      *
      * Since we are taking the product of the marginal probabilities, we know
@@ -138,8 +134,8 @@ add_location_to_ml_match(
         mapped_location* location,
         struct ml_match* match, 
         int subseq_length,
-        int subseq_offset,
-        int cum_ref_gap );
+        int subseq_offset
+    );
 
 /***** ml_matches ******/
 

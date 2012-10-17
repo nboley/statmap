@@ -878,7 +878,6 @@ void
 add_matches_from_pseudo_locations_to_stack(
         mapped_locations* candidate_locs,
         struct ml_match* match,
-        int match_index,
         int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct genome_data* genome,
@@ -955,12 +954,10 @@ add_matches_from_pseudo_locations_to_stack(
                     - prev_matched_location_start;
             }
 
-            int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
-
-            if( candidate_cum_ref_gap < 0 )
+            if( candidate_ref_gap < 0 )
                 continue;
 
-            if( candidate_cum_ref_gap <= max_reference_insert_len )
+            if( candidate_ref_gap <= max_reference_insert_len )
             {
                 /* construct a mapped location */
                 mapped_location* tmp = malloc( sizeof( mapped_location ));
@@ -969,11 +966,9 @@ add_matches_from_pseudo_locations_to_stack(
                 tmp->loc = iloc->loc;
 
                 struct ml_match* new_match = copy_ml_match( match );
-                add_location_to_ml_match( tmp,
-                        new_match,
+                add_location_to_ml_match( tmp, new_match,
                         candidate_locs->probe->subseq_length,
-                        candidate_locs->probe->subseq_offset,
-                        candidate_cum_ref_gap );
+                        candidate_locs->probe->subseq_offset );
 
                 ml_match_stack_push( stack, new_match );
 
@@ -991,7 +986,6 @@ void
 add_matches_from_locations_to_stack(
         mapped_locations* candidate_locs,
         struct ml_match* match,
-        int match_index,
         int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct mapping_params* mapping_params )
@@ -1024,12 +1018,10 @@ add_matches_from_locations_to_stack(
                 - ( candidate_loc->loc + candidate_locs->probe->subseq_offset );
         }
 
-        int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
-
-        if( candidate_cum_ref_gap < 0 )
+        if( candidate_ref_gap < 0 )
             continue;
 
-        if( candidate_cum_ref_gap <= max_reference_insert_len )
+        if( candidate_ref_gap <= max_reference_insert_len )
         {
             /* check the cumulative penalty for the match. If it is less
              * than the minimum, skip this match */
@@ -1042,11 +1034,9 @@ add_matches_from_locations_to_stack(
              * the stack */
             struct ml_match* new_match = copy_ml_match( match );
 
-            add_location_to_ml_match( candidate_loc,
-                    new_match,
+            add_location_to_ml_match( candidate_loc, new_match,
                     candidate_locs->probe->subseq_length,
-                    candidate_locs->probe->subseq_offset,
-                    candidate_cum_ref_gap );
+                    candidate_locs->probe->subseq_offset );
 
             ml_match_stack_push( stack, new_match );
         } else {
@@ -1091,7 +1081,6 @@ add_potential_matches_to_stack(
     add_matches_from_pseudo_locations_to_stack(
             candidate_locs,
             match,
-            match_index,
             prev_matched_location_start,
             stack,
             genome,
@@ -1101,7 +1090,6 @@ add_potential_matches_to_stack(
     add_matches_from_locations_to_stack(
             candidate_locs,
             match,
-            match_index,
             prev_matched_location_start,
             stack,
             mapping_params
@@ -1177,7 +1165,7 @@ build_candidate_mappings_from_base_mapped_location(
     struct ml_match* base_match = NULL;
     init_ml_match( &base_match, search_results_length );
     add_location_to_ml_match( base, base_match, base_probe->subseq_length,
-            base_probe->subseq_offset, 0 );
+            base_probe->subseq_offset );
 
     /* Initialize container for complete, valid matches to this base location */
     struct ml_matches* matches = NULL;

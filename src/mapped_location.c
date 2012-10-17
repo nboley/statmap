@@ -275,7 +275,6 @@ init_ml_match( struct ml_match** match, int match_len )
     (*match)->subseq_lengths = calloc( match_len, sizeof( int ));
     (*match)->subseq_offsets = calloc( match_len, sizeof( int ));
 
-    (*match)->cum_ref_gap = 0;
     (*match)->cum_penalty = 0;
 
     return;
@@ -297,8 +296,6 @@ copy_ml_match( struct ml_match* match )
     memcpy( match_copy->subseq_offsets, match->subseq_offsets,
             sizeof( int )*match->len );
 
-    /* copy the cumulative reference gap */
-    match_copy->cum_ref_gap = match->cum_ref_gap;
     /* copy the cumulative penalty */
     match_copy->cum_penalty = match->cum_penalty;
 
@@ -325,8 +322,7 @@ add_location_to_ml_match(
         mapped_location* location,
         struct ml_match* match, 
         int subseq_length,
-        int subseq_offset,
-        int cum_ref_gap )
+        int subseq_offset )
 {
     assert( match->matched < match->len );
 
@@ -334,7 +330,6 @@ add_location_to_ml_match(
     match->subseq_lengths[match->matched] = subseq_length;
     match->subseq_offsets[match->matched] = subseq_offset;
 
-    match->cum_ref_gap = cum_ref_gap;
     match->cum_penalty += location->penalty;
 
     match->matched++;
