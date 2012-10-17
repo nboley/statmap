@@ -499,7 +499,6 @@ init_mapping_params_for_read(
                                         1 - metaparams->error_model_params[0] );
         }
         
-         //metaparams->error_model_params[0];
         (*p)->recheck_max_penalty_spread = log10(
                 1 - metaparams->error_model_params[0] );
 

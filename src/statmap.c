@@ -97,11 +97,9 @@ map_marginal( struct args_t* args,
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
 
-    /* Save the user-set mapping metaparameters in a struct */
+    /* Save the user-specified mapping metaparameters in a struct */
     struct mapping_metaparams mapping_metaparams;
 
-    /* TODO set the metaparameters - wait for error_model merge */
-    
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
@@ -141,6 +139,7 @@ map_marginal( struct args_t* args,
         /* initialize the meta params */
         mapping_metaparams.error_model_type = MISMATCH;
         mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
+        mapping_metaparams.error_model_params[1] = args->mapping_metaparameter / 2;
         
         init_error_model( &error_model, MISMATCH );
     } else {
