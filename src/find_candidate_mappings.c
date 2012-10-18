@@ -1146,7 +1146,6 @@ find_matching_mapped_locations(
 void
 build_candidate_mappings_from_base_mapped_location(
         mapped_location* base,
-        int base_locs_index,
         struct indexable_subtemplate* base_probe,
 
         mapped_locations** search_results,
@@ -1158,9 +1157,6 @@ build_candidate_mappings_from_base_mapped_location(
         
         struct mapping_params* mapping_params )
 {
-    /* For now, we assume that we always start building from 5' -> 3' */
-    assert( base_locs_index == 0 );
-
     /* Initialize the match object for all matches from this base location */
     struct ml_match* base_match = NULL;
     init_ml_match( &base_match, search_results_length );
@@ -1240,7 +1236,7 @@ build_candidate_mappings_from_search_results(
             mapped_location* match_base = expanded_base_locs->locations + j;
 
             build_candidate_mappings_from_base_mapped_location( match_base,
-                    0, expanded_base_locs->probe, search_results,
+                    expanded_base_locs->probe, search_results,
                     search_results_length, genome, rst, mappings,
                     mapping_params);
         }
