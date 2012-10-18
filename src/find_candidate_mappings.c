@@ -883,26 +883,27 @@ add_matches_from_pseudo_locations_to_stack(
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
-    /* Get a reference to the base mapped location for the strand */
-    mapped_location* base = match->locations + 0;
-
-    /* Assume the pseudo chr is sorted to come before the rest of the chrs */
+    /* THe following algorithm assumes the pseudo location chr is sorted to
+     * come before the rest of the chrs */
     assert( PSEUDO_LOC_CHR_INDEX == 0 );
 
-    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
+    /* Get a reference to the base mapped location for the strand */
+    mapped_location* base = match->locations + 0;
 
     /* Find the start of the set of pseudo mapped locations with the same
      * strand as the location we are matching to */
     int pslocs_start_in_sorted_mapped_locations =
-        find_start_of_pseudo_mapped_locations_for_strand(
-            candidate_locs, base->strnd );
-
+        find_start_of_pseudo_mapped_locations_for_strand( candidate_locs,
+                base->strnd );
+    
     /* If there are no pseudo locations in the set of candidate locations for
      * matching, nothing to do here. */
     if( pslocs_start_in_sorted_mapped_locations < 0 )
         return;
 
-    /* Iterate over the sets of pseduo locations */
+    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
+
+    /* Iterate over the sets of pseudo locations */
     int i;
     for( i = pslocs_start_in_sorted_mapped_locations;
          i < candidate_locs->length;
@@ -918,8 +919,9 @@ add_matches_from_pseudo_locations_to_stack(
         if( candidate_loc->chr > PSEUDO_LOC_CHR_INDEX )
             break;
 
-        /* check the cumulative penalty for the match. If it is less
-         * than the minimum, skip this match */
+        /* Check the cumulative penalty for the match. If it is less
+         * than the minimum, skip this match. All of the expanded pseudo
+         * locations will have the same penalty. */
         float cum_penalty = match->cum_penalty + candidate_loc->penalty;
         if( cum_penalty < mapping_params->recheck_min_match_penalty )
             continue;
@@ -960,19 +962,19 @@ add_matches_from_pseudo_locations_to_stack(
             if( candidate_ref_gap <= max_reference_insert_len )
             {
                 /* construct a mapped location */
-                mapped_location* tmp = malloc( sizeof( mapped_location ));
-                copy_mapped_location( tmp, candidate_loc );
-                tmp->chr = iloc->chr;
-                tmp->loc = iloc->loc;
+                mapped_location* tmp_loc = malloc( sizeof( mapped_location ));
+                copy_mapped_location( tmp_loc, candidate_loc );
+                tmp_loc->chr = iloc->chr;
+                tmp_loc->loc = iloc->loc;
 
                 struct ml_match* new_match = copy_ml_match( match );
-                add_location_to_ml_match( tmp, new_match,
+                add_location_to_ml_match( tmp_loc, new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset );
 
                 ml_match_stack_push( stack, new_match );
 
-                free( tmp );
+                free( tmp_loc );
             } else {
                 break;
             }
@@ -1061,14 +1063,17 @@ add_potential_matches_to_stack(
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
+    /* The number of ists that have been match is also the index of the next
+     * ist to match */
     int match_index = match->matched;
-
+    assert( match_index > 0 );
     mapped_locations* candidate_locs = search_results[match_index];
 
     /* Compute the true start (loc - subseq_offset) of the last mapped
      * location in the match */
-    int prev_matched_location_start;
     mapped_location* base = match->locations + 0;
+
+    int prev_matched_location_start;
     if( base->strnd == FWD )
     {
         prev_matched_location_start = match->locations[match_index - 1].loc
