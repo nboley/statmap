@@ -22,13 +22,12 @@ def test_error_rate_estimation( ):
     nsamples = 19900
     output_directory = "smo_test_error_rate_estimation"
     
-    
     ###### Prepare the data for the test #######################################
     # build a random genome
-    genome_of = open("tmp.genome.fa", "w")
     r_genome = build_random_genome( [2000,2000], ["1","2"] )
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
+    genome_fnames = ( "tmp.genome.fa", )
+    with open( genome_fnames[0], "w" ) as genome_of:
+        write_genome_to_fasta( r_genome, genome_of, 1 )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in
@@ -75,8 +74,8 @@ def test_error_rate_estimation( ):
     
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len, 
-                      search_type='e', num_threads=8 )
+    map_with_statmap( read_fnames, output_directory, indexed_seq_len,
+            search_type='e', num_threads=8, genome_fnames=genome_fnames )
     
     ###### Make sure that the error data looks correct #########################
     records = load_error_data(os.path.join(output_directory, "error_stats.log"))
