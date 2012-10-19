@@ -364,9 +364,17 @@ build_indexable_subtemplates_from_read_subtemplate(
    struct indexable_subtemplates* ists = NULL;
    init_indexable_subtemplates( &ists );
 
-    /* for testing, try to build the maximum number of indexable subtemplates
-     * (with a maximum of 2) */
-    int num_partitions = MIN( indexable_length / subseq_length, MAX_NUM_INDEX_PROBES );
+    /* for now, try to build the maximum number of indexable subtemplates up to
+     * a maximum */
+    int num_partitions;
+    if( _assay_type == RNA_SEQ ) {
+        /* for RNA-seq, always use two probes at either end of the read so we
+         * can maximize the space for finding introns */
+        num_partitions = 2;
+    } else { 
+        num_partitions = MIN( indexable_length / subseq_length,
+                MAX_NUM_INDEX_PROBES );
+    }
     int partition_len = ceil((float)indexable_length / num_partitions);
 
     int i;
