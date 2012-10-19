@@ -10,6 +10,8 @@
 #include "mapped_location.h"
 #include "error_correction.h"
 
+#define MAX_NUM_INDEX_PROBES 3
+
 #define MAX_NUM_UNTEMPLATED_GS 1
 #define UNTEMPLATED_G_MARGINAL_LOG_PRB -1.30103
 

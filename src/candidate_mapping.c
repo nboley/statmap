@@ -132,7 +132,7 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         } else {
-            read_location -= (read_len + softclip_len);
+            read_location -= read_len;
         }
     
     } else {
@@ -193,18 +193,6 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
  * Candidate Mapping Code
  *
  *********************************************************************************/
-
-candidate_mapping
-init_candidate_mapping()
-{
-    candidate_mapping cm;
-    memset( &cm, 0, sizeof(candidate_mapping) );
-
-    /* FIXME I don't like using a global variable for this */
-    cm.trimmed_length = softclip_len;
-
-    return cm;
-}
 
 int
 get_length_from_cigar_string( candidate_mapping* mapping )

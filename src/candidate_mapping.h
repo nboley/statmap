@@ -81,9 +81,6 @@ typedef struct {
 
 } candidate_mapping;
 
-candidate_mapping
-init_candidate_mapping();
-
 int
 get_length_from_cigar_string( candidate_mapping* mapping );
 

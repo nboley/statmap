@@ -587,7 +587,6 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
 
     # If no indexed_seq_len explicitly set, use read_len
     indexed_seq_len = indexed_seq_len or read_len
-    rl = read_len
     
     # if we are testing untemplated g's, increase the number of samples so that we get some
     # beginning overlap
@@ -600,9 +599,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
-    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples, frag_len=rl )
-    reads = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=rev_comp, paired_end=False )
+    fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples,
+            frag_len=read_len )
+    reads = build_reads_from_fragments( r_genome, fragments, read_len=read_len,
+            rev_comp=rev_comp, paired_end=False )
 
     ###### Write out the test files, and run statmap ################################
     # write genome
@@ -1563,6 +1563,16 @@ def test_softclipped_read_finding():
     test_sequence_finding( rl, rev_comp = True, random_prefix_len=3 )
     print "PASS: Finding soft clipped reads"
 
+def test_more_than_two_indexable_subtemplates():
+    # no gaps
+    test_sequence_finding( read_len=60, indexed_seq_len=20 )
+    # gaps
+    test_sequence_finding( read_len=80, indexed_seq_len=20 )
+    print "PASS: Mapping perfect reads with more than two indexable subtemplates"
+
+def test_overlapping_index_probes():
+    pass
+
 def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
@@ -1598,6 +1608,8 @@ def main( RUN_SLOW_TESTS ):
 
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
+    print "Start test_more_than_two_indexable_subtemplates()"
+    test_more_than_two_indexable_subtemplates()
     print "Start test_multiple_indexable_subtemplate_for_threep()"
     test_multiple_indexable_subtemplate_for_threep()
     print "Start test_multiple_indexable_subtemplates_for_repeat_sequences()"

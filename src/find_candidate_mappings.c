@@ -366,7 +366,7 @@ build_indexable_subtemplates_from_read_subtemplate(
 
     /* for testing, try to build the maximum number of indexable subtemplates
      * (with a maximum of 2) */
-    int num_partitions = MIN( indexable_length / subseq_length, 2 );
+    int num_partitions = MIN( indexable_length / subseq_length, MAX_NUM_INDEX_PROBES );
     int partition_len = ceil((float)indexable_length / num_partitions);
 
     int i;
@@ -609,8 +609,8 @@ build_candidate_mapping_cigar_string_from_match(
             cm->cigar[cigar_index].len += match->subseq_offsets[i];
         }
 
-        /* cigar[cigar_index].len was initialized to zero in 
-         * init_candidate_mapping_from_read_subtemplate */
+        /* cigar[cigar_index].len was initialized to zero when candidate
+         * mapping was initialized */
         cm->cigar[cigar_index].len += match->subseq_lengths[i];
     }
 
@@ -657,44 +657,57 @@ build_candidate_mapping_from_match(
         struct read_subtemplate* rst,
         struct genome_data* genome )
 {
-    candidate_mapping cm = init_candidate_mapping();
+    /* Make sure this is a valid, completed match */
+    assert( match->len > 0 && match->matched == match->len );
 
-    assert( match->len > 0 );
+    candidate_mapping cm;
+    memset( &cm, 0, sizeof(candidate_mapping) );
+
     mapped_location* base = match->locations + 0;
-
+    cm.chr = base->chr;
     cm.rd_strnd = base->strnd;
 
-    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
+    /* the length of the sequence that was mapped */
+    cm.trimmed_length = softclip_len;
+    cm.mapped_length = rst->length - cm.trimmed_length;
 
-    /* set location information */
-    cm.chr = base->chr;
+    /* The first location in the match is the first location in the mapping,
+     * relative to the strand. We want to normalize to the start in the 5'
+     * genome. */
+    int norm_start_loc_index;
 
-    /* We need to play with this a bit to account for index probes that are
-     * shorter than the read length */
-    cm.mapped_length = rst->length - softclip_len;
-
-    int read_location = modify_mapped_read_location_for_index_probe_offset(
-                base->loc, base->chr, base->strnd,
-                match->subseq_offsets[0], match->subseq_lengths[0],
-                cm.mapped_length, genome
-            );
-
-    /* HACK */
-    /* TODO - update modify_mapped_read_location_for_index_probe_offset to
-     * handle this case */
-    if( match->len > 1 && base->strnd == BKWD ) {
-        read_location = match->locations[match->len-1].loc;
+    assert( cm.rd_strnd == FWD || cm.rd_strnd == BKWD );
+    if( cm.rd_strnd == FWD ) {
+        /* If this is a forward mapped read, then the start relative to the
+         * forward strand is in the first index probe's mapped location, since
+         * index probes are chosen from 5' to 3' across the read */
+        norm_start_loc_index = 0;
+    } else // strnd == BKWD
+    {
+        /* If this a reverse mapped read, then the start relative to the
+         * forward strand is the *end* of the read in the 3' genome - so we
+         * want to use the last mapped_location */
+        norm_start_loc_index = match->len - 1;
     }
+
+    int read_location
+        = modify_mapped_read_location_for_index_probe_offset(
+                match->locations[norm_start_loc_index].loc,
+                match->locations[norm_start_loc_index].chr,
+                match->locations[norm_start_loc_index].strnd,
+                match->subseq_offsets[norm_start_loc_index],
+                match->subseq_lengths[norm_start_loc_index],
+                rst->length,
+                genome
+            );
 
     if( read_location < 0 ) // the read location was invalid; skip this matched set
         return;
-
     cm.start_bp = read_location;
 
-    /* build the cigar string from the mapped_locations */
-    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
+    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
 
-    //print_candidate_mapping( &cm ); // DEBUG
+    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
     add_candidate_mapping( mappings, &cm );
 }
