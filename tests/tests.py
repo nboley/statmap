@@ -105,9 +105,9 @@ except AttributeError:
         err_str = property(itemgetter(1))        
         seq = property(itemgetter(2))
 
-def map_with_statmap( read_fnames, output_dir, indexed_seq_len,
+def map_with_statmap( genome_fnames, read_fnames, output_dir, indexed_seq_len,
         mapping_metaparameter=None, num_threads=1, search_type="m", assay=None,
-        genome_fnames=["*.fa",], num_samples=0, softclip_len=0 ):
+        num_samples=0, softclip_len=0 ):
 
     if not P_STATMAP_OUTPUT:
         stderr.seek( 0 )
@@ -124,12 +124,8 @@ def map_with_statmap( read_fnames, output_dir, indexed_seq_len,
         read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
     
     # build_index
-    if genome_fnames:
-        call = "%s %i tmp.genome.fa.bin %s" % (
-                BUILD_INDEX_PATH,
-                indexed_seq_len,
-                ' '.join(genome_fnames)
-            )
+    call = "%s %i tmp.genome.fa.bin %s" % ( BUILD_INDEX_PATH, indexed_seq_len,
+            ' '.join(genome_fnames) )
 
     print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -345,6 +341,7 @@ def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
             fasta_fname = file_prefix + "_" + chr_name + ".fa"
         else:
             fasta_fname = chr_name + ".fa"
+
         fasta_fp = open( fasta_fname, "w" )
         
         fasta_fp.write( ">%s\n" % chr_name)
@@ -576,60 +573,60 @@ def check_sequence_match( mapped_read, truth, genome ):
     return
     
 ###
-# Test to make sure that we are correctly finding reverse complemented subsequences. These
-# should all be short reads that we can map uniquely. We will test this over a variety of
-# sequence lengths. 
+# Test to make sure that we are correctly finding reverse complemented
+# subsequences. These should all be short reads that we can map uniquely. We
+# will test this over a variety of sequence lengths. 
 def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
         untemplated_gs_perc=0.0, search_type="m", mapping_metaparameter=None,
         num_samples=0, assay=None, random_prefix_len=0 ):
+
     output_directory = "smo_test_sequence_finding_%i_rev_comp_%s_%s_%s" % ( \
         read_len, str(rev_comp), indexed_seq_len, search_type )
 
-    # If no indexed_seq_len explicitly set, use read_len
+    # If no index sequence length is provided, use the length of the read
     indexed_seq_len = indexed_seq_len or read_len
     
-    # if we are testing untemplated g's, increase the number of samples so that we get some
-    # beginning overlap
+    # if we are testing untemplated g's, increase the number of samples so that
+    # we get some beginning overlap
     nsamples = 10000 if untemplated_gs_perc > 0 else 100
     
-    ###### Prepare the data for the test ############################################
+    ###### Prepare the data for the test #######################################
     # build a random genome
     r_genome = build_random_genome( [1000,], ["1",] )
     
-    # sample uniformly from the genome. This gives us the sequences
-    # that we need to map. Note that we dont RC them, so every read should be in the
+    # sample uniformly from the genome. This gives us the sequences that we
+    # need to map. Note that we dont RC them, so every read should be in the
     # correct direction. ( ie 5 prime )
     fragments = sample_uniformly_from_genome( r_genome, nsamples=nsamples,
             frag_len=read_len )
     reads = build_reads_from_fragments( r_genome, fragments, read_len=read_len,
             rev_comp=rev_comp, paired_end=False )
 
-    ###### Write out the test files, and run statmap ################################
+    ###### Write out the test files, and run statmap ###########################
     # write genome
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
+    genome_fnames = ( "tmp.genome.fa", )
+    with open( genome_fnames[0], "w" ) as genome_of:
+        write_genome_to_fasta( r_genome, genome_of, 1 )
     
     # build and write the reads
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc,
-            random_prefix_len )
-    reads_of.close()
+    read_fnames = ( "tmp.fastq", )
+    with open(read_fnames[0], "w") as reads_of:
+        build_single_end_fastq_from_seqs( reads, reads_of, untemplated_gs_perc,
+                random_prefix_len )
 
-    ## Map the data
-    read_fnames = [ "tmp.fastq", ]
+    # map the data
     if assay == None:
         assay = None if untemplated_gs_perc == 0.0 else 'a'
 
     softclip_len = random_prefix_len
 
-    map_with_statmap( read_fnames, output_directory,
-            indexed_seq_len=indexed_seq_len, assay=assay,
-            search_type=search_type, num_samples=num_samples,
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len, assay=assay, search_type=search_type,
+            num_samples=num_samples,
             mapping_metaparameter=mapping_metaparameter,
             softclip_len=softclip_len )
     
-    ###### Test the sam file to make sure that each of the reads appears ############
+    ###### Test the sam file to make sure that each of the reads appears #######
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = count_lines_in_sam( sam_fp )
 
@@ -759,20 +756,21 @@ def test_paired_end_reads( read_len ):
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( r_genome, genome_of, 1 )
-    genome_of.close()
+    genome_fnames = ("tmp.genome.fa",)
+    with open("tmp.genome.fa", "w") as genome_of:
+        write_genome_to_fasta( r_genome, genome_of, 1 )
     
     # build and write the reads
-    reads_of_1 = open("tmp.1.fastq", "w")
-    reads_of_2 = open("tmp.2.fastq", "w")
-    build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
-    reads_of_1.close()
-    reads_of_2.close()
+    read_fnames = ( "tmp.1.fastq", "tmp.2.fastq" )
+    reads_of1 = open( read_fnames[0], "w" )
+    reads_of2 = open( read_fnames[1], "w" )
+    build_paired_end_fastq_from_seqs( reads, reads_of1, reads_of2 )
+    reads_of1.close()
+    reads_of2.close()
 
     # map the reads - indexed_seq_len defaults to read_len
-    read_fnames = ( "tmp.1.fastq", "tmp.2.fastq" )
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len  )
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len=read_len )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -843,23 +841,21 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
     
     ###### Write out the test files, and run statmap ################################
     # write genome
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( r_genome, genome_of, n_dups )
-    genome_of.close()
+    genome_fnames = ( "tmp.genome.fa", )
+    with open( genome_fnames[0] , "w" ) as genome_of:
+        write_genome_to_fasta( r_genome, genome_of, n_dups )
     
     # build and write the reads
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
-    reads_of.close()
-
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory, 
-                      num_threads = n_threads, 
-                      indexed_seq_len = indexed_seq_len,
-                      search_type='m' ) # map with mismatches, since we won't be
-                                        # able to bootstrap error scores from a
-                                        # perfectly repeated genome
-                                        # (no unique mappers)
+    with open(read_fnames[0], "w") as reads_of:
+        build_single_end_fastq_from_seqs( reads, reads_of )
+
+    # map with mismatches, since we won't be
+    # able to bootstrap error scores from a
+    # perfectly repeated genome
+    # (no unique mappers)
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len, num_threads=n_threads, search_type='m' )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
@@ -907,14 +903,17 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1, nreads=100,
-        fasta_prefix=None, assay=None, num_samples=0 ):
-    output_directory = "smo_test_dirty_reads_%i_%i_%i_%s" \
-        % ( read_len, n_threads, nreads, str(fasta_prefix) )
+def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
+        assay=None, num_samples=0 ):
+    output_directory = "smo_test_dirty_reads_%i_%i_%i" \
+            % ( read_len, n_threads, nreads)
+
+    if separate_fastas:
+        output_directory += "_separate_fastas"
     
     rl = read_len
 
-    ###### Prepare the data for the test ############################################
+    ###### Prepare the data for the test ######################################
     # build a random genome
     r_genome = build_random_genome( [1000, 1000, 10000], ["1","2","3"] )
     
@@ -930,25 +929,24 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100,
     sample_file.close()
     mutated_reads = mutate_reads( reads, error_strs )
     
-    ###### Write out the test files, and run statmap ################################
+    ###### Write out the test files, and run statmap ##########################
     # write genome
-    if fasta_prefix == None:
-        genome_of = open("tmp.genome.fa", "w")
-        write_genome_to_fasta( r_genome, genome_of, 1 )
-        genome_of.close()
-    # otherwise, assume we want multiple genomes fasta
+    if separate_fastas:
+        genome_fnames = write_genome_to_multiple_fastas(r_genome, "tmp.genome")
     else:
-        write_genome_to_multiple_fastas( r_genome, fasta_prefix, 1 )
+        genome_fnames = ( "tmp.genome.fa", )
+        with open( genome_fnames[0], "w" ) as genome_of:
+            write_genome_to_fasta( r_genome, genome_of )
 
     # build and write the reads
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
-    reads_of.close()
-
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory,
-            indexed_seq_len = read_len - 3, num_threads = n_threads,
-            assay=assay, num_samples=num_samples )
+    with open(read_fnames[0], "w") as reads_of:
+        build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )
+
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+                      indexed_seq_len = read_len - 2,
+                      num_threads=n_threads,
+                      assay=assay, num_samples=num_samples )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1038,13 +1036,10 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100,
 
     ###### Cleanup the created files ###############################################
     if CLEANUP:
-        if fasta_prefix == None:
-            os.remove("./tmp.genome.fa")
-        else:
-            os.remove("./tmp_genome_1.fa")
-            os.remove("./tmp_genome_2.fa")
-            os.remove("./tmp_genome_3.fa")
-        os.remove("./tmp.fastq")
+        for genome_fname in genome_fnames:
+            os.remove(genome_fname)
+        for read_fname in read_fnames:
+            os.remove(read_fnames)
         shutil.rmtree(output_directory)
 
 def test_mutated_read_finding( ):
@@ -1067,20 +1062,22 @@ def test_multithreaded_mapping( ):
 def test_multi_fasta_mapping( ):
     rl = 50
     try: 
-        test_dirty_reads( rl, n_threads=2, fasta_prefix="tmp_genome" ) 
+        test_dirty_reads( rl, n_threads=2, separate_fastas=True ) 
     except:
         print "FAIL: Multi-Fasta Read Mapping %i BP Test Failed." % rl
         raise
     else:
         print "PASS: Multi-Fasta Read Mapping %i BP Test. ( Statmap appears to be mapping correctly from a genome with multiple fasta files )" % rl
 
-def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1, n_mut=10 ):
+def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1,
+        n_mut=10 ):
     '''
     Generates paternal and maternal genomes with a .map file for testing diploid mapping
     '''
     paternal_chr_name = chr_name + "_paternal"
     maternal_chr_name = chr_name + "_maternal"
 
+    # Initialize diploid map file
     mapf = []
     mapf.append("#REF\tPAT\tMAT") # MAP header
     mapf.append('{0}\t{1}\t{2}'.format(0, 1, 1)) # sequence start
@@ -1153,7 +1150,7 @@ def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1, n_mu
 
     return genome, output_filenames
 
-def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
+def map_diploid_genome( genome, genome_fnames, read_len, nreads=1000 ):
     '''
     Given a diploid genome, randomly sample reads and map them with statmap
     '''
@@ -1178,9 +1175,8 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
     output_directory = "smo_test_diploid_mapping_%i_%i_%i" % (
         read_len, nreads, len(genome) )
     read_fnames = [ "tmp.fastq" ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=read_len,
-            genome_fnames = output_filenames, search_type='e'
-        )
+    map_with_statmap( genome_fnames, read_fnames,
+            output_directory, indexed_seq_len=read_len, search_type='e' )
 
     # test the sam file to make sure that each of the reads appears
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1246,21 +1242,21 @@ def map_diploid_genome( genome, output_filenames, read_len, nreads=1000 ):
             os.remove(fn)
         shutil.rmtree(output_directory)
 
-def map_duplicated_diploid_genome( genome, output_filenames, read_len,
-                                   genome_len, n_dups, nreads=1000,
-                                   indexed_seq_len=None,
-                                   num_threads=1 ):
+def map_duplicated_diploid_genome( genome, genome_fnames, read_len, genome_len,
+        n_dups, nreads=100, indexed_seq_len=None, num_threads=1 ):
     '''
     Given a diploid genome, randomly sample reads and map with statmap.
     Test output of SAM from basis with expectation of duplicates
     '''
+    output_directory = "smo_test_diploid_mapping_%i" % (read_len)
+
     indexed_seq_len = indexed_seq_len or read_len
 
     # sample reads uniformly from both genomes to get reads
-    fragments = sample_uniformly_from_genome( genome, nsamples=nreads, frag_len=read_len )
-    reads = build_reads_from_fragments(
-            genome, fragments, read_len=read_len, rev_comp=False, paired_end=False
-        )
+    fragments = sample_uniformly_from_genome( genome, nsamples=nreads,
+            frag_len=read_len )
+    reads = build_reads_from_fragments( genome, fragments, read_len=read_len,
+            rev_comp=False, paired_end=False)
 
     # build and write the reads
     reads_of = open("tmp.fastq", "w")
@@ -1268,23 +1264,17 @@ def map_duplicated_diploid_genome( genome, output_filenames, read_len,
     reads_of.close()
 
     # map the data
-    output_directory = "smo_test_diploid_mapping_%i" % (read_len)
-    read_fnames = [ "tmp.fastq" ]
-    map_with_statmap( read_fnames, output_directory,
-                      genome_fnames = output_filenames,
-                      indexed_seq_len=indexed_seq_len,
-                      num_threads = num_threads )
+    read_fnames = ( "tmp.fastq", )
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len, num_threads=num_threads )
 
     # test the sam file to make sure that each of the reads appears
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-
-    # in order to be able to count the number of reads, we had to use a completely unmutated
-    # diploid genome
     total_num_reads = count_lines_in_sam( sam_fp )
 
-    # Since the paternal and maternal chrs of the reference genome are identical, each read
-    # will be repeated n_dups times * 2, since there will be a paternal and maternal copy for
-    # every sampled read
+    # Since the paternal and maternal chrs of the reference genome are
+    # identical, each read will be repeated n_dups times * 2, since there will
+    # be a paternal and maternal copy for every sampled read
     if len(fragments)*n_dups*2 != total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
                 % ( len(fragments)*n_dups*2, total_num_reads )
@@ -1366,6 +1356,7 @@ def test_lots_of_diploid_repeat_sequence_finding():
     rls = [ 25, ]
     n_dups = 4000
     genome_len=100
+
     for rl in rls:
         genome, output_filenames = build_diploid_genome(
                 rl, gen_len=genome_len, n_dups=n_dups, n_mut=0 )
@@ -1383,28 +1374,28 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     output_directory = "smo_test_paired_end_diploid_repeat_sequence_finding_%i" % rl
 
     # build diploid genome
-    genome, output_filenames = build_diploid_genome( rl, gen_len=100, n_dups=n_dups, n_mut=0 )
+    genome, genome_fnames = build_diploid_genome( rl, gen_len=100,
+            n_dups=n_dups, n_mut=0 )
 
-    # build the paired end reads
-    # we want to sample whole chunks of the genome, then build_read_from_fragments will take
-    # care of simulating paired end reads
+    # build the paired end reads we want to sample whole chunks of the genome,
+    # then build_read_from_fragments will take care of simulating paired end
+    # reads
     assert 2*rl < 50 # make sure the fragments are long enough
     fragments = sample_uniformly_from_genome( genome, nsamples=100, frag_len=50)
     reads = build_reads_from_fragments(
         genome, fragments, read_len=rl, rev_comp=False, paired_end=True )
 
     # write the reads
-    reads_of_1 = open("tmp.1.fastq", "w")
-    reads_of_2 = open("tmp.2.fastq", "w")
+    read_fnames = ( "tmp.1.fastq", "tmp.2.fastq" )
+    reads_of_1 = open(read_fnames[0], "w")
+    reads_of_2 = open(read_fnames[1], "w")
     build_paired_end_fastq_from_seqs( reads, reads_of_1, reads_of_2 )
     reads_of_1.close()
     reads_of_2.close()
 
     # map with statmap
-    read_fnames = [ "tmp.1.fastq", "tmp.2.fastq" ]
-    map_with_statmap( read_fnames, output_directory, indexed_seq_len=rl,
-            genome_fnames = output_filenames
-        )
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len=rl )
 
     # test the sam file
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -1506,17 +1497,16 @@ def test_sam_output():
     ###### Write out the test files, and run statmap ###########################
 
     # write genome
-    genome_of = open("tmp.genome.fa", "w")
-    write_genome_to_fasta( genome, genome_of, 1 )
-    genome_of.close()
+    genome_fnames = ( "tmp.genome.fa", )
+    with open( genome_fnames[0], "w") as genome_of:
+        write_genome_to_fasta( genome, genome_of, 1 )
     
     # build and write the reads
-    reads_of = open("tmp.fastq", "w")
-    build_single_end_fastq_from_seqs( reads, reads_of )
-    reads_of.close()
-
     read_fnames = ( "tmp.fastq", )
-    map_with_statmap( read_fnames, output_directory,
+    with open( read_fnames[0], "w" ) as reads_of:
+        build_single_end_fastq_from_seqs( reads, reads_of )
+
+    map_with_statmap( genome_fnames, read_fnames, output_directory,
             indexed_seq_len=rl )
 
     # Load the SAM file with pysam

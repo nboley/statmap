@@ -411,10 +411,8 @@ def main():
         sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_fp )
 
     # Map the data with Statmap
-    sc.map_with_statmap( read_fnames, output_directory,
-                         indexed_seq_len=indexed_seq_len,
-                         assay='r', search_type='e',
-                         genome_fnames=genome_fnames )
+    sc.map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len=indexed_seq_len, assay='r', search_type='e' )
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
             fragments, read_len, indexed_seq_len, num_mutations )
