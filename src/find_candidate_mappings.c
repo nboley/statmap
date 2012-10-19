@@ -67,12 +67,6 @@ find_optimal_subseq_offset(
     int region_start,
     int region_length
 ) {
-    /* Make sure the read is at least as long as the subsequence */
-    if( subseq_len > rst->length ) {
-        fprintf( stderr, "============ %i \t\t %i \n", subseq_len, rst->length );
-    }
-    assert( subseq_len <= rst->length );
-
     /* Make sure the search region makes sense */
     assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
     assert( region_length <= rst->length );
@@ -82,7 +76,7 @@ find_optimal_subseq_offset(
        error_prb returns the inverse log probability of error:
        log10(1 - P(error)) for matches
     */
-    int min_offset = 0;
+    int optimal_offset = region_start;
     float max_so_far = -FLT_MAX;
 
     int i;
@@ -94,11 +88,13 @@ find_optimal_subseq_offset(
         float ss_pen = subseq_penalty(rst, i, subseq_len, penalty_array);
         if( ss_pen > max_so_far ) {
             max_so_far = ss_pen;
-            min_offset = i;
+            optimal_offset = i;
         }
     }
 
-    return min_offset;
+    /* Return the offset of the optimal index probe from the start of this
+     * region */
+    return optimal_offset;
 };
 
 void
@@ -310,14 +306,6 @@ build_indexable_subtemplate(
 {
     int subseq_length = index->seq_length;
 
-    if( rst->length - softclip_len < subseq_length )
-    {
-        fprintf( stderr,
-                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
-        assert( false );
-        exit(1);
-    }
-
     /* Our strategy for choosing indexable subtemplates depends on the type of
      * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
      * between probes in order to optimize intron finding. For ungapped assays,
@@ -333,7 +321,7 @@ build_indexable_subtemplate(
              * code later? */
             subseq_offset = 0;
         } else {
-            subseq_offset = range_length - subseq_length;
+            subseq_offset = range_start + range_length - subseq_length;
         }
     } else {
         subseq_offset = find_optimal_subseq_offset(
@@ -344,11 +332,6 @@ build_indexable_subtemplate(
                 range_length
             );
     }
-
-    /* The probe must be offset by at least the soft clip length; if there is
-     * an optimal subseq offset greater than the soft clip length, that will be
-     * used instead. */
-    subseq_offset = MAX( subseq_offset, softclip_len );
 
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
@@ -365,61 +348,45 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct penalty_array_t* rev_penalty_array
     )
 {
+    int subseq_length = index->seq_length;
+    
+    /* Make sure we the read is long enough for us to build index probes
+     * (considering any softclipped bases from the start of the rst) */
+    int indexable_length = rst->length - softclip_len;
+    if( indexable_length < subseq_length )
+    {
+        fprintf( stderr,
+                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
+        assert( false );
+        exit(1);
+    }
+
    struct indexable_subtemplates* ists = NULL;
    init_indexable_subtemplates( &ists );
-   
-    /*
-       TODO for now, we build 2 indexable subtemplates if the index sequence
-       length is <= the read subtemplate length / 2. Otherwise build a single
-       indexable subtemplate
-     */
-    int subseq_length = index->seq_length;
-    struct indexable_subtemplate* ist = NULL;
-    
-    if( subseq_length <= rst->length / 2 )
-    {
-        /* we can build 2 non-overlapping indexable subtemplates */
-        ist = build_indexable_subtemplate(
-                rst, index,
-                fwd_penalty_array, rev_penalty_array,
-                0, ceil((float)rst->length / 2)
-            ); 
-        if( ist == NULL ) {
-            goto error_cleanup;
-        }
-        
-       // copy indexable subtemplate into set of indexable subtemplates
-       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-       // free working copy
-       free_indexable_subtemplate( ist );
 
-        ist = build_indexable_subtemplate(
-                rst, index,
-                fwd_penalty_array, rev_penalty_array,
-                ceil((float)rst->length / 2), rst->length
-            );
-        if( ist == NULL ) {
-            goto error_cleanup;
-        }
-        
-       // copy indexable subtemplate into set of indexable subtemplates
-       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-       // free working copy
-       free_indexable_subtemplate( ist );
-    }
-    else
+    /* for testing, try to build the maximum number of indexable subtemplates
+     * (with a maximum of 2) */
+    int num_partitions = MIN( indexable_length / subseq_length, 2 );
+    int partition_len = ceil((float)indexable_length / num_partitions);
+
+    int i;
+    for( i = 0; i < num_partitions; i++ )
     {
-        /* build a single indexable subtemplate */
-        ist = build_indexable_subtemplate(
-                rst, index,
+        struct indexable_subtemplate* ist = NULL;
+
+        int partition_start = softclip_len + i * partition_len;
+
+        /* partition the read into equal sized sections and try to find the
+         * best subsequence within each section to use as an index probe */
+        ist = build_indexable_subtemplate( rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                0, rst->length
-            );
+                partition_start, partition_len );
 
         if( ist == NULL ) {
-            goto error_cleanup;
+            free_indexable_subtemplates( ists );
+            return NULL;
         }
-        
+
        // copy indexable subtemplate into set of indexable subtemplates
        add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
        // free working copy
@@ -427,10 +394,6 @@ build_indexable_subtemplates_from_read_subtemplate(
     }
     
     return ists;
-    
-error_cleanup:
-    free_indexable_subtemplates( ists );
-    return NULL;
 }
 
 void
@@ -694,37 +657,27 @@ build_candidate_mapping_from_match(
         struct read_subtemplate* rst,
         struct genome_data* genome )
 {
-    /* build a candidate mapping from the base location, then build a cigar
-     * string representing all the locations in the match */
-
     candidate_mapping cm = init_candidate_mapping();
 
     assert( match->len > 0 );
     mapped_location* base = match->locations + 0;
 
-    /* set the strand */
-    assert( base->strnd == FWD || base->strnd == BKWD ); // XXX correct?
     cm.rd_strnd = base->strnd;
 
-    /* set metadata */
     cm.penalty = compute_candidate_mapping_penalty_from_match( match );
 
     /* set location information */
     cm.chr = base->chr;
 
-    /* set (partial) READ_TYPE information
-     * (rd_type.pos is set in update_read_type_pos) */
-    /* TODO this is unnecessary if we follow through with this
-     * reworking on candidate_mapping */
-    //cm.rd_type.follows_ref_gap = follows_ref_gap;
-
     /* We need to play with this a bit to account for index probes that are
      * shorter than the read length */
     cm.mapped_length = rst->length - softclip_len;
+
     int read_location = modify_mapped_read_location_for_index_probe_offset(
                 base->loc, base->chr, base->strnd,
                 match->subseq_offsets[0], match->subseq_lengths[0],
-                cm.mapped_length, genome );
+                cm.mapped_length, genome
+            );
 
     /* HACK */
     /* TODO - update modify_mapped_read_location_for_index_probe_offset to
@@ -957,11 +910,13 @@ add_matches_from_pseudo_locations_to_stack(
             }
 
             if( candidate_ref_gap < 0 )
-                continue;
-
-            if( candidate_ref_gap <= max_reference_insert_len )
             {
-                /* construct a mapped location */
+                continue;
+            }
+            else if( candidate_ref_gap <= max_reference_insert_len )
+            {
+                /* construct a mapped location from the INDEX_LOC_TYPE stored
+                 * by the pseudo location */
                 mapped_location* tmp_loc = malloc( sizeof( mapped_location ));
                 copy_mapped_location( tmp_loc, candidate_loc );
                 tmp_loc->chr = iloc->chr;
@@ -971,11 +926,13 @@ add_matches_from_pseudo_locations_to_stack(
                 add_location_to_ml_match( tmp_loc, new_match,
                         candidate_locs->probe->subseq_length,
                         candidate_locs->probe->subseq_offset );
-
                 ml_match_stack_push( stack, new_match );
-
                 free( tmp_loc );
             } else {
+                /* If gap between the current location and the previous
+                 * location in the match is greater than the maximum allowed
+                 * gap in the reference, we know that every subsequent location
+                 * also cannot match (because they are sorted). */
                 break;
             }
         }
@@ -1021,9 +978,10 @@ add_matches_from_locations_to_stack(
         }
 
         if( candidate_ref_gap < 0 )
+        {
             continue;
-
-        if( candidate_ref_gap <= max_reference_insert_len )
+        }
+        else if( candidate_ref_gap <= max_reference_insert_len )
         {
             /* check the cumulative penalty for the match. If it is less
              * than the minimum, skip this match */
@@ -1039,15 +997,12 @@ add_matches_from_locations_to_stack(
             add_location_to_ml_match( candidate_loc, new_match,
                     candidate_locs->probe->subseq_length,
                     candidate_locs->probe->subseq_offset );
-
             ml_match_stack_push( stack, new_match );
         } else {
-            /* adding this mapped_location to the match would cause it to have
-             * total intron length greater than the maximum accepted size.
-             * Since the mapped_locations in search_results are sorted by
-             * start location, we then know that none of the following
-             * mapped_locations can build a valid match, and we can optimize
-             * by terminating early. */
+            /* If gap between the current location and the previous
+             * location in the match is greater than the maximum allowed
+             * gap in the reference, we know that every subsequent location
+             * also cannot match (because they are sorted). */
             break;
         }
     }
