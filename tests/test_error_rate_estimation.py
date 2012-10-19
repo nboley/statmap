@@ -88,6 +88,8 @@ def test_error_rate_estimation( ):
 
 
 if __name__ == '__main__':
+    print "Starting test_error_rate_estimation.py ..."
+
     try:
         test_error_rate_estimation()
     except Exception, inst:
@@ -96,3 +98,5 @@ if __name__ == '__main__':
             print stderr.read()
         
         raise
+
+    print "PASS:    test error rate estimation"

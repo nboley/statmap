@@ -372,6 +372,8 @@ def randomly_mutate_reads( reads, num_mutations ):
     return mutated_reads
 
 def main():
+    print "Starting simulate_rnaseq.py ..."
+
     output_directory = "smo_rnaseq_sim"
 
     # Parameters
@@ -416,5 +418,7 @@ def main():
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
             fragments, read_len, indexed_seq_len, num_mutations )
+
+    print "PASS:    simulate rnaseq"
 
 if __name__ == "__main__": main()
