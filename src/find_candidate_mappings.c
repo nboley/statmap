@@ -45,10 +45,10 @@ subseq_penalty(
             penalty += N_penalty;
         } else {
             /* take the match penalty for this bp - assuming we can find
-             * a perfact match to a given subsequence in the genome, which
+             * a perfect match to a given subsequence in the genome, which
              * match would then have the best penalty (considering what we know
              * about error rates in positions, for the error scores, etc. from
-             * the error model) */
+             * the error model)? */
             penalty += penalty_array->array[pos].penalties[bp_code(bp)];
         }
     }
@@ -92,10 +92,123 @@ find_optimal_subseq_offset(
         }
     }
 
-    /* Return the offset of the optimal index probe from the start of this
-     * region */
+    /* Return the offset of the optimal index probe from the start of the read
+     * subtemplate */
     return optimal_offset;
 };
+
+struct indexable_subtemplate*
+build_indexable_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array,
+
+        // area of the read subtemplate to take an indexable subtemplate from
+        int range_start,
+        int range_length
+    )
+{
+    int subseq_length = index->seq_length;
+
+    /* Our strategy for choosing indexable subtemplates depends on the type of
+     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
+     * between probes in order to optimize intron finding. For ungapped assays,
+     * we want to use the highest quality subsequence in the read for the index
+     * search. */
+    int subseq_offset = 0;
+
+    if( _assay_type == RNA_SEQ ) // Gapped assay
+    {
+        /* FIXME soft clipping for gapped assays? */
+        if( range_start == 0 ) {
+            /* subseq_offset = softclip_len ? will that mess up the matching
+             * code later? */
+            subseq_offset = 0;
+        } else {
+            subseq_offset = range_start + range_length - subseq_length;
+        }
+    } else {
+        subseq_offset = find_optimal_subseq_offset(
+                rst,
+                fwd_penalty_array,
+                subseq_length,
+                range_start,
+                range_length
+            );
+    }
+
+    struct indexable_subtemplate* ist = NULL;
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
+            fwd_penalty_array, rev_penalty_array );
+
+    return ist;
+}
+
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array
+    )
+{
+    int subseq_length = index->seq_length;
+    
+    /* Make sure we the read is long enough for us to build index probes
+     * (considering any softclipped bases from the start of the rst) */
+    int indexable_length = rst->length - softclip_len;
+    if( indexable_length < subseq_length )
+    {
+        fprintf( stderr,
+                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
+        assert( false );
+        exit(1);
+    }
+
+   struct indexable_subtemplates* ists = NULL;
+   init_indexable_subtemplates( &ists );
+
+    /* for now, try to build the maximum number of indexable subtemplates up to
+     * a maximum */
+    int num_partitions;
+    if( _assay_type == RNA_SEQ ) {
+        /* for RNA-seq, always use two probes at either end of the read so we
+         * can maximize the space for finding introns */
+        num_partitions = 2;
+    } else { 
+        num_partitions = MIN( indexable_length / subseq_length,
+                MAX_NUM_INDEX_PROBES );
+    }
+    int partition_len = ceil((float)indexable_length / num_partitions);
+
+    int i;
+    for( i = 0; i < num_partitions; i++ )
+    {
+        struct indexable_subtemplate* ist = NULL;
+
+        int partition_start = softclip_len + i * partition_len;
+
+        /* partition the read into equal sized sections and try to find the
+         * best subsequence within each section to use as an index probe */
+        ist = build_indexable_subtemplate( rst, index,
+                fwd_penalty_array, rev_penalty_array,
+                partition_start, partition_len );
+
+        if( ist == NULL ) {
+            free_indexable_subtemplates( ists );
+            return NULL;
+        }
+
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
+    }
+    
+    return ists;
+}
 
 void
 search_index(
@@ -289,119 +402,6 @@ update_error_data_record_from_candidate_mappings(
         free( read_seq );
     
     return;
-}
-
-struct indexable_subtemplate*
-build_indexable_subtemplate(
-        struct read_subtemplate* rst,
-        struct index_t* index,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array,
-
-        // area of the read subtemplate to take an indexable subtemplate from
-        int range_start,
-        int range_length
-    )
-{
-    int subseq_length = index->seq_length;
-
-    /* Our strategy for choosing indexable subtemplates depends on the type of
-     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
-     * between probes in order to optimize intron finding. For ungapped assays,
-     * we want to use the highest quality subsequence in the read for the index
-     * search. */
-    int subseq_offset = 0;
-
-    if( _assay_type == RNA_SEQ ) // Gapped assay
-    {
-        /* FIXME soft clipping for gapped assays? */
-        if( range_start == 0 ) {
-            /* subseq_offset = softclip_len ? will that mess up the matching
-             * code later? */
-            subseq_offset = 0;
-        } else {
-            subseq_offset = range_start + range_length - subseq_length;
-        }
-    } else {
-        subseq_offset = find_optimal_subseq_offset(
-                rst,
-                fwd_penalty_array,
-                subseq_length,
-                range_start,
-                range_length
-            );
-    }
-
-    struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
-            fwd_penalty_array, rev_penalty_array );
-
-    return ist;
-}
-
-struct indexable_subtemplates*
-build_indexable_subtemplates_from_read_subtemplate(
-        struct read_subtemplate* rst,
-        struct index_t* index,
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
-    )
-{
-    int subseq_length = index->seq_length;
-    
-    /* Make sure we the read is long enough for us to build index probes
-     * (considering any softclipped bases from the start of the rst) */
-    int indexable_length = rst->length - softclip_len;
-    if( indexable_length < subseq_length )
-    {
-        fprintf( stderr,
-                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
-        assert( false );
-        exit(1);
-    }
-
-   struct indexable_subtemplates* ists = NULL;
-   init_indexable_subtemplates( &ists );
-
-    /* for now, try to build the maximum number of indexable subtemplates up to
-     * a maximum */
-    int num_partitions;
-    if( _assay_type == RNA_SEQ ) {
-        /* for RNA-seq, always use two probes at either end of the read so we
-         * can maximize the space for finding introns */
-        num_partitions = 2;
-    } else { 
-        num_partitions = MIN( indexable_length / subseq_length,
-                MAX_NUM_INDEX_PROBES );
-    }
-    int partition_len = ceil((float)indexable_length / num_partitions);
-
-    int i;
-    for( i = 0; i < num_partitions; i++ )
-    {
-        struct indexable_subtemplate* ist = NULL;
-
-        int partition_start = softclip_len + i * partition_len;
-
-        /* partition the read into equal sized sections and try to find the
-         * best subsequence within each section to use as an index probe */
-        ist = build_indexable_subtemplate( rst, index,
-                fwd_penalty_array, rev_penalty_array,
-                partition_start, partition_len );
-
-        if( ist == NULL ) {
-            free_indexable_subtemplates( ists );
-            return NULL;
-        }
-
-       // copy indexable subtemplate into set of indexable subtemplates
-       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-       // free working copy
-       free_indexable_subtemplate( ist );
-    }
-    
-    return ists;
 }
 
 void
