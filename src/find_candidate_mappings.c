@@ -930,7 +930,12 @@ add_matches_from_pseudo_locations_to_stack(
                     - prev_matched_location_start;
             }
 
-            if( candidate_ref_gap < 0 )
+            /* The gap between this location and the previous location must be
+             * greater than the previous location's subseq_length. This allows
+             * for overlapping index probes, with the restriction that the
+             * start locations must be strictly increasing from the 5' to
+             * 3' end of the read subtemplate. */
+            if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
             {
                 continue;
             }
@@ -998,7 +1003,12 @@ add_matches_from_locations_to_stack(
                 - ( candidate_loc->loc + candidate_locs->probe->subseq_offset );
         }
 
-        if( candidate_ref_gap < 0 )
+        /* The gap between this location and the previous location must be
+         * greater than the previous location's subseq_length. This allows
+         * for overlapping index probes, with the restriction that the
+         * start locations must be strictly increasing from the 5' to
+         * 3' end of the read subtemplate. */
+        if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
         {
             continue;
         }
