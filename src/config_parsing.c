@@ -22,6 +22,7 @@
 #include <argp.h>
 
 #include "config_parsing.h"
+#include "log.h"
 #include "find_candidate_mappings.h"
 #include "rawread.h"
 #include "quality.h"

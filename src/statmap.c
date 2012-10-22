@@ -22,6 +22,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include "log.h"
 #include "config_parsing.h"
 #include "statmap.h"
 #include "mapped_read.h"
@@ -423,7 +424,9 @@ cleanup:
 
 int 
 main( int argc, char** argv )
-{       
+{
+    init_logging();
+
     /* Seed the random number generator */
     srand ( time(NULL) );
 
@@ -432,9 +435,7 @@ main( int argc, char** argv )
     abs_path = realpath( argv[0], abs_path );
     if( NULL == abs_path )
     {
-        fprintf( stderr, "%s\n", argv[0] );
-        perror( "Couldnt find abs path" );
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Couldn't find abs path: %s", argv[0] );
     }
     char* statmap_base_dir = dirname( abs_path );
 
@@ -482,6 +483,8 @@ cleanup:
     /* finish the R interpreter */
     end_R();
     fprintf( stderr, "NOTICE      :  Shutting down R interpreter.\n" );
+
+    finish_logging();
 
     return 0;
 }
