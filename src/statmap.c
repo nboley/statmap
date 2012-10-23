@@ -109,12 +109,11 @@ map_marginal( struct args_t* args,
     struct error_model_t* error_model = NULL;
     if( args->error_model_type == ESTIMATED )
     {
-        fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
+        statmap_log( LOG_NOTICE, "Bootstrapping error model" );
         init_error_model( &error_model, ESTIMATED );
         
-        fprintf( stderr, 
-                 "NOTICE      :  Setting bootstrap mismatch rates to %f and %f\n",
-                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+        statmap_log( LOG_NOTICE, "Setting bootstrap mismatch rates to %f and %f",
+                MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE  );
 
         mapping_metaparams.error_model_type = MISMATCH;
         mapping_metaparams.error_model_params[0] = MAX_NUM_MM_RATE;
@@ -134,7 +133,7 @@ map_marginal( struct args_t* args,
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
     } else if(args->error_model_type == FASTQ_MODEL) {
-        fprintf(stderr, "FATAL       :  FASTQ_MODEL (provided error scores) is not implemented yet\n" );
+        statmap_log( LOG_FATAL, "FASTQ_MODEL (provided error scores) is not implemented yet" );
         exit( 1 );
     } else if(args->error_model_type == MISMATCH) {
         /* initialize the meta params */
@@ -144,8 +143,7 @@ map_marginal( struct args_t* args,
         
         init_error_model( &error_model, MISMATCH );
     } else {
-        fprintf(stderr, "FATAL       :  Invalid index search type '%i'\n",
-            args->error_model_type);
+        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  args->error_model_type );
         assert( false );
         exit( 1 );
     }
@@ -165,7 +163,7 @@ map_marginal( struct args_t* args,
         init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
     }
     
-    fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
+    statmap_log( LOG_NOTICE, "Finding candidate mappings." );
 
     find_all_candidate_mappings( 
         genome,
@@ -190,12 +188,11 @@ map_marginal( struct args_t* args,
 
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
-    fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
+    statmap_log( LOG_NOTICE, "Writing non mapping reads to FASTQ files." );
     write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
     gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Wrote non-mapping reads to FASTQ in %.2lf sec",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
 
     return;
 }
@@ -208,7 +205,7 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     if( args->frag_len_fp == NULL 
         && args->pair1_reads_fnames != NULL )
     {
-        fprintf(stderr, "NOTICE      :  Estimating FL distribution\n" );
+        statmap_log( LOG_NOTICE, "Estimating FL distribution" );
         estimate_fl_dist_from_mapped_reads( mpd_rds_db );
     }
 
@@ -218,7 +215,7 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
         FILE* fp = fopen( "estimated_fl_dist.txt", "w" );
         if( fp == NULL )
         {
-            perror( "ERROR       :  Can not open 'estimated_fl_dist.txt' for writing " );
+            statmap_log( LOG_ERROR, "Can not open 'estimated_fl_dist.txt' for writing" );
         } else {
             fprint_fl_dist( fp, mpd_rds_db->fl_dist );
             fclose( fp );
@@ -233,19 +230,15 @@ iterative_mapping( struct args_t* args,
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
-    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN )
-    {
-        fprintf( stderr,
-                 "FATAL     :  Cannot iteratively map data with unknown assay type.\n" );
-        assert( false );
-        exit(1);
+    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN ) {
+        statmap_log( LOG_FATAL, "Cannot iteratively map data with unknown assay type" );
     }
 
     if( NULL != args->unpaired_reads_fnames 
         && args->assay_type == CHIP_SEQ
         && mpd_rds_db->fl_dist == NULL )
     {
-        fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
+        statmap_log( LOG_FATAL, "Can not iteratively map single end chip-seq reads unless a FL dist is provided" );
         exit(-1);
     }
 
@@ -274,9 +267,8 @@ map_generic_data(  struct args_t* args )
     load_genome( &genome, args );
     
     gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
         
     /***** END Genome processing */
     
@@ -285,7 +277,7 @@ map_generic_data(  struct args_t* args )
     
     /* Free the genome index */
     /* we may need the memory later */
-    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    statmap_log( LOG_NOTICE, "Freeing index" );
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
@@ -319,9 +311,9 @@ map_chipseq_data(  struct args_t* args )
     load_genome( &genome, args );
     gettimeofday( &stop, NULL );
     
-    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000
+        );
         
     /***** END Genome processing */
     
@@ -365,7 +357,7 @@ map_chipseq_data(  struct args_t* args )
 
     /* Free the genome index */
     /* we may need the memory later */
-    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    statmap_log( LOG_NOTICE, "Freeing index" );
     free_ondisk_index( genome->index );
     
     /* if there is no negative control, we use the same iterative 
@@ -450,7 +442,7 @@ main( int argc, char** argv )
     /* intialize an R instance */
     if( args.error_model_type == ESTIMATED )
     {
-        fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
+        statmap_log( LOG_NOTICE, "Initializing R interpreter." );
         init_R( );        
         load_statmap_source( statmap_base_dir );
     }
@@ -482,7 +474,7 @@ cleanup:
     
     /* finish the R interpreter */
     end_R();
-    fprintf( stderr, "NOTICE      :  Shutting down R interpreter.\n" );
+    statmap_log( LOG_NOTICE, "Shutting down R interpreter." );
 
     finish_logging();
 

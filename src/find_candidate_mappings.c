@@ -12,6 +12,7 @@
 #include <float.h>
 
 #include "statmap.h"
+#include "log.h"
 #include "find_candidate_mappings.h"
 #include "quality.h"
 #include "index_genome.h"
@@ -161,10 +162,10 @@ build_indexable_subtemplates_from_read_subtemplate(
     int indexable_length = rst->length - softclip_len;
     if( indexable_length < subseq_length )
     {
-        fprintf( stderr,
-                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
-        assert( false );
-        exit(1);
+        statmap_log( LOG_FATAL,
+                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
+                softclip_len
+            );
     }
 
    struct indexable_subtemplates* ists = NULL;
@@ -1899,8 +1900,7 @@ find_candidate_mappings( void* params )
          */
         if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
-            fprintf(stderr, "DEBUG       :  Mapped %u reads, %i successfully\n", 
-                    r->read_id, *mapped_cnt);
+            statmap_log( LOG_DEBUG, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
         }
 
         struct mapping_params* mapping_params = NULL;
@@ -2023,11 +2023,7 @@ spawn_find_candidate_mappings_threads( struct single_map_thread_data* td_templat
             ); 
         
         if (rc) {
-            fprintf(stderr, 
-                    "ERROR; return code from pthread_create() is %d\n", 
-                    rc
-            );
-            exit(-1);
+            statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
         }
     }
     
@@ -2037,11 +2033,7 @@ spawn_find_candidate_mappings_threads( struct single_map_thread_data* td_templat
         rc = pthread_join(thread[t], &status);
         pthread_attr_destroy(attrs+t);
         if (rc) {
-            fprintf( stderr, 
-                     "ERROR; return code from pthread_join() is %d\n", 
-                     rc
-            );
-            exit(-1);
+            statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
         }
         num_reads += (size_t) status;
     }
@@ -2147,8 +2139,9 @@ bootstrap_estimated_error_model(
     spawn_find_candidate_mappings_threads( &td_template );
         
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )\n",
-            *(td_template.mapped_cnt), rdb->readkey, 
+    statmap_log( LOG_NOTICE,
+            "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
+            *(td_template.mapped_cnt), rdb->readkey,
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
@@ -2210,8 +2203,9 @@ find_all_candidate_mappings(
     
     /* Print out performance information */
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
-            *(td_template.mapped_cnt), rdb->readkey, 
+    statmap_log( LOG_NOTICE,
+            "Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )",
+            *(td_template.mapped_cnt), rdb->readkey,
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );

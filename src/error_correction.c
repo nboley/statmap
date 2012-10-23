@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "log.h"
 #include "read.h"
 #include "quality.h"
 #include "genome.h"
@@ -174,10 +175,10 @@ void
 predict_freqs( struct error_data_t* data, int record_index, 
                struct freqs_array* predicted_freqs )
 {
-    fprintf( stderr, 
-             "DEBUG       :  Predicting the error models for readkeys %i - %i.\n",
-             data->records[record_index]->min_readkey, 
-             data->records[record_index]->max_readkey );
+    statmap_log( LOG_DEBUG, "Predicting the error models for readkeys %i - %i.",
+            data->records[record_index]->min_readkey,
+            data->records[record_index]->max_readkey
+        );
     
     SEXP *mm_cnts = NULL;
     SEXP *cnts = NULL; 
@@ -274,9 +275,8 @@ update_error_model_from_error_data(
     } else if ( error_model->error_model_type == ESTIMATED ) {
         update_estimated_error_model_from_error_data( error_model, data );
     } else {
-        fprintf( stderr, "FATAL:        Unrecognized error type '%i'", 
-                 error_model->error_model_type );
-        exit(1);
+        statmap_log( LOG_FATAL, "Unrecognized error type '%i'", 
+                error_model->error_model_type  );
     }
     
     return;
@@ -354,17 +354,19 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
 
 enum bool
 filter_penalty_array( 
-    struct penalty_t* penalties, int penalties_len,
-    double effective_genome_len)
+        struct penalty_t* penalties, int penalties_len,
+        double effective_genome_len
+    )
 {
     int effective_seq_len = calc_effective_sequence_length(
         penalties, penalties_len );
                 
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
         /*
-        fprintf( stderr, "Filtering Read: %i %i - %e %e\n", 
-                 effective_seq_len, penalties_len, 
-                 pow(4, effective_seq_len)/2, effective_genome_len );
+        statmap_log( LOG_DEBUG, "Filtering Read: %i %i - %e %e",
+                effective_seq_len, penalties_len,
+                pow(4, effective_seq_len)/2, effective_genome_len
+            );
         */
         return true;
     }

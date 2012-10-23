@@ -8,8 +8,9 @@ import os
 
 from config_parsing import *
 from genome import *
-from rawread import *
+from log import *
 from mapped_read import *
+from rawread import *
 from trace import *
 
 ### FILE* <-> Python File Object ###
@@ -178,6 +179,9 @@ class StatmapOutput:
             os.chdir( output_directory )
         except IOError as e:
             print "Could not change to directory : %s" % output_directory; raise
+
+        # initialize logging before we do anything else
+        init_logging()
 
         # load statmap run's configuration
         self.config = load_config_from_file( CONFIG_FNAME )

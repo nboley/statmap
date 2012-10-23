@@ -16,11 +16,12 @@ import re
 sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
 
 from config_parsing import *
+from diploid_map_data import *
+from enums import *
 from genome import *
+from log import *
 from mapped_read import *
 from trace import *
-from enums import *
-from diploid_map_data import *
 
 def usage():
     print "Usage: ./build_index.py indexed_seq_len output_filename genome.fa(s) [diploid.map(s)]"
@@ -163,6 +164,9 @@ def build_diploid_map_data_from_group( group, map_data_t, genome ):
 
 def main():
     if len(sys.argv) < 4: usage()
+
+    # Initialize Statmap's logging infrastructure
+    init_logging()
 
     # parse arguments
     indexed_seq_len = int( sys.argv[1] )

@@ -20,6 +20,8 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+#include "log.h"
+
 /** MAPPED READ SUBLOCATIONS **/
 mapped_read_sublocation*
 get_start_of_sublocations_in_mapped_read_location(
@@ -620,7 +622,7 @@ recheck_candidate_mapping(
             /* just update the read pointer to skip the soft clipped bases */
             read_pos += entry.len;
         } else {
-            fprintf( stderr, "FATAL       :  Found unsupported CIGAR string op '%c'\n", entry.op );
+            statmap_log( LOG_FATAL, "Found unsupported CIGAR string op '%c'",  entry.op  );
             assert( false );
             exit(-1);
         }
@@ -1197,7 +1199,7 @@ init_mapped_reads_db(
     (*rdb)->mapped_fp = fopen( fname, mode );
     if( (*rdb)->mapped_fp == NULL )
     {
-        fprintf(stderr, "FATAL       :  Could not open mapped reads file %s\n", fname );
+        statmap_log( LOG_FATAL, "Could not open mapped reads file %s",  fname  );
         assert( false );
         exit(-1);
     }
@@ -1216,7 +1218,7 @@ init_mapped_reads_db(
     (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
     if( (*rdb)->unmappable_fp == NULL )
     {
-        fprintf(stderr, "FATAL       :  Could not open unmappable reads file %s\n", fname_buffer );
+        statmap_log( LOG_FATAL, "Could not open unmappable reads file %s",  fname_buffer  );
         assert(false);
         exit(-1);
     }
@@ -1232,7 +1234,7 @@ init_mapped_reads_db(
     (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
     if( (*rdb)->nonmapping_fp == NULL )
     {
-        fprintf(stderr, "FATAL       :  Could not open nonmapping reads file %s\n", fname_buffer);
+        statmap_log( LOG_FATAL, "Could not open nonmapping reads file %s",  fname_buffer );
         assert(false);
         exit(-1);
     }
@@ -1343,9 +1345,7 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
-        fprintf( stderr,
-                "FATAL       :  Unrecognized mode '%c' for open mapped reads db.\n",
-                (*rdb)->mode );
+        statmap_log( LOG_FATAL, "Unrecognized mode '%c' for open mapped reads db.",  (*rdb)->mode  );
         assert( false );
         exit( -1 );
     }
@@ -1373,7 +1373,7 @@ add_read_to_mapped_reads_db(
 {
     if ( rdb->mode == 'r' )
     {
-        fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");
+        statmap_log( LOG_ERROR, "Mapped Reads DB is read-only - cannot add read." );
         assert( false );
         exit( -1 );
     }
@@ -1387,7 +1387,7 @@ add_read_to_mapped_reads_db(
 
     if( error < 0 )
     {
-        fprintf(stderr, "FATAL       :  Error writing to packed mapped reads db.\n");
+        statmap_log( LOG_FATAL, "Error writing to packed mapped reads db." );
         assert( false );
         exit( -1 );
     }
@@ -1430,7 +1430,7 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     if( rdb->mode != 'r' )
     {
-        fprintf(stderr, "FATAL       :  Can only rewind mapped reads db that is open for reading ( mode 'r' ).\n");
+        statmap_log( LOG_FATAL, "Can only rewind mapped reads db that is open for reading ( mode 'r' )." );
         assert( false );
         exit( -1 );
     }
@@ -1450,7 +1450,7 @@ get_next_read_from_mapped_reads_db(
     /* Make sure the db is open for reading */
     if( rdb->mode != 'r' )
     {
-        fprintf(stderr, "FATAL       :  Cannot get read from mapped reads db unless it is open for reading.\n" );
+        statmap_log( LOG_FATAL, "Cannot get read from mapped reads db unless it is open for reading." );
         assert( false );
         exit( -1 );
     }
@@ -1600,11 +1600,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     /* check that the file is not empty before trying to mmap */
     fseek(rdb->mapped_fp, 0L, SEEK_END);   // seek to end
     long fp_size = ftell(rdb->mapped_fp);  // tell() to get size
-    if( fp_size == 0 )
-    {
-        fprintf( stderr,
-                 "FATAL       :  Cannot mmap empty mapped reads db.\n" );
-        exit( 1 );
+    if( fp_size == 0 ) {
+        statmap_log( LOG_FATAL, "Cannot mmap empty mapped reads db" );
     }
     rewind( rdb->mapped_fp ); // reset fp
 
@@ -1616,16 +1613,10 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     #ifdef MALLOC_READS_DB
     fseek( rdb->mapped_fp, 0, SEEK_SET );
 
-    fprintf( stderr, 
-             "NOTICE        : Allocating %zu bytes for the mapped reads db.", 
-             buf.st_size );
+    statmap_log( LOG_NOTICE, "Allocating %zu bytes for the mapped reads db.", buf.st_size );
     rdb->mmapped_data = malloc( buf.st_size );
-    if( NULL == rdb->mmapped_data )
-    {
-        fprintf( stderr, 
-                 "FATAL       : Failed to allocate %zu bytes for the mapped reads.\n",
-                 (size_t) buf.st_size );
-        exit( 1 );
+    if( NULL == rdb->mmapped_data ) {
+        statmap_log( LOG_FATAL, "Failed to allocate %zu bytes for the mapped reads.", (size_t) buf.st_size );
     }
     
     fread( rdb->mmapped_data, buf.st_size, 1, rdb->mapped_fp );
@@ -1637,14 +1628,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
                 PROT_READ|PROT_WRITE, 
 		MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
 
-    if( rdb->mmapped_data == (void*) -1 )
-    {
-        char* buffer;
-        buffer = malloc( sizeof(char)*500 );
-        sprintf(buffer, "Can not mmap the fdescriptor '%i'", fdin );
-        perror( buffer );
-        assert( false );
-        exit( -1 );
+    if( rdb->mmapped_data == (void*) -1 ) {
+        statmap_log( LOG_FATAL, "Can not mmap the fdescriptor '%i'", fdin );
     }
     #endif
     
@@ -1661,11 +1646,8 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
     free( rdb->mmapped_data );
     #else 
     int error = munmap( rdb->mmapped_data, rdb->mmapped_data_size );
-    if( error != 0 )
-    {
-        perror( "Could not munmap mapped reads db" );
-        assert( false );
-        exit( -1 );
+    if( error != 0 ) {
+        statmap_log( LOG_FATAL, "Could not munmap mapped reads db (returned %i)", error );
     }
     #endif
 
@@ -1763,14 +1745,11 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     );
 
     /* make sure that we have indexed every read */
-    if( num_indexed_reads != rdb->num_mapped_reads )
-    {
-        fprintf( stderr, 
-                 "FATAL           :  The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.", 
-                 num_indexed_reads, rdb->num_mapped_reads );
-
-        assert(false);
-        exit(-1);
+    if( num_indexed_reads != rdb->num_mapped_reads ) {
+        statmap_log( LOG_FATAL,
+                "The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.",
+                num_indexed_reads, rdb->num_mapped_reads
+            );
     }
     
     return;

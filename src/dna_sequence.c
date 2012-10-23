@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "dna_sequence.h"
+#include "log.h"
 
 /*
  *
@@ -36,7 +37,6 @@ replace_ns_inplace( char* read, int seq_len )
 
     return;
 }
-
 
 int
 calc_num_letters( const int seq_len )
@@ -78,7 +78,7 @@ complement_read( char* read, char* mut_read, int seq_len )
         case 'n':
             return 5;
         default:
-            fprintf(stderr, "Unable to translate %c\n", bp);
+            statmap_log( LOG_ERROR, "Unable to translate %c", bp );
             return 5;
         }
     }
@@ -118,7 +118,7 @@ rev_complement_read( char* read, char* mut_read, int seq_len )
             mut_read[seq_len-1-i] = 'N';
             break;
         default:
-            fprintf(stderr, "Unable to translate %c\n", bp);
+            statmap_log( LOG_ERROR, "Unable to translate %c", bp );
             return 5;
         }
     }
@@ -203,11 +203,8 @@ translate_seq(char* seq, int seq_len)
     LETTER_TYPE* result = calloc(result_len, sizeof(LETTER_TYPE));
 
     /* Memory check */
-    if( result == NULL )
-    {
-        fprintf(stderr, "Out of memory in translate sequence.\n");
-        fprintf(stderr, "( this is extremely unlikely unless there is a memory leak ) \n");
-        exit(-1);
+    if( result == NULL ) {
+        statmap_log( LOG_FATAL, "Out of memory in translate_seq(). ( this is extremely unlikely unless there is a memory leak )" );
     }
 
     /*

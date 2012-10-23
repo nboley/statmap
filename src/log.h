@@ -23,7 +23,7 @@ void
 init_logging();
 
 void
-statmap_log( enum LOG_LEVEL log_level, char* fmt, ... );
+statmap_log( enum LOG_LEVEL log_level, const char* format, ... );
 
 void
 finish_logging();

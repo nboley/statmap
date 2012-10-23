@@ -7,6 +7,7 @@
 #include <ctype.h>
 
 #include "quality.h"
+#include "log.h"
 #include "rawread.h"
 #include "error_correction.h"
 #include "util.h"
@@ -36,23 +37,22 @@ bp_code( const char letter )
 {
     switch( letter )
     {
-    case 'A':
-    case 'a':
-        return 0;
-    case 'C':
-    case 'c':
-        return 1;
-    case 'G':
-    case 'g':
-        return 2;
-    case 'T':
-    case 't':
-        return 3;
+        case 'A':
+        case 'a':
+            return 0;
+        case 'C':
+        case 'c':
+            return 1;
+        case 'G':
+        case 'g':
+            return 2;
+        case 'T':
+        case 't':
+            return 3;
     }
 
-    fprintf(stderr, "PANIC - Error converting '%c' in recheck\n", letter );
-    assert( false );
-    exit( -1 );
+    statmap_log( LOG_FATAL, "Error converting '%c' in recheck", letter );
+    return -1;
 }
 
 char
@@ -70,11 +70,8 @@ code_bp( int code )
             return 'T';
     }
 
-    fprintf(stderr, "PANIC - Error converting bp code %i in "
-                    "penalty array build.\n", code
-        );
-    assert( false );
-    exit( -1 );
+    statmap_log( LOG_FATAL, "Error converting bp code %i in penalty array build.", code );
+    return '\0';
 }
 
 /**** penalty functions ****/

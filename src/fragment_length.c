@@ -10,6 +10,8 @@
 #include "config.h"
 #include "mapped_read.h"
 
+#include "log.h"
+
 void
 init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
 {
@@ -30,7 +32,7 @@ init_fl_dist( struct fragment_length_dist_t** fl_dist, int min_fl, int max_fl )
     
     if( NULL == (*fl_dist)->density )
     {
-        fprintf( stderr, "FATAL       :  Failed to allocate memory for the fragment length dist.\n" );
+        statmap_log( LOG_FATAL, "Failed to allocate memory for the fragment length dist." );
         assert( 0 );
         exit( -1 );
     }
@@ -103,10 +105,8 @@ void
 build_fl_dist_from_filename( struct fragment_length_dist_t** fl_dist, char* filename )
 {
     FILE* fl_fp = fopen( filename, "r" );
-    if( fl_fp == NULL )
-    {
-        fprintf( stderr, "Failed to open fl_dist from filename %s\n", filename);
-        exit(-1);
+    if( fl_fp == NULL ) {
+        statmap_log( LOG_FATAL, "Failed to open fl_dist from filename %s", filename );
     }
     init_fl_dist_from_file( fl_dist, fl_fp );
     fclose( fl_fp );
@@ -171,7 +171,7 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
     int* temp_fls = calloc(sizeof(int), max_fl+1);
     if( temp_fls == NULL )
     {
-        fprintf( stderr, "FATAL        : Failed to allocate in estimate fl dist.\n" );
+        statmap_log( LOG_FATAL, "Failed to allocate in estimate fl dist." );
         exit( -1 );
     }
     
@@ -204,8 +204,7 @@ estimate_fl_dist_from_mapped_reads(  struct mapped_reads_db* rdb )
 
     if( total_num_reads < MIN_NUM_READS )
     {
-        fprintf( stderr, 
-                 "ERROR       :  Too few unique reads to estimate the fl dist.\n" );
+        statmap_log( LOG_ERROR, "Too few unique reads to estimate the fl dist" );
         return;
     }
 

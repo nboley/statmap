@@ -15,20 +15,9 @@
 #include "config.h"
 #include "trace.h"
 #include "genome.h"
+#include "util.h"
 
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        assert( false );
-        exit( -1 );
-    }
-    return tmp;
-}
+#include "log.h"
 
 /* get the correct mutex index to access the specified position */
 /* this is slow - it should probably be done as a macro in hot areas */
@@ -43,10 +32,9 @@ TRACE_TYPE*
 init_trace_array( size_t size  )
 {
     TRACE_TYPE* chr_trace = malloc(sizeof(TRACE_TYPE)*size);
-    if( NULL == chr_trace )
-    {
-        fprintf(stderr, "Can not allocate '%zu' bytes for a trace,\n", sizeof(TRACE_TYPE)*size );
-        exit( -1 );
+    if( NULL == chr_trace ) {
+        statmap_log( LOG_FATAL, "Can not allocate '%zu' bytes for a trace",
+                sizeof(TRACE_TYPE)*size );
     }
     
     return chr_trace;
@@ -103,8 +91,7 @@ init_trace_locks( struct trace_t* trace )
                 
                 if( error != 0 )
                 {
-                    perror( "Failed to initialize lock in init_trace" );
-                    exit( -1 );
+                    statmap_log( LOG_FATAL, "Failed to initialize lock in init_trace" );
                 }
             }
         }
@@ -280,8 +267,7 @@ copy_trace( struct trace_t** traces,
                 
                 if( error != 0 )
                 {
-                    perror( "Failed to initialize lock in init_trace" );
-                    exit( -1 );
+                    statmap_log( LOG_FATAL, "Failed to initialize lock in init_trace" );
                 }
             }
         }
@@ -325,8 +311,7 @@ close_traces( struct trace_t* traces )
                               
                 if( error != 0 )
                 {
-                    perror( "Failed to destroy lock in close_trace" );
-                    exit( -1 );
+                    statmap_log( LOG_FATAL, "Failed to destroy lock in close_trace" );
                 }
             }
 
@@ -580,7 +565,8 @@ write_wiggle_from_trace_to_stream(
                              traces->traces[track_index][j][k] );
                 
                 if( global_counter > 0  && global_counter%10000000 == 0 )
-                    fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
+                    statmap_log( LOG_NOTICE, "Written %i positions to trace.",
+                            global_counter );
             }
         }
     }
@@ -606,8 +592,7 @@ write_wiggle_from_trace( struct trace_t* traces,
     FILE* wfp = fopen( output_fname, "a" );
     if( wfp == NULL )
     {
-        perror( "FATAL        : Could not open wiggle file for writing " );
-        fprintf( stderr, "Filename: %s\n", output_fname );
+        statmap_log( LOG_FATAL, "Could not open wiggle file for writing" );
         assert( 0 );
         exit( -1 );
     }
@@ -684,7 +669,7 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     rv = fread( MN, sizeof(char), 6, is );
     if( 6 != rv || 0 != strcmp( MN, TRACE_MAGIC_NUMBER ))
     {
-        fprintf( stderr, "FATAL           : Mismatched bin trace header ( rv: %i, header: '%s' )\n", rv, MN );
+        statmap_log( LOG_FATAL, "Mismatched bin trace header ( rv: %i, header: '%s' )",  rv, MN  );
         assert( 0 );
     }
     

@@ -16,6 +16,7 @@
 #include "diploid_map_data.h"
 #include "util.h"
 
+#include "log.h"
 /** 
     Some bastard code. I need this later on when I unpack the pseudo loc reads
     so I stick it here. 
@@ -34,13 +35,13 @@ modify_mapped_read_location_for_index_probe_offset(
 {
     // Check for overflow error
     if( read_location < 0 ) {
-        perror( "ERROR: The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        statmap_log( LOG_ERROR, "The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
         return -1;
     }
     
     // Pseudo locations should already have been expanded
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        statmap_log( LOG_ERROR, "Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
         return -1;
     }
 
@@ -136,7 +137,7 @@ modify_mapped_read_location_for_index_probe_offset(
         }
     
     } else {
-        perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
+        statmap_log( LOG_ERROR, "IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR." );
         return -1;
     }
     
@@ -267,8 +268,7 @@ add_candidate_mapping( candidate_mappings* mappings,
         
         if( mappings->mappings == NULL )
         {
-            fprintf(stderr, "Failed realloc in add_candidate_mapping\n");
-            exit(1);
+            statmap_log( LOG_FATAL, "Failed realloc in add_candidate_mapping" );
         }
     }
 

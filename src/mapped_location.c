@@ -7,6 +7,8 @@
 #include "mapped_location.h"
 #include "diploid_map_data.h"
 
+#include "log.h"
+
 /*************************************************************************
  *
  *  Mapped Location 
@@ -120,7 +122,6 @@ add_new_mapped_location( mapped_locations* results,
         
         if( results->locations == NULL )
         {
-            fprintf(stderr, "Failed realloc in add_mapped_locations\n");
             exit(1);
         }
     }
@@ -386,7 +387,7 @@ copy_ml_match_into_matches(
 
         if( matches->matches == NULL )
         {
-            fprintf( stderr, "FATAL       :  Failed realloc in add_ml_match\n");
+            statmap_log( LOG_FATAL, "Failed realloc in add_ml_match" );
             assert(false);
             exit(1);
         }

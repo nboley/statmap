@@ -8,13 +8,15 @@
 #include "genome.h"
 #include "diploid_map_data.h"
 
+#include "log.h"
+
 static void* 
 realloc_CE( void* ptr, size_t size )
 {
     ptr = realloc( ptr, size );
     if( NULL == ptr )
     {
-        fprintf( stderr, "FATAL       : Failed to alloc space for pseudo location.\n");
+        statmap_log( LOG_FATAL, "Failed to alloc space for pseudo location." );
         assert( false );
         exit( -1 );
     }
@@ -301,7 +303,7 @@ load_pseudo_locations_from_text( FILE* fp, struct pseudo_locations_t** ps_locs )
                 /* gracefuly alowing spurious trailing newlines */
                 break;
             }
-            fprintf( stderr, "FATAL         : Error reading line header in pseudo loc parsing code.\n" );
+            statmap_log( LOG_FATAL, "Error reading line header in pseudo loc parsing code." );
             exit( 1 );
         }
         
@@ -313,7 +315,7 @@ load_pseudo_locations_from_text( FILE* fp, struct pseudo_locations_t** ps_locs )
             error = fscanf( fp, "\t%i,%i", &chr, &pos );
             if( error != 2 )
             {
-                fprintf( stderr, "FATAL         : Error reading data in pseudo loc parsing code.\n" );
+                statmap_log( LOG_FATAL, "Error reading data in pseudo loc parsing code." );
                 exit( 1 );
             }
             

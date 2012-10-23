@@ -38,9 +38,8 @@ set_global_quality_parameters_from_input_file_type(
     )
 {
     /* print out the determined format */
-    fprintf( stderr,
-             "NOTICE      :  Setting Input File Format to %i\n",
-             input_file_type );
+    statmap_log( LOG_NOTICE, "Setting input file format to %i",
+            input_file_type );
 
     switch( input_file_type )
     {
@@ -62,16 +61,13 @@ set_global_quality_parameters_from_input_file_type(
         break;
 #if 0
     default:
-        fprintf( stderr,
-                 "ERROR       :  Unrecognized file format type %i\n",
-                 input_file_type );
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Unrecognized file format type %i",
+                input_file_type );
 #endif
     }
 
-    fprintf( stderr,
-             "NOTICE      :  Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i\n",
-             QUAL_SHIFT, ARE_LOG_ODDS );
+    statmap_log( LOG_NOTICE, "Set QUAL_SHIFT to '%i' and ARE_LOG_ODDS to %i",
+            QUAL_SHIFT, ARE_LOG_ODDS );
 }
 
 enum input_file_type_t
@@ -109,9 +105,7 @@ guess_input_file_type( struct args_t* args )
     }
     fclose( fp );
 
-    fprintf( stderr,
-             "NOTICE      :  Calculated max and min quality scores as '%i' and '%i'\n",
-             max_qual, min_qual );
+    statmap_log( LOG_NOTICE, "Calculated max and min quality scores as '%i' and '%i'",  max_qual, min_qual  );
 
     /* if the max quality score is 73, ( 'I' ), then
        this is almost certainly a sanger format */
@@ -132,8 +126,8 @@ guess_input_file_type( struct args_t* args )
 	       plus 64 version, but we can't be sure. However, assume that it is and print a 
 	       warning. 
 	    */
-	    fprintf(stderr, "WARNING     :  maximum input score wasn't achieved. ( %i )\n", max_qual);
-	    fprintf(stderr, "WARNING     :  ( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )\n");
+	    statmap_log( LOG_WARNING, "Maximum input score wasn't achieved. ( %i )", max_qual);
+	    statmap_log( LOG_WARNING, "( That means the highest quality basepair was above 73 but less than 104. Probably, there are just no very HQ basepairs, but make sure that the predicted error format is correct. )" );
 	}
 	/*
 	 * If the shifted min quality is less than 0, then the
@@ -146,21 +140,19 @@ guess_input_file_type( struct args_t* args )
 	// If the min is less than 69, it is still most likely
 	// a log odds version, but we emit a warning anyways.
 	else if ( min_qual < 66 ) {
-	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    statmap_log( LOG_WARNING, "input file format ambiguous. ( max=%i, min=%i )",  max_qual, min_qual );
 	    input_file_type = ILLUMINA_v13_FQ;
 	} else if ( min_qual < 70 ) {
-	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    statmap_log( LOG_WARNING, "input file format ambiguous. ( max=%i, min=%i )",  max_qual, min_qual );
 	    input_file_type = ILLUMINA_v15_FQ;
 	} else if ( min_qual < 90 ) {
-	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    statmap_log( LOG_WARNING, "input file format ambiguous. ( max=%i, min=%i )",  max_qual, min_qual );
 	    input_file_type = MARKS_SOLEXA;
 	} else if ( min_qual == 104 ) {
-	    fprintf(stderr, "WARNING     :  input file format ambiguous. ( max=%i, min=%i )\n", max_qual, min_qual);
+	    statmap_log( LOG_WARNING, "input file format ambiguous. ( max=%i, min=%i )",  max_qual, min_qual );
 	    input_file_type = TEST_SUITE_FORMAT;
 	} else {
-	    fprintf( stderr, "ERROR       :  Could not automatically determine input format. ( max=%i, min=%i  )\n",
-		     max_qual, min_qual );
-	    exit( -1 );
+	    statmap_log( LOG_FATAL, "Could not automatically determine input format. ( max=%i, min=%i  )",  max_qual, min_qual  );
 	}
     }
 
@@ -482,7 +474,7 @@ parse_arguments( int argc, char** argv )
     /********* CHECK REQUIRED ARGUMENTS *************************************/
 
     if( args.genome_fname == NULL ) {
-        fprintf( stderr, "FATAL       :  -g (binary genome) is required\n" );
+        statmap_log( LOG_FATAL, "-g (binary genome) is required" );
         exit(-1);
     }
 
@@ -490,7 +482,7 @@ parse_arguments( int argc, char** argv )
             && ( args.pair1_reads_fnames == NULL ||
                 args.pair2_reads_fnames == NULL ))
     {
-        fprintf( stderr, "FATAL       :  -r or (-1 and -2) is requried\n" );
+        statmap_log( LOG_FATAL, "-r or (-1 and -2) is required" );
         exit(-1);
     }
 
@@ -499,27 +491,20 @@ parse_arguments( int argc, char** argv )
     {
         if( args.pair1_reads_fnames != NULL || args.pair2_reads_fnames != NULL )
         {
-            fprintf( stderr,
-                    "FATAL       :  if -r is set, neither -1 nor -2 should be set\n"
-                   );
-            exit( -1 );
+            statmap_log( LOG_FATAL, "if -r is set, neither -1 nor -2 should be set" );
         }
     }
 
     if( args.pair1_reads_fnames != NULL &&
             args.pair2_reads_fnames == NULL )
     {
-        fprintf( stderr,
-                "FATAL       :  -1 is set but -2 is not\n" );
-        exit( -1 );
+        statmap_log( LOG_FATAL, "-1 is set but -2 is not" );
     }
 
     if( args.pair2_reads_fnames != NULL &&
             args.pair1_reads_fnames == NULL )
     {
-        fprintf( stderr,
-                "FATAL       :  -2 option is set but -1 is not\n" );
-        exit( -1 );
+        statmap_log( LOG_FATAL, "-2 is set but -1 is not" );
     }
 
     /* If no output directory specified, make it */
@@ -549,7 +534,7 @@ parse_arguments( int argc, char** argv )
     error = mkdir( args.output_directory, S_IRWXU | S_IRWXG | S_IRWXO );
     if( -1 == error )
     {
-        fprintf( stderr, "FATAL       :  Cannot make output directory\n" );
+        statmap_log( LOG_FATAL, "Cannot make output directory" );
         exit( -1 );
     }
 
@@ -557,7 +542,7 @@ parse_arguments( int argc, char** argv )
     char* genome_fname = realpath( args.genome_fname, NULL );
     if( NULL == genome_fname )
     {
-        fprintf(stderr, "FATAL       :  Could not determine absolute path of genome file\n");
+        statmap_log( LOG_FATAL, "Could not determine absolute path of genome file" );
         exit( -1 );
     }
     args.genome_fname = genome_fname;
@@ -580,16 +565,12 @@ parse_arguments( int argc, char** argv )
         if( args.error_model_type == ESTIMATED )
         {
             args.mapping_metaparameter = DEFAULT_ESTIMATED_ERROR_METAPARAMETER;
-            fprintf(stderr,
-                    "NOTICE      :  Setting the mapping metaparameter (-p) (for the estimated error model) to %.3f\n",
-                    DEFAULT_ESTIMATED_ERROR_METAPARAMETER );
+            statmap_log( LOG_NOTICE, "Setting the mapping metaparameter (-p) (for the estimated error model) to %.3f",  DEFAULT_ESTIMATED_ERROR_METAPARAMETER  );
         }
         else if( args.error_model_type == MISMATCH )
         {
             args.mapping_metaparameter = DEFAULT_MISMATCH_METAPARAMTER;
-            fprintf(stderr,
-                    "NOTICE      :  Setting the mapping metaparameter (-p) (for the mismatch error model) to %.3f\n",
-                    DEFAULT_MISMATCH_METAPARAMTER );
+            statmap_log( LOG_NOTICE, "Setting the mapping metaparameter (-p) (for the mismatch error model) to %.3f",  DEFAULT_MISMATCH_METAPARAMTER  );
         }
     }
 
@@ -597,9 +578,7 @@ parse_arguments( int argc, char** argv )
      * range [0,1] */
     if( args.mapping_metaparameter< 0 || args.mapping_metaparameter > 1 )
     {
-        fprintf( stderr,
-                 "FATAL       :  The mapping metaparameter (-p) must be in the range [0,1] got %.3f\n",
-                 args.mapping_metaparameter );
+        statmap_log( LOG_FATAL, "The mapping metaparameter (-p) must be in the range [0,1] got %.3f",  args.mapping_metaparameter  );
         assert( false );
         exit(1);
     }
@@ -639,10 +618,7 @@ parse_arguments( int argc, char** argv )
 
             if( args.pair2_NC_reads_fnames == NULL )
             {
-                fprintf(stderr,
-                        "FATAL     :  The NC reads must be paired for a paired experiment.\n"
-                       );
-                exit( -1 );
+                statmap_log( LOG_FATAL, "The NC reads must be paired for a paired experiment." );
             }
 
             safe_copy_into_output_directory( 
@@ -671,16 +647,13 @@ parse_arguments( int argc, char** argv )
         args.frag_len_fp = fopen( args.frag_len_fname, "r" );
         if( NULL == args.frag_len_fp )
         {
-            fprintf(stderr,
-            "FATAL       :  Failed to open '%s'\n", args.frag_len_fname );
+            statmap_log( LOG_FATAL, "Failed to open '%s'\n",  args.frag_len_fname );
             exit( -1 );
         }    
     } else {
         if( args.assay_type == CHIP_SEQ )
         {
-            fprintf(stderr,
-            "FATAL       :  CHIPSEQ assay mappings requires a fragment length distirbution (-f)\n" );
-            exit( -1 );
+            statmap_log( LOG_FATAL, "Chip-Seq assay mapping requires a fragment lenght distribution (-f)" );
         }
     }
 
@@ -690,10 +663,9 @@ parse_arguments( int argc, char** argv )
     error = chdir( args.output_directory );
     if( -1 == error )
     {
-        fprintf(stderr, "FATAL       :  Cannot move into output directory\n" );
+        statmap_log( LOG_FATAL, "Cannot move into output directory" );
         exit( -1 );
     }
-
 
     /* Make sub directories to store wiggle samples */
     if( SAVE_STARTING_SAMPLES )
@@ -772,17 +744,14 @@ parse_arguments( int argc, char** argv )
         if( args.num_threads > 8 )
             args.num_threads = 8;
         
-        fprintf(stderr, "NOTICE      :  Number of threads is being set to %i \n",
-                args.num_threads);
+        statmap_log( LOG_NOTICE, "Number of threads is being set to %i",  args.num_threads );
     }
 
     /* set the min num hq basepairs if it's unset */
     if( args.min_num_hq_bps == -1 )
     {
         args.min_num_hq_bps = 12;
-        fprintf(stderr,
-                "NOTICE      :  Number of min hq bps is being set to %i \n",
-                args.min_num_hq_bps);
+        statmap_log( LOG_NOTICE, "Number of min hq bps is being set to %i",  args.min_num_hq_bps );
     }
 
     /* Set the maximum allowed reference gap between indexable subtemplates */
@@ -915,10 +884,8 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     *args = malloc( sizeof(struct args_t)  );
     FILE* arg_fp = fopen( fname, "r" );
 
-    if( arg_fp == NULL )
-    {
-        fprintf( stderr, "ERROR       :  Could not load config file '%s'\n", fname );
-        exit( -1 );
+    if( arg_fp == NULL ) {
+        statmap_log( LOG_FATAL, "Could not load config file '%s'",  fname );
     }
 
     fscanf_name_or_null( 

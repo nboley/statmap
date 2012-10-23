@@ -32,6 +32,8 @@
 #include "fragment_length.h"
 #include "sam.h"
 
+#include "log.h"
+
 #define DONT_USE_VEC_OPERATIONS
 #define LOCK_TRACES
 
@@ -137,7 +139,7 @@ bootstrap_traces_from_mapped_reads(
     
     if( RAND_MAX < reads_db->num_mapped_reads )
     {
-        fprintf( stderr, "ERROR     : cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) \n" );
+        statmap_log( LOG_ERROR, "cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) " );
         return;
     }
 
@@ -158,7 +160,7 @@ bootstrap_traces_from_mapped_reads(
 
         if( i > 0 && i%1000000 == 0 )
         {
-            fprintf( stderr, "NOTICE      :  Read %i reads in bootstrap\n", i );
+            statmap_log( LOG_NOTICE, "Read %i reads in bootstrap",  i  );
         }
 
         /* If there are no mappings, then this is pointless */
@@ -211,8 +213,11 @@ bootstrap_traces_from_mapped_reads(
     
     if( num_error_reads > 0 )
     {
-        fprintf( stderr, "ERROR      :  %i reads ( out of %u ) had errors in which the cum dist didnt add up to 1. \n", 
-                 num_error_reads, reads_db->num_mapped_reads );
+        statmap_log( LOG_ERROR,
+                "%i reads ( out of %u ) had errors in which the cum dist didnt add up to 1.",
+                num_error_reads,
+                reads_db->num_mapped_reads
+            );
     }
     
     return;
@@ -352,12 +357,9 @@ update_traces_from_mapped_reads(
                                  update_traces_from_mapped_reads_worker, 
                                  (void *)(tds + t) 
                 ); 
+
             if (rc) {
-                fprintf(stderr, 
-                        "ERROR; return code from pthread_create() is %d\n", 
-                        rc
-                    );
-                exit(-1);
+                statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
             }
         }
 
@@ -365,11 +367,7 @@ update_traces_from_mapped_reads(
         for(t=0; t < num_threads; t++) {
             rc = pthread_join(thread[t], &status);
             if (rc) {
-                fprintf( stderr, 
-                         "ERROR; return code from pthread_join() is %d\n", 
-                         rc
-                    );
-                exit(-1);
+                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
             }
         }
         pthread_attr_destroy(&attr);
@@ -518,11 +516,7 @@ update_mapped_reads_from_trace(
                                  (void *)(tds + t) 
                 ); 
             if (rc) {
-                fprintf(stderr, 
-                        "ERROR; return code from pthread_create() is %d\n", 
-                        rc
-                    );
-                exit(-1);
+                statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
             }
         }
 
@@ -532,11 +526,7 @@ update_mapped_reads_from_trace(
             pthread_attr_destroy( attrs + t );
             
             if (rc) {
-                fprintf( stderr, 
-                         "ERROR; return code from pthread_join() is %d\n", 
-                         rc
-                    );
-                exit(-1);
+                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
             }
         }
         
@@ -643,13 +633,14 @@ update_mapping(
                 )
             )
         {
-            fprintf( stderr, "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec\n", 
-                 num_iterations, rv.max_change, rv.log_lhd,
-                     pow( 10, rv.log_lhd - prev_log_lhd ),
-                     (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
-                     (float)(umr_stop.tv_sec - umr_start.tv_sec) + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
-                     (float)(ut_stop.tv_sec - ut_start.tv_sec) + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
-            );
+            statmap_log( LOG_INFO,
+                    "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec", 
+                    num_iterations, rv.max_change, rv.log_lhd,
+                    pow( 10, rv.log_lhd - prev_log_lhd ),
+                    (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
+                    (float)(umr_stop.tv_sec - umr_start.tv_sec) + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
+                    (float)(ut_stop.tv_sec - ut_start.tv_sec) + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
+               );
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
@@ -794,7 +785,7 @@ sample_random_trace(
                                            const mapped_read_t* const r  )
     )
 {
-    fprintf( stderr, "Starting Sample %i\n", sample_index+1 );
+    statmap_log( LOG_INFO, "Starting sample %i", sample_index+1 );
 
     struct trace_t* sample_trace;
     init_trace( genome, &sample_trace, num_tracks, track_names );
@@ -1258,7 +1249,7 @@ void update_CAGE_trace_expectation_from_location(
     /* If the reads are paired */
     if( is_paired )
     {
-        fprintf( stderr, "FATAL: paired cage reads are not supported" );
+        statmap_log( LOG_FATAL, "paired cage reads are not supported" );
         exit( -1 );                
     } 
     /* If the read is *not* paired */
@@ -1337,7 +1328,7 @@ update_CAGE_mapped_read_prbs(
         unsigned int j = 0;
         if( is_paired )
         {
-            fprintf( stderr, "FATAL: paired cage reads are not supported\n" );
+            statmap_log( LOG_FATAL, "paired cage reads are not supported" );
             continue;
         } 
         /* If the read is *not* paired */
@@ -1460,7 +1451,7 @@ update_chipseq_mapping_wnc(
             
     /* iteratively map from a uniform prior */
     gettimeofday( &start, NULL );
-    fprintf(stderr, "NOTICE      :  Starting iterative mapping.\n" );
+    statmap_log( LOG_NOTICE, "Starting iterative mapping." );
     
     /* initialize the trace that we will store the expectation in */
     /* it has dimension 2 - for the negative and positive stranded reads */
@@ -1504,19 +1495,17 @@ update_chipseq_mapping_wnc(
         update_chipseq_mapped_read_prbs
     );
 
-    if( 0 != error )
-    {
-        perror("Unrecognized error code from update_mapping");
-        assert(false);
-        exit( -1 );
+    if( 0 != error ) {
+        statmap_log( LOG_FATAL, "Unrecognized error code %i from update_mapping", error );
     }
     
     gettimeofday( &stop, NULL );
     long seconds  = stop.tv_sec  - start.tv_sec;
     long useconds = stop.tv_usec - start.tv_usec;
     
-    fprintf(stderr, "PERFORMANCE :  Maximized LHD in %.5f seconds\n", 
-            ((float)seconds) + ((float)useconds)/1000000 );
+    statmap_log( LOG_INFO, "Maximized LHD in %.5f seconds\n",
+            ((float)seconds) + ((float)useconds)/1000000
+        );
     
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );
@@ -1610,7 +1599,6 @@ take_chipseq_sample_wnc(
             
     if( NUM_BOOTSTRAP_SAMPLES > 0 )
     {
-        fprintf( stderr, "Bootstrapping %i samples.", NUM_BOOTSTRAP_SAMPLES );
         char buffer[200];
         sprintf( buffer, "mkdir %ssample%i/",
                  BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1 );
@@ -1618,18 +1606,15 @@ take_chipseq_sample_wnc(
         if (WIFSIGNALED(error) &&
             (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
         {
-            fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-            perror( "System Call Failure");
-            assert( false );
-            exit( -1 );
+            statmap_log( LOG_FATAL, "System call '%s' failed", buffer );
         }
 
         int j;
         for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
         {                
-            if(  j%(NUM_BOOTSTRAP_SAMPLES/10)  == 0 )
+            if( j % (NUM_BOOTSTRAP_SAMPLES/10) == 0 )
                 fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
-                    
+
             /* actually perform the bootstrap */
             bootstrap_traces_from_mapped_reads( 
                 chip_mpd_rds_db, chip_cond_prbs_db, ip_trace, 
@@ -1644,18 +1629,18 @@ take_chipseq_sample_wnc(
             {
                 /* write out the IP */
                 sprintf( buffer, "%ssample%i/bssample%i.ip.bin.trace", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
+                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
 
                 write_trace_to_file( ip_trace, buffer );
 
                 /* write out the NC */
                 sprintf( buffer, "%ssample%i/bssample%i.nc.bin.trace", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );                        
+                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
 
                 write_trace_to_file( nc_trace, buffer );                        
             }    
         }
-        fprintf( stderr, " 100%%\n");
+        fprintf( stderr, " 100%%\n" );
                 
         close_traces( ip_trace );
         close_traces( nc_trace );
@@ -1830,14 +1815,14 @@ update_cond_prbs_from_trace_and_assay_type(
     // case STRANDED_RNASEQ:
 
     default:
-        fprintf( stderr, "FATAL       :  Unrecognized assay type in iterative mapping.\n");
+        statmap_log( LOG_FATAL, "Unrecognized assay type in iterative mapping." );
         assert(false);
         exit(-1);
     }
     
     if( NULL == update_reads )
     {
-        fprintf( stderr, "ERROR       :  Unrecognized assay type (%i). Did you mix statmap versions?\n", assay_type);
+        statmap_log( LOG_ERROR, "Unrecognized assay type (%i). Did you mix statmap versions?",  assay_type );
         exit(1);
 
     }

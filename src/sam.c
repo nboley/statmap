@@ -14,6 +14,8 @@
 #include "dna_sequence.h"
 #include "util.h"
 
+#include "log.h"
+
 void
 fprintf_sam_headers_from_genome(
         FILE* sam_fp,
@@ -447,7 +449,7 @@ write_mapped_reads_to_sam(
      * only if the mapped reads db is empty. */
     if( rv != 0 )
     {
-        fprintf( stderr, "ERROR       :  Mapped Reads DB is empty - nothing to write to SAM.\n" );
+        statmap_log( LOG_ERROR, "Mapped Reads DB is empty - nothing to write to SAM." );
         assert( false );
         exit( -1 );
     }
@@ -478,14 +480,13 @@ write_mapped_reads_to_sam(
 
         if( rd->read_id != mapped_rd_index->read_id )
         {
-            fprintf( stderr, "read_id: %d\n", rd->read_id );
-            fprintf( stderr, "mapped_rd->read_id: %d\n",
-                     mapped_rd_index->read_id );
+            statmap_log( LOG_DEBUG, "read_id: %d", rd->read_id );
+            statmap_log( LOG_DEBUG, "mapped_rd->read_id: %d", mapped_rd_index->read_id );
         }
         assert( rd->read_id == mapped_rd_index->read_id );
         
         if( rd->read_id > 0 && rd->read_id%1000000 == 0 )
-            fprintf( stderr, "NOTICE       : Written %u reads to sam\n", rd->read_id );
+            statmap_log( LOG_NOTICE, "Written %u reads to sam\n",  rd->read_id  );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 

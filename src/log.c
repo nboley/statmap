@@ -45,23 +45,23 @@ log_level_to_string( enum LOG_LEVEL log_level )
  * gettid/getpid for thread id. If program is single threaded, tid == pid. */
 
 void
-statmap_log( enum LOG_LEVEL log_level, char* fmt, ... )
+statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
 {
     /* Build the log message format string */
     char log_msg[1024];
     va_list args;
-    va_start(args, fmt);
-    vsprintf(log_msg, fmt, args);
+    va_start(args, format);
+    vsprintf(log_msg, format, args);
     va_end(args);
 
     /* Build the log line to output (prepends log level) */
     char log_line[1024];
-    sprintf( log_line, "%-10s: %s\n",
+    sprintf( log_line, "%-12s: %s\n",
              log_level_to_string(log_level), log_msg );
 
     /* Print the message to the log file (and stderr if non-trivial) */
     pthread_mutex_lock( &log_mutex );
-    fputs( log_line, log_fp );
+    fprintf( log_fp, "%s", log_line );
     /*
      * TODO - come back to this once we've properly set up logging to a file
     if( log_level >= NONTRIVIAL_LOG_LEVEL )
