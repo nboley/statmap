@@ -500,9 +500,11 @@ init_mapping_params_for_read(
                                         (*p)->fwd_penalty_arrays[j]->length,
                                         1 - metaparams->error_model_params[0] );
         }
-        
-        (*p)->recheck_max_penalty_spread = log10(
-                1 - metaparams->error_model_params[0] );
+
+        (*p)->recheck_max_penalty_spread = -log10(
+                1 - metaparams->error_model_params[0]);
+        assert( (*p)->recheck_max_penalty_spread >= 0 );
+        //(*p)->recheck_max_penalty_spread = 1.3;
 
         if( _assay_type == CAGE )
         {
@@ -553,9 +555,13 @@ init_index_search_params(
                     ists->container[i].fwd_penalties,
                     ists->container[i].subseq_length,
                     1 - expected_map_rate );
-            
+
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
-        }        
+        }    
+
+        /* Make sure the index search parameters have the correct signs */
+        assert( min_match_penalty <= 0 );
+        assert( max_penalty_spread >= 0 );
         
         (*isp)[i].min_match_penalty = min_match_penalty;
         (*isp)[i].max_penalty_spread = max_penalty_spread;
