@@ -2195,6 +2195,8 @@ find_all_candidate_mappings(
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
         
+        /* TODO compute mapping metaparameters for this set of reads */
+
         spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */

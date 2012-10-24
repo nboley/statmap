@@ -142,8 +142,21 @@ rewind_rawread_db( struct rawread_db_t* rdb );
 enum bool
 rawread_db_is_empty( struct rawread_db_t* rdb );
 
+/* Store the state of the rawread db during calls to
+ * get_next_read_from_rawread_db. We can use this to reset the position of the
+ * rawread db if necessary. */
+struct rawread_db_state {
+    readkey_t readkey;
+    long single_end_reads_pos;
+    long paired_end_1_reads_pos;
+    long paired_end_2_reads_pos;
+};
+
+struct rawread_db_state
+save_rawread_db_state( struct rawread_db_t *rdb );
+
 void
-move_fp_to_next_read( FILE* fp );
+restore_rawread_db_state( struct rawread_db_state, struct rawread_db_t* rdb );
 
 /**************** END Raw Read DB **********************/
 
