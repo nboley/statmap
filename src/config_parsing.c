@@ -667,6 +667,10 @@ parse_arguments( int argc, char** argv )
         exit( -1 );
     }
 
+    /* Now that we've chdir'ed into the output directory , we can initialize
+     * the real logfile. */
+    init_logging();
+
     /* Make sub directories to store wiggle samples */
     if( SAVE_STARTING_SAMPLES )
         safe_mkdir( STARTING_SAMPLES_PATH );
