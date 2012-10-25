@@ -455,14 +455,12 @@ init_mapping_params_for_read(
     int i;
     for( i = 0; i < (*p)->num_penalty_arrays; i++ )
     {
-        (*p)->fwd_penalty_arrays[i] = calloc( 
-            sizeof(struct penalty_array_t), r->subtemplates[i].length );
+        (*p)->fwd_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
         build_penalty_array( (*p)->fwd_penalty_arrays[i],
                              r->subtemplates + i, 
                              error_model );
         
-        (*p)->rev_penalty_arrays[i] = calloc( 
-            sizeof(struct penalty_array_t), r->subtemplates[i].length );        
+        (*p)->rev_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
         build_reverse_penalty_array( 
             (*p)->rev_penalty_arrays[i], 
             r->subtemplates + i,
