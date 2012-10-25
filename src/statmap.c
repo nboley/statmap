@@ -417,10 +417,12 @@ cleanup:
 int 
 main( int argc, char** argv )
 {
-    init_logging();
-
     /* Seed the random number generator */
     srand ( time(NULL) );
+
+    /* Log to a temporary log file until we are ready to create the real log
+     * file (must wait until the Statmap output directory has been created) */
+    init_initial_logging();
 
     /* get the base directory */
     char* abs_path = NULL;
