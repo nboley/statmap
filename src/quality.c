@@ -109,7 +109,9 @@ error_prb_for_estimated_model(
     if( ref == obs )
         return log10(1 - prb);
     else
-        return log10(prb);
+        /* TODO we assume that any mismatch is equally likely (for now) */
+        /* So p(match) + p(any mismatch) = 1 */
+        return log10(prb / 3);
     
     assert( false );
 }
