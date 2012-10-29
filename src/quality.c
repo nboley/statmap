@@ -110,7 +110,8 @@ error_prb_for_estimated_model(
         return log10(1 - prb);
     else
         /* TODO we assume that any mismatch is equally likely (for now) */
-        /* So p(match) + p(any mismatch) = 1 */
+        /* So p(match) + p(any mismatch) = 1. Dividing by 3 makes the whole
+         * penalty distribution sum to 1, so we can sample from it. */
         return log10(prb / 3);
     
     assert( false );

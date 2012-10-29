@@ -259,7 +259,7 @@ search_index(
     bkwd_seq = translate_seq( tmp_read, subseq_length );
     assert( bkwd_seq != NULL );
     
-    /* map the full read */
+    /* search the index */
     find_matches_from_root(
             index, 
 
@@ -1523,6 +1523,11 @@ find_candidate_mappings_for_read_subtemplate(
     struct index_search_params* index_search_params = NULL;
     init_index_search_params( &index_search_params, ists, mapping_params );
 
+    statmap_log( LOG_DEBUG, "min_match_penalty %f",
+            index_search_params[0].min_match_penalty );
+
+    clock_t start = clock();
+
     search_index_for_indexable_subtemplates(
             ists,
             search_results,
@@ -1530,6 +1535,10 @@ find_candidate_mappings_for_read_subtemplate(
             index_search_params,
             only_collect_error_data
         );
+
+    clock_t stop = clock();
+
+    statmap_log( LOG_DEBUG, "search_time %f", ((double)(stop-start)) / CLOCKS_PER_SEC );
 
     free( index_search_params );
 
@@ -1896,12 +1905,15 @@ find_candidate_mappings( void* params )
                rdb, &r, td->max_readkey )  
          ) 
     {
+        // DEBUG
+        statmap_log( LOG_DEBUG, "read_id %i", r->read_id );
+
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
         if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
-            statmap_log( LOG_DEBUG, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
+            statmap_log( LOG_INFO, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
         }
 
         struct mapping_params* mapping_params = NULL;
@@ -1938,7 +1950,7 @@ find_candidate_mappings( void* params )
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            
         }
-        
+
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
@@ -1973,6 +1985,8 @@ find_candidate_mappings( void* params )
         }
 
         curr_read_index += 1;
+
+        statmap_log( LOG_DEBUG, "FINISHED mapping %i", r->read_id );
 
         /* cleanup memory */
         free_mapping_params( mapping_params );
@@ -2206,7 +2220,7 @@ find_all_candidate_mappings(
                 = compute_min_match_penalty_for_reads( rdb, error_model,
                         mapping_metaparams->error_model_params[0] );
 
-            statmap_log( LOG_DEBUG, "Computed min_match_penalty %f for reads [%i, %i]",
+            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
                     reads_min_match_penalty,
                     td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
                     td_template.max_readkey );

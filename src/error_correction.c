@@ -337,6 +337,21 @@ calc_min_match_penalty( struct penalty_t* penalties, int penalties_len,
     return mean - 4*sqrt( var );
 }
 
+/* Separate penalty mean calculation from below so we can log independently of
+ * the underlying program logic */
+void
+log_penalties_mean( struct penalty_t* penalties, int penalties_len )
+{
+    double mean = 0;
+    int i;
+    for( i = 0; i < penalties_len; i++ ) {
+        double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
+        mean += mm_prb;
+    }
+
+    statmap_log(LOG_DEBUG, "penalties_mean %f", mean);
+}
+
 int
 calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
 {
@@ -346,7 +361,7 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
         double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
         mean += mm_prb;
     }
-    
+
     return penalties_len - (int)mean - 1;
 }
 
@@ -358,7 +373,7 @@ filter_penalty_array(
 {
     int effective_seq_len = calc_effective_sequence_length(
         penalties, penalties_len );
-                
+
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
         /*
         statmap_log( LOG_DEBUG, "Filtering Read: %i %i - %e %e",
@@ -390,6 +405,10 @@ filter_read(
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
+        /* WARNING this logging strategy will only work for unpaired reads */
+        log_penalties_mean( mapping_params->fwd_penalty_arrays[i]->array,
+                mapping_params->fwd_penalty_arrays[i]->length );
+
         if( filter_penalty_array( 
                 mapping_params->fwd_penalty_arrays[i]->array, 
                 mapping_params->fwd_penalty_arrays[i]->length,
@@ -414,7 +433,7 @@ filter_indexable_subtemplates(
     }
     
     int effective_genome_len = calc_genome_len( genome );
-    
+
     int i;
     for( i = 0; i < ists->length; i++ )
     {
@@ -445,12 +464,9 @@ check_sum_of_probabilities(
     /* should be equal within a small range around 1.0 to account for rounding
      * errors */
     if( sum < (1.0 - ROUND_ERROR) || sum > (1.0 + ROUND_ERROR) ) {
-#if 0
         statmap_log( LOG_FATAL,
                 "Sum of bp mutation probabilities (%f) is not within range [%f, %f]",
                 sum, 1.0 - ROUND_ERROR, 1.0 + ROUND_ERROR );
-#endif
-        ;
     }
 
     return true;
