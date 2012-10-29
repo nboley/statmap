@@ -94,6 +94,7 @@ struct mapping_params {
     struct penalty_array_t** fwd_penalty_arrays;
     struct penalty_array_t** rev_penalty_arrays;
     
+    int total_read_length;
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
@@ -110,7 +111,8 @@ init_mapping_params_for_read(
         struct mapping_params** p,
         struct read* r,        
         struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        float reads_min_match_penalty
     );
 
 void

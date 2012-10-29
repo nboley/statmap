@@ -586,7 +586,8 @@ init_mapping_params_for_read(
         struct mapping_params** p,
         struct read* r,        
         struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        float reads_min_match_penalty
     )
 {
     *p = malloc( sizeof( struct mapping_params ));
@@ -623,6 +624,7 @@ init_mapping_params_for_read(
     {
         total_read_len += r->subtemplates[i].length;
     }
+    (*p)->total_read_length = total_read_len;
     
     /* now, calcualte the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -638,18 +640,10 @@ init_mapping_params_for_read(
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
-        (*p)->recheck_min_match_penalty = 0;
-        int j;
-        for( j = 0; j < (*p)->num_penalty_arrays; j++ ) 
-        {
-            (*p)->recheck_min_match_penalty += 
-                calc_min_match_penalty( (*p)->fwd_penalty_arrays[j]->array,
-                                        (*p)->fwd_penalty_arrays[j]->length,
-                                        1 - metaparams->error_model_params[0] );
-        }
 
-        (*p)->recheck_max_penalty_spread = -log10(
-                1 - metaparams->error_model_params[0]);
+        (*p)->recheck_min_match_penalty = reads_min_match_penalty;
+        (*p)->recheck_max_penalty_spread
+            = -log10(1 - metaparams->error_model_params[0]);
         assert( (*p)->recheck_max_penalty_spread >= 0 );
         //(*p)->recheck_max_penalty_spread = 1.3;
 
@@ -671,38 +665,34 @@ init_index_search_params(
         struct indexable_subtemplates* ists,
         struct mapping_params* mapping_params )
 {
-    /* Allocate memory for an array of index_search_params, one for each index
-     * probe */
+    /* Allocate an array of index_search_params for each index probe */
     *isp = malloc( sizeof( struct index_search_params ) * ists->length );
     
-    /* TODO for now, set the index search params equal to the recheck params */
     int i;
     for( i = 0; i < ists->length; i++ )
     {
         float min_match_penalty = 1;
         float max_penalty_spread = -1;
-        int length = ists->container[i].subseq_length;        
+        int ist_length = ists->container[i].subseq_length;        
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
 
-            min_match_penalty = -(int)(
-                mapping_params->metaparams->error_model_params[0]*length)-1;
+            min_match_penalty
+                = -(int)(mapping_params->metaparams->error_model_params[0]
+                        *ist_length)-1;
 
-            /* Let the mismatch spread be 1/2 the allowed mismatch rate (for
-             * now */
-            max_penalty_spread = (int)(
-                mapping_params->metaparams->error_model_params[0]*0.5*length)+1;
+            /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
+            max_penalty_spread
+                = (int)(mapping_params->metaparams->error_model_params[0]
+                        *0.5*ist_length)+1;
 
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
-            float expected_map_rate = 
-                mapping_params->metaparams->error_model_params[0];
-            
-            min_match_penalty 
-                = calc_min_match_penalty( 
-                    ists->container[i].fwd_penalties,
-                    ists->container[i].subseq_length,
-                    1 - expected_map_rate );
 
+            /* TODO - divide recheck min match penalty by ratio of index
+             * sequence length to read length - crude, but ok for now
+             * (conservative). */
+            min_match_penalty = mapping_params->recheck_min_match_penalty \
+                    * ((float)ist_length / mapping_params->total_read_length );
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
 

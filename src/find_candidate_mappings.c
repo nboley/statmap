@@ -1598,12 +1598,12 @@ find_candidate_mappings_for_read(
 {
     assert( NULL != error_model );
     int rv = -1;
-    
-    int rst_index;
-    for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
+
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ )
     {
         // reference to current read subtemplate
-        struct read_subtemplate* rst = r->subtemplates + rst_index;
+        struct read_subtemplate* rst = r->subtemplates + i;
 
         /* initialize the candidate mappings container for this read
          * subtemplate */
@@ -1621,7 +1621,7 @@ find_candidate_mappings_for_read(
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
-        update_pos_in_template( rst_mappings, rst_index );
+        update_pos_in_template( rst_mappings, i );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
@@ -1873,6 +1873,7 @@ find_candidate_mappings( void* params )
     enum bool only_collect_error_data = td->only_collect_error_data;
 
     struct mapping_metaparams* metaparams = td->metaparams;
+    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* END parameter 'recreation' */
 
@@ -1904,7 +1905,8 @@ find_candidate_mappings( void* params )
         }
 
         struct mapping_params* mapping_params = NULL;
-        init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
+        init_mapping_params_for_read( &mapping_params, r, metaparams,
+                error_model, reads_min_match_penalty );
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
@@ -2077,6 +2079,7 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->mpd_rds_db = mpd_rds_db;
     
     td_template->metaparams = metaparams;
+    td_template->reads_min_match_penalty = 0;
     td_template->error_data = error_data;
     td_template->error_model = error_model;
 
@@ -2195,7 +2198,22 @@ find_all_candidate_mappings(
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
         
-        /* TODO compute mapping metaparameters for this set of reads */
+        if( mapping_metaparams->error_model_type == ESTIMATED )
+        {
+            /* Compute the min match penalty for this block of reads that will
+             * map the desired percentage of reads given in metaparameters */
+            float reads_min_match_penalty
+                = compute_min_match_penalty_for_reads( rdb, error_model,
+                        mapping_metaparams->error_model_params[0] );
+
+            statmap_log( LOG_DEBUG, "Computed min_match_penalty %f for reads [%i, %i]",
+                    reads_min_match_penalty,
+                    td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
+                    td_template.max_readkey );
+
+            /* Save in the mapping metaparameters */
+            td_template.reads_min_match_penalty = reads_min_match_penalty;
+        }
 
         spawn_find_candidate_mappings_threads( &td_template );
         
