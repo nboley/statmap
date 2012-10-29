@@ -150,3 +150,15 @@ cmp_ints( const int* i1, const int* i2 )
 {
     return *i1 - *i2;
 }
+
+int
+cmp_floats( const float *f1, const float *f2 )
+{
+    if( (*f1 - *f2) < 0 )
+        return -1;
+
+    if( (*f1 - *f2) > 0 )
+        return 1;
+
+    return 0;
+}

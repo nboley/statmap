@@ -7,12 +7,14 @@
 
 #include "config.h"
 #include "log.h"
+#include "rawread.h"
 #include "read.h"
 #include "quality.h"
 #include "genome.h"
 #include "error_correction.h"
 #include "find_candidate_mappings.h"
 #include "statmap.h"
+#include "util.h"
 
 /*
  *  Code to estiamte error frequencies. Calls R.
@@ -340,11 +342,7 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
 {
     double mean = 0;
     int i;
-    for( i = 0; i < penalties_len; i++ )
-    {
-        /* we take [0][1] because this is a guaranteed mismatch,
-           but this is wrong when we move to using actual by base
-           mutation rates. */
+    for( i = 0; i < penalties_len; i++ ) {
         double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
         mean += mm_prb;
     }
@@ -430,6 +428,157 @@ filter_indexable_subtemplates(
     }
 
     return false;
+}
+
+enum bool
+check_sum_of_probabilities(
+        struct penalty_t* bp_penalties
+    )
+{
+    float sum = 0;
+    int i;
+    for( i = 0; i < 4; i++ )
+    {
+        sum += pow(10, bp_penalties->penalties[i] );
+    }
+
+    /* should be equal within a small range around 1.0 to account for rounding
+     * errors */
+    if( sum < (1.0 - ROUND_ERROR) || sum > (1.0 + ROUND_ERROR) ) {
+#if 0
+        statmap_log( LOG_FATAL,
+                "Sum of bp mutation probabilities (%f) is not within range [%f, %f]",
+                sum, 1.0 - ROUND_ERROR, 1.0 + ROUND_ERROR );
+#endif
+        ;
+    }
+
+    return true;
+}
+
+float
+sample_bp_penalties(
+        struct penalty_t* bp_penalties
+    )
+{
+    /* Check that the probabilities sum to 1 */
+    assert( check_sum_of_probabilities( bp_penalties ) );
+
+    /* Sample randomly from the bp mutation probabilities */
+    /* Break if the sum is greater than a random number in the range [0,1] */
+    double rand_val = ((double)rand() / (double)RAND_MAX);
+    float sum = 0;
+    int i;
+    for( i = 0; i < 4; i++ )
+    {
+        sum += pow(10, bp_penalties->penalties[i]);
+        if( sum > rand_val )
+            break;
+    }
+
+    /* return the randomly sampled probability */
+    return bp_penalties->penalties[i];
+}
+
+float
+compute_min_match_penalty_for_reads(
+        struct rawread_db_t* rdb,
+        struct error_model_t* error_model,
+        float quantile
+    )
+{
+    struct rawread_db_state saved_state
+        = save_rawread_db_state( rdb );
+
+    /* Sample from the next set of READS_STAT_UPDATE_STEP_SIZE reads */
+    readkey_t max_readkey = rdb->readkey + READS_STAT_UPDATE_STEP_SIZE;
+
+    int num_sample_prbs
+        = READS_STAT_UPDATE_STEP_SIZE * NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+    float* sample_prbs = calloc( num_sample_prbs, sizeof(float) );
+    int sample_prbs_index = 0;
+
+    struct read* r;
+    while( EOF != get_next_read_from_rawread_db(
+                rdb, &r, max_readkey ) )
+    {
+        struct penalty_array_t* penalty_arrays = malloc(
+                sizeof(struct penalty_array_t) * r->num_subtemplates );
+        int st_i;
+        for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
+        {
+            build_penalty_array( penalty_arrays + st_i,
+                                 r->subtemplates + st_i,
+                                 error_model );
+        }
+        free_read( r );
+
+        int sample_i;
+        for( sample_i = 0;
+             sample_i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+             sample_i++ )
+        {
+            float sample_prb = 0;
+
+            int bp_i;
+            for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
+            {
+                for( bp_i = 0; bp_i < penalty_arrays[st_i].length; bp_i++ )
+                {
+                    sample_prb += sample_bp_penalties(
+                            penalty_arrays[st_i].array + bp_i );
+                }
+            }
+
+            assert( sample_prb < 0 );
+            sample_prbs[sample_prbs_index++] = sample_prb;
+        }
+
+        /* cleanup memory */
+        for( st_i = 0; st_i < r->num_subtemplates; st_i++ ) {
+            free_penalty_array( penalty_arrays + st_i );
+        }
+        free( penalty_arrays );
+    }
+
+    restore_rawread_db_state( rdb, saved_state );
+
+    float min_match_penalty = 0;
+
+    if( sample_prbs_index == 0 ) {
+        /* we didn't process any reads - cleanup and return, leaving
+         * min_match_penalty set to 0 (invalid value) */
+        goto cleanup;
+    }
+
+    /* resize the sample_prbs array so it's the exact size of the number of
+     * sample probabilities (if there are fewer than
+     * READS_STAT_UPDATE_STEP_SIZE reads in a block, then they won't match and
+     * that will mess up the qsort. This happens naturally with small data sets
+     * that have less than the step size reads, or in the last set from a large
+     * data set.) */
+    num_sample_prbs = sample_prbs_index;
+    sample_prbs = realloc( sample_prbs, sizeof(float)*num_sample_prbs );
+
+    /* sort the mismatch_prbs and take the specified quantile */
+    qsort( sample_prbs, 
+           num_sample_prbs,
+           sizeof(float),
+           (int(*)(const void*, const void*))cmp_floats );
+
+    assert( quantile > 0.0 && quantile < 1.0 );
+    /* Since these are log prbs, and qsort sorts in ascending order, the
+     * indexes of the quantiles are reversed */
+    min_match_penalty = sample_prbs[(int)(num_sample_prbs*(1-quantile))];
+
+    /* Add fudge factor to account for rounding error */
+    min_match_penalty -= ROUND_ERROR;
+
+cleanup:
+    /* cleanup memory */
+    free( sample_prbs );
+
+    return min_match_penalty;
 }
 
 void

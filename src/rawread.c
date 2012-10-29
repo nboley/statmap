@@ -491,8 +491,8 @@ save_rawread_db_state(
 
 void
 restore_rawread_db_state(
-        struct rawread_db_state state,
-        struct rawread_db_t* rdb
+        struct rawread_db_t* rdb,
+        struct rawread_db_state state
     )
 {
     assert( rdb->mutex != NULL );

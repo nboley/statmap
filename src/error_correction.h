@@ -14,6 +14,9 @@
 #include "read.h"
 #include "genome.h"
 
+#define NUM_SAMPLES_FOR_MIN_PENALTY_COMP 10
+#define ROUND_ERROR 1e-6
+
 struct freqs_array {
     int max_qual_score;
     int max_position;
@@ -94,6 +97,13 @@ struct mapping_params {
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
+
+float
+compute_min_match_penalty_for_reads(
+        struct rawread_db_t* rdb,
+        struct error_model_t* error_model,
+        float quantile
+    );
 
 void
 init_mapping_params_for_read(

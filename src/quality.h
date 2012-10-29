@@ -49,10 +49,6 @@ struct penalty_t {
     float penalties[4];
 };
 
-/*
-   3d array of penalties:
-   length of read * ref bp * obs bp
- */
 struct penalty_array_t {
     int length;
     struct penalty_t* array;

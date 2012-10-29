@@ -153,10 +153,15 @@ struct rawread_db_state {
 };
 
 struct rawread_db_state
-save_rawread_db_state( struct rawread_db_t *rdb );
+save_rawread_db_state(
+        struct rawread_db_t *rdb
+    );
 
 void
-restore_rawread_db_state( struct rawread_db_state, struct rawread_db_t* rdb );
+restore_rawread_db_state(
+        struct rawread_db_t* rdb,
+        struct rawread_db_state
+    );
 
 /**************** END Raw Read DB **********************/
 
