@@ -10,6 +10,8 @@
 #include <limits.h>
 #include <math.h>
 #include <float.h>
+#include <time.h>
+#include <unistd.h> // for sysconf
 
 #include "statmap.h"
 #include "log.h"
@@ -1526,7 +1528,13 @@ find_candidate_mappings_for_read_subtemplate(
     statmap_log( LOG_DEBUG, "min_match_penalty %f",
             index_search_params[0].min_match_penalty );
 
-    clock_t start = clock();
+    /* Log CPU time used by the current thread */
+    int err;
+    struct timespec start, stop;
+    double elapsed;
+
+    assert( sysconf(_POSIX_THREAD_CPUTIME) );
+    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
 
     search_index_for_indexable_subtemplates(
             ists,
@@ -1536,9 +1544,12 @@ find_candidate_mappings_for_read_subtemplate(
             only_collect_error_data
         );
 
-    clock_t stop = clock();
+    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
 
-    statmap_log( LOG_DEBUG, "search_time %f", ((double)(stop-start)) / CLOCKS_PER_SEC );
+    elapsed = (stop.tv_sec - start.tv_sec);
+    elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+    statmap_log(LOG_DEBUG, "search_time %f", elapsed);
 
     free( index_search_params );
 
@@ -1908,6 +1919,14 @@ find_candidate_mappings( void* params )
         // DEBUG
         statmap_log( LOG_DEBUG, "read_id %i", r->read_id );
 
+        /* Log CPU time used by the current thread in processing this candidate mapping */
+        int err;
+        struct timespec start, stop;
+        double elapsed;
+
+        assert( sysconf(_POSIX_THREAD_CPUTIME) );
+        err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
@@ -1985,7 +2004,12 @@ find_candidate_mappings( void* params )
         }
 
         curr_read_index += 1;
+     
+        err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
+        elapsed = (stop.tv_sec - start.tv_sec);
+        elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
 
+        statmap_log(LOG_DEBUG, "find_candidate_mappings_time %f", elapsed);
         statmap_log( LOG_DEBUG, "FINISHED mapping %i", r->read_id );
 
         /* cleanup memory */
