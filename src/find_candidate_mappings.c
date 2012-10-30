@@ -1525,9 +1525,6 @@ find_candidate_mappings_for_read_subtemplate(
     struct index_search_params* index_search_params = NULL;
     init_index_search_params( &index_search_params, ists, mapping_params );
 
-    statmap_log( LOG_DEBUG, "min_match_penalty %f",
-            index_search_params[0].min_match_penalty );
-
     /* Log CPU time used by the current thread */
     int err;
     struct timespec start, stop;
@@ -1918,6 +1915,7 @@ find_candidate_mappings( void* params )
     {
         // DEBUG
         statmap_log( LOG_DEBUG, "read_id %i", r->read_id );
+        statmap_log( LOG_DEBUG, "block_min_match_penalty %f", reads_min_match_penalty);
 
         /* Log CPU time used by the current thread in processing this candidate mapping */
         int err;
@@ -2010,7 +2008,7 @@ find_candidate_mappings( void* params )
         elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
 
         statmap_log(LOG_DEBUG, "find_candidate_mappings_time %f", elapsed);
-        statmap_log( LOG_DEBUG, "FINISHED mapping %i", r->read_id );
+        statmap_log( LOG_DEBUG, "end read_id %i", r->read_id );
 
         /* cleanup memory */
         free_mapping_params( mapping_params );
