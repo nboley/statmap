@@ -129,6 +129,15 @@ log_level_to_string( enum LOG_LEVEL log_level )
 void
 statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
 {
+    /* Build timestamp string */
+    time_t rawtime;
+    time( &rawtime );
+    struct tm* timeinfo;
+    timeinfo = localtime( &rawtime );
+
+    char timestamp[100];
+    strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S", timeinfo );
+
     /* Build the log message format string */
     char log_msg[1024];
     va_list args;
@@ -137,11 +146,11 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     va_end(args);
 
     /* Get the thread id from the kernel */
-    pid_t tid = (pid_t) syscall(SYS_gettid);
+    pid_t thread_id = (pid_t) syscall(SYS_gettid);
 
     /* Build the log line to output (prepends thread_id, log level) */
     char log_line[1024];
-    sprintf( log_line, "[%d] %-10s: %s\n", tid,
+    sprintf( log_line, "[%s] [%d] %-10s: %s\n", timestamp, thread_id,
              log_level_to_string(log_level), log_msg );
 
     /* Print the message to the log file (and stderr if non-trivial) */
