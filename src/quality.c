@@ -130,6 +130,12 @@ error_prb(
     ref = toupper(ref);
     obs = toupper(obs);
 
+    /* normalize N's in the read sequence (ref) to A's
+       (they will be properly considered in recheck_penalty).
+       Otherwise, we cannot compute the correct probability distribution for
+       this base. */
+    if( ref == 'N' ) ref = 'A';
+
     switch ( error_model->error_model_type ) 
     {
     case MISMATCH:
