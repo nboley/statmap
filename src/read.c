@@ -293,7 +293,9 @@ init_indexable_subtemplate(
         int subseq_offset,
 
         struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        struct penalty_array_t* rev_penalty_array,
+
+        float perfect_match_penalty
     )
 {
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
@@ -312,6 +314,8 @@ init_indexable_subtemplate(
      * plus the length of the offset subtracted from the total read length. */
     (*ist)->rev_penalties = rev_penalty_array->array
         + ( rst->length - (subseq_offset + subseq_length));
+
+    (*ist)->perfect_match_penalty = perfect_match_penalty;
 }
 
 void

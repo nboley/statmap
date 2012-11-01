@@ -95,6 +95,7 @@ struct mapping_params {
     struct penalty_array_t** rev_penalty_arrays;
     
     int total_read_length;
+    float perfect_match_penalty;
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
@@ -106,20 +107,19 @@ compute_min_match_penalty_for_reads(
         float quantile
     );
 
-void
+struct mapping_params*
 init_mapping_params_for_read(
-        struct mapping_params** p,
         struct read* r,        
         struct mapping_metaparams* metaparams,
         struct error_model_t* error_model,
         float reads_min_match_penalty
     );
 
-void
+struct index_search_params*
 init_index_search_params(
-        struct index_search_params** isp,
         struct indexable_subtemplates* ists,
-        struct mapping_params* mapping_params );
+        struct mapping_params* mapping_params
+    );
 
 void
 free_mapping_params( struct mapping_params* p );

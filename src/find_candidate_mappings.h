@@ -28,7 +28,7 @@ struct single_map_thread_data {
     readkey_t max_readkey;
     
     struct mapped_reads_db* mpd_rds_db;
-
+    
     struct mapping_metaparams* metaparams;    
     float reads_min_match_penalty;
     struct error_model_t* error_model;
@@ -58,3 +58,10 @@ find_all_candidate_mappings(
         struct error_model_t* error_model
     );
 
+float
+subseq_penalty(
+        struct read_subtemplate* rst,
+        int subseq_offset,
+        int subseq_length,
+        struct penalty_array_t* penalties
+    );

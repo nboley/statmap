@@ -30,16 +30,19 @@
 float
 subseq_penalty(
         struct read_subtemplate* rst,
-        int offset,
-        int subseq_len,
-        struct penalty_array_t* penalty_array
+        int subseq_offset,
+        int subseq_length,
+        struct penalty_array_t* penalties
     )
 {
-    float penalty = 0;
+    assert( subseq_offset + subseq_length <= rst->length );
 
+    float penalty = 0;
     /* loop over subsequence */
     int pos;
-    for( pos = offset; pos < subseq_len; pos++ )
+    for( pos = subseq_offset;
+         pos < subseq_offset + subseq_length; 
+         pos++ )
     {
         int bp = rst->char_seq[pos];
 
@@ -52,7 +55,7 @@ subseq_penalty(
              * match would then have the best penalty (considering what we know
              * about error rates in positions, for the error scores, etc. from
              * the error model)? */
-            penalty += penalty_array->array[pos].penalties[bp_code(bp)];
+            penalty += penalties->array[pos].penalties[bp_code(bp)];
         }
     }
 
@@ -142,9 +145,14 @@ build_indexable_subtemplate(
             );
     }
 
+    /* Get the penalty of a perfect match for the sequence chosen to be the
+       index probe */
+    float perfect_match_penalty = subseq_penalty( rst, subseq_offset,
+        subseq_length, fwd_penalty_array );
+
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
-            fwd_penalty_array, rev_penalty_array );
+            fwd_penalty_array, rev_penalty_array, perfect_match_penalty );
 
     return ist;
 }
@@ -1518,12 +1526,12 @@ find_candidate_mappings_for_read_subtemplate(
     
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
-    mapped_locations** search_results = malloc(
-            sizeof(mapped_locations*) * search_results_length );
+    mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
+        search_results_length);
 
     /* initialize search parameters for the index probes */
-    struct index_search_params* index_search_params = NULL;
-    init_index_search_params( &index_search_params, ists, mapping_params );
+    struct index_search_params* index_search_params
+        = init_index_search_params(ists, mapping_params);
 
     /* Log CPU time used by the current thread */
     int err;
@@ -1933,9 +1941,9 @@ find_candidate_mappings( void* params )
             statmap_log( LOG_INFO, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
         }
 
-        struct mapping_params* mapping_params = NULL;
-        init_mapping_params_for_read( &mapping_params, r, metaparams,
-                error_model, reads_min_match_penalty );
+        struct mapping_params* mapping_params
+            = init_mapping_params_for_read( r, metaparams, error_model, 
+                reads_min_match_penalty );
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )

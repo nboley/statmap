@@ -597,40 +597,36 @@ cleanup:
     return min_match_penalty;
 }
 
-void
+struct mapping_params*
 init_mapping_params_for_read(
-        struct mapping_params** p,
         struct read* r,        
         struct mapping_metaparams* metaparams,
         struct error_model_t* error_model,
         float reads_min_match_penalty
     )
 {
-    *p = malloc( sizeof( struct mapping_params ));
+    struct mapping_params* p = malloc(sizeof(struct mapping_params));
 
-    (*p)->metaparams = metaparams;
+    p->metaparams = metaparams;
     
     /* build the penalty arrays */
-    (*p)->num_penalty_arrays = r->num_subtemplates;
+    p->num_penalty_arrays = r->num_subtemplates;
     
-    (*p)->fwd_penalty_arrays = calloc( 
-        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
-    (*p)->rev_penalty_arrays = calloc( 
-        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
+    p->fwd_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), p->num_penalty_arrays );
+    p->rev_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), p->num_penalty_arrays );
     
     int i;
-    for( i = 0; i < (*p)->num_penalty_arrays; i++ )
+    for( i = 0; i < p->num_penalty_arrays; i++ )
     {
-        (*p)->fwd_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
-        build_penalty_array( (*p)->fwd_penalty_arrays[i],
-                             r->subtemplates + i, 
-                             error_model );
-        
-        (*p)->rev_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
-        build_reverse_penalty_array( 
-            (*p)->rev_penalty_arrays[i], 
-            r->subtemplates + i,
+        p->fwd_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
+        build_penalty_array( p->fwd_penalty_arrays[i], r->subtemplates + i, 
             error_model );
+        
+        p->rev_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
+        build_reverse_penalty_array( p->rev_penalty_arrays[i], 
+            r->subtemplates + i, error_model );
     }
 
     /* calculate the total read length. This is just the sum of the read 
@@ -640,7 +636,17 @@ init_mapping_params_for_read(
     {
         total_read_len += r->subtemplates[i].length;
     }
-    (*p)->total_read_length = total_read_len;
+    p->total_read_length = total_read_len;
+
+    /* calculate the penalty of a perfect match to the genome. We use this to
+       determine the min match penalty for index probes based on the read min 
+       match penalty. */
+    p->perfect_match_penalty = 0;
+    for( i = 0; i < r->num_subtemplates; i++ )
+    {
+        p->perfect_match_penalty += subseq_penalty(r->subtemplates + i, 0,
+            r->subtemplates[i].length, p->fwd_penalty_arrays[i]);
+    }
     
     /* now, calcualte the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -649,66 +655,73 @@ init_mapping_params_for_read(
         int max_mm_spread = (int)(
             metaparams->error_model_params[1]*total_read_len)+1;
         
-        (*p)->recheck_min_match_penalty = max_num_mm;
-        (*p)->recheck_max_penalty_spread = max_mm_spread;
+        p->recheck_min_match_penalty = max_num_mm;
+        p->recheck_max_penalty_spread = max_mm_spread;
     } 
     /* if the error model is estiamted, then just pass the meta params
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
 
-        (*p)->recheck_min_match_penalty = reads_min_match_penalty;
-        (*p)->recheck_max_penalty_spread
+        p->recheck_min_match_penalty = reads_min_match_penalty;
+        p->recheck_max_penalty_spread
             = -log10(1 - metaparams->error_model_params[0]);
-        assert( (*p)->recheck_max_penalty_spread >= 0 );
-        //(*p)->recheck_max_penalty_spread = 1.3;
+        assert( p->recheck_max_penalty_spread >= 0 );
+        //p->recheck_max_penalty_spread = 1.3;
 
         if( _assay_type == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
-            (*p)->recheck_min_match_penalty +=
-                (MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
+            p->recheck_min_match_penalty = MAX(
+                p->recheck_min_match_penalty,
+                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
         }
     }
 
-    return;
+    return p;
 }
 
-void
+struct index_search_params*
 init_index_search_params(
-        struct index_search_params** isp,
         struct indexable_subtemplates* ists,
         struct mapping_params* mapping_params )
 {
-    /* Allocate an array of index_search_params for each index probe */
-    *isp = malloc( sizeof( struct index_search_params ) * ists->length );
-    
+    /* Allocate an array of index_search_params structs, one for each index probe */
+    struct index_search_params *isp
+        = malloc(sizeof(struct index_search_params)*ists->length);
+
     int i;
     for( i = 0; i < ists->length; i++ )
     {
         float min_match_penalty = 1;
         float max_penalty_spread = -1;
-        int ist_length = ists->container[i].subseq_length;        
+        int ist_length = ists->container[i].subseq_length;
+
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
+            /* The first metaparam is the expected rate of mapping (assuming 
+            the read came from the genome) */
+            float expected_map_rate
+                = mapping_params->metaparams->error_model_params[0];
 
-            min_match_penalty
-                = -(int)(mapping_params->metaparams->error_model_params[0]
-                        *ist_length)-1;
-
+            min_match_penalty = -(int)(expected_map_rate*ist_length)-1;
             /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
-            max_penalty_spread
-                = (int)(mapping_params->metaparams->error_model_params[0]
-                        *0.5*ist_length)+1;
-
+            max_penalty_spread = (int)(expected_map_rate*0.5*ist_length)+1;
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
-            /* TODO - divide recheck min match penalty by ratio of index
-             * sequence length to read length - crude, but ok for now
-             * (conservative). */
+            /*The min_match_penalty for the full read was computed for the
+            current set of mapping reads. We use the ratio of the index probe
+            perfect match penalty to the read's perfect match penalty to
+            determine the min match penalty to set based on the read's min
+            match penalty.*/
+
             min_match_penalty = mapping_params->recheck_min_match_penalty \
-                    * ((float)ist_length / mapping_params->total_read_length );
+                    * (ists->container[i].perfect_match_penalty \
+                    /  mapping_params->perfect_match_penalty);
+
+            statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
+
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
 
@@ -716,11 +729,11 @@ init_index_search_params(
         assert( min_match_penalty <= 0 );
         assert( max_penalty_spread >= 0 );
         
-        (*isp)[i].min_match_penalty = min_match_penalty;
-        (*isp)[i].max_penalty_spread = max_penalty_spread;
+        isp[i].min_match_penalty = min_match_penalty;
+        isp[i].max_penalty_spread = max_penalty_spread;
     }
     
-    return;
+    return isp;
 }
 
 void
