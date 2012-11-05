@@ -95,10 +95,24 @@ struct mapping_params {
     struct penalty_array_t** rev_penalty_arrays;
     
     int total_read_length;
-    float perfect_match_penalty;
+    float read_expected_value;
+    
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
+
+float
+expected_value_of_rst_subsequence(
+        struct penalty_array_t* rst_pens,
+        int subseq_start,
+        int subseq_length
+    );
+
+float
+expected_value_of_rst(
+        struct read_subtemplate* rst,
+        struct penalty_array_t* rst_pens
+    );
 
 float
 compute_min_match_penalty_for_reads(

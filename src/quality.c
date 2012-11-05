@@ -151,7 +151,6 @@ error_prb(
     }
 }
 
-
 /**** Penalty array functions ****/
 
 void

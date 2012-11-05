@@ -145,14 +145,9 @@ build_indexable_subtemplate(
             );
     }
 
-    /* Get the penalty of a perfect match for the sequence chosen to be the
-       index probe */
-    float perfect_match_penalty = subseq_penalty( rst, subseq_offset,
-        subseq_length, fwd_penalty_array );
-
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
-            fwd_penalty_array, rev_penalty_array, perfect_match_penalty );
+            fwd_penalty_array, rev_penalty_array );
 
     return ist;
 }

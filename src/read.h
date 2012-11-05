@@ -94,8 +94,8 @@ struct indexable_subtemplate
     struct penalty_t* fwd_penalties;
     struct penalty_t* rev_penalties;
 
-    /* this is the penalty of this read mapping perfectly to the genome. */
-    float perfect_match_penalty;
+    /* expected value of this index probe */
+    float expected_value;
 };
 
 struct indexable_subtemplates
@@ -113,9 +113,7 @@ init_indexable_subtemplate(
         int subseq_offset,
 
         struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array,
-
-        float perfect_match_penalty
+        struct penalty_array_t* rev_penalty_array
     );
 
 void

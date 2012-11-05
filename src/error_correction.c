@@ -452,6 +452,40 @@ filter_indexable_subtemplates(
     return false;
 }
 
+float
+expected_value_of_rst_subsequence(
+        struct penalty_array_t* rst_pens,
+        int subseq_start,
+        int subseq_length
+    )
+{
+    float seq_ev = 0;
+    int i, j;
+    for(i = subseq_start; i < subseq_start + subseq_length; i++)
+    {
+        /* Expected value for this basepair */
+        float bp_ev = 0;
+        for(j = 0; j < 4; j++)
+        {
+            float bp_logprb = rst_pens->array[i].penalties[j];
+            float bp_prb = pow(10, bp_logprb);
+            bp_ev += bp_logprb * bp_prb;
+        }
+
+        seq_ev += bp_ev;
+    }
+    return seq_ev;
+}
+
+float
+expected_value_of_rst(
+        struct read_subtemplate* rst,
+        struct penalty_array_t* rst_pens
+    )
+{
+    return expected_value_of_rst_subsequence(rst_pens, 0, rst->length);
+}
+
 enum bool
 check_sum_of_probabilities(
         struct penalty_t* bp_penalties
@@ -641,14 +675,14 @@ init_mapping_params_for_read(
     }
     p->total_read_length = total_read_len;
 
-    /* calculate the penalty of a perfect match to the genome. We use this to
-       determine the min match penalty for index probes based on the read min 
-       match penalty. */
-    p->perfect_match_penalty = 0;
+    /* compute the expected value over the read. We use this to determine the
+       scaling factor to get the min match penalty for an index probe from the
+       min match penalty for the entire read. */
+    p->read_expected_value = 0;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
-        p->perfect_match_penalty += subseq_penalty(r->subtemplates + i, 0,
-            r->subtemplates[i].length, p->fwd_penalty_arrays[i]);
+        p->read_expected_value += expected_value_of_rst(r->subtemplates + i,
+            p->fwd_penalty_arrays[i]);
     }
     
     /* now, calcualte the model parameters */
@@ -699,7 +733,8 @@ init_index_search_params(
     {
         float min_match_penalty = 1;
         float max_penalty_spread = -1;
-        int ist_length = ists->container[i].subseq_length;
+
+        struct indexable_subtemplate *ist = ists->container + i;
 
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
             /* The first metaparam is the expected rate of mapping (assuming 
@@ -707,24 +742,20 @@ init_index_search_params(
             float expected_map_rate
                 = mapping_params->metaparams->error_model_params[0];
 
-            min_match_penalty = -(int)(expected_map_rate*ist_length)-1;
+            min_match_penalty = -(int)(expected_map_rate*ist->subseq_length)-1;
             /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
-            max_penalty_spread = (int)(expected_map_rate*0.5*ist_length)+1;
+            max_penalty_spread = (int)(expected_map_rate*0.5*ist->subseq_length)+1;
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
-            /*The min_match_penalty for the full read was computed for the
-            current set of mapping reads. We use the ratio of the index probe
-            perfect match penalty to the read's perfect match penalty to
-            determine the min match penalty to set based on the read's min
-            match penalty.*/
+            float scaling_factor 
+                = ist->expected_value / mapping_params->read_expected_value;
+            min_match_penalty 
+                = scaling_factor * mapping_params->recheck_min_match_penalty;
 
-            min_match_penalty = mapping_params->recheck_min_match_penalty \
-                    * (ists->container[i].perfect_match_penalty \
-                    /  mapping_params->perfect_match_penalty);
-
+            // DEBUG
             statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
-
+                
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
 
