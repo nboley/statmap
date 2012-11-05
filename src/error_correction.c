@@ -296,18 +296,21 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
-get_min_penalty( struct penalty_t* penalty_array )
+get_mismatch_penalty( struct penalty_t* penalty_array )
 {
-    double min_penalty = 0;
+    double mismatch_penalty = 0;
 
+    /* We can safely assume the penalty for a match (in log space) is > any
+    penalty for a mismatch. */
     int i;
     for( i = 0; i < 4; i++ )
     {
-        min_penalty = MIN( penalty_array->penalties[i], min_penalty );
+        mismatch_penalty = MIN( penalty_array->penalties[i], mismatch_penalty );
     }
 
-    return min_penalty;
+    return mismatch_penalty;
 }
+
 
 double
 calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
@@ -326,7 +329,7 @@ calc_min_match_penalty( struct penalty_t* penalties, int penalties_len,
          * the four penalty values (since penalties are negative, this will be
          * the "highest" penalty score. This is wrong when we move to using
          * actual by base mutation rates. */
-        double penalty = get_min_penalty( penalties + i );
+        double penalty = get_mismatch_penalty( penalties + i );
         double mm_prb = pow( 10, penalty );
         mean += mm_prb*penalty;
         mean += (1-mm_prb)*log10((1-mm_prb));
@@ -345,7 +348,7 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
     double mean = 0;
     int i;
     for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
+        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
         mean += mm_prb;
     }
 
@@ -358,7 +361,7 @@ calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
     double mean = 0;
     int i;
     for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
+        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
         mean += mm_prb;
     }
 
