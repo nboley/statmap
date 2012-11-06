@@ -177,7 +177,7 @@ void
 predict_freqs( struct error_data_t* data, int record_index, 
                struct freqs_array* predicted_freqs )
 {
-    statmap_log( LOG_DEBUG, "Predicting the error models for readkeys %i - %i.",
+    statmap_log(LOG_INFO, "Predicting the error models for readkeys %i - %i.",
             data->records[record_index]->min_readkey,
             data->records[record_index]->max_readkey
         );
@@ -352,7 +352,9 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
         mean += mm_prb;
     }
 
+    #if PROFILE_CANDIDATE_MAPPING
     statmap_log(LOG_DEBUG, "penalties_mean %f", mean);
+    #endif
 }
 
 int
@@ -752,9 +754,11 @@ init_index_search_params(
                 = ist->expected_value / mapping_params->read_expected_value;
             min_match_penalty 
                 = scaling_factor * mapping_params->recheck_min_match_penalty;
+            //min_match_penalty = mapping_params->recheck_min_match_penalty;
 
-            // DEBUG
+            #if PROFILE_CANDIDATE_MAPPING
             statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
+            #endif
                 
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    

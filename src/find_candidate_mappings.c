@@ -1528,6 +1528,7 @@ find_candidate_mappings_for_read_subtemplate(
     struct index_search_params* index_search_params
         = init_index_search_params(ists, mapping_params);
 
+    #if PROFILE_CANDIDATE_MAPPING
     /* Log CPU time used by the current thread */
     int err;
     struct timespec start, stop;
@@ -1535,6 +1536,7 @@ find_candidate_mappings_for_read_subtemplate(
 
     assert( sysconf(_POSIX_THREAD_CPUTIME) );
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+    #endif
 
     search_index_for_indexable_subtemplates(
             ists,
@@ -1544,12 +1546,14 @@ find_candidate_mappings_for_read_subtemplate(
             only_collect_error_data
         );
 
+    #if PROFILE_CANDIDATE_MAPPING
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
 
     elapsed = (stop.tv_sec - start.tv_sec);
     elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
 
-    statmap_log(LOG_DEBUG, "search_time %f", elapsed);
+    statmap_log(LOG_DEBUG, "index_search_time %f", elapsed);
+    #endif
 
     free( index_search_params );
 
@@ -1916,9 +1920,8 @@ find_candidate_mappings( void* params )
                rdb, &r, td->max_readkey )  
          ) 
     {
-        // DEBUG
-        statmap_log( LOG_DEBUG, "read_id %i", r->read_id );
-        statmap_log( LOG_DEBUG, "block_min_match_penalty %f", reads_min_match_penalty);
+        #if PROFILE_CANDIDATE_MAPPING
+        statmap_log( LOG_DEBUG, "begin read_id %i", r->read_id );
 
         /* Log CPU time used by the current thread in processing this candidate mapping */
         int err;
@@ -1927,6 +1930,7 @@ find_candidate_mappings( void* params )
 
         assert( sysconf(_POSIX_THREAD_CPUTIME) );
         err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+        #endif
 
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
@@ -2006,12 +2010,14 @@ find_candidate_mappings( void* params )
 
         curr_read_index += 1;
      
+        #if PROFILE_CANDIDATE_MAPPING
         err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
         elapsed = (stop.tv_sec - start.tv_sec);
         elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
 
         statmap_log(LOG_DEBUG, "find_candidate_mappings_time %f", elapsed);
-        statmap_log( LOG_DEBUG, "end read_id %i", r->read_id );
+        statmap_log(LOG_DEBUG, "end read_id %i", r->read_id);
+        #endif
 
         /* cleanup memory */
         free_mapping_params( mapping_params );
