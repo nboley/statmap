@@ -5,15 +5,27 @@
 
 #define TRACE_MAGIC_NUMBER "BTRACE"
 
-/* Trace spinlock granularity */
-/* How many basepairs are grouped together for a single lock */
-#define TM_GRAN 5000
-
 #include "genome.h"
 
 // define this to use mutexes, otherwise use spinlocks
 // #define USE_MUTEX
 #define USE_SPINLOCK
+
+struct trace_segment_t {
+    int length;
+    TRACE_TYPE* data;
+
+    int real_track_id;
+    int real_chr_id;
+    int real_start;
+};
+
+struct trace_segments_t {
+    int num_segments;
+    struct trace_segment_t* segments;
+    pthread_mutex_t* read_lock;
+    pthread_mutex_t* write_lock;
+};
 
 struct trace_t {
     int num_tracks;
@@ -22,30 +34,16 @@ struct trace_t {
     int num_chrs;
     char** chr_names;
     unsigned int* chr_lengths;
-    
-    /* num_traces X num_chrs matrix */
-    TRACE_TYPE*** traces;
 
-    #ifdef USE_MUTEX
-    pthread_mutex_t*** locks;
-    #else
-    pthread_spinlock_t*** locks;
-    #endif
+    // num_tracks x num_chrs   
+    struct trace_segments_t** segments;
 };
-
-/* build an mmapped array to store the density */
-TRACE_TYPE*
-init_trace_array( size_t size );
 
 void
 init_trace( struct genome_data* genome,
             struct trace_t** traces,
             const int num_traces,
             char** track_names );
-
-void
-copy_trace_data( struct trace_t* traces,
-                 struct trace_t* original );
 
 void
 copy_trace( struct trace_t** traces,

@@ -17,89 +17,99 @@
 #include "genome.h"
 #include "util.h"
 
-/* get the correct mutex index to access the specified position */
-/* this is slow - it should probably be done as a macro in hot areas */
-int
-get_mutex_index( unsigned int bp)
+void
+init_trace_segment_t(
+        struct trace_segment_t *ts,
+        int length,
+        int real_track_id,
+        int real_chr_id,
+        int real_start
+    )
 {
-    return bp/TM_GRAN;
-}
+    ts->length = length;
 
-/* build a array to store the density */
-TRACE_TYPE*
-init_trace_array( size_t size  )
-{
-    TRACE_TYPE* chr_trace = malloc(sizeof(TRACE_TYPE)*size);
-    if( NULL == chr_trace )
-    {
-        fprintf(stderr, "Can not allocate '%zu' bytes for a trace,\n", sizeof(TRACE_TYPE)*size );
-        exit( -1 );
-    }
-    
-    return chr_trace;
+    ts->data = malloc(sizeof(TRACE_TYPE)*length);
+    assert(ts->data != NULL);
+    memset(ts->data, 0, sizeof(TRACE_TYPE)*length);
+
+    ts->real_track_id = real_track_id;
+    ts->real_chr_id = real_chr_id;
+    ts->real_start = real_start;
 }
 
 void
-init_trace_locks( struct trace_t* trace )
+free_trace_segment_t(
+        struct trace_segment_t* ts
+    )
 {
-    /* allocate space for the locks */
-    #ifdef USE_MUTEX
-    trace->locks = malloc(sizeof(pthread_mutex_t**)*trace->num_tracks);
-    #else
-    trace->locks = malloc(sizeof(pthread_spinlock_t**)*trace->num_tracks);
-    #endif
-    
-    assert( trace->locks != NULL );
-    
-    /* Allocate space for the pointers to the chr's individual traces and the locks */
-    int i;
-    for( i = 0; i < trace->num_tracks; i++ )
-    {
-        /* Store the trace mutex pointers */
-        #ifdef USE_MUTEX
-        trace->locks[i] = malloc( trace->num_chrs*sizeof(pthread_mutex_t*) );
-        #else
-        trace->locks[i] = malloc( trace->num_chrs*sizeof(pthread_spinlock_t*) );
-        #endif        
-        assert( trace->locks[i] != NULL );
-        
-        /* initialize each chr */
-        int j;
-        for( j = 0; j < trace->num_chrs; j++ )
-        {            
-            /* initialize the locks */
-            int locks_len = trace->chr_lengths[j]/TM_GRAN;
-            if( trace->chr_lengths[j] % TM_GRAN > 0 )
-                locks_len += 1;
-            
-            #ifdef USE_MUTEX
-            trace->locks[i][j] = malloc( locks_len*sizeof(pthread_mutex_t) );
-            #else
-            trace->locks[i][j] = malloc( locks_len*sizeof(pthread_spinlock_t) );
-            #endif        
-            
-            int k;
-            for( k = 0; k < locks_len; k++ )
-            {
-                #ifdef USE_MUTEX
-                int error = pthread_mutex_init( trace->locks[i][j] + k, 0 );
-                #else
-                int error = pthread_spin_init( trace->locks[i][j] + k, 0 );
-                #endif        
-                
-                
-                if( error != 0 )
-                {
-                    perror( "Failed to initialize lock in init_trace" );
-                    exit( -1 );
-                }
-            }
-        }
-    }
-
+    /* free memory allocated in the trace_segment_t */
+    free(ts->data);
 }
 
-/* Build mmapped arrays for all of the chrs ***/
+void
+add_trace_segment_to_trace_segments(
+        struct trace_segments_t* segs,
+        int real_track_id,
+        int real_chr_id,
+        int real_start,
+        int length
+    )
+{
+    segs->num_segments++;
+    segs->segments = realloc(segs->segments,
+        sizeof(struct trace_segment_t)*segs->num_segments);
+    assert(segs->segments != NULL);
+
+    /* initialize the new trace segment with the given values */
+    init_trace_segment_t(&(segs->segments[segs->num_segments-1]), length,
+        real_track_id, real_chr_id, real_start);
+}
+
+void
+init_trace_segments_t(
+        struct trace_segments_t *segs
+    )
+{
+    /* segs is already allocated as part of a contiguous array */
+    assert(segs != NULL);
+
+    segs->num_segments = 0;
+    segs->segments = NULL;
+
+    int rv;
+    rv = pthread_mutex_init(segs->read_lock, NULL);
+    assert(rv == 0);
+    rv = pthread_mutex_init(segs->write_lock, NULL);
+    assert(rv == 0);
+
+    return;
+}
+
+void
+free_trace_segments_t(
+    struct trace_segments_t* tsegs
+)
+{
+    /* free memory allocated for the trace segments */
+    int i;
+    for(i=0; i < tsegs->num_segments; tsegs++)
+    {
+        free_trace_segment_t(tsegs->segments + i);
+    }
+    free(tsegs->segments);
+
+    /* free the locks */
+    int rv;
+
+    rv = pthread_mutex_destroy(tsegs->read_lock);
+    assert(rv == 0);
+    free((void*)tsegs->read_lock);
+
+    rv = pthread_mutex_destroy(tsegs->write_lock);
+    assert(rv == 0);
+    free((void*)tsegs->write_lock);
+}
+
 void
 init_trace( struct genome_data* genome,
             struct trace_t** traces,
@@ -116,72 +126,47 @@ init_trace( struct genome_data* genome,
     (*traces)->track_names = malloc( sizeof(char*)*num_tracks );
     for( i = 0; i < num_tracks; i++ )
     {
-        (*traces)->track_names[i] = malloc( (strlen(track_names[i])+1)*sizeof(char) );
+        (*traces)->track_names[i]
+            = malloc( (strlen(track_names[i])+1)*sizeof(char) );
         strcpy( (*traces)->track_names[i], track_names[i] );
     }
     
-    (*traces)->traces = malloc(sizeof(TRACE_TYPE**)*num_tracks);
-    assert( (*traces)->traces != NULL );
+    /* Allocate pointers to lists of segments for each track */
+    (*traces)->segments = malloc(sizeof(struct trace_segments_t*)*num_tracks);
+    assert( (*traces)->segments != NULL );
 
     /* set the number of chrs */
     (*traces)->num_chrs = genome->num_chrs;
     (*traces)->chr_lengths = malloc(sizeof(unsigned int)*genome->num_chrs);
     (*traces)->chr_names = malloc(sizeof(char*)*genome->num_chrs);
     assert( (*traces)->chr_lengths != NULL );
+    assert( (*traces)->chr_names != NULL );
 
     for( i = 0; i < (*traces)->num_chrs; i++ )
     {
-        /* initialize the trace length, in bps */
         (*traces)->chr_lengths[i] = genome->chr_lens[i];
-        (*traces)->chr_names[i] = malloc( (strlen(genome->chr_names[i])+1)*sizeof(char) );
+        (*traces)->chr_names[i]
+            = malloc( (strlen(genome->chr_names[i])+1)*sizeof(char) );
         strcpy( (*traces)->chr_names[i], genome->chr_names[i] );
-        
     }
     
-    /* Allocate space for the pointers to the chr's individual traces and the locks */
+    /* Allocate space for the pointers to the chr's individual traces */
     for( i = 0; i < num_tracks; i++ )
     {
         /* Store the pointers for the chrs */
-        (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE*) );
-        assert( (*traces)->traces[i] != NULL );
+        (*traces)->segments[i]
+            = malloc( (*traces)->num_chrs*sizeof(struct trace_segments_t) );
+        assert( (*traces)->segments[i] != NULL );
         
         /* initialize each chr */
         int j;
         for( j = 0; j < (*traces)->num_chrs; j++ )
-        {            
-            /* initialize the forward trace */
-            (*traces)->traces[i][j] = init_trace_array( (*traces)->chr_lengths[j] );
-            
-            assert( (*traces)->traces[i][j] != NULL );
-            memset( (*traces)->traces[i][j], 0, 
-                    sizeof(TRACE_TYPE)*(*traces)->chr_lengths[j] );            
-        }
-    }
-    
-    init_trace_locks( *traces );
-    
-    return;
-}
-
-void
-copy_trace_data( struct trace_t* traces,
-                 struct trace_t* original )
-{
-    assert( original->num_tracks == traces->num_tracks );
-    int i;
-    for( i = 0; i < original->num_tracks; i++ )
-    {
-        /* Store the pointers for the chrs */
-        assert( original->num_chrs == traces->num_chrs );
-        
-        /* initialize each chr */
-        int j;
-        for( j = 0; j < traces->num_chrs; j++ )
-        {            
-            assert( traces->chr_lengths[j] == original->chr_lengths[j] );
-            
-            memcpy( traces->traces[i][j], original->traces[i][j],
-                    sizeof(TRACE_TYPE)*(traces->chr_lengths[j])   );
+        {
+            /* initialize the trace segments object for each chr */
+            init_trace_segments_t( &((*traces)->segments[i][j]) );
+            /* for now, initialize a single trace_segment_t for the entire contig */
+            add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
+                (*traces)->chr_lengths[j], i, j, 0);
         }
     }
     
@@ -198,8 +183,11 @@ copy_trace( struct trace_t** traces,
     
     /* set the number of traces */
     (*traces)->num_tracks = original->num_tracks;
-    (*traces)->traces = malloc(sizeof(TRACE_TYPE**)*original->num_tracks);
-    assert( (*traces)->traces != NULL );
+    /* TODO copy track_names ? the original code here didn't */
+
+    (*traces)->segments = malloc(
+        sizeof(struct trace_segments_t*)*original->num_tracks);
+    assert( (*traces)->segments != NULL );
 
     (*traces)->num_chrs = original->num_chrs;
     (*traces)->chr_lengths = malloc(sizeof(unsigned int)*original->num_chrs);
@@ -208,68 +196,52 @@ copy_trace( struct trace_t** traces,
     int i;
     for( i = 0; i < (*traces)->num_chrs; i++ )
     {
-        /* initialize the trace length, in bps */
+        /* copy the trace lengths, in bps */
         (*traces)->chr_lengths[i] = original->chr_lengths[i];
+        /* TODO copy chromsome names? the original code here didn't */
     }
-
-    /* allocate space for the locks */
-    #ifdef USE_MUTEX
-    (*traces)->locks = malloc(sizeof(pthread_mutex_t**)*original->num_tracks);
-    #else
-    (*traces)->locks = malloc(sizeof(pthread_spinlock_t**)*original->num_tracks);
-    #endif
 
     /* Allocate space for the pointers to the chr's individual traces */
     for( i = 0; i < original->num_tracks; i++ )
     {
-        /* Store the pointers for the chrs */
-        (*traces)->traces[i] = malloc( (*traces)->num_chrs*sizeof(TRACE_TYPE**) );
-        assert( (*traces)->traces[i] != NULL );
-
-        /* Store the trace mutex pointers */
-        #ifdef USE_MUTEX
-        (*traces)->locks[i] = malloc( (*traces)->num_chrs*sizeof(pthread_mutex_t*) );
-        #else
-        (*traces)->locks[i] = malloc( (*traces)->num_chrs*sizeof(pthread_spinlock_t*) );
-        #endif        
-        assert( (*traces)->locks[i] != NULL );
+        /* Allocate an array of trace segments objects for each chromosome */
+        (*traces)->segments[i] = malloc( 
+            (*traces)->num_chrs*sizeof(struct trace_segments_t));
+        assert( (*traces)->segments[i] != NULL );
         
-        /* initialize each chr */
+        /* copy the trace_segments_t */
         int j;
         for( j = 0; j < (*traces)->num_chrs; j++ )
-        {            
-            (*traces)->traces[i][j] = init_trace_array( (*traces)->chr_lengths[j] );
-            
-            assert( (*traces)->traces[i][j] != NULL );
-            memcpy( (*traces)->traces[i][j], original->traces[i][j],
-                    sizeof(TRACE_TYPE)*(*traces)->chr_lengths[j]   );
+        {
+            struct trace_segments_t *new_tsegs = &((*traces)->segments[i][j]);
+            init_trace_segments_t(new_tsegs);
+            assert(new_tsegs != NULL);
 
-            /* initialize the locks */
-            int locks_len = (*traces)->chr_lengths[j]/TM_GRAN;
-            if( (*traces)->chr_lengths[j] % TM_GRAN > 0 )
-                locks_len += 1;
-            
-            #ifdef USE_MUTEX
-            (*traces)->locks[i][j] = malloc( locks_len*sizeof(pthread_mutex_t) );
-            #else
-            (*traces)->locks[i][j] = malloc( locks_len*sizeof(pthread_spinlock_t) );
-            #endif        
-            
+            /* Copy the trace segments */
+            /* TODO do i need to get the read_lock on original_tsegs? */
+            struct trace_segments_t *original_tsegs
+                = &(original->segments[i][j]);
             int k;
-            for( k = 0; k < locks_len; k++ )
+            for(k = 0; k < original_tsegs->num_segments; k++)
             {
-                #ifdef USE_MUTEX
-                int error = pthread_mutex_init( (*traces)->locks[i][j] + k, 0 );
-                #else
-                int error = pthread_spin_init( (*traces)->locks[i][j] + k, 0 );
-                #endif        
-                
-                
-                if( error != 0 )
-                {
-                    perror( "Failed to initialize lock in init_trace" );
-                    exit( -1 );
-                }
+                /* TODO this interface could maybe be cleaner - need to
+                   1) realloc the contiguous array of trace_segments to add the
+                      new one
+                   2) initialize the trace_segment struct (mostly just need to
+                      allocate memory for ts->data)
+                   3) copy other fields, and possibly data
+                */
+                struct trace_segment_t *original_tseg
+                    = original_tsegs->segments + k;
+                add_trace_segment_to_trace_segments(new_tsegs,
+                    original_tseg->length, original_tseg->real_track_id,
+                    original_tseg->real_chr_id, original_tseg->real_start);
+
+                /* copy data from original trace segment */
+                struct trace_segment_t *new_tseg
+                    = new_tsegs->segments + new_tsegs->num_segments-1;
+                memcpy(new_tseg->data, original_tseg->data,
+                    sizeof(TRACE_TYPE)*original_tseg->length);
             }
         }
     }
@@ -294,49 +266,17 @@ close_traces( struct trace_t* traces )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            free( traces->traces[i][j] );                          
-
-            /* initialize the locks */
-            int locks_len = traces->chr_lengths[j]/TM_GRAN;
-            if( traces->chr_lengths[j] % TM_GRAN > 0 )
-                locks_len += 1;
-            
-            int k;
-            for( k = 0; k < locks_len; k++ )
-            {
-                #ifdef USE_MUTEX
-                int error = pthread_mutex_destroy( traces->locks[i][j] + k );
-                #else
-                int error = pthread_spin_destroy( traces->locks[i][j] + k );
-                #endif        
-                              
-                if( error != 0 )
-                {
-                    perror( "Failed to destroy lock in close_trace" );
-                    exit( -1 );
-                }
-            }
-
-            /* I'm not sure why this cast is necessary, but it prevents 
-               a warning so Im keeping it */
-            free( (void*) traces->locks[i][j] );
+            free_trace_segments_t(&(traces->segments[i][j]));
+            free( traces->chr_names[j] );
         }
-        //free( traces->chr_names[i] );
+        free( traces->segments[i] );                          
         free( traces->track_names[i] );
-        free( traces->traces[i] );                          
-        free( traces->locks[i] );
     }
 
-    for( j = 0; j < traces->num_chrs; j++ )
-    {
-        free( traces->chr_names[j] );
-    }
-
-    free( traces->chr_names );
     free( traces->track_names );
+    free( traces->chr_names );
     free( traces->chr_lengths );
-    free( traces->traces );
-    free( traces->locks );
+    free( traces->segments );
     
     free( traces );
 
@@ -346,15 +286,21 @@ close_traces( struct trace_t* traces )
 void
 divide_trace_by_sum( struct trace_t* traces, double value )
 {
-    int i, j;
-    unsigned int k;
+    int i, j, k, l;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            /* Loop over each trace segment in the set of trace segments for
+               this track, chr combination */
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
             {
-                traces->traces[i][j][k] /= value;
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                for( l = 0; l < tseg->length; l++ )
+                {
+                    tseg->data[l] /= value;
+                }
             }
         }
     }
@@ -364,15 +310,19 @@ divide_trace_by_sum( struct trace_t* traces, double value )
 void
 multiply_trace_by_scalar( struct trace_t* traces, double value )
 {
-    int i, j;
-    unsigned int k;
+    int i, j, k, l;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
             {
-                traces->traces[i][j][k] *= value;
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                for( l = 0; l < tseg->length; l++ )
+                {
+                    tseg->data[l] *= value;
+                }
             }
         }
     }
@@ -383,15 +333,19 @@ double
 sum_traces( struct trace_t* traces )
 {
     double sum = 0;
-    int i, j;
-    unsigned int k;
+    int i, j, k, l;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
             {
-                sum += traces->traces[i][j][k];
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                for( l = 0; l < tseg->length; l++ )
+                {
+                    sum += tseg->data[l];
+                }
             }
         }
     }
@@ -412,13 +366,17 @@ void
 zero_traces( struct trace_t* traces )
 {
     /* Zero out the trace for the update */
-    int i, j;
+    int i, j, k;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            memset( traces->traces[i][j], 0, 
-                    sizeof(TRACE_TYPE)*(traces->chr_lengths[j]) );
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
+            {
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                memset(tseg->data, 0, sizeof(TRACE_TYPE)*tseg->length);
+            }
         }
     }
 }
@@ -426,15 +384,19 @@ zero_traces( struct trace_t* traces )
 void
 set_trace_to_uniform( struct trace_t* traces, double value )
 {
-    int i, j;
-    unsigned int k;
+    int i, j, k, l;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
             {
-                traces->traces[i][j][k] = value;
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                for( l = 0; l < tseg->length; l++ )
+                {
+                    tseg->data[l] = value;
+                }
             }
         }
     }
@@ -443,20 +405,22 @@ set_trace_to_uniform( struct trace_t* traces, double value )
 void
 apply_to_trace( struct trace_t* traces, double (*fun)(double) )
 {
-    int i, j;
-    unsigned int k;
+    int i, j, k, l;
     for( i = 0; i < traces->num_tracks; i++ )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            struct trace_segments_t *tsegs = &(traces->segments[i][j]);
+            for( k = 0; k < tsegs->num_segments; k++ )
             {
-                traces->traces[i][j][k] = fun( traces->traces[i][j][k] );
-            }
+                struct trace_segment_t *tseg = tsegs->segments + k;
+                for( l = 0; l < tseg->length; l++ )
+                {
+                    tseg->data[l] = fun(tseg->data[l]);
+                }
+            }            
         }
     }
-    
-    return;
 }
 
 /* traces must be the same dimension */
@@ -467,23 +431,40 @@ aggregate_over_trace_pairs(  struct trace_t* update_trace,
                              TRACE_TYPE (*aggregate)( const TRACE_TYPE, const TRACE_TYPE )
                           )
 {
-    int trace_index, chr;
-    unsigned int bp;
     assert( update_trace->num_tracks = other_trace->num_tracks );
     assert( update_trace->num_chrs = other_trace->num_chrs );
+
+    int trace_index, chr, segment_index, bp;
     for( trace_index = 0; trace_index < update_trace->num_tracks; trace_index++ )
     {
         for( chr = 0; chr < update_trace->num_chrs; chr++ )
         {
             assert( update_trace->chr_lengths[chr] == other_trace->chr_lengths[chr] );
-            for( bp = 0; bp < update_trace->chr_lengths[chr]; bp++ )
+            
+            struct trace_segments_t *update_tsegs
+                = &(update_trace->segments[trace_index][chr]);
+            struct trace_segments_t *other_tsegs
+                = &(other_trace->segments[trace_index][chr]);
+            /* make sure both traces have the same sets of segments */
+            assert( update_tsegs->num_segments == other_tsegs->num_segments );
+
+            for( segment_index = 0;
+                 segment_index < update_tsegs->num_segments;
+                 segment_index++ )
             {
-                /* update the trace at the correct basepair */
-                update_trace->traces[trace_index][chr][bp] 
-                    = aggregate( 
-                        update_trace->traces[trace_index][chr][bp],   
-                        other_trace->traces[trace_index][chr][bp]
-                );
+                struct trace_segment_t *update_tseg
+                    = update_tsegs->segments + segment_index;
+                struct trace_segment_t *other_tseg
+                    = other_tsegs->segments + segment_index;
+
+                /* make sure the segments match */
+                assert( update_tseg->length == other_tseg->length );
+
+                for( bp = 0; bp < update_tseg->length; bp++ )
+                {
+                    update_tseg->data[bp] = aggregate(update_tseg->data[bp],
+                        other_tseg->data[bp] );
+                }
             }
         }
     }
@@ -525,49 +506,47 @@ aggregate_over_traces_from_fnames(
 extern void
 write_wiggle_from_trace_to_stream( 
     struct trace_t* traces,
-    
-    /* These are usually chr names */
-    // char** scaffold_names,
-    /* The names of the various tracks */
-    /* Use null for the indexes */
-    // char** track_names,
-    
     FILE* os, /* output stream */                           
     const double filter_threshold )
 {    
     unsigned int global_counter = 0;
 
-    int track_index, j;
-    unsigned int k;
-    for( track_index = 0; track_index < traces->num_tracks; track_index++ )
+    int track, chr, segment, bp;
+    for( track = 0; track < traces->num_tracks; track++ )
     {
         /* Print out the header */
         fprintf( os, "track type=wiggle_0 name=%s\n", 
-                 traces->track_names[track_index] );
+                 traces->track_names[track] );
 
-        for( j = 0; j < traces->num_chrs; j++ )
+        for( chr = 0; chr < traces->num_chrs; chr++ )
         {
             /* skip the pseudo chr */
-            if( j == PSEUDO_LOC_CHR_INDEX )
+            if( chr == PSEUDO_LOC_CHR_INDEX )
                 continue;
             
             /* Print out the new chr start line */
             if( traces->chr_names == NULL ) {
-                fprintf( os, "variableStep chrom=%i\n", j );
+                fprintf( os, "variableStep chrom=%i\n", chr );
             } else {
-                fprintf( os, "variableStep chrom=%s\n", traces->chr_names[j] );
+                fprintf( os, "variableStep chrom=%s\n", traces->chr_names[chr] );
             }
             
-            for( k = 0; k < traces->chr_lengths[j]; k++ )
+            struct trace_segments_t *tsegs = &(traces->segments[track][chr]);
+            for( segment = 0; segment < tsegs->num_segments; segment++ )
             {
-                global_counter += 1;
+                struct trace_segment_t *tseg = tsegs->segments + segment;
+                for( bp = 0; bp < tseg->length; bp++ )
+                {
+                    global_counter += 1;
                 
-                if( traces->traces[track_index][j][k] > filter_threshold )
-                    fprintf( os, "%i\t%e\n", k+1, 
-                             traces->traces[track_index][j][k] );
-                
-                if( global_counter > 0  && global_counter%10000000 == 0 )
-                    fprintf( stderr, "NOTICE        :  Written %i positions to trace.\n", global_counter );
+                    if( tseg->data[bp] > filter_threshold )
+                        fprintf( os, "%i\t%e\n", bp+1, tseg->data[bp] );
+                    
+                    if( global_counter > 0  && global_counter%10000000 == 0 )
+                        fprintf( stderr,
+                            "NOTICE        :  Written %i positions to trace.\n",
+                            global_counter );
+                }
             }
         }
     }
@@ -716,6 +695,39 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
 }
 
 void
+write_trace_segment_to_stream(
+    struct trace_segment_t *tseg,
+    FILE* os )
+{
+    /* write out the trace segment metadata */
+    fwrite(tseg->real_track_id, sizeof(int), 1, os);
+    fwrite(tseg->real_chr_id, sizeof(int), 1, os);
+    fwrite(tseg->real_start, sizeof(int), 1, os);
+
+    /* write out the length of the trace */
+    fwrite(tseg->length, sizeof(int), 1, os);
+
+    /* write out the trace */
+    fwrite(tseg->data, sizeof(TRACE_TYPE), tseg->length, os);
+}
+
+void
+write_trace_segments_to_stream(
+    struct trace_segments_t *tsegs,
+    FILE* os )
+{
+    /* write out the number of segments */
+    fwrite( tsegs->num_segments, sizeof(int), 1, os );
+
+    /* write out the trace segments */
+    int i;
+    for( i = 0; i < tsegs->num_segments; i++ )
+    {
+        write_trace_segment_to_stream(tsegs->segments + i, os);
+    }
+}
+
+void
 write_trace_to_stream( struct trace_t* trace, FILE* os )
 {
     write_trace_header_to_stream( trace, os );
@@ -726,10 +738,7 @@ write_trace_to_stream( struct trace_t* trace, FILE* os )
         int j;
         for( j = 0; j < trace->num_chrs; j++ )
         {
-            /* write the array from track i, chr j */
-            fwrite( trace->traces[i][j], 
-                    sizeof(TRACE_TYPE), trace->chr_lengths[j],
-                    os );
+            write_trace_segments_to_stream(&(trace->segments[i][j]), os);
         }
     }
     
@@ -745,6 +754,60 @@ write_trace_to_file( struct trace_t* trace, char* fname )
 }
 
 void
+load_trace_segment_from_stream(
+    /* append the loaded trace segment to tsegs */
+    struct trace_segments_t* tsegs,
+    FILE* is )
+{
+    int rv;
+
+    /* load the metadata for segment */
+    int real_track_id, real_chr_id, real_start, length;
+    fread(&real_track_id, sizeof(int), 1, is);
+    assert(rv == 1);
+
+    fread(&real_chr_id, sizeof(int), 1, is);
+    assert(rv == 1);
+
+    fread(&real_start, sizeof(int), 1, is);
+    assert(rv == 1);
+
+    fread(&length, sizeof(int), 1, is);
+    assert(rv == 1);
+
+    /* add the trace segment to set of segments */
+    add_trace_segment_to_trace_segments(tsegs, real_track_id, real_chr_id,
+        real_start, length);
+
+    /* load the data for this trace segment */
+    struct trace_segment_t *new_segment = tsegs->segments + tsegs->num_segments-1;
+    rv = fread(&(new_segment->data), sizeof(TRACE_TYPE), new_segment->length, is);
+    assert( rv == new_segment->length );
+}
+
+void
+load_trace_segments_from_stream(
+    struct trace_segments_t* tsegs,
+    FILE* is )
+{
+    int rv;
+
+    init_trace_segments_t(tsegs);
+
+    /* load the number of segments from the stream */
+    rv = fread(&(tsegs->num_segments), sizeof(int), 1, is);
+    assert(rv == 1);
+    assert(tsegs->num_segments > 0);
+
+    /* load the segments */
+    int i;
+    for( i = 0; i < tsegs->num_segments; i++ )
+    {
+        load_trace_segment_from_stream(tsegs, is);
+    }
+}
+
+void
 load_trace_from_stream( struct trace_t** trace, FILE* is )
 {
     size_t rv;
@@ -753,23 +816,17 @@ load_trace_from_stream( struct trace_t** trace, FILE* is )
     
     load_trace_header_from_stream( *trace, is );
 
-    init_trace_locks( *trace );
-
-    int i;
-    (*trace)->traces = calloc( sizeof(TRACE_TYPE*), (*trace)->num_tracks  );
+    (*trace)->segments 
+        = malloc(sizeof(struct trace_segments_t*)*(*trace)->num_tracks);
+    int i, j;
     for( i = 0; i < (*trace)->num_tracks; i++ )
     {
-        int j;
-        (*trace)->traces[i] = calloc( sizeof(TRACE_TYPE*), (*trace)->num_chrs  );
+        (*trace)->segments[i]
+            = malloc(sizeof(struct trace_segments_t)*(*trace)->num_chrs);
+        
         for( j = 0; j < (*trace)->num_chrs; j++ )
         {
-            /* read the array from track i, chr j */            
-            (*trace)->traces[i][j] = 
-                malloc( sizeof(TRACE_TYPE)*((*trace)->chr_lengths[j]) );
-            rv = fread( (*trace)->traces[i][j], 
-                    sizeof(TRACE_TYPE), (*trace)->chr_lengths[j],
-                    is );
-            assert( rv == (*trace)->chr_lengths[j] );
+            load_trace_segments_from_stream(&((*trace)->segments[i][j]), is);
         }
     }
     
