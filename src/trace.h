@@ -12,19 +12,18 @@
 #define USE_SPINLOCK
 
 struct trace_segment_t {
-    int length;
-    TRACE_TYPE* data;
-
     int real_track_id;
     int real_chr_id;
     int real_start;
+
+    int length;
+    TRACE_TYPE* data;
+    pthread_mutex_t* data_lock;
 };
 
 struct trace_segments_t {
     int num_segments;
     struct trace_segment_t* segments;
-    pthread_mutex_t* read_lock;
-    pthread_mutex_t* write_lock;
 };
 
 struct trace_t {

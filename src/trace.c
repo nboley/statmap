@@ -26,15 +26,22 @@ init_trace_segment_t(
         int real_start
     )
 {
+    /* ts is a pointer to an allocated trace_segment_t */
+    assert(ts != NULL);
+
+    ts->real_track_id = real_track_id;
+    ts->real_chr_id = real_chr_id;
+    ts->real_start = real_start;'
+    '
     ts->length = length;
 
     ts->data = malloc(sizeof(TRACE_TYPE)*length);
     assert(ts->data != NULL);
     memset(ts->data, 0, sizeof(TRACE_TYPE)*length);
 
-    ts->real_track_id = real_track_id;
-    ts->real_chr_id = real_chr_id;
-    ts->real_start = real_start;
+    int rv;
+    rv = pthread_mutex_init(ts->data_lock, NULL); // NULL uses attr defaults
+    assert(rv == 0);
 }
 
 void
@@ -42,8 +49,19 @@ free_trace_segment_t(
         struct trace_segment_t* ts
     )
 {
+    /* for now, require our design to be so clean that we never try to free an
+       unallocated trace_segment. Can be relaxed (and return on NULL) if this
+       utopian vision is not achieved. */
+    assert(ts != NULL);
+
     /* free memory allocated in the trace_segment_t */
     free(ts->data);
+
+    /* free the lock */
+    int rv;
+    rv = pthread_mutex_destroy(ts->data_lock);
+    assert(rv == 0);
+    free((void*)ts->data_lock);
 }
 
 void
@@ -75,14 +93,6 @@ init_trace_segments_t(
 
     segs->num_segments = 0;
     segs->segments = NULL;
-
-    int rv;
-    rv = pthread_mutex_init(segs->read_lock, NULL);
-    assert(rv == 0);
-    rv = pthread_mutex_init(segs->write_lock, NULL);
-    assert(rv == 0);
-
-    return;
 }
 
 void
@@ -90,24 +100,14 @@ free_trace_segments_t(
     struct trace_segments_t* tsegs
 )
 {
-    /* free memory allocated for the trace segments */
+    /* free memory allocated in the trace segments */
     int i;
     for(i=0; i < tsegs->num_segments; tsegs++)
     {
         free_trace_segment_t(tsegs->segments + i);
     }
+    /* free the array of trace segments */
     free(tsegs->segments);
-
-    /* free the locks */
-    int rv;
-
-    rv = pthread_mutex_destroy(tsegs->read_lock);
-    assert(rv == 0);
-    free((void*)tsegs->read_lock);
-
-    rv = pthread_mutex_destroy(tsegs->write_lock);
-    assert(rv == 0);
-    free((void*)tsegs->write_lock);
 }
 
 void
@@ -217,10 +217,8 @@ copy_trace( struct trace_t** traces,
             init_trace_segments_t(new_tsegs);
             assert(new_tsegs != NULL);
 
-            /* Copy the trace segments */
-            /* TODO do i need to get the read_lock on original_tsegs? */
-            struct trace_segments_t *original_tsegs
-                = &(original->segments[i][j]);
+            /* copy each trace segment */
+            struct trace_segments_t *original_tsegs = &(original->segments[i][j]);
             int k;
             for(k = 0; k < original_tsegs->num_segments; k++)
             {
@@ -231,7 +229,7 @@ copy_trace( struct trace_t** traces,
                       allocate memory for ts->data)
                    3) copy other fields, and possibly data
                 */
-                struct trace_segment_t *original_tseg
+                struct trace_segment_t *original_tseg 
                     = original_tsegs->segments + k;
                 add_trace_segment_to_trace_segments(new_tsegs,
                     original_tseg->real_track_id, original_tseg->real_chr_id,
