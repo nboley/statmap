@@ -20,10 +20,10 @@
 void
 init_trace_segment_t(
         struct trace_segment_t *ts,
-        int length,
         int real_track_id,
         int real_chr_id,
-        int real_start
+        int real_start,
+        int length
     )
 {
     /* ts is a pointer to an allocated trace_segment_t */
@@ -64,7 +64,7 @@ free_trace_segment_t(
     free((void*)ts->data_lock);
 }
 
-void
+struct trace_segment_t*
 add_trace_segment_to_trace_segments(
         struct trace_segments_t* segs,
         int real_track_id,
@@ -79,8 +79,11 @@ add_trace_segment_to_trace_segments(
     assert(segs->segments != NULL);
 
     /* initialize the new trace segment with the given values */
-    init_trace_segment_t(&(segs->segments[segs->num_segments-1]), length,
-        real_track_id, real_chr_id, real_start);
+    struct trace_segment_t* new_tseg = segs->segments + segs->num_segments-1;
+    init_trace_segment_t(new_tseg, real_track_id, real_chr_id, real_start,
+        length);
+
+    return new_tseg;
 }
 
 void
@@ -231,15 +234,14 @@ copy_trace( struct trace_t** traces,
                 */
                 struct trace_segment_t *original_tseg 
                     = original_tsegs->segments + k;
-                add_trace_segment_to_trace_segments(new_tsegs,
-                    original_tseg->real_track_id, original_tseg->real_chr_id,
-                    original_tseg->real_start, original_tseg->length);
+                struct trace_segment_t *new_tseg
+                    = add_trace_segment_to_trace_segments(new_tsegs,
+                        original_tseg->real_track_id, original_tseg->real_chr_id,
+                        original_tseg->real_start, original_tseg->length);
 
                 /* copy data from original trace segment */
-                struct trace_segment_t *new_tseg
-                    = new_tsegs->segments + new_tsegs->num_segments-1;
-                memcpy(new_tseg->data, original_tseg->data,
-                    sizeof(TRACE_TYPE)*original_tseg->length);
+                memcpy(new_tseg->data, original_tseg->data, sizeof(TRACE_TYPE)*
+                    original_tseg->length);
             }
         }
     }
@@ -774,11 +776,10 @@ load_trace_segment_from_stream(
     assert(rv == 1);
 
     /* add the trace segment to set of segments */
-    add_trace_segment_to_trace_segments(tsegs, real_track_id, real_chr_id,
-        real_start, length);
-
+    struct trace_segment_t *new_segment
+        = add_trace_segment_to_trace_segments(tsegs, real_track_id, real_chr_id, 
+            real_start, length);
     /* load the data for this trace segment */
-    struct trace_segment_t *new_segment = tsegs->segments + tsegs->num_segments-1;
     rv = fread(&(new_segment->data), sizeof(TRACE_TYPE), new_segment->length, is);
     assert( rv == new_segment->length );
 }
