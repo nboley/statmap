@@ -38,6 +38,14 @@ struct trace_t {
     struct trace_segments_t** segments;
 };
 
+struct trace_segment_t*
+find_trace_segment_t(
+    struct trace_t* traces,
+    int track_index,
+    int chr_index,
+    int bp
+);
+
 void
 init_trace( struct genome_data* genome,
             struct trace_t** traces,

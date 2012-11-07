@@ -113,6 +113,54 @@ free_trace_segments_t(
     free(tsegs->segments);
 }
 
+struct trace_segment_t*
+find_trace_segment_t(
+    struct trace_t* traces,
+    int track_index,
+    int chr_index,
+    int bp
+)
+{
+    struct trace_segments_t* trace_segments
+        = &(traces->segments[track_index][chr_index]);
+
+    /* assume the trace_segments are sorted by start position and non-overlapping. */
+
+    /* special case if there's only one trace segment - skip bisect */
+    assert(trace_segments->num_segments > 0);
+    if(trace_segments->num_segments == 1) {
+        return trace_segments->segments; // + 0
+    }
+
+    /* otherwise, bisect to find the segment containing this location */
+    int lo = 0
+    int hi = trace_segments->num_segments;
+    while(lo < hi)
+    {
+        int mid = lo + (hi - lo) / 2;
+        if trace_segments->segments[mid].real_start < bp {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    /* make sure the binary search is working */
+    assert(lo <= hi);
+    assert(lo <= trace_segments->num_segments);
+    assert(lo >= 0);
+
+    int bisect_result;
+    if(trace_segments->segments[lo].real_start == bp) {
+        bisect_result = lo;
+    } else {
+        assert(lo > 0);
+        bisect_result = lo - 1;
+    }
+
+    return trace_segments->segments + bisect_result;
+}
+
 void
 init_trace( struct genome_data* genome,
             struct trace_t** traces,
