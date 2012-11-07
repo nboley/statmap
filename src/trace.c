@@ -166,7 +166,7 @@ init_trace( struct genome_data* genome,
             init_trace_segments_t( &((*traces)->segments[i][j]) );
             /* for now, initialize a single trace_segment_t for the entire contig */
             add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
-                (*traces)->chr_lengths[j], i, j, 0);
+                i, j, 0. (*traces)->chr_lengths[j] );
         }
     }
     
@@ -234,8 +234,8 @@ copy_trace( struct trace_t** traces,
                 struct trace_segment_t *original_tseg
                     = original_tsegs->segments + k;
                 add_trace_segment_to_trace_segments(new_tsegs,
-                    original_tseg->length, original_tseg->real_track_id,
-                    original_tseg->real_chr_id, original_tseg->real_start);
+                    original_tseg->real_track_id, original_tseg->real_chr_id,
+                    original_tseg->real_start, original_tseg->length);
 
                 /* copy data from original trace segment */
                 struct trace_segment_t *new_tseg
