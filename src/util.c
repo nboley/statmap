@@ -84,7 +84,7 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
 }
 
 FILE* 
-open_check_error( char* fname, char* file_mode )
+open_check_error( const char* const fname, char* file_mode )
 {
     FILE* tmp;
     tmp = fopen( fname, file_mode );

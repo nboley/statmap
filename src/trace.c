@@ -32,8 +32,8 @@ init_trace_segment_t(
 
     ts->real_track_id = real_track_id;
     ts->real_chr_id = real_chr_id;
-    ts->real_start = real_start;'
-    '
+    ts->real_start = real_start;
+
     ts->length = length;
 
     ts->data = malloc(sizeof(TRACE_TYPE)*length);
@@ -41,6 +41,8 @@ init_trace_segment_t(
     memset(ts->data, 0, sizeof(TRACE_TYPE)*length);
 
     int rv;
+    ts->data_lock = malloc(sizeof(pthread_mutex_t));
+    assert(ts->data_lock != NULL);
     rv = pthread_mutex_init(ts->data_lock, NULL); // NULL uses attr defaults
     assert(rv == 0);
 }
@@ -106,7 +108,7 @@ free_trace_segments_t(
 {
     /* free memory allocated in the trace segments */
     int i;
-    for(i=0; i < tsegs->num_segments; tsegs++)
+    for(i=0; i < tsegs->num_segments; i++)
     {
         free_trace_segment_t(tsegs->segments + i);
     }
@@ -114,32 +116,27 @@ free_trace_segments_t(
     free(tsegs->segments);
 }
 
-struct trace_segment_t*
-find_trace_segment_t(
-    struct trace_t* traces,
-    int track_index,
-    int chr_index,
-    int bp
+int
+find_start_of_trace_segments_to_update(
+    struct trace_segments_t* trace_segments,
+    int start_bp
 )
 {
-    struct trace_segments_t* trace_segments
-        = &(traces->segments[track_index][chr_index]);
-
     /* assume the trace_segments are sorted by start position and non-overlapping. */
 
     /* special case if there's only one trace segment - skip bisect */
     assert(trace_segments->num_segments > 0);
     if(trace_segments->num_segments == 1) {
-        return trace_segments->segments; // + 0
+        return 0;
     }
 
     /* otherwise, bisect to find the segment containing this location */
-    int lo = 0
+    int lo = 0;
     int hi = trace_segments->num_segments;
     while(lo < hi)
     {
         int mid = lo + (hi - lo) / 2;
-        if trace_segments->segments[mid].real_start < bp {
+        if(trace_segments->segments[mid].real_start < start_bp) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -152,14 +149,14 @@ find_trace_segment_t(
     assert(lo >= 0);
 
     int bisect_result;
-    if(trace_segments->segments[lo].real_start == bp) {
+    if(trace_segments->segments[lo].real_start == start_bp) {
         bisect_result = lo;
     } else {
         assert(lo > 0);
         bisect_result = lo - 1;
     }
 
-    return trace_segments->segments + bisect_result;
+    return bisect_result;
 }
 
 void
@@ -218,7 +215,7 @@ init_trace( struct genome_data* genome,
             init_trace_segments_t( &((*traces)->segments[i][j]) );
             /* for now, initialize a single trace_segment_t for the entire contig */
             add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
-                i, j, 0. (*traces)->chr_lengths[j] );
+                i, j, 0, (*traces)->chr_lengths[j] );
         }
     }
     
@@ -315,11 +312,16 @@ close_traces( struct trace_t* traces )
     {
         for( j = 0; j < traces->num_chrs; j++ )
         {
-            free_trace_segments_t(&(traces->segments[i][j]));
-            free( traces->chr_names[j] );
+            free_trace_segments_t( &(traces->segments[i][j]) );
         }
         free( traces->segments[i] );                          
         free( traces->track_names[i] );
+    }
+
+    /* free the chr names */
+    for( i = 0; i < traces->num_chrs; i++ )
+    {
+        free( traces->chr_names[i] );
     }
 
     free( traces->track_names );
@@ -506,7 +508,8 @@ aggregate_over_trace_pairs(  struct trace_t* update_trace,
                 struct trace_segment_t *other_tseg
                     = other_tsegs->segments + segment_index;
 
-                /* make sure the segments match */
+                /* make sure the segments match - this isn't necessary, but
+                   simplifies things for now */
                 assert( update_tseg->length == other_tseg->length );
 
                 for( bp = 0; bp < update_tseg->length; bp++ )
@@ -747,16 +750,23 @@ write_trace_segment_to_stream(
     struct trace_segment_t *tseg,
     FILE* os )
 {
+    int rv;
+
     /* write out the trace segment metadata */
-    fwrite(tseg->real_track_id, sizeof(int), 1, os);
-    fwrite(tseg->real_chr_id, sizeof(int), 1, os);
-    fwrite(tseg->real_start, sizeof(int), 1, os);
+    rv = fwrite(&(tseg->real_track_id), sizeof(int), 1, os);
+    assert(rv == 1);
+    rv = fwrite(&(tseg->real_chr_id), sizeof(int), 1, os);
+    assert(rv == 1);
+    rv = fwrite(&(tseg->real_start), sizeof(int), 1, os);
+    assert(rv == 1);
 
     /* write out the length of the trace */
-    fwrite(tseg->length, sizeof(int), 1, os);
+    rv = fwrite(&(tseg->length), sizeof(int), 1, os);
+    assert(rv == 1);
 
     /* write out the trace */
-    fwrite(tseg->data, sizeof(TRACE_TYPE), tseg->length, os);
+    rv = fwrite(tseg->data, sizeof(TRACE_TYPE), tseg->length, os);
+    assert(rv == tseg->length);
 }
 
 void
@@ -765,7 +775,7 @@ write_trace_segments_to_stream(
     FILE* os )
 {
     /* write out the number of segments */
-    fwrite( tsegs->num_segments, sizeof(int), 1, os );
+    fwrite(&(tsegs->num_segments), sizeof(int), 1, os );
 
     /* write out the trace segments */
     int i;
@@ -811,16 +821,16 @@ load_trace_segment_from_stream(
 
     /* load the metadata for segment */
     int real_track_id, real_chr_id, real_start, length;
-    fread(&real_track_id, sizeof(int), 1, is);
+    rv = fread(&real_track_id, sizeof(int), 1, is);
     assert(rv == 1);
 
-    fread(&real_chr_id, sizeof(int), 1, is);
+    rv = fread(&real_chr_id, sizeof(int), 1, is);
     assert(rv == 1);
 
-    fread(&real_start, sizeof(int), 1, is);
+    rv = fread(&real_start, sizeof(int), 1, is);
     assert(rv == 1);
 
-    fread(&length, sizeof(int), 1, is);
+    rv = fread(&length, sizeof(int), 1, is);
     assert(rv == 1);
 
     /* add the trace segment to set of segments */
@@ -857,8 +867,6 @@ load_trace_segments_from_stream(
 void
 load_trace_from_stream( struct trace_t** trace, FILE* is )
 {
-    size_t rv;
-    
     *trace = malloc( sizeof( struct trace_t ) );
     
     load_trace_header_from_stream( *trace, is );
@@ -915,4 +923,148 @@ trace_agg_max( const TRACE_TYPE a, const TRACE_TYPE b )
         return a;
     
     return b;
+}
+
+void
+update_trace_segments_from_mapped_read_array(
+    struct trace_segments_t* trace_segments,
+    float* update_vals,
+    float scale_factor,
+    int start,
+    int stop
+)
+{
+    /* start, stop are relative to the contig start */
+    /* update_vals is from start->stop */
+
+    /* Find the index of the first trace segment to update */
+    int st_index = find_start_of_trace_segments_to_update(trace_segments, start);
+
+    int bp = start; // need to maintain last bp updated over multiple segments
+    //int update_vals_index = 0;
+    /* loop over all the segments that the given mapped fragment overlaps */
+    int i;
+    for( i = st_index; i < trace_segments->num_segments; i++ )
+    {
+        struct trace_segment_t* trace_segment = trace_segments->segments + i;
+        
+        /* lock while we update this trace segment */
+        pthread_mutex_lock(trace_segment->data_lock);
+
+        for( ; bp < stop; bp++ )
+        {
+            /* check if we've reached the end of the current segment - this will
+               happen if a mapping spans multiple segments */
+            if( bp == trace_segment->real_start + trace_segment->length ) {
+                break;
+            }
+            assert(bp >= trace_segment->real_start);
+
+            float update_val;
+            if( update_vals == NULL ) {
+                /* update from uniform distribution */
+                update_val = 1;
+            } else {
+                /* update_vals starts at the update value for this first bp in 
+                   the trace - convert bp to 0-indexed */
+                update_val = update_vals[bp - start];
+            }
+
+            /* update the current trace value */
+            /* bp - trace_segment->real_start gives index relative to the start
+               of the trace segment */
+            trace_segment->data[bp - trace_segment->real_start]
+                += update_val*scale_factor;
+        }
+
+        pthread_mutex_unlock(trace_segment->data_lock);
+
+        /* check if finished updating the given range */
+        if(bp-1 == stop)
+            break;
+    }
+
+    return;
+}
+
+/* Wrapper function to update from a uniform kernel */
+void
+update_trace_segments_from_uniform_kernel(
+    struct trace_segments_t* trace_segments,
+    float scale_factor,
+    int start,
+    int stop
+)
+{
+    update_trace_segments_from_mapped_read_array(trace_segments, NULL,
+        scale_factor, start, stop);
+}
+
+double
+accumulate_from_trace(
+    const struct trace_t* const traces,
+    int track_index,
+    int chr_index,
+    int start,
+    int stop
+)
+{
+    double acc = 0;
+
+    struct trace_segments_t* trace_segments
+        = &(traces->segments[track_index][chr_index]);
+
+    int ss_i = find_start_of_trace_segments_to_update(trace_segments, start);
+
+    int bp = start; // need to maintain last bp updated over multiple segments
+
+    int si;
+    for( si = ss_i; si < trace_segments->num_segments; si++ )
+    {
+        struct trace_segment_t* trace_segment = trace_segments->segments + si;
+
+        /* lock while we update this trace segment */
+        pthread_mutex_lock(trace_segment->data_lock);
+
+        for( ; bp < stop; bp++ )
+        {
+            /* check if we've reached the end of the current segment - this will
+               happen if a mapping spans multiple segments */
+            if( bp == trace_segment->real_start + trace_segment->length ) {
+                break;
+            }
+            assert(bp >= trace_segment->real_start);
+
+            acc += trace_segment->data[bp - trace_segment->real_start];
+        }
+
+        pthread_mutex_unlock(trace_segment->data_lock);
+
+        /* check if we've covered the given trace */
+        if(bp-1 == stop)
+            break;
+    }
+
+    return acc;
+}
+
+/* Wrapper over accumulate_from_trace - accumulates values from the trace across
+   all tracks */
+double
+accumulate_from_traces(
+    const struct trace_t* const traces,
+    int chr_index,
+    int start,
+    int stop
+)
+{
+    double acc = 0;
+
+    int ti;
+    for( ti = 0; ti < traces->num_tracks; ti++ )
+    {
+        acc += accumulate_from_trace(traces, ti, chr_index, start, stop);
+    }
+
+    return acc;
 }

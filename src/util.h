@@ -11,7 +11,7 @@ void
 safe_link_into_output_directory( char* fname, char* output_dir, char* output_fname );
 
 FILE* 
-open_check_error( char* fname, char* file_mode );
+open_check_error( const char* const fname, char* file_mode );
 
 void*
 safe_malloc( size_t num_bytes );

@@ -31,83 +31,11 @@
 #include "genome.h"
 #include "fragment_length.h"
 #include "sam.h"
-
 #include "log.h"
-
-#define DONT_USE_VEC_OPERATIONS
-#define LOCK_TRACES
-
-
-#ifdef USE_VEC_OPERATIONS
-typedef float v4sf __attribute__ ((vector_size(16) ));
-                  
-union f4vector 
-{
-    v4sf v;
-    float f[4];
-};
-#endif
 
 struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
-
-static inline void
-update_stranded_read_start_density_from_location( 
-    const struct trace_t* const traces, 
-    const mapped_read_location* const loc,
-    const float cond_prob 
-)
-{
-    const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
-    const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
-    
-    if( first_read_in_mapped_read_location_is_rev_comp( loc ) )
-    {
-        
-        #ifdef USE_MUTEX
-        pthread_mutex_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
-        #else
-        pthread_spin_lock( traces->locks[1][ chr_index ] + start/TM_GRAN );
-        #endif
-        
-        
-        // #pragma omp atomic
-        traces->traces[1][chr_index][start] += cond_prob;
-        // traces->traces[1][chr_index][start] += cond_prob;
-
-        
-        #ifdef USE_MUTEX
-        pthread_mutex_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
-        #else
-        pthread_spin_unlock( traces->locks[1][ chr_index ] + start/TM_GRAN );
-        #endif
-        
-    } else {
-        
-        #ifdef USE_MUTEX
-        pthread_mutex_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
-        #else
-        pthread_spin_lock( traces->locks[0][ chr_index ] + start/TM_GRAN );
-        #endif
-        
-
-        // #pragma omp atomic
-        traces->traces[0][chr_index][start] += cond_prob;        
-        // traces->traces[0][chr_index][start] += cond_prob;
-
-        
-        #ifdef USE_MUTEX
-        pthread_mutex_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
-        #else
-        pthread_spin_unlock( traces->locks[0][ chr_index ] + start/TM_GRAN );
-        #endif
-        
-    }
-    
-    return;
-}
-
 
 /*
  * This is technically a non-parametric bootstrap
@@ -871,9 +799,6 @@ update_chipseq_trace_expectation_from_location(
     /* Make sure the reference genome is correct */            
     assert( chr_index < traces->num_chrs );
     assert( traces->chr_lengths[chr_index] >= stop );
-    
-    /* iteration variable */
-    unsigned int k;
 
     /* update the trace */
     /* If the reads are paired */
@@ -881,163 +806,25 @@ update_chipseq_trace_expectation_from_location(
     {
         const float scale = (1.0/(stop-start));
 
-        int trace_index;
+        int track_index;
         if( first_read_is_rev_comp )
         {
-            trace_index = 0;
+            track_index = 0;
         } else {
-            trace_index = 1;
+            track_index = 1;
         }
-        
-        for( k = start/TM_GRAN; k <= (stop-1)/TM_GRAN; k++ )
-        {
-            /* lock the spinlocks */
-            #ifdef LOCK_TRACES
-                #ifdef USE_MUTEX
-                pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
-                #else
-                pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
-                #endif
-            #endif
-        
-            unsigned int LR_start = MAX( start, k*TM_GRAN ); // Locked Region start
-            unsigned int LR_stop = MIN( stop, (k+1)*TM_GRAN ); // Locked Region stop
-            
-            unsigned int j;
-            for( j = LR_start; j < LR_stop; j++ )
-            {
-                assert( chr_index < traces->num_chrs );
-                assert( j < traces->chr_lengths[chr_index] );
-                
-                traces->traces[trace_index][chr_index][j] 
-                    += scale*cond_prob;
-            }
 
-            /* unlock the spinlocks */
-            #ifdef LOCK_TRACES
-                #ifdef USE_MUTEX
-                pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
-                #else
-                pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
-                #endif
-            #endif
-        }
+        /* get the set of trace_segments to update */
+        struct trace_segments_t* trace_segments
+            = &(traces->segments[track_index][chr_index]);
+        
+        float scale_factor = scale*cond_prob;
+        update_trace_segments_from_uniform_kernel(trace_segments, scale_factor,
+            start, stop);
     } 
     /* If the read is *not* paired */
     else {
-        /* the binding site must be on the five prime side of the read */
-        unsigned int window_start;
-        unsigned int window_stop;
-        /* determine which trace to lock */
-        int trace_index;
-        if( first_read_is_rev_comp )
-        {
-            /* prevent overrunning the trace bounadry - this is fancy to avoid the 
-               fact that the indexes are unsigned */
-            window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
-            window_stop = MIN( stop, traces->chr_lengths[chr_index] );
-            trace_index = 1;
-        } else {
-            window_start = start;
-            window_stop = MIN( start + global_fl_dist->max_fl, 
-                               traces->chr_lengths[chr_index] );
-            trace_index = 0;
-        }
-
-        for( k = window_start/TM_GRAN; k <= (window_stop-1)/TM_GRAN; k++ )
-        {
-            int LR_start = MAX( window_start, k*TM_GRAN ); // Locked Region start
-            int LR_stop = MIN( window_stop, (k+1)*TM_GRAN ); // Locked Region stop
-            
-            /* lock the spinlocks */
-            #ifdef LOCK_TRACES
-                #ifdef USE_MUTEX
-                pthread_mutex_lock( traces->locks[trace_index][ chr_index ] + k );
-                #else
-                pthread_spin_lock( traces->locks[trace_index][ chr_index ] + k );
-                #endif
-            #endif
-            
-            float* fl_dist_array;
-            int trace_index;
-            if( first_read_is_rev_comp )
-            {
-                /* we use the rev_chipseq_bs_density instead of just
-                   moving through the bs density in reverse order so
-                   that we can use vector operations */ 
-                /* note that, even if the vec operations are disabled,
-                   we want this so that gcc can auto-vectorize */
-                fl_dist_array = global_fl_dist->rev_chipseq_bs_density;
-                trace_index = 1;
-            } else {
-                fl_dist_array = global_fl_dist->chipseq_bs_density;
-                trace_index = 0;
-            }            
-            
-            int j;
-            #ifndef USE_VEC_OPERATIONS
-            for( j = LR_start; j < LR_stop; j++ )
-            {
-                float fl_density = fl_dist_array[ j - LR_start ];
-                fl_density *= cond_prob;
-                traces->traces[trace_index][chr_index][j] += fl_density;
-            }
-            #else
-            
-            #define AL_SIZE 16
-            union f4vector cond_prob_vec;
-            cond_prob_vec.f[0] = cond_prob;
-            cond_prob_vec.f[1] = cond_prob;
-            cond_prob_vec.f[2] = cond_prob;
-            cond_prob_vec.f[3] = cond_prob;
-
-            union f4vector* fl_array = (union f4vector*) fl_dist_array;
-            /* make sure this is aligned to the 16 byte boundary */
-            assert( ( ( (size_t)fl_dist_array)%AL_SIZE ) == 0 );
-            
-            union f4vector* trace_array = 
-                (union f4vector*) ( traces->traces[trace_index][chr_index] + LR_start );
-            /* word align the trace array */
-            /* save this so we know what has been skipped */
-            size_t old_trace_array_start = (size_t) trace_array;
-            trace_array =  (union f4vector*) ( (size_t)trace_array + ( AL_SIZE - ((size_t)trace_array)%AL_SIZE ) );
-            
-            /* deal with the unaligned floats */
-            for( j = 0; j < (int) ( (size_t)trace_array - old_trace_array_start ); j++ )
-            {
-                float fl_density = fl_dist_array[ j ];
-                fl_density *= cond_prob;
-                traces->traces[trace_index][chr_index][j+LR_start] += fl_density;
-            }
-            
-            /* we subtract 1 to account for the revised alignment */
-            for( j = 0; j < (LR_stop-LR_start)/4 - 1; j++ )
-            {
-                union f4vector fl_density __attribute__ ((aligned (128)));
-                fl_density.v = __builtin_ia32_mulps( fl_array[j].v, cond_prob_vec.v);
-                trace_array[j].v += fl_density.v;
-            }
-            
-            /* deal with the excess - its always greater than 1 
-               because of the alignment floats*/
-            for( j = LR_stop - LR_stop%4 - 4; j < LR_stop; j++ )
-            {
-                float fl_density = fl_dist_array[ j-LR_start ];
-                fl_density *= cond_prob;
-                traces->traces[trace_index][chr_index][j] += fl_density;
-                assert( fl_density < 1 );
-            }
-            #endif
-        
-            /* unlock the spinlocks */
-            #ifdef LOCK_TRACES
-                #ifdef USE_MUTEX
-                pthread_mutex_unlock( traces->locks[trace_index][ chr_index ] + k );
-                #else
-                pthread_spin_unlock( traces->locks[trace_index][ chr_index ] + k );
-                #endif
-            #endif
-        }        
+        statmap_log(LOG_FATAL, "Single end chipseq is not supported");
     }
 
     return;
@@ -1062,12 +849,12 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
     double prb_sum = ML_PRB_MIN;
     double error_prb_sum = ML_PRB_MIN;
 
+    /* calculate the mean density */
+    double window_density = 0;
+
     int i;
     for( i = 0; i < rd_index->num_mappings; i++ )
     {
-        /* calculate the mean density */
-        double window_density = 0;
-
         mapped_read_location* current_loc = rd_index->mappings[i];
 
         MRL_CHR_TYPE chr_index =
@@ -1079,19 +866,19 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
 
         enum bool is_paired 
             = mapped_read_location_is_paired( current_loc );
+        /* unused since we've temporarily removed single ended chipseq */
+        #if 0
         enum bool first_read_is_rev_comp
             = first_read_in_mapped_read_location_is_rev_comp( current_loc );
+        #endif
+
+        /* XXX for now, assuming segments correspond across tracks */
 
         /* If the reads are paired */
-        unsigned int j = 0;
         if( is_paired )
         {
-            for( j = start; j <= stop; j++ )
-            {
-                assert( j < traces->chr_lengths[chr_index] );
-                window_density += traces->traces[0][chr_index][j]
-                                  + traces->traces[1][chr_index][j];
-            }
+            window_density += accumulate_from_traces(traces, chr_index, start, 
+                stop);
 
             /* 
              * This is the probability of observing the seqeunce given that it came from 
@@ -1106,50 +893,7 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
         } 
         /* If the read is *not* paired */
         else {
-            unsigned int k;
-            
-            /* the binding site must be on the five prime side of the read */
-            unsigned int window_start;
-            unsigned int window_stop;
-            /* determine which trace to use */
-            if( first_read_is_rev_comp )
-            {
-                /* we don't use MAX bc stop-max_fl might be negative */
-                window_start = stop - MIN( stop, (unsigned int) global_fl_dist->max_fl );
-                window_stop = MIN( stop, global_genome->chr_lens[chr_index] );
-            } else {
-                window_start = start;
-                window_stop = MIN( start + global_fl_dist->max_fl, 
-                                   global_genome->chr_lens[chr_index] );
-            }
-
-            if( first_read_is_rev_comp )
-            {
-                for( k = window_start; k < window_stop; k++ )
-                {
-                    /* 
-                       This is a bit confusing. First, at this stage we dont care 
-                       whether the inferred binding site came from 5'or 3' reads  
-                       - so we add up the binding site density from both strands. 
-                       Next, we normalize this value by the precomputed frag length
-                       normalization factor.
-                    */
-                    float value =  traces->traces[0][chr_index][k];
-                    value += traces->traces[1][chr_index][k];
-                    value *= global_fl_dist->chipseq_bs_density[ 
-                                 global_fl_dist->max_fl - 1 - (k-window_start) ];
-                    window_density += value;
-                }
-            } else {
-                for( k = window_start; k < window_stop; k++ )
-                {
-                    /* same comment as directly above */
-                    float value = traces->traces[0][chr_index][k];
-                    value += traces->traces[1][chr_index][k]; 
-                    value *= global_fl_dist->chipseq_bs_density[ k-window_start ];
-                    window_density += value;
-                }
-            }
+            statmap_log(LOG_FATAL, "Single end chipseq is not supported");
         }
         
         new_prbs[i] = 
@@ -1247,39 +991,31 @@ void update_CAGE_trace_expectation_from_location(
     
     /* update the trace */
     /* If the reads are paired */
-    if( is_paired )
-    {
-        statmap_log( LOG_FATAL, "paired cage reads are not supported" );
-        exit( -1 );                
+    if( is_paired ) {
+        statmap_log(LOG_FATAL, "FATAL: paired cage reads are not supported" );
     } 
     /* If the read is *not* paired */
     else {
-        int trace_index;
+        int track_index;
         int promoter_pos = -1;
         /* If this is in the reverse ( 3') transcriptome */
         if( first_read_is_rev_comp )
         {
-            trace_index = 1;
+            track_index = 1;
             promoter_pos = stop - 1;
         } 
         /* We are in the 5' ( positive ) transcriptome */
         else {
-            trace_index = 0;
+            track_index = 0;
             promoter_pos = start;
         }
-        
-        /* lock the spinlock */
-        #ifdef USE_MUTEX
-        pthread_mutex_lock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
-        #else
-        pthread_spin_lock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
-        #endif        
-        traces->traces[ trace_index ][ chr_index ][ promoter_pos ] += cond_prob; 
-        #ifdef USE_MUTEX
-        pthread_mutex_unlock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
-        #else
-        pthread_spin_unlock( traces->locks[ trace_index ][ chr_index ] + (promoter_pos/TM_GRAN) );
-        #endif
+
+        struct trace_segments_t* trace_segments
+            = &(traces->segments[track_index][chr_index]);
+        float scale_factor = cond_prob;
+        /* Just update the promoter start position (n, n+1) */
+        update_trace_segments_from_uniform_kernel(trace_segments, scale_factor,
+            promoter_pos, promoter_pos+1);
     }
     
     return;
@@ -1325,37 +1061,31 @@ update_CAGE_mapped_read_prbs(
             = first_read_in_mapped_read_location_is_rev_comp( current_loc );
         
         /* If the reads are paired */
-        unsigned int j = 0;
-        if( is_paired )
-        {
-            statmap_log( LOG_FATAL, "paired cage reads are not supported" );
-            continue;
+        if( is_paired ) {
+            statmap_log(LOG_FATAL, "FATAL: paired cage reads are not supported" );
         } 
         /* If the read is *not* paired */
         else {
-            /* store the trace that we care about */
-            TRACE_TYPE** trace;
+            int track_index;
             unsigned int win_stop = 0;
             unsigned int win_start = 0;
             
             /* If this is in the rev stranded transcriptome */
             if( first_read_is_rev_comp )
             {
-                trace = traces->traces[1];
+                track_index = 1;
                 win_start = stop - MIN( stop, WINDOW_SIZE ) - 1;
                 win_stop = MIN( traces->chr_lengths[chr_index], stop + WINDOW_SIZE - 1 );
             } 
             /* We are in the 5' ( positive ) transcriptome */
             else {
-                trace = traces->traces[0];
+                track_index = 0;
                 win_start = start - MIN( start, WINDOW_SIZE );
                 win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
             }
-            
-            for( j = win_start; j < win_stop; j++ )
-            {
-                window_density += trace[chr_index][j];
-            }
+
+            window_density += accumulate_from_trace(traces, track_index,
+                chr_index, win_start, win_stop);
         }
         
         new_prbs[i] = get_seq_error_from_mapped_read_location( current_loc )

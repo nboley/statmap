@@ -38,14 +38,6 @@ struct trace_t {
     struct trace_segments_t** segments;
 };
 
-struct trace_segment_t*
-find_trace_segment_t(
-    struct trace_t* traces,
-    int track_index,
-    int chr_index,
-    int bp
-);
-
 void
 init_trace( struct genome_data* genome,
             struct trace_t** traces,
@@ -155,5 +147,40 @@ trace_agg_min( const TRACE_TYPE a, const TRACE_TYPE b );
 
 TRACE_TYPE
 trace_agg_max( const TRACE_TYPE a, const TRACE_TYPE b );
+
+void
+update_trace_segments_from_mapped_read_array(
+    struct trace_segments_t* trace_segments,
+    float* update_vals,
+    float scale_factor,
+    int start,
+    int stop
+);
+
+/* Wrapper function to update from a uniform kernel */
+void
+update_trace_segments_from_uniform_kernel(
+    struct trace_segments_t* trace_segments,
+    float scale_factor,
+    int start,
+    int stop
+);
+
+double
+accumulate_from_trace(
+    const struct trace_t* const traces,
+    int track_index,
+    int chr_index,
+    int start,
+    int stop
+);
+
+double
+accumulate_from_traces(
+    const struct trace_t* const traces,
+    int chr_index,
+    int start,
+    int stop
+);
 
 #endif // #define TRACE_H
