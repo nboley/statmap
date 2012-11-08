@@ -343,6 +343,7 @@ aggregate_over_wiggles(
     return;
 }
 
+#if 0
 /*
  * Take a paired bootstrap sample and update the trace to 
  * reflect the number of times that the ip bootstrap sample 
@@ -476,3 +477,4 @@ call_peaks_from_wiggles(
     
     return;
 }
+#endif
