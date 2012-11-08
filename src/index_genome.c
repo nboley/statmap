@@ -20,6 +20,8 @@
 #include "diploid_map_data.h"
 #include "error_correction.h"
 
+#include "log.h"
+
 /* a global pointer offset */
 /* This must be added to all pointers */
 static size_t index_offset = 0;
@@ -460,8 +462,7 @@ void free_node( void* node, char node_type )
             #endif
             break;
         default:
-            perror("Impossible branch reached in free_node.\n");
-            abort();
+            statmap_log( LOG_FATAL, "Impossible branch '%c' reached in free_node.", node_type );
     }
 }
 
@@ -504,9 +505,7 @@ void free_node_and_children( void* node, char node_type )
             free_node( node, 'l' );
             break;
         default:
-            fprintf(stderr, "FATAL       :  Impossible Branch: %c\n", node_type);
-            perror("Impossbile branch reached in free_node_and_children.\n");
-            abort();
+            statmap_log( LOG_FATAL, "Impossible branch '%c' reached in free_node_and_children.", node_type );
     }
 }
 
@@ -1090,12 +1089,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                     continue;
 
                 /* this should be optimized out */
-                float penalty_addition = compute_penalty(
-                    letter, seq[node_level], 
-                    node_level, seq_length,
-                    min_match_penalty - curr_penalty,
-                    penalties
-                );
+                float penalty_addition = compute_penalty( letter, node_level,
+                        seq_length, min_match_penalty - curr_penalty,
+                        penalties );
 
                 /* if this letter exceeds the max, continue */
                 if( penalty_addition > 0 ) {
@@ -1137,12 +1133,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* this should be optimized out */
                 LETTER_TYPE letter = children[i].letter;
 
-                float penalty_addition = compute_penalty(
-                    letter, seq[node_level], 
-                    node_level, seq_length,
-                    min_match_penalty - curr_penalty,
-                    penalties
-                );
+                float penalty_addition = compute_penalty( letter, node_level,
+                        seq_length, min_match_penalty - curr_penalty,
+                        penalties);
 
                 /* 
                  * If compute_penalty returns a value >= 1
@@ -1388,7 +1381,7 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
         return size + size_of_dnode( node );
     }
 
-    fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
+    statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
     assert( false );
     exit( -1 );
 }
@@ -1415,7 +1408,7 @@ calc_node_size( NODE_TYPE type, void* node  )
         return size_of_dnode( node );
     }
 
-    fprintf(stderr, "FATAL       :  Unrecognized Node Type: '%c'\n", type);
+    statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
     assert( false );
     exit( -1 );
 }
@@ -1514,7 +1507,7 @@ add_ODI_stack_item( struct ODI_stack* stack,
         
         if( stack->stack == NULL )
         {
-            fprintf( stderr, "FATAL       :  Error allocating memory for the ODI Stack.\n" );
+            statmap_log( LOG_FATAL, "Error allocating memory for the ODI Stack." );
             exit( -1 );
         }
     }
@@ -1581,12 +1574,12 @@ load_ondisk_index( char* index_fname, struct index_t** index )
        the magic number is correct and to get the size.
     */
     
-    fprintf( stderr, "NOTICE      :  Loading the index file '%s'.\n", index_fname );
+    statmap_log( LOG_NOTICE, "Loading the index file '%s'",  index_fname  );
 
     FILE* index_fp = fopen( index_fname, "r" );
     if( index_fp == NULL )
     {
-        fprintf( stderr, "FATAL       :  Cannot open the index '%s' for reading\n", index_fname );
+        statmap_log( LOG_FATAL, "Cannot open the index '%s' for reading",  index_fname  );
         assert( false );
         exit( 1 );
     }
@@ -1600,7 +1593,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     
     if( magic_number != 0 )
     {
-        fprintf( stderr, "FATAL    :  We appear to have loaded an invalid index\n" );
+        statmap_log( LOG_FATAL, "We appear to have loaded an invalid index" );
         exit( 1 );
     }
     
@@ -1629,22 +1622,23 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     #ifdef MMAP_INDEX
     int fd;
     if ((fd = open(index_fname, O_RDONLY )) < 0)
-        fprintf(stderr, "FATAL     : can't create %s for reading", index_fname);
+        statmap_log( LOG_FATAL, "can't create %s for reading",  index_fname );
     
     if ((OD_index = mmap (0, index_size + HEADER_SIZE, 
                              // index_size + sizeof(size_t) + sizeof(char), 
                           PROT_READ,
                           MAP_SHARED|MAP_POPULATE, fd, 0)) == (caddr_t) -1)
-        fprintf(stderr, "FATAL     : mmap error for index file");
+        statmap_log( LOG_FATAL, "mmap error for index file" );
     #else
     FILE* fp = NULL;
     fp = fopen( index_fname, "r"  );
-    if( fp == NULL )
-        perror("Could not open index file.");
+    if( fp == NULL ) {
+       statmap_log( LOG_FATAL, "Could not open index file at %s", index_fname );
+    }
     
     OD_index = calloc( index_size + HEADER_SIZE, 1  );
     size_t res = fread( OD_index, 1, index_size + HEADER_SIZE, fp );
-    fprintf( stderr, "DEBUG       :  Read %zu bytes ( out of %zu + %zu )\n", res, HEADER_SIZE, index_size );
+    statmap_log( LOG_DEBUG, "Read %zu bytes ( out of %zu + %zu )", res, HEADER_SIZE, index_size );
     fclose( fp );
     #endif
     
@@ -1689,21 +1683,21 @@ build_ondisk_index( struct index_t* index, char* ofname  )
     int fdout;
     if ((fdout = open(ofname, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)) < 0)
     {
-        perror( "FATAL       :  can't create index file for writing" );
+        statmap_log( LOG_FATAL, "can't create index file for writing" );
         exit( 1 );
     }
     
     /* go to the location corresponding to the last byte */
     if (lseek (fdout, HEADER_SIZE + index_size - 1, SEEK_SET) == -1)
     {
-        perror("FATAL       :  lseek error");
+        statmap_log( LOG_FATAL, "lseek error" );
         exit( 1 );
     }
     
     /* write a dummy byte at the last location */
     if (write (fdout, "", 1) != 1)
     {
-        perror("FATAL       :  write error");
+        statmap_log( LOG_FATAL, "write error" );
         exit( 1 );
     }
     
@@ -1713,7 +1707,7 @@ build_ondisk_index( struct index_t* index, char* ofname  )
                           PROT_READ | PROT_WRITE,
                           MAP_SHARED, fdout, 0)) == (caddr_t) -1)
     {
-        perror( "FATAL       :  mmap error for index output" );
+        statmap_log( LOG_FATAL, "mmap error for index output" );
         exit( 1 );
     }
 
@@ -1828,30 +1822,23 @@ build_ondisk_index( struct index_t* index, char* ofname  )
     char pseudo_loc_ofname[500];
     sprintf(pseudo_loc_ofname, "%s.pslocs", ofname  );
     FILE* ps_locs_of = fopen(pseudo_loc_ofname, "w");
-    if( NULL == ps_locs_of )
-    {
-        char buffer[500];
-        sprintf( buffer, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
-        perror( buffer );
-        exit( -1 );
+    if( NULL == ps_locs_of ) {
+        statmap_log( LOG_FATAL, "Error opening '%s' for writing.", PSEUDO_LOCATIONS_FNAME );
     }
+
     size_t size_written = 
         write_pseudo_locations_to_file( index->ps_locs, ps_locs_of );
-    fprintf( stderr, "NOTICE      :  wrote %zu bytes to pseudo locs file.\n", 
-             size_written);
+    statmap_log( LOG_NOTICE, "wrote %zu bytes to pseudo locs file.", size_written );
     fclose(ps_locs_of);
     
     /* write diploid mappings to file */
     char diploid_mapping_ofname[500];
     sprintf( diploid_mapping_ofname, "%s.dmap", ofname );
     FILE* dmap_of = fopen( diploid_mapping_ofname, "w" );
-    if( NULL == dmap_of )
-    {
-        char buffer[500];
-        sprintf( buffer, "Error opening '%s' for writing", diploid_mapping_ofname );
-        perror( buffer );
-        exit( -1 );
+    if( NULL == dmap_of ) {
+        statmap_log( LOG_FATAL, "Error opening '%s' for writing", diploid_mapping_ofname );
     }
+
     write_diploid_maps_to_file( index->diploid_maps, dmap_of );
     fclose( dmap_of );
 
@@ -1872,34 +1859,34 @@ print_memory_usage_stats()
     fprintf(stderr, "Size of Static Node:             %i Bytes\n", 
             sizeof(static_node)); 
     fprintf(stderr, "static_children_bytes:           %i\n", 
-           static_children_bytes);
+            static_children_bytes);
 
     fprintf(stderr, "\nDynamic Nodes Size:              %i kB\n",  
             (sizeof(dynamic_node)*num_dynamic_nodes)/1024);
     fprintf(stderr, "Size of Dynamic Node:            %i Bytes\n", 
             sizeof(dynamic_node)); 
     fprintf(stderr, "Dynamic Children Bytes:          %i kB\n",  
-           dynamic_children_bytes/1024);
+            dynamic_children_bytes/1024);
     fprintf(stderr, "\nTotal Dynamic Nodes Size:        %i kB\n",  
             (sizeof(dynamic_node)*num_dynamic_nodes)/1024
             + dynamic_children_bytes/1024);
-    
 
     fprintf(stderr, "\nSequence Nodes Size:             %i kB\n", 
             (sizeof(sequences_node)*num_sequence_nodes)/1024);
     fprintf(stderr, "Size of Sequence Node:           %i Bytes\n", 
             sizeof(sequences_node)); 
     fprintf(stderr, "Sequences Bytes:                 %i kB\n", 
-           sequence_node_sequence_bytes/1024);
+            sequence_node_sequence_bytes/1024);
     fprintf(stderr, "Genome Location Bytes:           %i kB\n", 
-           genome_location_bytes/1024);
+            genome_location_bytes/1024);
     fprintf(stderr, "Dynamic Genome Location Bytes:   %i kB\n", 
-           dynamic_genome_location_bytes/1024);
+            dynamic_genome_location_bytes/1024);
     fprintf(stderr, "\nTotal Sequences Nodes Size:      %i kB\n",  
             (sizeof(sequences_node)*num_sequence_nodes)/1024
             + sequence_node_sequence_bytes/1024);
 
     fprintf(stderr, "\n");
+
     return;
 }
 #endif

@@ -22,6 +22,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include "log.h"
 #include "config_parsing.h"
 #include "statmap.h"
 #include "mapped_read.h"
@@ -62,50 +63,26 @@ void set_max_reference_insert_len(int n) { max_reference_insert_len = n; }
  */
 void load_genome( struct genome_data** genome, struct args_t* args )
 {
-    int rv;
+    /* copy the genome into the output directory */
+    safe_link_into_output_directory( 
+        args->genome_fname, "./", GENOME_FNAME );
+    /* copy genome index into the output directory */
+    safe_link_into_output_directory( 
+        args->genome_index_fname, "./", GENOME_INDEX_FNAME );
+    
+    /* copy pseudo_locs into the output directory */
+    char pseudo_loc_ofname[500];
+    sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
+    safe_link_into_output_directory( 
+        pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
 
-    /* test for a correctly converted binary genome */
-    FILE* genome_fp = fopen( args->genome_fname, "r" );
-    if( NULL == genome_fp )
-    {
-        fprintf(stderr, "FATAL       :  Unable to open genome file '%s'\n", args->genome_fname);
-        exit( 1 );
-    }
-
-    char magic_number[9];
-    rv = fread( magic_number, sizeof(char), 9, genome_fp );
-    assert( rv == 9 );
-    fclose( genome_fp );
-
-    if( 0 == strncmp( magic_number, "SM_OD_GEN", 9 ) )
-    {
-        /* copy the genome into the output directory */
-        safe_link_into_output_directory( 
-            args->genome_fname, "./", GENOME_FNAME );
-        /* copy genome index into the output directory */
-        safe_link_into_output_directory( 
-            args->genome_index_fname, "./", GENOME_INDEX_FNAME );
-        
-        /* copy pseudo_locs into the output directory */
-        char pseudo_loc_ofname[500];
-        sprintf(pseudo_loc_ofname, "%s.pslocs", args->genome_index_fname  );
-        safe_link_into_output_directory( 
-            pseudo_loc_ofname, "./", GENOME_INDEX_PSLOCS_FNAME );
-
-        /* copy diploid map data into the output directory */
-        char dmap_ofname[500];
-        sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
-        safe_link_into_output_directory(
-            dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
-        
-        load_genome_from_disk( genome, GENOME_FNAME );
-    }
-    else
-    {
-        fprintf(stderr, "FATAL      :  Genome file '%s' is not in the correct format.\n", args->genome_fname);
-        exit(1);
-    }
-
+    /* copy diploid map data into the output directory */
+    char dmap_ofname[500];
+    sprintf( dmap_ofname, "%s.dmap", args->genome_index_fname );
+    safe_link_into_output_directory(
+        dmap_ofname, "./", GENOME_INDEX_DIPLOID_MAP_FNAME );
+    
+    load_genome_from_disk( genome, GENOME_FNAME );
     load_ondisk_index( GENOME_INDEX_FNAME, &((*genome)->index) );
 
     return;
@@ -121,11 +98,9 @@ map_marginal( struct args_t* args,
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
 
-    /* Save the user-set mapping metaparameters in a struct */
+    /* Save the user-specified mapping metaparameters in a struct */
     struct mapping_metaparams mapping_metaparams;
 
-    /* TODO set the metaparameters - wait for error_model merge */
-    
     /* 
        if the error data is not initalized, then we need to bootstrap it. We 
        do this by mapping the reads using a mismatch procedure until we have 
@@ -134,12 +109,11 @@ map_marginal( struct args_t* args,
     struct error_model_t* error_model = NULL;
     if( args->error_model_type == ESTIMATED )
     {
-        fprintf(stderr, "NOTICE      :  Bootstrapping error model\n" );
+        statmap_log( LOG_NOTICE, "Bootstrapping error model" );
         init_error_model( &error_model, ESTIMATED );
         
-        fprintf( stderr, 
-                 "NOTICE      :  Setting bootstrap mismatch rates to %f and %f\n",
-                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
+        statmap_log( LOG_NOTICE, "Setting bootstrap mismatch rates to %f and %f",
+                MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE  );
 
         mapping_metaparams.error_model_type = MISMATCH;
         mapping_metaparams.error_model_params[0] = MAX_NUM_MM_RATE;
@@ -153,27 +127,23 @@ map_marginal( struct args_t* args,
             error_model
         );
 
-        fprintf( stderr, 
-                 "NOTICE      :  Setting mapping metaparams to %f and %f\n",
-                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE );
-
         mapping_metaparams.error_model_type = ESTIMATED;
         mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
         
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
     } else if(args->error_model_type == FASTQ_MODEL) {
-        fprintf(stderr, "FATAL       :  FASTQ_MODEL (provided error scores) is not implemented yet\n" );
+        statmap_log( LOG_FATAL, "FASTQ_MODEL (provided error scores) is not implemented yet" );
         exit( 1 );
     } else if(args->error_model_type == MISMATCH) {
         /* initialize the meta params */
         mapping_metaparams.error_model_type = MISMATCH;
         mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
+        mapping_metaparams.error_model_params[1] = args->mapping_metaparameter / 2;
         
         init_error_model( &error_model, MISMATCH );
     } else {
-        fprintf(stderr, "FATAL       :  Invalid index search type '%i'\n",
-            args->error_model_type);
+        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  args->error_model_type );
         assert( false );
         exit( 1 );
     }
@@ -193,7 +163,7 @@ map_marginal( struct args_t* args,
         init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
     }
     
-    fprintf(stderr, "NOTICE      :  Finding candidate mappings.\n" );    
+    statmap_log( LOG_NOTICE, "Finding candidate mappings." );
 
     find_all_candidate_mappings( 
         genome,
@@ -218,12 +188,11 @@ map_marginal( struct args_t* args,
 
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
-    fprintf(stderr, "NOTICE      :  Writing non mapping reads to FASTQ files.\n" );
+    statmap_log( LOG_NOTICE, "Writing non mapping reads to FASTQ files." );
     write_nonmapping_reads_to_fastq( rdb, *mpd_rds_db );
     gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Wrote non-mapping reads to FASTQ in %.2lf sec\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Wrote non-mapping reads to FASTQ in %.2lf sec",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
 
     return;
 }
@@ -236,7 +205,7 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     if( args->frag_len_fp == NULL 
         && args->pair1_reads_fnames != NULL )
     {
-        fprintf(stderr, "NOTICE      :  Estimating FL distribution\n" );
+        statmap_log( LOG_NOTICE, "Estimating FL distribution" );
         estimate_fl_dist_from_mapped_reads( mpd_rds_db );
     }
 
@@ -246,7 +215,7 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
         FILE* fp = fopen( "estimated_fl_dist.txt", "w" );
         if( fp == NULL )
         {
-            perror( "ERROR       :  Can not open 'estimated_fl_dist.txt' for writing " );
+            statmap_log( LOG_ERROR, "Can not open 'estimated_fl_dist.txt' for writing" );
         } else {
             fprint_fl_dist( fp, mpd_rds_db->fl_dist );
             fclose( fp );
@@ -261,19 +230,15 @@ iterative_mapping( struct args_t* args,
                    struct genome_data* genome, 
                    struct mapped_reads_db* mpd_rds_db )
 {   
-    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN )
-    {
-        fprintf( stderr,
-                 "FATAL     :  Cannot iteratively map data with unknown assay type.\n" );
-        assert( false );
-        exit(1);
+    if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN ) {
+        statmap_log( LOG_FATAL, "Cannot iteratively map data with unknown assay type" );
     }
 
     if( NULL != args->unpaired_reads_fnames 
         && args->assay_type == CHIP_SEQ
         && mpd_rds_db->fl_dist == NULL )
     {
-        fprintf(stderr, "FATAL       :  Can not iteratively map single end chip-seq reads unless a FL dist is provided\n");
+        statmap_log( LOG_FATAL, "Can not iteratively map single end chip-seq reads unless a FL dist is provided" );
         exit(-1);
     }
 
@@ -302,9 +267,8 @@ map_generic_data(  struct args_t* args )
     load_genome( &genome, args );
     
     gettimeofday( &stop, NULL );
-    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
         
     /***** END Genome processing */
     
@@ -313,7 +277,7 @@ map_generic_data(  struct args_t* args )
     
     /* Free the genome index */
     /* we may need the memory later */
-    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    statmap_log( LOG_NOTICE, "Freeing index" );
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
@@ -347,9 +311,9 @@ map_chipseq_data(  struct args_t* args )
     load_genome( &genome, args );
     gettimeofday( &stop, NULL );
     
-    fprintf(stderr, "PERFORMANCE :  Indexed Genome in %.2lf seconds\n", 
-                    (float)(stop.tv_sec - start.tv_sec) 
-                        + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000
+        );
         
     /***** END Genome processing */
     
@@ -393,7 +357,7 @@ map_chipseq_data(  struct args_t* args )
 
     /* Free the genome index */
     /* we may need the memory later */
-    fprintf(stderr, "NOTICE      :  Freeing index\n" );
+    statmap_log( LOG_NOTICE, "Freeing index" );
     free_ondisk_index( genome->index );
     
     /* if there is no negative control, we use the same iterative 
@@ -452,18 +416,20 @@ cleanup:
 
 int 
 main( int argc, char** argv )
-{       
+{
     /* Seed the random number generator */
     srand ( time(NULL) );
+
+    /* Log to a temporary log file until we are ready to create the real log
+     * file (must wait until the Statmap output directory has been created) */
+    init_initial_logging();
 
     /* get the base directory */
     char* abs_path = NULL;
     abs_path = realpath( argv[0], abs_path );
     if( NULL == abs_path )
     {
-        fprintf( stderr, "%s\n", argv[0] );
-        perror( "Couldnt find abs path" );
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Couldn't find abs path: %s", argv[0] );
     }
     char* statmap_base_dir = dirname( abs_path );
 
@@ -478,7 +444,7 @@ main( int argc, char** argv )
     /* intialize an R instance */
     if( args.error_model_type == ESTIMATED )
     {
-        fprintf( stderr, "NOTICE      :  Initializing R interpreter.\n" );
+        statmap_log( LOG_NOTICE, "Initializing R interpreter." );
         init_R( );        
         load_statmap_source( statmap_base_dir );
     }
@@ -510,7 +476,9 @@ cleanup:
     
     /* finish the R interpreter */
     end_R();
-    fprintf( stderr, "NOTICE      :  Shutting down R interpreter.\n" );
+    statmap_log( LOG_NOTICE, "Shutting down R interpreter." );
+
+    finish_logging();
 
     return 0;
 }

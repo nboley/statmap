@@ -17,6 +17,23 @@
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
 
+#include "log.h"
+
+long
+calc_genome_len( struct genome_data* genome )
+{
+    long genome_len = 0;
+    
+    int i;
+    for( i = 0; i < genome->num_chrs; i++ )
+    {
+        genome_len += genome->chr_lens[i];
+    }
+    
+    return genome_len;
+}
+
+
 /**** ON DISK Code **********************************************************************/
 
 /* returns size written to disk */
@@ -25,6 +42,9 @@ write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
 {
     int rv;
     fprintf( fp, "SM_OD_GEN" );
+
+    rv = fwrite( &(header->format_version), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
     
     rv = fwrite( &(header->size), sizeof(size_t), 1, fp );
     assert( rv == 1 );
@@ -32,14 +52,6 @@ write_reference_data_header_to_disk( struct genome_header* header, FILE* fp )
     rv = fwrite( &(header->genome_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
 
-    rv = fwrite( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-
-    /* // keep the index in a separate file
-    rv = fwrite( &(header->index_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-    */
-    
     return ( 9*sizeof(char) + 3*sizeof(size_t) );
 }
 
@@ -51,17 +63,26 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
     char magic_number[9];
     rv = fread( magic_number, sizeof(unsigned char), 9, fp );
 
-    #ifdef DEBUG
-    fprintf( stderr, "DEBUG       :  Genome Magic Number - %.9s\n", magic_number );
-    #endif
-
     assert( rv == 9 );
     if( 0 != memcmp( magic_number, "SM_OD_GEN", 9 ) )
     {
-        fprintf( stderr, "FATAL       :  Genome Magic Number ('%.9s') is incorrect ( it should be 'SM_OD_GEN' - cmp %i  ) \n", 
-                 magic_number, memcmp( magic_number, "SM_OD_GEN", 9 ) );
-        fprintf( stderr, "HINT        :  Is this a fasta file? Fasta files need to be converted with build_index.\n" );
-        exit( 1 );
+        statmap_log( LOG_FATAL,
+                "Genome Magic Number ('%.9s') is incorrect ( it should be 'SM_OD_GEN' - cmp %i  )",
+                magic_number,
+                memcmp( magic_number, "SM_OD_GEN",  9 )
+            );
+    }
+
+    rv = fread( &(header->format_version), sizeof(size_t), 1, fp );
+    assert( rv == 1 );
+
+    if( header->format_version != GENOME_FILE_FORMAT_VERSION )
+    {
+        statmap_log( LOG_FATAL,
+                "Genome file format version is incompatible with this release of Statmap (found %zu, require %zu)",
+                header->format_version,
+                GENOME_FILE_FORMAT_VERSION
+            );
     }
 
     rv = fread( &(header->size), sizeof(size_t), 1, fp );
@@ -69,14 +90,6 @@ read_reference_data_header_from_disk( struct genome_header* header, FILE* fp )
 
     rv = fread( &(header->genome_offset), sizeof(size_t), 1, fp );
     assert( rv == 1 );
-
-    rv = fread( &(header->pseudo_locs_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-
-    /* // keep the index in a separate file
-    rv = fread( &(header->index_offset), sizeof(size_t), 1, fp );
-    assert( rv == 1 );
-    */
     
     return;
 }
@@ -203,26 +216,23 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
 {
     FILE* ofp;
     ofp = fopen( fname, "w+" );
-    if( ofp == NULL )
-    {
-        fprintf( stderr, "Can not open '%s' for writing.", fname );
-        exit( 1 );
+    if( ofp == NULL ) {
+        statmap_log( LOG_FATAL, "Could not open '%s' for writing", fname );
     }
       
     size_t size_written;
     
     /** write the header  */
     /* 
-       we dont actually know what any of these values are, so we write 
-       them to allocate the sapce, then we will go back and make them 
-       correct 
+       we don't actually know what the values of size or genome_offset are yet,
+       so we write them to allocate the space, then we will go back and make
+       them correct 
     */
     struct genome_header header;
     
+    header.format_version = GENOME_FILE_FORMAT_VERSION;
     header.size = 0;
     header.genome_offset = 0;
-    header.pseudo_locs_offset = 0;
-    // header.index_offset = 0;
 
     size_written = write_reference_data_header_to_disk( &header, ofp );
     header.size += size_written;
@@ -231,8 +241,6 @@ write_genome_to_disk( struct genome_data* gen, char* fname )
     size_written = write_standard_genome_to_file( gen, ofp  );
     header.size += size_written;
     
-    header.pseudo_locs_offset = header.genome_offset + size_written;
-
     /* write the updated header */
     fseek( ofp, 0, SEEK_SET );
     size_written = write_reference_data_header_to_disk( &header, ofp );
@@ -252,18 +260,16 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
     */
     
     FILE* genome_fp = fopen( fname, "r" );
-    if( genome_fp == NULL )
-    {
-        fprintf( stderr, "Cannot open the binary genome '%s' for reading", fname );
-        exit( -1 );
+    if( genome_fp == NULL ) {
+        statmap_log( LOG_FATAL, "Cannot open the binary genome '%s' for reading", fname );
     }
 
     struct genome_header header;
     read_reference_data_header_from_disk( &header, genome_fp );
 
     #ifdef DEBUG
-    fprintf( stderr, "DEBUG       :  HEADER DATA: %zu %zu %zu\n", 
-            header.size, header.genome_offset, header.pseudo_locs_offset  );
+    statmap_log( LOG_DEBUG, "HEADER DATA: %zu %zu %zu",
+            header.size, header.genome_offset, header.pseudo_locs_offset );
     #endif
     
     *gen = malloc( sizeof( struct genome_data ) );
@@ -274,14 +280,14 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
     
     int fd;
     if ((fd = open(fname, O_RDONLY )) < 0)
-        fprintf(stderr, "FATAL     : can't create %s for reading", fname);
+        statmap_log( LOG_FATAL, "can't create %s for reading",  fname );
     
     char* OD_genome;
     assert( sizeof(char) == 1 );
     if ((OD_genome = mmap (0, header.size,
                           PROT_READ,
                           MAP_SHARED, fd, 0)) == (caddr_t) -1)
-        fprintf(stderr, "FATAL     : mmap error for genome file");
+        statmap_log( LOG_FATAL, "mmap error for genome file" );
 
     char* curr_pos = OD_genome + header.genome_offset;
     populate_standard_genome_from_mmapped_file( *gen, curr_pos );
@@ -375,11 +381,20 @@ find_diploid_chr_index(
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
-              int chr_index, unsigned int loc, 
+              int chr_index, int start_bp, 
               int read_len )
 {
     assert( chr_index < genome->num_chrs );
-    
+
+    /* We can get negative locs from the assay specific correction code if the
+     * original mapping is close to a contig boundary. */
+    if( start_bp < 0 )
+    {
+        return NULL;
+    }
+
+    unsigned int loc = (unsigned int) start_bp;
+
     if( chr_index != PSEUDO_LOC_CHR_INDEX 
         && ( 
             loc + read_len > genome->chr_lens[chr_index]
@@ -474,7 +489,7 @@ add_chrs_from_fasta_file(
     FILE* f = fopen( fname, "r" );
     if( NULL == f )
     {
-        fprintf( stderr, "FATAL    : Error opening input file %s.\n", fname );
+        statmap_log( LOG_FATAL, "Error opening input file %s",  fname  );
         exit( -1 );
     }
     
@@ -490,7 +505,7 @@ add_chrs_from_fasta_file(
     char* chr;
     chr = malloc( (allcd_size+1)*sizeof(char) );
     if( chr == NULL ) {
-        fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+        statmap_log( LOG_FATAL, "Could not allocate enough memory for genome" );
         assert( 0 );
         exit(-1);
     }
@@ -533,8 +548,7 @@ add_chrs_from_fasta_file(
                     allcd_size = i;
 
                     assert( chr_name[0] != '\0' );
-                    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", 
-                            chr_name, i);
+                    statmap_log( LOG_NOTICE, "Added '%s' with %i basepairs",  chr_name, i );
                     add_chr_to_genome( chr_name, chr, i, chr_source, gen );
                     
                     if( !feof(f)) {
@@ -571,7 +585,7 @@ add_chrs_from_fasta_file(
             allcd_size += allcd_size;
             chr = realloc( chr, (allcd_size+1)*sizeof(char) );
             if( chr == NULL ) {
-                fprintf(stderr, "FATAL       :  Could not allocate enough memory for genome\n");
+                statmap_log( LOG_FATAL, "Could not allocate enough memory for genome" );
                 assert( 0 );
                 exit(-1);
             }
@@ -579,7 +593,7 @@ add_chrs_from_fasta_file(
 
         if( !isalpha(bp))
         {
-            fprintf( stderr, "ERROR           : Unrecognized character '%c' - ignoring\n", bp );
+            statmap_log( LOG_ERROR, "Unrecognized character '%c' - ignoring",  bp  );
             
         } else {
             chr[i] = bp;
@@ -596,7 +610,7 @@ add_chrs_from_fasta_file(
     assert( chr_name[0] != '\0' );
     add_chr_to_genome( chr_name, chr, i, chr_source, gen );
     
-    fprintf(stderr, "NOTICE      :  Added '%s' with %i basepairs\n", chr_name, i);
+    statmap_log( LOG_NOTICE, "Added '%s' with %i basepairs",  chr_name, i );
     free(chr);
 
     /* close the input file */
@@ -655,8 +669,10 @@ char* get_chr_prefix( char* chr_name )
     assert( first_underscore != NULL );
     if( first_underscore == NULL )
     {
-        fprintf( stderr, "FATAL : Diploid genome chr names must have a prefix delimited by an underscore. Found %s\n", chr_name );
-        exit(1);
+        statmap_log( LOG_FATAL,
+                "Diploid genome chr names must have a prefix delimited by an underscore. Found %s",
+                chr_name
+            );
     }
 
     int prefix_len = first_underscore - chr_name;
@@ -787,11 +803,12 @@ index_diploid_chrs(
             loc.chr = maternal_chr_index;
         }
         else {
-            fprintf( stderr, "FATAL : Impossible sequence segment : %i, %i, %i \n",
+            statmap_log( LOG_FATAL,
+                    "Impossible sequence segment : %i, %i, %i",
                     segments[i].paternal_start_pos,
                     segments[i].maternal_start_pos,
-                    segments[i].segment_length );
-            abort();
+                    segments[i].segment_length
+                );
         }
 
         /* index sequence segment */
@@ -841,15 +858,11 @@ index_genome( struct genome_data* genome )
     int chr_index;
     for( chr_index = 1; chr_index < genome->num_chrs; chr_index++ )
     {
-        if( genome->chr_lens[chr_index] > LOCATION_MAX )
-        {
-            fprintf( stderr, 
-                     "FATAL ERROR       :  Max indexable chr size is '%i'\n", 
-                     LOCATION_MAX );
-            exit( -1 );
+        if( genome->chr_lens[chr_index] > LOCATION_MAX ) {
+            statmap_log( LOG_FATAL, "Max indexable chr size is '%i'", LOCATION_MAX );
         }
 
-        fprintf(stderr, "NOTICE      :  Indexing '%s'\n", (genome->chr_names)[chr_index] );
+        statmap_log( LOG_NOTICE, "Indexing '%s'", (genome->chr_names)[chr_index] );
 
         /* Set the chr index in the soon to be added location */
         loc.chr = chr_index;

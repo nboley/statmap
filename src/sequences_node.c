@@ -10,6 +10,7 @@
 #include <float.h>
 
 #include "sequences_node.h"
+#include "log.h"
 #include "pseudo_location.h"
 #include "quality.h"
 
@@ -979,11 +980,8 @@ find_sequences_in_sequences_node(
     assert( results != NULL );
     assert( results->length <= results->allocated_length );
 
-    if( results->allocated_length == USHRT_MAX )
-    {
-        fprintf(stderr, "Overran max results length\n" );
-        assert( false );
-        exit( -1 );
+    if( results->allocated_length == USHRT_MAX ) {
+        statmap_log( LOG_FATAL, "Overran max results length in find_sequences_in_sequences_node()" );
     }
 
     /* get the total number of sequences that we need to consider */
@@ -1003,8 +1001,6 @@ find_sequences_in_sequences_node(
         float cum_penalty = multiple_letter_penalty(
             /* the start of the current seq in the array */
             seq_array_start + i*(num_letters-node_level), 
-            /* the start of the subseq in the reference sequence */
-            seq+node_level, 
             node_level, 
             seq_length, 
             num_letters,

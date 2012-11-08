@@ -16,6 +16,8 @@
 #include "util.h"
 #include "read.h"
 
+#include "log.h"
+
 /***** Rawread initialization and utility functions *****/
 
 void 
@@ -94,8 +96,10 @@ int safe_get_next_line( FILE* input_file,
             if( feof( input_file ) )
                 return 1;
             
-            fprintf(stderr, "ERROR:    Expected '%c' and get '%c' at position '%li'. Skipping read.\n",
-                    expected_first_char, next_char, ftell(input_file) );
+            statmap_log( LOG_ERROR,
+                    "Expected '%c' and get '%c' at position '%li'. Skipping read.",
+                    expected_first_char, next_char, ftell(input_file)
+                );
             move_fastq_fp_to_next_read( input_file );
             return 1;
         }
@@ -108,7 +112,7 @@ int safe_get_next_line( FILE* input_file,
         if( feof(input_file) ) {
             return 1;
         } else {
-            perror( "FATAL:    Error reading from rawread file." );
+            statmap_log( LOG_FATAL, "Error reading from rawread file." );
             exit( 1 );
         }
     }
@@ -117,7 +121,7 @@ int safe_get_next_line( FILE* input_file,
     
     if( buffer[buffer_len-1] != '\n' )
     {
-        fprintf(stderr, "ERROR:    Unable to read full line. Skipping read.\n");
+        statmap_log( LOG_ERROR, "Unable to read full line. Skipping read." );
         move_fastq_fp_to_next_read( input_file );
         return 1;        
     }
@@ -129,7 +133,7 @@ int safe_get_next_line( FILE* input_file,
     }
 
     if( !allow_empty_lines && buffer_len == 0 ) {
-        fprintf(stderr, "ERROR:    Line had 0 chracters. Skipping read.\n");
+        statmap_log( LOG_ERROR, "Line had 0 chracters. Skipping read." );
         move_fastq_fp_to_next_read( input_file );
         return 1;        
     }
@@ -194,7 +198,7 @@ populate_rawread_from_fastq_file(
         } else if( end == NORMAL )   {
             /* if the end is normal, we dont need to do antyhing */
         } else {
-            fprintf(stderr, "ERROR       :  Read end should be known\n");
+            statmap_log( LOG_ERROR, "Read end should be know" );
             assert(false);
         }
             
@@ -436,7 +440,7 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
         {
             if( !feof(rdb->paired_end_2_reads) ) 
             {
-                fprintf( stderr, "ERROR       :  File Mismatch: Paired files have different numbers of reads\n" );
+                statmap_log( LOG_ERROR, "File Mismatch: Paired files have different numbers of reads" );
                 exit( -1 );
             }
             return true;

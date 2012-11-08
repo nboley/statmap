@@ -12,6 +12,10 @@
  *
  */
 
+/* if any of these structures are changed, GENOME_FILE_FORMAT_VERSION in
+ * config.h should be incremented to reflect backwards incompatible changes in
+ * the binary genome format */
+
 enum INDEX_TYPE {
     TREE = 1
 };
@@ -49,8 +53,12 @@ struct genome_data {
     enum bool is_mmapped;
 };
 
+long
+calc_genome_len( struct genome_data* genome );
+
 void
-add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, enum CHR_SOURCE chr_source, struct genome_data* gen ); 
+add_chr_to_genome( char* chr_name, char* chr_str, unsigned int chr_len, 
+                   enum CHR_SOURCE chr_source, struct genome_data* gen ); 
 
 int
 find_chr_index( struct genome_data* genome, const char* const chr_name );
@@ -71,7 +79,7 @@ int get_map_data_index_from_chr_index(
 
 char* 
 find_seq_ptr( struct genome_data* genome, 
-              int chr_index, unsigned int loc, 
+              int chr_index, int start_bp, 
               int read_len );
 
 extern void
@@ -87,10 +95,9 @@ void
 free_genome( struct genome_data* gen );
 
 struct genome_header {
+    size_t format_version;
     size_t size;
     size_t genome_offset;
-    size_t pseudo_locs_offset;
-    size_t index_offset;
 };
 
 void

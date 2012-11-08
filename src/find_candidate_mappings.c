@@ -12,6 +12,7 @@
 #include <float.h>
 
 #include "statmap.h"
+#include "log.h"
 #include "find_candidate_mappings.h"
 #include "quality.h"
 #include "index_genome.h"
@@ -39,13 +40,17 @@ subseq_penalty(
     for( pos = offset; pos < subseq_len; pos++ )
     {
         int bp = rst->char_seq[pos];
+
         if( bp == 'N' || bp == 'n' )
         {
             penalty += N_penalty;
         } else {
-            int bpc = bp_code( bp );
-            /* take the match penalty for this bp */
-            penalty += penalty_array->array[pos].penalties[bpc][bpc];
+            /* take the match penalty for this bp - assuming we can find
+             * a perfect match to a given subsequence in the genome, which
+             * match would then have the best penalty (considering what we know
+             * about error rates in positions, for the error scores, etc. from
+             * the error model)? */
+            penalty += penalty_array->array[pos].penalties[bp_code(bp)];
         }
     }
 
@@ -63,22 +68,16 @@ find_optimal_subseq_offset(
     int region_start,
     int region_length
 ) {
-    /* Make sure the read is at least as long as the subsequence */
-    if( subseq_len > rst->length ) {
-        fprintf( stderr, "============ %i \t\t %i \n", subseq_len, rst->length );
-    }
-    assert( subseq_len <= rst->length );
-
     /* Make sure the search region makes sense */
     assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
     assert( region_length <= rst->length );
     assert( (region_start + region_length - subseq_len) >= 0 );
     
     /*
-       Remember: error_prb returns the inverse log probability of
-       error: log10(1 - P(error)) for matches
+       error_prb returns the inverse log probability of error:
+       log10(1 - P(error)) for matches
     */
-    int min_offset = 0;
+    int optimal_offset = region_start;
     float max_so_far = -FLT_MAX;
 
     int i;
@@ -90,12 +89,127 @@ find_optimal_subseq_offset(
         float ss_pen = subseq_penalty(rst, i, subseq_len, penalty_array);
         if( ss_pen > max_so_far ) {
             max_so_far = ss_pen;
-            min_offset = i;
+            optimal_offset = i;
         }
     }
 
-    return min_offset;
+    /* Return the offset of the optimal index probe from the start of the read
+     * subtemplate */
+    return optimal_offset;
 };
+
+struct indexable_subtemplate*
+build_indexable_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array,
+
+        // area of the read subtemplate to take an indexable subtemplate from
+        int range_start,
+        int range_length
+    )
+{
+    int subseq_length = index->seq_length;
+
+    /* Our strategy for choosing indexable subtemplates depends on the type of
+     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
+     * between probes in order to optimize intron finding. For ungapped assays,
+     * we want to use the highest quality subsequence in the read for the index
+     * search. */
+    int subseq_offset = 0;
+
+    if( _assay_type == RNA_SEQ ) // Gapped assay
+    {
+        /* FIXME soft clipping for gapped assays? */
+        if( range_start == 0 ) {
+            /* subseq_offset = softclip_len ? will that mess up the matching
+             * code later? */
+            subseq_offset = 0;
+        } else {
+            subseq_offset = range_start + range_length - subseq_length;
+        }
+    } else {
+        subseq_offset = find_optimal_subseq_offset(
+                rst,
+                fwd_penalty_array,
+                subseq_length,
+                range_start,
+                range_length
+            );
+    }
+
+    struct indexable_subtemplate* ist = NULL;
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
+            fwd_penalty_array, rev_penalty_array );
+
+    return ist;
+}
+
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        struct penalty_array_t* fwd_penalty_array,
+        struct penalty_array_t* rev_penalty_array
+    )
+{
+    int subseq_length = index->seq_length;
+    
+    /* Make sure we the read is long enough for us to build index probes
+     * (considering any softclipped bases from the start of the rst) */
+    int indexable_length = rst->length - softclip_len;
+    if( indexable_length < subseq_length )
+    {
+        statmap_log( LOG_FATAL,
+                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
+                softclip_len
+            );
+    }
+
+   struct indexable_subtemplates* ists = NULL;
+   init_indexable_subtemplates( &ists );
+
+    /* for now, try to build the maximum number of indexable subtemplates up to
+     * a maximum */
+    int num_partitions;
+    if( _assay_type == RNA_SEQ ) {
+        /* for RNA-seq, always use two probes at either end of the read so we
+         * can maximize the space for finding introns */
+        num_partitions = 2;
+    } else { 
+        num_partitions = MIN( indexable_length / subseq_length,
+                MAX_NUM_INDEX_PROBES );
+    }
+    int partition_len = ceil((float)indexable_length / num_partitions);
+
+    int i;
+    for( i = 0; i < num_partitions; i++ )
+    {
+        struct indexable_subtemplate* ist = NULL;
+
+        int partition_start = softclip_len + i * partition_len;
+
+        /* partition the read into equal sized sections and try to find the
+         * best subsequence within each section to use as an index probe */
+        ist = build_indexable_subtemplate( rst, index,
+                fwd_penalty_array, rev_penalty_array,
+                partition_start, partition_len );
+
+        if( ist == NULL ) {
+            free_indexable_subtemplates( ists );
+            return NULL;
+        }
+
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
+    }
+    
+    return ists;
+}
 
 void
 search_index(
@@ -292,141 +406,6 @@ update_error_data_record_from_candidate_mappings(
 }
 
 void
-build_indexable_subtemplate(
-        struct read_subtemplate* rst,
-        struct indexable_subtemplates* ists,
-        struct index_t* index,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array,
-
-        // area of the read subtemplate to take an indexable subtemplate from
-        int range_start,
-        int range_length
-    )
-{
-    int subseq_length = index->seq_length;
-
-    if( rst->length - softclip_len < subseq_length )
-    {
-        fprintf( stderr,
-                 "FATAL       :  Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)\n", softclip_len );
-        assert( false );
-        exit(1);
-    }
-
-    /* Finding the optimal subsequence offset is desirable for ungapped assays,
-     * but is not best for gapped assays (where we want the ists to be as far
-     * apart as possible to avoid overlapping with potential introns).
-     *
-     * For now, we manually set the ists to the first and last subsequences of
-     * the read of length subseq_length, which will work well for both types of
-     * assays. */
-
-    int subseq_offset = 0;
-
-    /* Our strategy for choosing indexable subtemplates depends on the type of
-     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
-     * between probes in order to optimize intron finding. For ungapped assays,
-     * we want to use the highest quality subsequence in the read for the index
-     * search. */
-    if( _assay_type == RNA_SEQ ) // Gapped assay
-    {
-        /* FIXME soft clipping for gapped assays? */
-        if( range_start == 0 ) {
-            /* subseq_offset = softclip_len ? will that mess up the matching
-             * code later? */
-            subseq_offset = 0;
-        } else {
-            subseq_offset = range_length - subseq_length;
-        }
-    } else if( _assay_type == CAGE ) {
-        /* FIXME this will work for now but the value saved in config.data
-         * (which is currently unused) will be wrong if we make the adjustment
-         * here. */
-        if( softclip_len < MAX_NUM_UNTEMPLATED_GS ) {
-            fprintf( stderr,
-                     "WARNING     :  Specified soft clip length (%i) for CAGE assay type is less than the maximum number of untemplated G's (%i)\n",
-                     softclip_len, MAX_NUM_UNTEMPLATED_GS );
-            fprintf( stderr,
-                     "NOTICE      :  Setting soft clip length to maxmimum number of untemplated G's (minimum required for mapping CAGE)\n" );
-
-            softclip_len = MAX_NUM_UNTEMPLATED_GS;
-        }
-    } else {
-        subseq_offset = find_optimal_subseq_offset(
-                rst,
-                fwd_penalty_array,
-                subseq_length,
-                range_start,
-                range_length
-            );
-    }
-
-    /* The probe must be offset by at least the soft clip length; if there is
-     * an optimal subseq offset greater than the soft clip length, that will be
-     * used instead. */
-    subseq_offset = MAX( subseq_offset, softclip_len );
-
-    struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist,
-            subseq_length,
-            subseq_offset,
-            rst->char_seq,
-            fwd_penalty_array,
-            rev_penalty_array
-        );
-
-    // copy indexable subtemplate into set of indexable subtemplates
-    add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-
-    // free working copy
-    free_indexable_subtemplate( ist );
-}
-
-void
-build_indexable_subtemplates_from_read_subtemplate(
-        struct indexable_subtemplates* ists,
-        struct read_subtemplate* rst,
-        struct index_t* index,
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
-    )
-{
-    /*
-       TODO for now, we build 2 indexable subtemplates if the index sequence
-       length is <= the read subtemplate length / 2. Otherwise build a single
-       indexable subtemplate
-     */
-    int subseq_length = index->seq_length;
-
-    if( subseq_length <= rst->length / 2 )
-    {
-        /* we can build 2 non-overlapping indexable subtemplates */
-        build_indexable_subtemplate(
-                rst, ists, index,
-                fwd_penalty_array, rev_penalty_array,
-                0, rst->length / 2
-            );
-
-        build_indexable_subtemplate(
-                rst, ists, index,
-                fwd_penalty_array, rev_penalty_array,
-                rst->length / 2, rst->length
-            );
-    }
-    else
-    {
-        /* build a single indexable subtemplate */
-        build_indexable_subtemplate(
-                rst, ists, index,
-                fwd_penalty_array, rev_penalty_array,
-                0, rst->length
-            );
-    }
-}
-
-void
 search_index_for_indexable_subtemplates(
         struct indexable_subtemplates* ists,
         mapped_locations** search_results,
@@ -455,16 +434,6 @@ search_index_for_indexable_subtemplates(
     }
 
     return;
-}
-
-int
-choose_mapped_locations_base_index( int search_results_length )
-{
-    assert( search_results_length > 0 );
-
-    /* TODO for now, use the first set of mapped locations, which corresponds
-     * to the search results for the first (5'-most) indexable subtemplate */
-    return 0;
 }
 
 int
@@ -615,11 +584,11 @@ build_candidate_mapping_cigar_string_from_match(
 
             if( cm->rd_strnd == FWD )
             {
-                ref_gap = (match->locations[i]->loc - match->subseq_offsets[i])
-                        - (match->locations[i-1]->loc - match->subseq_offsets[i-1]);
+                ref_gap = (match->locations[i].loc - match->subseq_offsets[i])
+                        - (match->locations[i-1].loc - match->subseq_offsets[i-1]);
             } else {
-                ref_gap = (match->locations[i-1]->loc + match->subseq_offsets[i-1])
-                        - (match->locations[i]->loc + match->subseq_offsets[i]);
+                ref_gap = (match->locations[i-1].loc + match->subseq_offsets[i-1])
+                        - (match->locations[i].loc + match->subseq_offsets[i]);
             }
 
             if( ref_gap > 0 )
@@ -649,8 +618,8 @@ build_candidate_mapping_cigar_string_from_match(
             cm->cigar[cigar_index].len += match->subseq_offsets[i];
         }
 
-        /* cigar[cigar_index].len was initialized to zero in 
-         * init_candidate_mapping_from_read_subtemplate */
+        /* cigar[cigar_index].len was initialized to zero when candidate
+         * mapping was initialized */
         cm->cigar[cigar_index].len += match->subseq_lengths[i];
     }
 
@@ -684,7 +653,7 @@ compute_candidate_mapping_penalty_from_match(
     int i;
     for( i = 0; i < match->len; i++ ) {
         /* the product of the marginal (log) probabilites */
-        cum_penalty += match->locations[i]->penalty;
+        cum_penalty += match->locations[i].penalty;
     }
 
     return cum_penalty;
@@ -697,54 +666,57 @@ build_candidate_mapping_from_match(
         struct read_subtemplate* rst,
         struct genome_data* genome )
 {
-    /* build a candidate mapping from the base location, then build a cigar
-     * string representing all the locations in the match */
+    /* Make sure this is a valid, completed match */
+    assert( match->len > 0 && match->matched == match->len );
 
-    candidate_mapping cm = init_candidate_mapping();
+    candidate_mapping cm;
+    memset( &cm, 0, sizeof(candidate_mapping) );
 
-    assert( match->len > 0 );
-    mapped_location* base = match->locations[0];
-
-    /* set the strand */
-    assert( base->strnd == FWD || base->strnd == BKWD ); // XXX correct?
+    mapped_location* base = match->locations + 0;
+    cm.chr = base->chr;
     cm.rd_strnd = base->strnd;
 
-    /* set metadata */
-    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
+    /* the length of the sequence that was mapped */
+    cm.trimmed_length = softclip_len;
+    cm.mapped_length = rst->length - cm.trimmed_length;
 
-    /* set location information */
-    cm.chr = base->chr;
+    /* The first location in the match is the first location in the mapping,
+     * relative to the strand. We want to normalize to the start in the 5'
+     * genome. */
+    int norm_start_loc_index;
 
-    /* set (partial) READ_TYPE information
-     * (rd_type.pos is set in update_read_type_pos) */
-    /* TODO this is unnecessary if we follow through with this
-     * reworking on candidate_mapping */
-    //cm.rd_type.follows_ref_gap = follows_ref_gap;
-
-    /* We need to play with this a bit to account for index probes that are
-     * shorter than the read length */
-    cm.mapped_length = rst->length - softclip_len;
-    int read_location = modify_mapped_read_location_for_index_probe_offset(
-                base->loc, base->chr, base->strnd,
-                match->subseq_offsets[0], match->subseq_lengths[0],
-                cm.mapped_length, genome );
-
-    /* HACK */
-    /* TODO - update modify_mapped_read_location_for_index_probe_offset to
-     * handle this case */
-    if( match->len > 1 && base->strnd == BKWD ) {
-        read_location = match->locations[match->len-1]->loc;
+    assert( cm.rd_strnd == FWD || cm.rd_strnd == BKWD );
+    if( cm.rd_strnd == FWD ) {
+        /* If this is a forward mapped read, then the start relative to the
+         * forward strand is in the first index probe's mapped location, since
+         * index probes are chosen from 5' to 3' across the read */
+        norm_start_loc_index = 0;
+    } else // strnd == BKWD
+    {
+        /* If this a reverse mapped read, then the start relative to the
+         * forward strand is the *end* of the read in the 3' genome - so we
+         * want to use the last mapped_location */
+        norm_start_loc_index = match->len - 1;
     }
+
+    int read_location
+        = modify_mapped_read_location_for_index_probe_offset(
+                match->locations[norm_start_loc_index].loc,
+                match->locations[norm_start_loc_index].chr,
+                match->locations[norm_start_loc_index].strnd,
+                match->subseq_offsets[norm_start_loc_index],
+                match->subseq_lengths[norm_start_loc_index],
+                rst->length,
+                genome
+            );
 
     if( read_location < 0 ) // the read location was invalid; skip this matched set
         return;
-
     cm.start_bp = read_location;
 
-    /* build the cigar string from the mapped_locations */
-    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
+    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
 
-    //print_candidate_mapping( &cm ); // DEBUG
+    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
     add_candidate_mapping( mappings, &cm );
 }
@@ -803,17 +775,6 @@ build_candidate_mappings_from_matches(
     }
 }
 
-mapped_locations*
-mapped_locations_template( struct indexable_subtemplate* indexable_probe )
-{
-    /* construct an empty set of mapped_locations with the metadata
-     * (original indexable_subtemplate) from template */
-    mapped_locations* locs = NULL;
-    init_mapped_locations( &locs, indexable_probe );
-
-    return locs;
-}
-
 void
 add_pseudo_loc_to_mapped_locations(
         INDEX_LOC_TYPE* gen_loc,
@@ -861,14 +822,15 @@ expand_pseudo_location_into_mapped_locations(
     return;
 }
 
-void
+mapped_locations*
 expand_base_mapped_locations(
         mapped_location* base_loc,
-        mapped_locations* expanded_locs,
+        struct indexable_subtemplate* index_probe,
         struct genome_data* genome
     )
 {
-    /* we assume that expanded_locs has already been initalize */
+    mapped_locations* expanded_locs = NULL;
+    init_mapped_locations( &expanded_locs, index_probe );
     
     /* if base_loc is a pseudo location, expand it and add all of its
      * potential mapped_location's */
@@ -884,39 +846,39 @@ expand_base_mapped_locations(
     /* sort in order to use binary search later */
     sort_mapped_locations_by_location( expanded_locs );
 
-    return;
+    return expanded_locs;
 }
 
 void
 add_matches_from_pseudo_locations_to_stack(
         mapped_locations* candidate_locs,
         struct ml_match* match,
-        int match_index,
         int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
-    /* Get a reference to the base mapped location for the strand */
-    mapped_location* base = match->locations[0];
-
-    /* Assume the pseudo chr is sorted to come before the rest of the chrs */
+    /* THe following algorithm assumes the pseudo location chr is sorted to
+     * come before the rest of the chrs */
     assert( PSEUDO_LOC_CHR_INDEX == 0 );
 
-    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
+    /* Get a reference to the base mapped location for the strand */
+    mapped_location* base = match->locations + 0;
 
     /* Find the start of the set of pseudo mapped locations with the same
      * strand as the location we are matching to */
     int pslocs_start_in_sorted_mapped_locations =
-        find_start_of_pseudo_mapped_locations_for_strand(
-            candidate_locs, base->strnd );
-
+        find_start_of_pseudo_mapped_locations_for_strand( candidate_locs,
+                base->strnd );
+    
     /* If there are no pseudo locations in the set of candidate locations for
      * matching, nothing to do here. */
     if( pslocs_start_in_sorted_mapped_locations < 0 )
         return;
 
-    /* Iterate over the sets of pseduo locations */
+    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
+
+    /* Iterate over the sets of pseudo locations */
     int i;
     for( i = pslocs_start_in_sorted_mapped_locations;
          i < candidate_locs->length;
@@ -932,8 +894,9 @@ add_matches_from_pseudo_locations_to_stack(
         if( candidate_loc->chr > PSEUDO_LOC_CHR_INDEX )
             break;
 
-        /* check the cumulative penalty for the match. If it is less
-         * than the minimum, skip this match */
+        /* Check the cumulative penalty for the match. If it is less
+         * than the minimum, skip this match. All of the expanded pseudo
+         * locations will have the same penalty. */
         float cum_penalty = match->cum_penalty + candidate_loc->penalty;
         if( cum_penalty < mapping_params->recheck_min_match_penalty )
             continue;
@@ -968,36 +931,35 @@ add_matches_from_pseudo_locations_to_stack(
                     - prev_matched_location_start;
             }
 
-            int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
-
-            if( candidate_cum_ref_gap < 0 )
-                continue;
-
-            if( candidate_cum_ref_gap <= max_reference_insert_len )
+            /* The gap between this location and the previous location must be
+             * greater than the previous location's subseq_length. This allows
+             * for overlapping index probes, with the restriction that the
+             * start locations must be strictly increasing from the 5' to
+             * 3' end of the read subtemplate. */
+            if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
             {
-                /* construct a mapped location */
-                mapped_location* tmp = malloc( sizeof( mapped_location ));
-                copy_mapped_location( tmp, candidate_loc );
-                tmp->chr = iloc->chr;
-                tmp->loc = iloc->loc;
-
-                /* Since we're building this mapped_location dynamically to
-                 * represent a pseudo location, it won't be free with the rest
-                 * of the mapped_locations pointers from search_results.
-                 * For now, we set an explicit flag to distinguish these
-                 * different types of mapped locations. */
-                tmp->free_with_match = true;
+                continue;
+            }
+            else if( candidate_ref_gap <= max_reference_insert_len )
+            {
+                /* construct a mapped location from the INDEX_LOC_TYPE stored
+                 * by the pseudo location */
+                mapped_location* tmp_loc = malloc( sizeof( mapped_location ));
+                copy_mapped_location( tmp_loc, candidate_loc );
+                tmp_loc->chr = iloc->chr;
+                tmp_loc->loc = iloc->loc;
 
                 struct ml_match* new_match = copy_ml_match( match );
-                add_location_to_ml_match( tmp,
-                        new_match,
+                add_location_to_ml_match( tmp_loc, new_match,
                         candidate_locs->probe->subseq_length,
-                        candidate_locs->probe->subseq_offset,
-                        match_index,
-                        candidate_cum_ref_gap );
-
+                        candidate_locs->probe->subseq_offset );
                 ml_match_stack_push( stack, new_match );
+                free( tmp_loc );
             } else {
+                /* If gap between the current location and the previous
+                 * location in the match is greater than the maximum allowed
+                 * gap in the reference, we know that every subsequent location
+                 * also cannot match (because they are sorted). */
                 break;
             }
         }
@@ -1010,12 +972,11 @@ void
 add_matches_from_locations_to_stack(
         mapped_locations* candidate_locs,
         struct ml_match* match,
-        int match_index,
         int prev_matched_location_start,
         struct ml_match_stack* stack,
         struct mapping_params* mapping_params )
 {
-    mapped_location* base = match->locations[0];
+    mapped_location* base = match->locations + 0;
 
     /* try to continue building match with each location in the
      * candidate_locs. Since each set of mapped_locations is sorted by start
@@ -1043,12 +1004,16 @@ add_matches_from_locations_to_stack(
                 - ( candidate_loc->loc + candidate_locs->probe->subseq_offset );
         }
 
-        int candidate_cum_ref_gap = match->cum_ref_gap + candidate_ref_gap;
-
-        if( candidate_cum_ref_gap < 0 )
+        /* The gap between this location and the previous location must be
+         * greater than the previous location's subseq_length. This allows
+         * for overlapping index probes, with the restriction that the
+         * start locations must be strictly increasing from the 5' to
+         * 3' end of the read subtemplate. */
+        if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
+        {
             continue;
-
-        if( candidate_cum_ref_gap <= max_reference_insert_len )
+        }
+        else if( candidate_ref_gap <= max_reference_insert_len )
         {
             /* check the cumulative penalty for the match. If it is less
              * than the minimum, skip this match */
@@ -1061,52 +1026,20 @@ add_matches_from_locations_to_stack(
              * the stack */
             struct ml_match* new_match = copy_ml_match( match );
 
-            add_location_to_ml_match( candidate_loc,
-                    new_match,
+            add_location_to_ml_match( candidate_loc, new_match,
                     candidate_locs->probe->subseq_length,
-                    candidate_locs->probe->subseq_offset,
-                    match_index,
-                    candidate_cum_ref_gap );
-
+                    candidate_locs->probe->subseq_offset );
             ml_match_stack_push( stack, new_match );
         } else {
-            /* adding this mapped_location to the match would cause it to have
-             * total intron length greater than the maximum accepted size.
-             * Since the mapped_locations in search_results are sorted by
-             * start location, we then know that none of the following
-             * mapped_locations can build a valid match, and we can optimize
-             * by terminating early. */
+            /* If gap between the current location and the previous
+             * location in the match is greater than the maximum allowed
+             * gap in the reference, we know that every subsequent location
+             * also cannot match (because they are sorted). */
             break;
         }
     }
 
     return;
-}
-
-int
-find_index_of_next_indexable_subtemplate_to_match(
-        struct ml_match* match )
-{
-    int match_index = 0;
-    /*
-     * find the index of the next set of index subtemplate search results
-     * to consider. Since match is a partially built set of matched locations,
-     * the index is the first entry in it's mapped_locations array that is NULL.
-     */
-    int i;
-    for( i = 0; i < match->len; i++ )
-    {
-        if( match->locations[i] == NULL )
-        {
-            match_index = i;
-            break;
-        }
-    }
-    /* Since we initialize match with the base matched location, this index
-     * should always be greater than zero */
-    assert( match_index > 0 );
-
-    return match_index;
 }
 
 void
@@ -1117,28 +1050,29 @@ add_potential_matches_to_stack(
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
-    int match_index =
-        find_index_of_next_indexable_subtemplate_to_match( match );
-
+    /* The number of ists that have been match is also the index of the next
+     * ist to match */
+    int match_index = match->matched;
+    assert( match_index > 0 );
     mapped_locations* candidate_locs = search_results[match_index];
 
     /* Compute the true start (loc - subseq_offset) of the last mapped
      * location in the match */
+    mapped_location* base = match->locations + 0;
+
     int prev_matched_location_start;
-    mapped_location* base = match->locations[0];
     if( base->strnd == FWD )
     {
-        prev_matched_location_start = match->locations[match_index - 1]->loc
+        prev_matched_location_start = match->locations[match_index - 1].loc
                                     - match->subseq_offsets[match_index - 1];
     } else {
-        prev_matched_location_start = match->locations[match_index - 1]->loc
+        prev_matched_location_start = match->locations[match_index - 1].loc
                                     + match->subseq_offsets[match_index - 1];
     }
 
     add_matches_from_pseudo_locations_to_stack(
             candidate_locs,
             match,
-            match_index,
             prev_matched_location_start,
             stack,
             genome,
@@ -1148,7 +1082,6 @@ add_potential_matches_to_stack(
     add_matches_from_locations_to_stack(
             candidate_locs,
             match,
-            match_index,
             prev_matched_location_start,
             stack,
             mapping_params
@@ -1178,8 +1111,8 @@ find_matching_mapped_locations(
         struct ml_match* curr_match = ml_match_stack_pop( stack );
 
         /* if this is a completed, valid match object (i.e. it contains a
-         * matched mapped location from each indexable subtemplate */
-        if( ml_match_is_valid( curr_match ) )
+         * matched mapped location from each indexable subtemplate ) */
+        if( curr_match->matched == curr_match->len )
         {
             /* then add it to the list of found matches */
             copy_ml_match_into_matches( curr_match, matches );
@@ -1196,7 +1129,7 @@ find_matching_mapped_locations(
                 );
         }
 
-        free_ml_match( curr_match, false );
+        free_ml_match( curr_match );
     }
 
     free_ml_match_stack( stack );
@@ -1205,7 +1138,6 @@ find_matching_mapped_locations(
 void
 build_candidate_mappings_from_base_mapped_location(
         mapped_location* base,
-        int base_locs_index,
         struct indexable_subtemplate* base_probe,
 
         mapped_locations** search_results,
@@ -1217,15 +1149,11 @@ build_candidate_mappings_from_base_mapped_location(
         
         struct mapping_params* mapping_params )
 {
-    /* For now, we assume that we always start building from 5' -> 3' */
-    assert( base_locs_index == 0 );
-
     /* Initialize the match object for all matches from this base location */
     struct ml_match* base_match = NULL;
     init_ml_match( &base_match, search_results_length );
-    add_location_to_ml_match( base, base_match,
-            base_probe->subseq_length, base_probe->subseq_offset,
-            base_locs_index, 0 );
+    add_location_to_ml_match( base, base_match, base_probe->subseq_length,
+            base_probe->subseq_offset );
 
     /* Initialize container for complete, valid matches to this base location */
     struct ml_matches* matches = NULL;
@@ -1246,7 +1174,7 @@ build_candidate_mappings_from_base_mapped_location(
         );
     
     /* cleanup memory */
-    free_ml_matches( matches, true );
+    free_ml_matches( matches );
 }
 
 void
@@ -1263,22 +1191,24 @@ sort_search_results(
     return;
 }
 
-void
+candidate_mappings*
 build_candidate_mappings_from_search_results(
-        candidate_mappings* rst_mappings,
         mapped_locations** search_results,
         int search_results_length,
         struct read_subtemplate* rst,
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
-    /* sort each mapped_locations in order to binary search later */
+    candidate_mappings* mappings = NULL;
+    init_candidate_mappings( &mappings );
+
+    /* sort each mapped_locations in order to use optimized merge algorithm */
     sort_search_results( search_results, search_results_length );
 
-    /* pick a mapped_locations to use as the basis for matching */
-    int base_locs_index = choose_mapped_locations_base_index(
-            search_results_length );
-    mapped_locations* base_locs = search_results[base_locs_index];
+    /* Always use the mapped locations from the first indexable subtemplate as
+     * the basis for building matches across the whole read subtemplate. We
+     * always build matches from 5' -> 3' */
+    mapped_locations* base_locs = search_results[0];
     
     /* consider each base location */
     int i, j;
@@ -1286,29 +1216,27 @@ build_candidate_mappings_from_search_results(
     {
         mapped_location* base_loc = base_locs->locations + i;
 
-        /* If the base_loc is a diploid or pseudo location, build a set of all
-         * possible expansions to consider for matching */
-        mapped_locations* expanded_base =
-            mapped_locations_template( base_locs->probe );
-
-        expand_base_mapped_locations( base_loc, expanded_base, genome );
+        /* If the base_loc is a pseudo location, build a set of all its
+         * possible expansions to consider for matching. Otherwise, returns the
+         * original location */
+        mapped_locations* expanded_base_locs = expand_base_mapped_locations(
+                base_loc, base_locs->probe, genome );
 
         /* match across each of the expanded locations */
-        for( j = 0; j < expanded_base->length; j++ )
+        for( j = 0; j < expanded_base_locs->length; j++ )
         {
-            mapped_location* base = expanded_base->locations + j;
+            mapped_location* match_base = expanded_base_locs->locations + j;
 
-            build_candidate_mappings_from_base_mapped_location(
-                    base, base_locs_index, base_locs->probe,
-                    search_results, search_results_length,
-                    genome,
-                    rst, rst_mappings,
-                    mapping_params
-                );
+            build_candidate_mappings_from_base_mapped_location( match_base,
+                    expanded_base_locs->probe, search_results,
+                    search_results_length, genome, rst, mappings,
+                    mapping_params);
         }
 
-        free_mapped_locations( expanded_base );
+        free_mapped_locations( expanded_base_locs );
     }
+
+    return mappings;
 }
 
 void
@@ -1556,7 +1484,7 @@ build_gapped_candidate_mappings_for_read_subtemplate(
     return;
 }
 
-void
+int
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         candidate_mappings* final_mappings,
@@ -1568,16 +1496,23 @@ find_candidate_mappings_for_read_subtemplate(
         struct mapping_params* mapping_params
     )
 {
+    /* the index of the read subtemplate that we are using */
     int rst_pos = rst->pos_in_template.pos;
     
     // build a set of indexable subtemplates from this read subtemplate
-    struct indexable_subtemplates* ists = NULL;
-    init_indexable_subtemplates( &ists );
-    build_indexable_subtemplates_from_read_subtemplate(
-            ists, rst, genome->index,
-            mapping_params->fwd_penalty_arrays[rst_pos],
-            mapping_params->rev_penalty_arrays[rst_pos]
-        );
+    struct indexable_subtemplates* ists = 
+       build_indexable_subtemplates_from_read_subtemplate(
+           rst, genome->index,
+           mapping_params->fwd_penalty_arrays[rst_pos],
+           mapping_params->rev_penalty_arrays[rst_pos]
+       );
+    
+    /* if the set of probe's is too low quality, don't try and map this read */
+    if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
+    {
+        free_indexable_subtemplates( ists );
+        return CANT_BUILD_READ_SUBTEMPLATES;
+    }
     
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
@@ -1597,15 +1532,10 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     free( index_search_params );
-    
-    /* build candidate mappings from matching subsets of the mapped_locations
-     * for each indexable_subtemplate returned by the index search */
-    candidate_mappings* mappings = NULL;
-    init_candidate_mappings( &mappings );
 
-    build_candidate_mappings_from_search_results(
-            mappings, search_results, search_results_length,
-            rst, genome, mapping_params );
+    candidate_mappings* mappings
+        = build_candidate_mappings_from_search_results( search_results,
+                search_results_length, rst, genome, mapping_params );
 
     /* NOTE search_results contains references to memory allocated in the
      * indexable_subtemplates. search_results must be freed before ists */
@@ -1637,22 +1567,23 @@ find_candidate_mappings_for_read_subtemplate(
             scratch_error_data_record
         );
     
-    return;
+    return 0;
 }
 
 void
-update_read_type_pos(
+update_pos_in_template(
         candidate_mappings* mappings,
         int rst_index )
 {
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        mappings->mappings[i].rd_type.pos = rst_index;
+        mappings->mappings[i].pos_in_template = rst_index;
     }
 }
 
-void
+/* returns 0 on success */
+int
 find_candidate_mappings_for_read(
         struct read* r,
         candidate_mappings* read_mappings,
@@ -1666,6 +1597,7 @@ find_candidate_mappings_for_read(
     )
 {
     assert( NULL != error_model );
+    int rv = -1;
     
     int rst_index;
     for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
@@ -1678,39 +1610,45 @@ find_candidate_mappings_for_read(
         candidate_mappings* rst_mappings = NULL;
         init_candidate_mappings( &rst_mappings );
 
-        find_candidate_mappings_for_read_subtemplate(
+        rv = find_candidate_mappings_for_read_subtemplate(
                 rst,
                 rst_mappings,
                 genome,
-                
                 scratch_error_data_record,
                 only_collect_error_data,
-
                 mapping_params
             );
-
+        
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
-        update_read_type_pos( rst_mappings, rst_index );
+        update_pos_in_template( rst_mappings, rst_index );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
         append_candidate_mappings( read_mappings, rst_mappings );
 
         free_candidate_mappings( rst_mappings );
+        
+        if( rv != 0 )
+        {
+            return rv;
+        }
     }
+    
+    return 0;
 }
 
 void
 add_candidate_mappings_for_untemplated_gs(
         candidate_mappings* assay_corrected_mappings,
         candidate_mapping* cm,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     /** Add additional mappings if there is a G (that could be untemplated) in
      * the read sequence **/
-    struct read_subtemplate* rst = r->subtemplates + cm->rd_type.pos;
+    struct read_subtemplate* rst = r->subtemplates + cm->pos_in_template;
 
     int i;
     for( i = 0; i < MAX_NUM_UNTEMPLATED_GS; i++ )
@@ -1736,7 +1674,13 @@ add_candidate_mappings_for_untemplated_gs(
 
             cm_copy.num_untemplated_gs += i+1;
 
-            add_candidate_mapping( assay_corrected_mappings, &cm_copy );
+            /* Add this soft clipped variation on the base candidate mapping if
+             * it is a valid mapping */
+            if( NULL != find_seq_ptr( genome, cm_copy.chr, cm_copy.start_bp,
+                        cm_copy.mapped_length ) )
+            {
+                add_candidate_mapping( assay_corrected_mappings, &cm_copy );
+            }
         } else {
             break;
         }
@@ -1749,29 +1693,20 @@ void
 make_cage_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     int i;
     for( i = 0; i < mappings->length; i++ )
     {
-        candidate_mapping* cm = mappings->mappings + i;
-
-        /* Add initial candidate mapping with no untemplated G's */
-        candidate_mapping corrected_cm = *cm;
+        /* Start by adjusting the mapping to be an initial candidate mapping
+         * with no untemplated G's */
+        candidate_mapping corrected_cm = mappings->mappings[i];
 
         /* Make sure we soft clipped enough bases when searching the index to be
          * able to make this adjustment */
         assert( corrected_cm.trimmed_length >= MAX_NUM_UNTEMPLATED_GS );
-
-        /* Check that the candidate mapping isn't so close to a contig boundary
-         * that this adjustment would cause it to cross over */
-        if( corrected_cm.start_bp - MAX_NUM_UNTEMPLATED_GS < 0 ) {
-            /* FIXME what's the right thing to do here? (skipping it for now) */
-            /* Run the same algorithm with as many bp's as we can spare? */
-            continue;
-        }
-
         corrected_cm.mapped_length += MAX_NUM_UNTEMPLATED_GS;
         corrected_cm.trimmed_length -= MAX_NUM_UNTEMPLATED_GS;
 
@@ -1785,19 +1720,28 @@ make_cage_specific_corrections(
 
             assert( corrected_cm.cigar[0].op == 'M' );
             corrected_cm.cigar[0].len += MAX_NUM_UNTEMPLATED_GS;
-
         } else { // corrected_cm.rd_strnd == BKWD
             assert( corrected_cm.cigar[corrected_cm.cigar_len-1].op == 'M' );
             corrected_cm.cigar[corrected_cm.cigar_len-1].len += MAX_NUM_UNTEMPLATED_GS;
         }
 
-        add_candidate_mapping( assay_corrected_mappings, &corrected_cm );
+        /* If a soft clipped read maps near the boundary of a contig, it is
+         * possible that this adjusted candidate mapping will be beyond the
+         * boundary and thus invalid. However, soft clipped variations on the
+         * mapping may be valid - so we don't add this to the set of corrected
+         * mappings, but do use it as a basis to build possible valid soft
+         * clipped mappings. */
+        if( NULL != find_seq_ptr( genome, corrected_cm.chr,
+                    corrected_cm.start_bp, corrected_cm.mapped_length ) )
+        {
+            add_candidate_mapping( assay_corrected_mappings, &corrected_cm );
+        }
 
         /* This candidate mapping is now the basis for adding additional
          * candidate mappings if it possible that they could have untemplated
          * G's */
         add_candidate_mappings_for_untemplated_gs( assay_corrected_mappings,
-                &corrected_cm, r );
+                &corrected_cm, r, genome );
     }
 
     return;
@@ -1807,16 +1751,22 @@ void
 make_assay_specific_corrections(
         candidate_mappings* mappings,
         candidate_mappings* assay_corrected_mappings,
-        struct read* r
+        struct read* r,
+        struct genome_data* genome
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
-        make_cage_specific_corrections( mappings, assay_corrected_mappings, r );
+        make_cage_specific_corrections( mappings, assay_corrected_mappings, r,
+                genome );
     } else {
         /* Copy the original set of mappings to the corrected set (without
          * alteration, since this assay type does not require corrections) */
+
+        /* FIXME can just return pointer to original mappings, eliminating
+         * unnecessary memcpy. However, freeing the correct memory then becomes
+         * a bit tricky. Revisit. */
         copy_candidate_mappings( assay_corrected_mappings, mappings );
     }
         
@@ -1847,7 +1797,8 @@ build_mapped_read_from_candidate_mappings(
      * */
     candidate_mappings* assay_corrected_mappings = NULL;
     init_candidate_mappings( &assay_corrected_mappings );
-    make_assay_specific_corrections( mappings, assay_corrected_mappings, r );
+    make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
+            genome );
     /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,
@@ -1949,15 +1900,14 @@ find_candidate_mappings( void* params )
          */
         if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
-            fprintf(stderr, "DEBUG       :  Mapped %u reads, %i successfully\n", 
-                    r->read_id, *mapped_cnt);
+            statmap_log( LOG_DEBUG, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
         }
 
         struct mapping_params* mapping_params = NULL;
         init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
         
         // Make sure this read has "enough" HQ bps before trying to map it
-        if( filter_read( r, error_model ) )
+        if( filter_read( r, mapping_params, genome ) )
         {
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
@@ -1969,15 +1919,23 @@ find_candidate_mappings( void* params )
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );
         
-        find_candidate_mappings_for_read(
-                r,
-                mappings,
-                genome,
-                error_model,
-                scratch_error_data_record,
-                only_collect_error_data,
-                mapping_params
+        int rv = find_candidate_mappings_for_read(
+                    r,
+                    mappings,
+                    genome,
+                    error_model,
+                    scratch_error_data_record,
+                    only_collect_error_data,
+                    mapping_params
             );
+        
+        if( rv != 0 )
+        {
+            assert(rv == CANT_BUILD_READ_SUBTEMPLATES);
+            free_read( r );
+            free_mapping_params( mapping_params );
+            continue; // skip the unmappable read            
+        }
         
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
@@ -2065,11 +2023,7 @@ spawn_find_candidate_mappings_threads( struct single_map_thread_data* td_templat
             ); 
         
         if (rc) {
-            fprintf(stderr, 
-                    "ERROR; return code from pthread_create() is %d\n", 
-                    rc
-            );
-            exit(-1);
+            statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
         }
     }
     
@@ -2079,11 +2033,7 @@ spawn_find_candidate_mappings_threads( struct single_map_thread_data* td_templat
         rc = pthread_join(thread[t], &status);
         pthread_attr_destroy(attrs+t);
         if (rc) {
-            fprintf( stderr, 
-                     "ERROR; return code from pthread_join() is %d\n", 
-                     rc
-            );
-            exit(-1);
+            statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
         }
         num_reads += (size_t) status;
     }
@@ -2189,8 +2139,9 @@ bootstrap_estimated_error_model(
     spawn_find_candidate_mappings_threads( &td_template );
         
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )\n",
-            *(td_template.mapped_cnt), rdb->readkey, 
+    statmap_log( LOG_NOTICE,
+            "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
+            *(td_template.mapped_cnt), rdb->readkey,
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
@@ -2252,8 +2203,9 @@ find_all_candidate_mappings(
     
     /* Print out performance information */
     clock_t stop = clock();
-    fprintf(stderr, "PERFORMANCE :  Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )\n",
-            *(td_template.mapped_cnt), rdb->readkey, 
+    statmap_log( LOG_NOTICE,
+            "Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )",
+            *(td_template.mapped_cnt), rdb->readkey,
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );

@@ -1,4 +1,5 @@
 #include <R.h>
+#include "log.h"
 
 #define R_HOME "/usr/lib/R/"
 
@@ -15,7 +16,7 @@ load_statmap_source( char* statmap_dir )
 void
 init_R( )
 {
-    fprintf( stderr, "NOTICE      :  Setting R_HOME to '%s'\n", R_HOME );
+    statmap_log( LOG_NOTICE, "Setting R_HOME to '%s'", R_HOME );
     setenv("R_HOME", R_HOME, false);
 
     char *argv[] = {"Rstatmap", "--gui=none", "--vanilla", "--slave"};

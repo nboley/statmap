@@ -16,6 +16,7 @@
 #include "trace.h"
 #include "genome.h"
 #include "util.h"
+#include "log.h"
 
 void
 init_trace_segment_t(
@@ -591,8 +592,7 @@ write_wiggle_from_trace_to_stream(
                         fprintf( os, "%i\t%e\n", bp+1, tseg->data[bp] );
                     
                     if( global_counter > 0  && global_counter%10000000 == 0 )
-                        fprintf( stderr,
-                            "NOTICE        :  Written %i positions to trace.\n",
+                        statmap_log(LOG_NOTICE, "Written %i positions to trace.",
                             global_counter );
                 }
             }
@@ -689,7 +689,7 @@ load_trace_header_from_stream( struct trace_t* trace, FILE* is )
     rv = fread( MN, sizeof(char), 6, is );
     if( 6 != rv || 0 != strcmp( MN, TRACE_MAGIC_NUMBER ))
     {
-        fprintf( stderr, "FATAL           : Mismatched bin trace header ( rv: %i, header: '%s' )\n", rv, MN );
+        statmap_log( LOG_FATAL, "Mismatched bin trace header ( rv: %i, header: '%s' )",  rv, MN  );
         assert( 0 );
     }
     

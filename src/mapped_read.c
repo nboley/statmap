@@ -20,6 +20,8 @@
 #include "iterative_mapping.h"
 #include "trace.h"
 
+#include "log.h"
+
 /** MAPPED READ SUBLOCATIONS **/
 mapped_read_sublocation*
 get_start_of_sublocations_in_mapped_read_location(
@@ -403,7 +405,7 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     {
         candidate_mapping* mapping = mappings->mappings + i;
 
-        if( mapping->rd_type.pos == 1 && pair_2_start == -1 )
+        if( mapping->pos_in_template == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
             num_pair_1 = i-1;
@@ -523,7 +525,7 @@ join_candidate_mappings( candidate_mappings* mappings,
     {
         candidate_mapping* mapping = mappings->mappings + i;
 
-        if( mapping->rd_type.pos == 1 )
+        if( mapping->pos_in_template == 1 )
         {
             paired_end = true;
             break;
@@ -556,11 +558,14 @@ recheck_candidate_mapping(
 {
     float rechecked_penalty = 0;
 
-    /* build penalty arrays from the underlying read subtemplate */
-    struct penalty_array_t fwd_pa, rev_pa;
-    build_penalty_array( &fwd_pa, rst->length,
-            error_model, rst->error_str );
-    build_reverse_penalty_array( &rev_pa, &fwd_pa );
+    /* build penalty array from the underlying read subtemplate.
+     *
+     * Since we actually reverse complement the full *genome*
+     * sequence in the recheck (to simplify the algorithm when rechecking
+     * gapped reads), the read is being compared to the sequence that it mapped
+     * to. Therefore, we only need to build the fwd penalty array. */
+    struct penalty_array_t pa;
+    build_penalty_array( &pa, rst, error_model );
 
     /* Get the entire region of the genome covered by this fragment */
     int full_fragment_length = get_length_from_cigar_string( mapping);
@@ -573,15 +578,11 @@ recheck_candidate_mapping(
     char* mapped_seq = calloc( full_fragment_length+1, sizeof(char) );
     assert( mapped_seq != NULL );
 
-    struct penalty_array_t* mapped_pa;
-
     if( mapping->rd_strnd == FWD )
     {
         memcpy( mapped_seq, genome_seq, full_fragment_length );
-        mapped_pa = &fwd_pa;
     } else {
         rev_complement_read( genome_seq, mapped_seq, full_fragment_length );
-        mapped_pa = &rev_pa;
     }
 
     /* loop over the entries in this candidate mapping's cigar string */
@@ -607,7 +608,7 @@ recheck_candidate_mapping(
             rechecked_penalty += recheck_penalty(
                     mapped_seq + ref_pos,
                     rst->char_seq + read_pos,
-                    mapped_pa->array + read_pos,
+                    pa.array + read_pos,
                     entry.len
                 );
 
@@ -621,7 +622,7 @@ recheck_candidate_mapping(
             /* just update the read pointer to skip the soft clipped bases */
             read_pos += entry.len;
         } else {
-            fprintf( stderr, "FATAL       :  Found unsupported CIGAR string op '%c'\n", entry.op );
+            statmap_log( LOG_FATAL, "Found unsupported CIGAR string op '%c'",  entry.op  );
             assert( false );
             exit(-1);
         }
@@ -635,8 +636,7 @@ recheck_candidate_mapping(
 
     /* cleanup memory */
     free( mapped_seq );
-    free_penalty_array( &fwd_pa );
-    free_penalty_array( &rev_pa );
+    free_penalty_array( &pa );
 
     return;
 }
@@ -707,7 +707,7 @@ recheck_joined_candidate_mappings(
         /* each candidate_mapping in a joined group corresponds to a read
          * subtemplate. Get a reference to this cm's read subtemplate */
         struct read_subtemplate* rst
-            = r->subtemplates + (*current_mapping)->rd_type.pos;
+            = r->subtemplates + (*current_mapping)->pos_in_template;
 
         recheck_candidate_mapping( *current_mapping, rst, genome, error_model );
 
@@ -1199,7 +1199,7 @@ init_mapped_reads_db(
     (*rdb)->mapped_fp = fopen( fname, mode );
     if( (*rdb)->mapped_fp == NULL )
     {
-        perror("FATAL       :  Could not open mapped reads file");
+        statmap_log( LOG_FATAL, "Could not open mapped reads file %s",  fname  );
         assert( false );
         exit(-1);
     }
@@ -1218,7 +1218,7 @@ init_mapped_reads_db(
     (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
     if( (*rdb)->unmappable_fp == NULL )
     {
-        perror("FATAL       :  Could not open unmappable reads file");
+        statmap_log( LOG_FATAL, "Could not open unmappable reads file %s",  fname_buffer  );
         assert(false);
         exit(-1);
     }
@@ -1234,7 +1234,7 @@ init_mapped_reads_db(
     (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
     if( (*rdb)->nonmapping_fp == NULL )
     {
-        perror("FATAL       :  Could not open nonmapping reads file");
+        statmap_log( LOG_FATAL, "Could not open nonmapping reads file %s",  fname_buffer );
         assert(false);
         exit(-1);
     }
@@ -1345,9 +1345,7 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
-        fprintf( stderr,
-                "FATAL       :  Unrecognized mode '%c' for open mapped reads db.\n",
-                (*rdb)->mode );
+        statmap_log( LOG_FATAL, "Unrecognized mode '%c' for open mapped reads db.",  (*rdb)->mode  );
         assert( false );
         exit( -1 );
     }
@@ -1375,7 +1373,7 @@ add_read_to_mapped_reads_db(
 {
     if ( rdb->mode == 'r' )
     {
-        fprintf(stderr, "ERROR       :  Mapped Reads DB is read-only - cannot add read.\n");
+        statmap_log( LOG_ERROR, "Mapped Reads DB is read-only - cannot add read." );
         assert( false );
         exit( -1 );
     }
@@ -1389,7 +1387,7 @@ add_read_to_mapped_reads_db(
 
     if( error < 0 )
     {
-        fprintf(stderr, "FATAL       :  Error writing to packed mapped reads db.\n");
+        statmap_log( LOG_FATAL, "Error writing to packed mapped reads db." );
         assert( false );
         exit( -1 );
     }
@@ -1432,7 +1430,7 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     if( rdb->mode != 'r' )
     {
-        fprintf(stderr, "FATAL       :  Can only rewind mapped reads db that is open for reading ( mode 'r' ).\n");
+        statmap_log( LOG_FATAL, "Can only rewind mapped reads db that is open for reading ( mode 'r' )." );
         assert( false );
         exit( -1 );
     }
@@ -1452,7 +1450,7 @@ get_next_read_from_mapped_reads_db(
     /* Make sure the db is open for reading */
     if( rdb->mode != 'r' )
     {
-        fprintf(stderr, "FATAL       :  Cannot get read from mapped reads db unless it is open for reading.\n" );
+        statmap_log( LOG_FATAL, "Cannot get read from mapped reads db unless it is open for reading." );
         assert( false );
         exit( -1 );
     }
@@ -1602,11 +1600,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     /* check that the file is not empty before trying to mmap */
     fseek(rdb->mapped_fp, 0L, SEEK_END);   // seek to end
     long fp_size = ftell(rdb->mapped_fp);  // tell() to get size
-    if( fp_size == 0 )
-    {
-        fprintf( stderr,
-                 "FATAL       :  Cannot mmap empty mapped reads db.\n" );
-        exit( 1 );
+    if( fp_size == 0 ) {
+        statmap_log( LOG_FATAL, "Cannot mmap empty mapped reads db" );
     }
     rewind( rdb->mapped_fp ); // reset fp
 
@@ -1618,16 +1613,10 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     #ifdef MALLOC_READS_DB
     fseek( rdb->mapped_fp, 0, SEEK_SET );
 
-    fprintf( stderr, 
-             "NOTICE        : Allocating %zu bytes for the mapped reads db.", 
-             buf.st_size );
+    statmap_log( LOG_NOTICE, "Allocating %zu bytes for the mapped reads db.", buf.st_size );
     rdb->mmapped_data = malloc( buf.st_size );
-    if( NULL == rdb->mmapped_data )
-    {
-        fprintf( stderr, 
-                 "FATAL       : Failed to allocate %zu bytes for the mapped reads.\n",
-                 (size_t) buf.st_size );
-        exit( 1 );
+    if( NULL == rdb->mmapped_data ) {
+        statmap_log( LOG_FATAL, "Failed to allocate %zu bytes for the mapped reads.", (size_t) buf.st_size );
     }
     
     fread( rdb->mmapped_data, buf.st_size, 1, rdb->mapped_fp );
@@ -1639,14 +1628,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
                 PROT_READ|PROT_WRITE, 
 		MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
 
-    if( rdb->mmapped_data == (void*) -1 )
-    {
-        char* buffer;
-        buffer = malloc( sizeof(char)*500 );
-        sprintf(buffer, "Can not mmap the fdescriptor '%i'", fdin );
-        perror( buffer );
-        assert( false );
-        exit( -1 );
+    if( rdb->mmapped_data == (void*) -1 ) {
+        statmap_log( LOG_FATAL, "Can not mmap the fdescriptor '%i'", fdin );
     }
     #endif
     
@@ -1663,11 +1646,8 @@ munmap_mapped_reads_db( struct mapped_reads_db* rdb )
     free( rdb->mmapped_data );
     #else 
     int error = munmap( rdb->mmapped_data, rdb->mmapped_data_size );
-    if( error != 0 )
-    {
-        perror( "Could not munmap mapped reads db" );
-        assert( false );
-        exit( -1 );
+    if( error != 0 ) {
+        statmap_log( LOG_FATAL, "Could not munmap mapped reads db (returned %i)", error );
     }
     #endif
 
@@ -1765,14 +1745,11 @@ index_mapped_reads_db( struct mapped_reads_db* rdb )
     );
 
     /* make sure that we have indexed every read */
-    if( num_indexed_reads != rdb->num_mapped_reads )
-    {
-        fprintf( stderr, 
-                 "FATAL           :  The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.", 
-                 num_indexed_reads, rdb->num_mapped_reads );
-
-        assert(false);
-        exit(-1);
+    if( num_indexed_reads != rdb->num_mapped_reads ) {
+        statmap_log( LOG_FATAL,
+                "The number of indexed reads (%i) is not equal to the number of reads in the mapped read db ( %i). This may indicate that the mapped read db is corrupt.",
+                num_indexed_reads, rdb->num_mapped_reads
+            );
     }
     
     return;

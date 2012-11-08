@@ -9,9 +9,12 @@
 /* reading directory entries */
 #include <dirent.h>
 
-#include "../src/wiggle.h"
-#include "../src/trace.h"
-#include "../src/genome.h"
+#include "wiggle.h"
+#include "trace.h"
+#include "genome.h"
+#include "util.h"
+
+#include "log.h"
 
 static inline TRACE_TYPE 
 sum( const TRACE_TYPE a, const TRACE_TYPE b )
@@ -59,21 +62,6 @@ parse_meta_info( FILE* mi_fp, double** lhds )
     
     return;
 }
-
-static FILE* 
-open_check_error( char* fname, char* file_mode )
-{
-    FILE* tmp;
-    tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n'", fname );
-        assert( false );
-        exit( -1 );
-    }
-    return tmp;
-}
-
 
 /* 
    Calculate the probability of observing >= cnt counts given that
@@ -139,7 +127,7 @@ double calc_pvalue( double cnt )
     case 0:
         return 1.000000e+00;
     default:
-        fprintf( stderr, "Illegal value '%i' encountered.", (int) cnt );
+        statmap_log( LOG_ERROR, "Illegal value '%i' encountered", (int) cnt );
         assert( false );
     }
 }
@@ -187,10 +175,8 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     /* This involves parsing hte directory name */
     /* we just move the pointer past 'sample', and then use atoi */
     int sample_id = atoi( samples_dname + 6 );
-    if( 0 == sample_id )
-    {
-        perror( "Could not convert directory name id" );
-        exit( 1 );
+    if( 0 == sample_id ) {
+        statmap_log( LOG_FATAL, "Could not convert directory name id" );
     }   
 
     char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};     
@@ -251,7 +237,7 @@ call_peaks( struct genome_data* genome )
     dp = opendir ( BOOTSTRAP_SAMPLES_ALL_PATH );
     if( NULL == dp )
     {
-        perror( "FATAL       : Could not open bootstrap samples directory." );
+        statmap_log( LOG_FATAL, "Could not open bootstrap samples directory." );
         exit( 1 );
     }
 

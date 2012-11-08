@@ -22,14 +22,14 @@
 #include "config.h"
 #include "util.h"
 
+#include "log.h"
+
 void
 safe_mkdir(char* dir)
 {
     int error = mkdir( dir, S_IRWXU | S_IRWXG | S_IRWXO );
-    if( -1 == error )
-    {
-        fprintf(stderr, "FATAL       :  Cannot make %s\n", dir );
-        exit( -1 );
+    if( -1 == error ) {
+        statmap_log( LOG_FATAL, "Cannot mkdir %s", dir );
     }
 }
 
@@ -43,14 +43,12 @@ safe_copy_into_output_directory( char* fname, char* output_dir, char* output_fna
 
     char buffer[500];
     sprintf( buffer, "cp %s %s/%s", fname, realpath_buffer, output_fname );
-    fprintf(stderr, "NOTICE      :  Copying '%s' to the output directory\n",  fname );
+    statmap_log( LOG_NOTICE, "Copying '%s' to the output directory", fname );
     error = system( buffer );
     if (WIFSIGNALED(error) &&
         (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
     {
-        fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-        perror( "Copy failure");
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Copy failure; system call '%s' failed", buffer );
     }
     
     free( realpath_buffer );
@@ -71,14 +69,12 @@ safe_link_into_output_directory( char* fname, char* output_dir, char* output_fna
 
     char buffer[500];
     sprintf( buffer, "ln -s %s %s/%s", input_realpath_buffer, realpath_buffer, output_fname );
-    fprintf(stderr, "NOTICE      :  Linking '%s' to the output directory\n",  fname );
+    statmap_log( LOG_NOTICE, "Linking '%s' to the output directory", fname );
     error = system( buffer );
     if (WIFSIGNALED(error) &&
         (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
     {
-        fprintf(stderr, "FATAL     : Failed to call '%s'\n", buffer );
-        perror( "Link failure");
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Link failure; system call '%s' failed", buffer );
     }
     
     free( realpath_buffer );
@@ -92,14 +88,27 @@ open_check_error( char* fname, char* file_mode )
 {
     FILE* tmp;
     tmp = fopen( fname, file_mode );
-    if( tmp == NULL )
-    {
-        fprintf( stderr, "Error opening '%s\n' with mode '%s'\n", fname,
-                file_mode );
-        assert( false );
-        exit( -1 );
+    if( tmp == NULL ) {
+        statmap_log( LOG_FATAL, "Error opening '%s'", fname );
     }
     return tmp;
+}
+
+void*
+safe_malloc( size_t num_bytes )
+{
+    assert( num_bytes > 0 );
+
+    void* ma_ptr = malloc( num_bytes );
+
+    if( ma_ptr == NULL )
+    {
+        statmap_log( LOG_FATAL, "Error malloc'ing %zi bytes",  num_bytes );
+        assert( false );
+        exit(-1);
+    }
+
+    return ma_ptr;
 }
 
 /*
@@ -108,14 +117,17 @@ open_check_error( char* fname, char* file_mode )
 void*
 safe_realloc( void* ptr, size_t size )
 {
+    assert( size > 0 );
+
     void* ra_ptr;
     ra_ptr = realloc( ptr, size );
 
     /* man 3 realloc, line 44 - may return NULL if size == 0 */
     if( ra_ptr == NULL && size != 0 )
     {
-        fprintf(stderr, "FATAL       :  Error realloc'ing %zi bytes.\n", size);
-        exit( -1 );
+        statmap_log( LOG_FATAL, "Error realloc'ing %zi bytes.", size );
+        assert( false );
+        exit(-1);
     }
 
     return ra_ptr;

@@ -16,6 +16,7 @@
 #include "diploid_map_data.h"
 #include "util.h"
 
+#include "log.h"
 /** 
     Some bastard code. I need this later on when I unpack the pseudo loc reads
     so I stick it here. 
@@ -23,24 +24,24 @@
 
 int
 modify_mapped_read_location_for_index_probe_offset(  
-    int read_location,
-    const int chr,
-    const enum STRAND strnd,
-    const int subseq_offset,
-    const int subseq_len,
-    const int read_len,
-    struct genome_data* genome
-) 
+        int read_location,
+        const int chr,
+        const enum STRAND strnd,
+        const int subseq_offset,
+        const int subseq_len,
+        const int read_len,
+        struct genome_data* genome
+    ) 
 {
     // Check for overflow error
     if( read_location < 0 ) {
-        perror( "ERROR: The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        statmap_log( LOG_ERROR, "The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
         return -1;
     }
     
     // Pseudo locations should already have been expanded
     if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        perror( "ERROR: Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG.\n" );
+        statmap_log( LOG_ERROR, "Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
         return -1;
     }
 
@@ -132,11 +133,11 @@ modify_mapped_read_location_for_index_probe_offset(
         {
             return -1;
         } else {
-            read_location -= (read_len + softclip_len);
+            read_location -= read_len;
         }
     
     } else {
-        perror("IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR.");
+        statmap_log( LOG_ERROR, "IMPOSSIBLE BRANCH:  WE SHOULD NEVER NOT KNOW A LOCATIONS STRAND - IGNORING IT BUT PLEASE REPORT THIS ERROR." );
         return -1;
     }
     
@@ -193,18 +194,6 @@ convert_paternal_candidate_mapping_to_maternal_candidate_mapping(
  * Candidate Mapping Code
  *
  *********************************************************************************/
-
-candidate_mapping
-init_candidate_mapping()
-{
-    candidate_mapping cm;
-    memset( &cm, 0, sizeof(candidate_mapping) );
-
-    /* FIXME I don't like using a global variable for this */
-    cm.trimmed_length = softclip_len;
-
-    return cm;
-}
 
 int
 get_length_from_cigar_string( candidate_mapping* mapping )
@@ -279,8 +268,7 @@ add_candidate_mapping( candidate_mappings* mappings,
         
         if( mappings->mappings == NULL )
         {
-            fprintf(stderr, "Failed realloc in add_candidate_mapping\n");
-            exit(1);
+            statmap_log( LOG_FATAL, "Failed realloc in add_candidate_mapping" );
         }
     }
 
@@ -354,9 +342,9 @@ cmp_candidate_mappings( const candidate_mapping* m1, const candidate_mapping* m2
      * > 0 if m1 > m2 
      */ 
 
-    /* first, sort by read type */
-    if( m1->rd_type.pos != m2->rd_type.pos )
-        return m1->rd_type.pos - m2->rd_type.pos;
+    /* first, sort by subtemplate index (single or paired end) */
+    if( m1->pos_in_template != m2->pos_in_template )
+        return m1->pos_in_template - m2->pos_in_template;
 
     /* next, sort by strand */
     if( m1->rd_strnd != m2->rd_strnd )

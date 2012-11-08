@@ -12,6 +12,7 @@
 #include "genome.h"
 #include "mapped_read.h"
 
+#include "log.h"
 
 float 
 wig_lines_min( const struct wig_line_info* lines, const int ub, const int num_wigs  )
@@ -140,7 +141,7 @@ parse_next_line( struct wig_line_info* line,
         }
         if( buffer[0] == 'f' )
         {
-            fprintf(stderr, "FATAL    : Wiggle parser does not support fixed step lines\n");
+            statmap_log( LOG_FATAL, "Wiggle parser does not support fixed step lines" );
             assert( 0 );
             exit( -1 );
         /* if we are at a 'track' line */
@@ -162,10 +163,13 @@ parse_next_line( struct wig_line_info* line,
                     if( 0 != strncmp( track_name, track_names[line->trace_index], \
                                       strlen( track_names[line->trace_index] ) ) )
                     {
-                        fprintf( stderr, "ERROR     : Track names ( new: %.*s and old: %s ) are out of sync\n", 
-                                 (int)strlen(track_names[line->trace_index]), track_name, \
-                                 track_names[line->trace_index] );
-                        assert( 0 );
+                        statmap_log( LOG_ERROR,
+                                "Track names ( new: %.*s and old: %s ) are out of sync",
+                                (int)strlen(track_names[line->trace_index]),
+                                track_name, 
+                                track_names[line->trace_index]
+                            );
+                        assert(false);
                     }
                 } else {
                     /* remove the trailing newline */
@@ -194,10 +198,13 @@ parse_next_line( struct wig_line_info* line,
                     if( 0 != strncmp( chr_name, chr_names[line->chr_index], \
                                       strlen( chr_names[line->chr_index] ) ) )
                     {
-                        fprintf( stderr, "ERROR     : Chr names ( new: %.*s and old: %s ) are out of sync", 
-                                 (int)strlen(chr_names[line->chr_index]), chr_name, \
-                                 chr_names[line->chr_index] );
-                        assert( 0 );
+                        statmap_log( LOG_ERROR,
+                                "Chr names ( new: %.*s and old: %s ) are out of sync",
+                                (int)strlen(chr_names[line->chr_index]),
+                                chr_name,
+                                chr_names[line->chr_index]
+                            );
+                        assert(false);
                     }
                 } else {
                     /* remove the trailing newline */

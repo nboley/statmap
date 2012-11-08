@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "genome.h"
+#include "log.h"
 #include "diploid_map_data.h"
 
 /**** INTERFACE ****/
@@ -401,18 +402,15 @@ parse_map_file( char* fname,
     /* Open .map file */
     FILE* fp = NULL;
     fp = fopen( fname,"r" );
-    if( fp == NULL )
-    {
-        fprintf( stderr, "FATAL          :  Can not open '%s'\n", fname );
-        assert( 0 );
-        exit( 1 );
+    if( fp == NULL ) {
+        statmap_log( LOG_FATAL, "Can not open '%s'",  fname  );
     }
 
     /* verify that this is a '.map' file ( just search for the suffix ) */
     if( 0 != strcmp( ".map", fname + (strlen(fname) - 4) ) )
     {
         char* extension = fname + (strlen(fname) - 4);
-        fprintf( stderr, "ERROR         :  '%s' doesn't appear to be a map file ( the extension is %.4s, not '.map' )\n", fname, extension );
+        statmap_log( LOG_ERROR, "'%s' doesn't appear to be a map file ( the extension is %.4s, not '.map' )",  fname, extension  );
         return;
     }
     
@@ -619,23 +617,20 @@ build_unique_sequence_segments( struct diploid_map_data_t* data,
          */
         switch ( case_code )
         {
-        case 0:
-            continue;
-        case 1:
-            maternal_start = data->mappings[i].maternal;
-            break;
-        case 2:
-            paternal_start = data->mappings[i].paternal;
-            break;
-        case 3:
-            maternal_start = data->mappings[i].maternal;
-            paternal_start = data->mappings[i].paternal;
-            break;
-        default:
-            fprintf( stderr, 
-                     "FATAL         :  impossible case value '%i'\n", 
-                     case_code );
-            abort();
+            case 0:
+                continue;
+            case 1:
+                maternal_start = data->mappings[i].maternal;
+                break;
+            case 2:
+                paternal_start = data->mappings[i].paternal;
+                break;
+            case 3:
+                maternal_start = data->mappings[i].maternal;
+                paternal_start = data->mappings[i].paternal;
+                break;
+            default:
+                statmap_log( LOG_FATAL, "impossible case value '%i'",  case_code );
         }
 
         /* determine the region length */

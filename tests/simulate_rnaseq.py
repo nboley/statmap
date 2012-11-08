@@ -372,16 +372,18 @@ def randomly_mutate_reads( reads, num_mutations ):
     return mutated_reads
 
 def main():
+    print "Starting simulate_rnaseq.py ..."
+
     output_directory = "smo_rnaseq_sim"
 
     # Parameters
     # In order to test RNASeq, indexed_seq_len*2 < read_len - max_intron_len
-    genome_len = 1000
+    genome_len = 10000
     frag_len = 100
     read_len = 100
     indexed_seq_len = 20
     max_intron_len = 50
-    n_reads  = 100
+    n_reads  = 100000
 
     genome = sc.build_random_genome( [genome_len,], ["1",] )
     introns, transcriptome = splice_introns_from_genome( genome,
@@ -409,12 +411,12 @@ def main():
         sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_fp )
 
     # Map the data with Statmap
-    sc.map_with_statmap( read_fnames, output_directory,
-                         indexed_seq_len=indexed_seq_len,
-                         assay='r',
-                         genome_fnames=genome_fnames )
+    sc.map_with_statmap( genome_fnames, read_fnames, output_directory,
+            indexed_seq_len=indexed_seq_len, assay='r', search_type='e' )
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
             fragments, read_len, indexed_seq_len, num_mutations )
+
+    print "PASS:    simulate rnaseq"
 
 if __name__ == "__main__": main()

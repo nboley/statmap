@@ -197,7 +197,7 @@ typedef struct {
     unsigned strand         :1;
     unsigned are_more       :1;
     unsigned trimmed_length :6;
-    unsigned unused_bits    :2;
+    //unsigned unused_bits    :0;
     /* For now, we assume that there is only 1 readid and therefore only
      * 1 corresponding seq_error */
     ML_PRB_TYPE seq_error;      
