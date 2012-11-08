@@ -496,6 +496,7 @@ aggregate_over_trace_pairs(  struct trace_t* update_trace,
                 = &(update_trace->segments[trace_index][chr]);
             struct trace_segments_t *other_tsegs
                 = &(other_trace->segments[trace_index][chr]);
+                
             /* make sure both traces have the same sets of segments */
             assert( update_tsegs->num_segments == other_tsegs->num_segments );
 

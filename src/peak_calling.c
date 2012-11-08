@@ -143,21 +143,41 @@ update_ip_is_gt_nc_counts_from_traces(
     struct trace_t* nc_trace, 
     struct trace_t* peaks_trace )
 {
-    int i;
-    for( i = 0; i < peaks_trace->num_tracks; i++ )
+    int track, chr, segment, bp;
+    for( track = 0; track < peaks_trace->num_tracks; track++ )
     {
-        int j;
-        for( j = 0; j < peaks_trace->num_chrs; j++ )
+        for( chr = 0; chr < peaks_trace->num_chrs; chr++ )
         {
-            unsigned int k;
-            for( k = 0; k < peaks_trace->chr_lengths[j]; k++ )
+            /* TODO can we assume the different traces will have the same layout
+            of segments? For now, we do. */
+
+            struct trace_segments_t* ip_segs = &(ip_trace->segments[track][chr]);
+            struct trace_segments_t* nc_segs = &(nc_trace->segments[track][chr]);
+            struct trace_segments_t* peak_segs
+                = &(peaks_trace->segments[track][chr]);
+
+            /* make sure all traces have the same set of segments */
+            assert( ip_segs->num_segments == nc_segs->num_segments &&
+                    nc_segs->num_segments == peak_segs->num_segments );
+
+            for( segment = 0; segment < peak_segs->num_segments; segment++ )
             {
-                if( ip_trace->traces[i][j][k] > nc_trace->traces[i][j][k] )
+                struct trace_segment_t* ip_seg = ip_segs->segments + segment;
+                struct trace_segment_t* nc_seg = nc_segs->segments + segment;
+                struct trace_segment_t* peak_seg = peak_segs->segments + segment;
+
+                /* make sure the segments match - simplifies things for now */
+                assert( ip_seg->length == nc_seg->length &&
+                        nc_seg->length == peak_seg->length );
+
+                for( bp = 0; bp < peak_seg->length; bp++ )
                 {
-                    peaks_trace->traces[i][j][k] += 1;
-                } else if( ip_trace->traces[i][j][k] == nc_trace->traces[i][j][k] ) {
-                    peaks_trace->traces[i][j][k] += 0.5;
-                } 
+                    if( ip_seg->data[bp] > nc_seg->data[bp] ) {
+                        peak_seg->data[bp] += 1;
+                    } else if( ip_seg->data[bp] == nc_seg->data[bp] ) {
+                        peak_seg->data[bp] += 0.5;
+                    }
+                }
             }
         }
     }
