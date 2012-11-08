@@ -1535,59 +1535,6 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb,
     }
 }
 
-
-/* use this for wiggles */
-void
-update_traces_from_read_densities( 
-    struct mapped_reads_db* rdb,
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct trace_t* traces
-)
-{    
-    zero_traces( traces );
-
-    mapped_read_t* r;
-
-    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
-    {
-        mapped_read_index* rd_index;
-        init_mapped_read_index( &rd_index, r );
-
-        /* Update the trace from this mapping */
-        MPD_RD_ID_T i;
-        double cond_prob_sum = 0;
-        for( i = 0; i < rd_index->num_mappings; i++ )
-        {
-            MRL_CHR_TYPE chr_index 
-                = get_chr_from_mapped_read_location( rd_index->mappings + i );
-            MRL_START_POS_TYPE start
-                = get_start_from_mapped_read_location( rd_index->mappings + i );
-            MRL_START_POS_TYPE stop
-                = get_stop_from_mapped_read_location( rd_index->mappings + i );
-
-            float cond_prob = get_cond_prb( cond_prbs_db, rd_index->read_id, i );
-            cond_prob_sum += cond_prob;
-            
-            assert( cond_prob >= -0.0001 );
-            assert( stop >= start );            
-            assert( chr_index < traces->num_chrs );
-            assert( traces->chr_lengths[chr_index] >= stop );
-
-            unsigned int j = 0;
-            for( j = start; j < stop; j++ )
-            {
-                /* update the trace */
-                traces->traces[0][chr_index][j] 
-                    += (1.0/(stop-start))*cond_prob;
-            }
-        }
-
-        free_mapped_read_index( rd_index );
-    }
-    
-    return;
-}
-
 void
 mmap_mapped_reads_db( struct mapped_reads_db* rdb )
 {
