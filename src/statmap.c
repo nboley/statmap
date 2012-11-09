@@ -258,19 +258,10 @@ map_generic_data(  struct args_t* args )
     struct genome_data* genome;
     
     /* store clock times - useful for benchmarking */
-    struct timeval start, stop;    
+    //struct timeval start, stop;    
     
-    /***** Index the genome */
-    gettimeofday( &start, NULL );
-    
-    /* initialize the genome */
+    /* load the genome */
     load_genome( &genome, args );
-    
-    gettimeofday( &stop, NULL );
-    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
-            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-        
-    /***** END Genome processing */
     
     struct mapped_reads_db* mpd_rds_db;    
     map_marginal( args, genome, args->rdb, &mpd_rds_db, false );
@@ -303,19 +294,10 @@ map_chipseq_data(  struct args_t* args )
     struct genome_data* genome;
 
     /* store clock times - useful for benchmarking */
-    struct timeval start, stop;    
+    //struct timeval start, stop;    
     
-    /***** Index the genome */
-    gettimeofday( &start, NULL );
-    /* initialize the genome */
+    /* load the genome */
     load_genome( &genome, args );
-    gettimeofday( &stop, NULL );
-    
-    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
-            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000
-        );
-        
-    /***** END Genome processing */
     
     /* map the real ( IP ) data */
     struct mapped_reads_db* chip_mpd_rds_db = NULL;    
