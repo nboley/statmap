@@ -77,6 +77,42 @@ except ImportError:
                 d[key] = value
             return d
 
+C_TRACE_TYPE = c_float
+
+class c_trace_segment_t(Structure):
+    """
+struct trace_segment_t {
+    int real_track_id;
+    int real_chr_id;
+    int real_start;
+
+    int length;
+    TRACE_TYPE* data;
+    pthread_mutex_t* data_lock;
+};
+    """
+    _fields_ = [
+        ("real_track_id", c_int),
+        ("real_chr_id", c_int),
+        ("real_start", c_int),
+
+        ("length", c_int),
+        ("data", POINTER(C_TRACE_TYPE)),
+        ("data_lock", c_void_p) # unused in Python API
+    ]
+
+class c_trace_segments_t(Structure):
+    """
+struct trace_segments_t {
+    int num_segments;
+    struct trace_segment_t* segments;
+};
+    """
+    _fields_ = [
+        ("num_segments", c_int),
+        ("segments", POINTER(c_trace_segment_t))
+    ]
+
 class c_trace_t(Structure):
     """
 #define TRACE_TYPE float
@@ -88,32 +124,25 @@ struct trace_t {
     int num_chrs;
     char** chr_names;
     unsigned int* chr_lengths;
-    
-    /* num_traces X num_chrs matrix */
-    TRACE_TYPE*** traces;
 
-    #ifdef USE_MUTEX
-    pthread_mutex_t*** locks;
-    #else
-    pthread_spinlock_t*** locks;
-    #endif
+    // num_tracks x num_chrs   
+    struct trace_segments_t** segments;
 };
 """
-    _fields_ = [("num_tracks", c_int),
-                ("track_names", POINTER(c_char_p)),
+    _fields_ = [
+        ("num_tracks", c_int),
+        ("track_names", POINTER(c_char_p)),
 
-                ("num_chrs", c_int),
-                ("chr_names", POINTER(c_char_p)),
-                ("chr_lengths", POINTER(c_uint)),
-                
-                ("traces", POINTER(POINTER(POINTER(c_float)))),
-                
-                # we should never touch this from python, 
-                # but I need it to make sizes correct 
-                ("locks", c_void_p )
-               ]
+        ("num_chrs", c_int),
+        ("chr_names", POINTER(c_char_p)),
+        ("chr_lengths", POINTER(c_uint)),
+
+        ("segments", POINTER(POINTER(c_trace_segments_t)))
+    ]
+
 
 class trace_t(OrderedDict):
+
     def __init__( self, c_trace_p ):
         # call the parent's initializer
         OrderedDict.__init__(self)
@@ -128,13 +157,27 @@ class trace_t(OrderedDict):
             self[track_name] = OrderedDict()
             for chr_index in range(c_trace.num_chrs):
                 chr_name, chr_len = c_trace.chr_names[chr_index], c_trace.chr_lengths[chr_index]
-                self[track_name][chr_name] = numpy.zeros( chr_len  )
-                # Make this faster - I must be able to load this through a pointer copy
-                for index in range( c_trace.chr_lengths[chr_index] ):
-                    self[track_name][chr_name][index] \
-                        = c_trace.traces[track_index][chr_index][index]
-        return
+                self[track_name][chr_name] = []
+                # load the trace segments
+                trace_segments = c_trace.segments[track_index][chr_index]
+                for trace_segment_i in range(trace_segments.num_segments):
+                    trace_segment = trace_segments.segments[trace_segment_i]
+                    self[track_name][chr_name].append({
+                            'real_track_id': trace_segment.real_track_id,
+                            'real_chr_id': trace_segment.real_chr_id,
+                            'real_start': trace_segment.real_start,
 
+                            'length': trace_segment.length,
+                            'data': numpy.fromiter(trace_segment.data, np.float,
+                                trace_segment.length),
+                        })
+
+    def __unicode__(self):
+        pass
+
+    def __str__(self):
+        return unicode(self).encode('utf-8')
+        
 def init_trace( genome_p, track_names ):
     '''
     Init a trace and return it
