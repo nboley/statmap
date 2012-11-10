@@ -396,9 +396,6 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     int pair_1_start = 0;
     int pair_2_start = -1;
 
-    int num_pair_1 = 0;
-    int num_pair_2 = 0;
-
     /* find the start of the second pair candidate mappings */
     int i;
     for( i = 0; i < mappings->length; i++ )
@@ -408,19 +405,17 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
         if( mapping->pos_in_template == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
-            num_pair_1 = i-1;
+            break;
         }
     }
 
-    if( pair_2_start == -1 )
+    if( pair_2_start == -1 || pair_2_start <= pair_1_start )
     {
         /* Don't build a mapped read if there are no second pair reads */
         return;
     }
     /* sanity check */
     assert( pair_2_start > pair_1_start );
-
-    num_pair_2 = (i-1) - pair_2_start;
 
     /* Count the number of valid joined combinations of reads */
     int num_joined_mappings = 0;
