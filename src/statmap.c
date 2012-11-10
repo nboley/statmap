@@ -300,6 +300,7 @@ map_chipseq_data(  struct args_t* args )
     load_genome( &genome, args );
     
     /* map the real ( IP ) data */
+    statmap_log(LOG_NOTICE, "Mapping the real (IP) data");
     struct mapped_reads_db* chip_mpd_rds_db = NULL;    
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
 
@@ -320,6 +321,7 @@ map_chipseq_data(  struct args_t* args )
     struct mapped_reads_db* NC_mpd_rds_db = NULL;
     if ( args->NC_rdb != NULL )
     {        
+        statmap_log(LOG_NOTICE, "Mapping the NC data");
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
         if( args->frag_len_fp != NULL ) {
