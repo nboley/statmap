@@ -475,33 +475,33 @@ write_mapped_reads_to_sam(
     while( rd != NULL
            && mapped_rd != NULL ) 
     {
-        mapped_read_index* mapped_rd_index;
-        init_mapped_read_index( &mapped_rd_index, mapped_rd );
+        mapped_read_index* rd_index 
+            = build_mapped_read_index( mapped_rd );
 
-        if( rd->read_id != mapped_rd_index->read_id )
+        if( rd->read_id != rd_index->read_id )
         {
             statmap_log( LOG_DEBUG, "read_id: %d", rd->read_id );
-            statmap_log( LOG_DEBUG, "mapped_rd->read_id: %d", mapped_rd_index->read_id );
+            statmap_log( LOG_DEBUG, "mapped_rd->read_id: %d", rd_index->read_id );
         }
-        assert( rd->read_id == mapped_rd_index->read_id );
+        assert( rd->read_id == rd_index->read_id );
         
         if( rd->read_id > 0 && rd->read_id%1000000 == 0 )
             statmap_log( LOG_NOTICE, "Written %u reads to sam\n",  rd->read_id  );
         
         /* We test for mapped read NULL in case the last read was unmappable */
         if( mapped_rd != NULL 
-            && mapped_rd_index->num_mappings > 0 )
+            && rd_index->num_mappings > 0 )
         {
             /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
             
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, mapped_rd_index,
+                sam_ofp, mapped_rd, rd_index,
                 cond_prbs_db, genome, rd );
         }
         
-        free_mapped_read_index( mapped_rd_index );
+        free_mapped_read_index( rd_index );
         
         /* Free the read */
         free_read( rd );

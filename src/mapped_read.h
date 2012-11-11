@@ -416,9 +416,8 @@ typedef struct {
     mapped_read_location** mappings;
 } mapped_read_index;
 
-void
-init_mapped_read_index( mapped_read_index** index,
-                        mapped_read_t* rd );
+mapped_read_index*
+build_mapped_read_index( mapped_read_t* rd );
 
 void
 free_mapped_read_index( mapped_read_index* index );
