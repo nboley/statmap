@@ -137,7 +137,7 @@ def map_with_statmap( read_fnames, output_dir, indexed_seq_len,
             % str( ret_code )
 
     # run statmap
-    call = "%s -g tmp.genome.fa.bin %s -o %s -t %i -q 0" \
+    call = "%s -g tmp.genome.fa.bin %s -o %s -t %i" \
         % ( STATMAP_PATH, read_fname_str, output_dir, num_threads )
 
     if mapping_metaparameter != None:

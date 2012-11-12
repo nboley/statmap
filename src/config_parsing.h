@@ -31,8 +31,6 @@ struct args_t {
     
     float mapping_metaparameter;
 
-    int min_num_hq_bps;
-
     int num_starting_locations;
     
     int num_threads;

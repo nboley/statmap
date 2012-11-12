@@ -183,8 +183,6 @@ class StatmapOutput:
         self.config = load_config_from_file( CONFIG_FNAME )
 
         # These values are saved in the configuration and should not be changed
-        statmap_o.set_min_num_hq_bps(
-            self.config.contents.min_num_hq_bps )
         statmap_o.set_max_reference_insert_len(
             self.config.contents.max_reference_insert_len )
 
@@ -221,7 +219,6 @@ def test():
     # did global variables get set properly?
     print "==== GLOBALS ===="
     print "num_threads:", statmap_o.get_num_threads()
-    print "min_num_hq_bps:", statmap_o.get_min_num_hq_bps()
     print "max_reference_insert_len:", statmap_o.get_max_reference_insert_len()
 
     # did genome load properly?
