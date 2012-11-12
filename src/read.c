@@ -11,6 +11,7 @@
 #include "error_correction.h"
 #include "quality.h"
 #include "read.h"
+#include "log.h"
 
 void
 init_read(
@@ -20,9 +21,17 @@ init_read(
 {
     *r = malloc( sizeof(struct read) );
 
+    (*r)->read_id = -1;
+
     /* Allocate memory for and copy the read name */
     (*r)->name = calloc( strlen(readname) + 1, sizeof(char) );
     memcpy( (*r)->name, readname, strlen(readname) );
+
+    /* Initialize the prior read information struct */
+    (*r)->prior.max_ref_insert_length = 0;
+    (*r)->prior.max_fragment_length = 0;
+    (*r)->prior.frag_type = UNKNOWN;
+    (*r)->prior.assay = UNKNOWN;
 
     (*r)->subtemplates = NULL;
     (*r)->num_subtemplates = 0;
@@ -77,12 +86,11 @@ add_subtemplate_to_read(
             sizeof(struct read_subtemplate) * r->num_subtemplates );
 
     // reference to new subtemplate
-    struct read_subtemplate* rst = &(r->subtemplates[r->num_subtemplates-1]);
+    struct read_subtemplate* rst = r->subtemplates + r->num_subtemplates-1;
 
     // Allocate memory for strings
-    rst->char_seq = malloc(sizeof(char)*length );
-    rst->error_str = malloc(sizeof(char)*length );
-
+    rst->char_seq = malloc( sizeof(char)*length );
+    rst->error_str = malloc( sizeof(char)*length );
     // Copy strings
     memcpy( rst->char_seq, char_seq, length );
     memcpy( rst->error_str, error_str, length );
@@ -92,7 +100,6 @@ add_subtemplate_to_read(
     /* initialize pos_in_template struct */
     rst->pos_in_template.pos = pos_in_template;
     rst->pos_in_template.number_of_reads_in_template = num_reads_in_template;
-    rst->pos_in_template.is_full_fragment = false;
 }
 
 void
@@ -186,6 +193,55 @@ build_read_from_rawreads(
     }
 }
 
+void
+set_prior_read_information(
+    struct read* r,
+    enum assay_type_t assay )
+{
+    /* Sets the prior read information based on the assay and the type of read
+       (single vs. paired end) */
+
+    /* Set the max lengths from config.h (for now) */
+    r->prior.max_ref_insert_length = REFERENCE_INSERT_LENGTH_MAX;
+    r->prior.max_fragment_length = FRAGMENT_LENGTH_MAX;
+
+    /* Set the assay type on the read from the rawread db */
+    r->prior.assay = assay;
+
+    /* Set the read fragment type depending on the assay and the number of
+       subtemplates */
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+
+    switch(assay) {
+        case CAGE:
+            if( r->num_subtemplates == 1 ) {
+                r->prior.frag_type = FRAGMENT_END;
+            } else {
+                statmap_log( LOG_FATAL, "Paired CAGE reads are not supported.");
+            }
+            break;
+        case CHIP_SEQ:
+            if( r->num_subtemplates == 1 ) {
+                r->prior.frag_type = FRAGMENT_END;
+            } else {
+                r->prior.frag_type = FULL_GENOME_FRAGMENT;
+            }
+        case RNA_SEQ:
+            if( r->num_subtemplates == 1 ) {
+                r->prior.frag_type = FRAGMENT_END;
+            } else {
+                r->prior.frag_type = FULL_TRANSCRIPTOME_FRAGMENT;
+            }
+        default:
+            /* We don't know the assay type, so don't make any assumptions that
+               we can determine the fragment length */
+            r->prior.frag_type = FRAGMENT_END;
+            break;
+    }
+
+    return;
+}
+
 int
 get_next_read_from_rawread_db( 
         struct rawread_db_t* rdb,
@@ -267,12 +323,7 @@ get_next_read_from_rawread_db(
         free_rawread( r2 );
     }
 
-    /***** Set the prior_read_information *****/
-    /* TODO Set the max lengths from config.h, for now */
-    (*r)->prior.max_ref_insert_length = REFERENCE_INSERT_LENGTH_MAX;
-    (*r)->prior.max_fragment_length = FRAGMENT_LENGTH_MAX;
-    /* Set the assay type on the read from the rawread db */
-    (*r)->prior.assay = rdb->assay;
+    set_prior_read_information(*r, rdb->assay);
 
     /* increment the read counter */
     (*r)->read_id = rdb->readkey;

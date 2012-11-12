@@ -13,10 +13,16 @@ struct penalty_array_t; // fwd declaration (?)
 #define POS_PAIRED_END_1 0
 #define POS_PAIRED_END_2 1
 
+enum read_fragment_type
+{
+    FRAGMENT_END = 1,
+    FULL_GENOME_FRAGMENT = 2,
+    FULL_TRANSCRIPTOME_FRAGMENT = 3
+};
+
 struct pos_in_template {
     int pos;
     int number_of_reads_in_template;
-    enum bool is_full_fragment;
 };
 
 struct read_subtemplate {
@@ -29,6 +35,7 @@ struct read_subtemplate {
 struct prior_read_information {
     int max_ref_insert_length;
     int max_fragment_length;
+    enum read_fragment_type frag_type;
     enum assay_type_t assay;
 };
 

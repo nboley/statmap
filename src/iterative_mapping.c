@@ -986,7 +986,7 @@ void update_CAGE_trace_expectation_from_location(
     /* update the trace */
     /* If the reads are paired */
     if( is_paired ) {
-        statmap_log(LOG_FATAL, "FATAL: paired cage reads are not supported" );
+        statmap_log(LOG_FATAL, "Paired CAGE reads are not supported" );
     } 
     /* If the read is *not* paired */
     else {
