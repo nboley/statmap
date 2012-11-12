@@ -22,6 +22,73 @@
 
 #include "log.h"
 
+/*******************************************************************************
+ *
+ * Debugging mapped reads
+ *
+ */
+
+void
+print_mapped_read_location(
+        mapped_read_location* loc
+    )
+{
+    /* cast the mapped read location to mapped_read_location_prologue and
+       get the prologue information */
+    mapped_read_location_prologue* prologue
+        = (mapped_read_location_prologue*) loc;
+
+    fprintf( stderr,
+        "chr:%i, strand:%i, are_more:%i, trimmed_length:%i, seq_error:%f\n",
+        prologue->chr, prologue->strand, prologue->are_more,
+        prologue->trimmed_length, prologue->seq_error );
+
+    /* print out each of the sublocations */
+    char* rd_ptr = loc;
+
+    /* skip the prologue */
+    rd_ptr += sizeof(mapped_read_location_prologue);
+
+    /* read until there are no more sublocations */
+    while(true)
+    {
+        mapped_read_sublocation* sub_loc
+            = (mapped_read_sublocation*) rd_ptr;
+
+        fprintf( stderr, 
+"start:%i, length:%i, rev_comp:%i, is_full_contig:%i, next_subread_is_gapped:%i, next_subread_is_ungapped:%i\n",
+            sub_loc->start_pos, sub_loc->length, sub_loc->rev_comp,
+            sub_loc->is_full_contig, sub_loc->next_subread_is_gapped,
+            sub_loc->next_subread_is_ungapped );
+
+        if( last_sublocation_in_mapped_read_location(sub_loc) )
+            break;
+
+        rd_ptr += sizeof(mapped_read_sublocation);
+    }
+}
+
+void
+print_mapped_read(
+        mapped_read_t* rd
+    )
+{
+    /* Index the mapped read to make this easier (be careful, if there's a bug 
+       in indexing mapped reads this will be messed up - then again, so will
+       everything else) */
+    mapped_read_index* rd_index = build_mapped_read_index(rd);
+
+    fprintf(stderr, "==== MAPPED READ ID %i (%i mappings) ====\n",
+        rd_index->read_id, rd_index->num_mappings);
+
+    /* print out each of the mappings */
+    int i;
+    for( i = 0; i < rd_index->num_mappings; i++ )
+    {
+        print_mapped_read_location( rd_index->mappings[i] );
+    }
+}
+
 /** MAPPED READ SUBLOCATIONS **/
 mapped_read_sublocation*
 get_start_of_sublocations_in_mapped_read_location(

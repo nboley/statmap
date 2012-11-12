@@ -214,6 +214,17 @@ typedef struct {
     unsigned next_subread_is_ungapped :1;
 } mapped_read_sublocation;
 
+/* Functions for inspecting/debugging mapped reads */
+void
+print_mapped_read_location(
+        mapped_read_location* loc
+    );
+
+void
+print_mapped_read(
+        mapped_read_t* rd
+    );
+
 /* Utility functions for accessing components of mapped_read_t */
 
 mapped_read_sublocation*
