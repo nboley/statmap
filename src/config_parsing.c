@@ -322,7 +322,6 @@ parse_opt( int key, char *arg, struct argp_state *state )
             args->output_directory = arg;
             break;
         case 'a':
-            /* set args->assay_type depending on argument */
             switch( arg[0] )
             {
                 case 'a':
@@ -339,10 +338,6 @@ parse_opt( int key, char *arg, struct argp_state *state )
                             "FATAL       :  Unrecognized assay type: '%s'",
                             arg );
             }
-
-            /* Set the global assay type variable */
-            _assay_type = args->assay_type;
-
             break;
         case 'f':
             args->frag_len_fname = arg;

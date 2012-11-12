@@ -11,7 +11,6 @@
 extern int num_threads;
 extern int min_num_hq_bps;
 extern int max_reference_insert_len;
-extern enum assay_type_t _assay_type;
 extern int softclip_len;
 
 extern int num_trace_tracks;

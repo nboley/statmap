@@ -504,7 +504,7 @@ init_mapping_params_for_read(
         (*p)->recheck_max_penalty_spread = log10(
                 1 - metaparams->error_model_params[0] );
 
-        if( _assay_type == CAGE )
+        if( r->prior.assay == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */

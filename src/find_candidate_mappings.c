@@ -102,13 +102,11 @@ struct indexable_subtemplate*
 build_indexable_subtemplate(
         struct read_subtemplate* rst,
         struct index_t* index,
-
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array,
-
-        // area of the read subtemplate to take an indexable subtemplate from
         int range_start,
-        int range_length
+        int range_length,
+        enum assay_type_t assay
     )
 {
     int subseq_length = index->seq_length;
@@ -120,7 +118,7 @@ build_indexable_subtemplate(
      * search. */
     int subseq_offset = 0;
 
-    if( _assay_type == RNA_SEQ ) // Gapped assay
+    if( assay == RNA_SEQ ) // Gapped assay
     {
         /* FIXME soft clipping for gapped assays? */
         if( range_start == 0 ) {
@@ -152,7 +150,8 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct read_subtemplate* rst,
         struct index_t* index,
         struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        struct penalty_array_t* rev_penalty_array,
+        enum assay_type_t assay
     )
 {
     int subseq_length = index->seq_length;
@@ -174,7 +173,7 @@ build_indexable_subtemplates_from_read_subtemplate(
     /* for now, try to build the maximum number of indexable subtemplates up to
      * a maximum */
     int num_partitions;
-    if( _assay_type == RNA_SEQ ) {
+    if( assay == RNA_SEQ ) {
         /* for RNA-seq, always use two probes at either end of the read so we
          * can maximize the space for finding introns */
         num_partitions = 2;
@@ -195,7 +194,8 @@ build_indexable_subtemplates_from_read_subtemplate(
          * best subsequence within each section to use as an index probe */
         ist = build_indexable_subtemplate( rst, index,
                 fwd_penalty_array, rev_penalty_array,
-                partition_start, partition_len );
+                partition_start, partition_len,
+                assay );
 
         if( ist == NULL ) {
             free_indexable_subtemplates( ists );
@@ -1493,7 +1493,8 @@ find_candidate_mappings_for_read_subtemplate(
         struct error_data_record_t* scratch_error_data_record,
         enum bool only_collect_error_data,
 
-        struct mapping_params* mapping_params
+        struct mapping_params* mapping_params,
+        enum assay_type_t assay
     )
 {
     /* the index of the read subtemplate that we are using */
@@ -1504,7 +1505,8 @@ find_candidate_mappings_for_read_subtemplate(
        build_indexable_subtemplates_from_read_subtemplate(
            rst, genome->index,
            mapping_params->fwd_penalty_arrays[rst_pos],
-           mapping_params->rev_penalty_arrays[rst_pos]
+           mapping_params->rev_penalty_arrays[rst_pos],
+           assay
        );
     
     /* if the set of probe's is too low quality, don't try and map this read */
@@ -1616,7 +1618,8 @@ find_candidate_mappings_for_read(
                 genome,
                 scratch_error_data_record,
                 only_collect_error_data,
-                mapping_params
+                mapping_params,
+                r->prior.assay
             );
         
         /* Update pos in READ_TYPE with the index of the underlying read
@@ -1756,7 +1759,7 @@ make_assay_specific_corrections(
     )
 {
     /* Only handle CAGE (untemplated G's) for now */
-    if( _assay_type == CAGE )
+    if( r->prior.assay == CAGE )
     {
         make_cage_specific_corrections( mappings, assay_corrected_mappings, r,
                 genome );
