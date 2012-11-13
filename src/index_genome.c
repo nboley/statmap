@@ -1546,6 +1546,8 @@ sort_ODI_stack( struct ODI_stack* stack )
 
 void
 free_ondisk_index( struct index_t* index ) {
+    statmap_log(LOG_NOTICE, "Freeing index");
+
     if( index->index != NULL ) {
         free( index->index );
     } else {

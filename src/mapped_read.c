@@ -1409,6 +1409,10 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
 
     pthread_mutex_destroy( (*rdb)->nonmapping_mutex );
     free( (*rdb)->nonmapping_mutex );
+
+    if( (*rdb)->fl_dist != NULL ) {
+        free_fl_dist( &((*rdb)->fl_dist) );
+    }
     
     free( *rdb );
     *rdb = NULL;

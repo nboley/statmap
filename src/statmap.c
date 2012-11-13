@@ -147,22 +147,20 @@ map_marginal( struct args_t* args,
     }
 
     /* initialize the mapped reads db */
-    if( false == is_nc )
-    {
+    if( false == is_nc ) {
         open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_READS_DB_FNAME );
     } else {
         open_mapped_reads_db_for_writing( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
     }
 
-    /* if a fragment length distribution was provided, load it into the mapped
-     * reads db. This has to happen before mapping, so we can use the fl_dist
-     * to compute the penalties of joined candidate mappings. */
+    /* initialize the fl dist if one was provided. This is necessary to properly
+       compute the penalty for a read, including the penalty from the fragment
+       length */
     if( args->frag_len_fp != NULL ) {
         init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
     }
     
     statmap_log( LOG_NOTICE, "Finding candidate mappings." );
-
     find_all_candidate_mappings( 
         genome,
         rdb,
@@ -260,8 +258,8 @@ map_generic_data(  struct args_t* args )
     
     /* load the genome */
     load_genome( &genome, args );
-    
-    struct mapped_reads_db* mpd_rds_db;    
+
+    struct mapped_reads_db* mpd_rds_db;
     map_marginal( args, genome, args->rdb, &mpd_rds_db, false );
     
     /* Free the genome index */
@@ -270,17 +268,15 @@ map_generic_data(  struct args_t* args )
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
-    /* iterative mapping */
-    iterative_mapping( args, genome, mpd_rds_db );
-
-    if( args->frag_len_fp != NULL ) {
-        init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
-    } else {
+    /* TODO estimate fl dist from mapped reads if none provided (?) */
+    if( args->frag_len_fp == NULL ) {
         build_fl_dist( args, mpd_rds_db );
     }
 
-    close_mapped_reads_db( &mpd_rds_db );
-    
+    /* iterative mapping */
+    iterative_mapping( args, genome, mpd_rds_db );
+
+    close_mapped_reads_db( &mpd_rds_db );    
     free_genome( genome );
 
     return;
@@ -299,15 +295,9 @@ map_chipseq_data(  struct args_t* args )
     
     /* map the real ( IP ) data */
     statmap_log(LOG_NOTICE, "Mapping the real (IP) data");
-    struct mapped_reads_db* chip_mpd_rds_db = NULL;    
+    struct mapped_reads_db* chip_mpd_rds_db = NULL;
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
 
-    if( args->frag_len_fp != NULL ) {
-        init_fl_dist_from_file( &(chip_mpd_rds_db->fl_dist), args->frag_len_fp );
-    } else {
-        build_fl_dist( args, chip_mpd_rds_db );
-    }
-    
     /* 
        this is a bit hacky - for single end chipseq we need to 
        do a bit of work in advance to speed up the fragment 
@@ -322,12 +312,6 @@ map_chipseq_data(  struct args_t* args )
         statmap_log(LOG_NOTICE, "Mapping the NC data");
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
-        if( args->frag_len_fp != NULL ) {
-            init_fl_dist_from_file( &(NC_mpd_rds_db->fl_dist), args->frag_len_fp );
-        } else {
-            build_fl_dist( args, NC_mpd_rds_db );
-        }
-
         /* 
            this is a bit messy - for single end chipseq we need to 
            do a bit of work in advance to speed up the fragment 
@@ -337,9 +321,7 @@ map_chipseq_data(  struct args_t* args )
             build_chipseq_bs_density( NC_mpd_rds_db->fl_dist );
     }
 
-    /* Free the genome index */
-    /* we may need the memory later */
-    statmap_log( LOG_NOTICE, "Freeing index" );
+    /* Free the genome index (we may need the memory later) */
     free_ondisk_index( genome->index );
     
     /* if there is no negative control, we use the same iterative 

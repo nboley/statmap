@@ -643,7 +643,6 @@ parse_arguments( int argc, char** argv )
         if( NULL == args.frag_len_fp )
         {
             statmap_log( LOG_FATAL, "Failed to open '%s'\n",  args.frag_len_fname );
-            exit( -1 );
         }    
     } else {
         if( args.assay_type == CHIP_SEQ )
