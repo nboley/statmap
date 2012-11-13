@@ -45,14 +45,6 @@ init_trace( struct genome_data* genome,
             char** track_names );
 
 void
-copy_trace( struct trace_t** traces,
-            struct trace_t* original );
-
-void
-copy_trace_structure( struct trace_t** traces,
-                      struct trace_t* original );
-
-void
 close_traces( struct trace_t* traces );
 
 void
