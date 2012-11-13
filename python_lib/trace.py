@@ -148,7 +148,6 @@ class trace_t(OrderedDict):
         OrderedDict.__init__(self)
         
         # keep a reference to c_trace_p?
-
         # de-reference the trace
         c_trace = c_trace_p[0]
         
@@ -168,7 +167,7 @@ class trace_t(OrderedDict):
                             'real_start': trace_segment.real_start,
 
                             'length': trace_segment.length,
-                            'data': numpy.fromiter(trace_segment.data, np.float,
+                            'data': numpy.fromiter(trace_segment.data, numpy.float,
                                 trace_segment.length),
                         })
 
@@ -182,7 +181,6 @@ def init_trace( genome_p, track_names ):
     '''
     Init a trace and return it
     '''
-
     # convert python list of strings into C array of char*
     c_track_names = (c_char_p * len(track_names))()
     for i, c_track in enumerate(c_track_names):

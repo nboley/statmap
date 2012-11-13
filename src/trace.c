@@ -36,9 +36,9 @@ init_trace_segment_t(
 
     ts->length = length;
 
-    ts->data = malloc(sizeof(TRACE_TYPE)*length);
+    ts->data = malloc( sizeof(TRACE_TYPE)*length );
     assert(ts->data != NULL);
-    memset(ts->data, 0, sizeof(TRACE_TYPE)*length);
+    memset( ts->data, 0, sizeof(TRACE_TYPE)*length );
 
     int rv;
     ts->data_lock = malloc(sizeof(pthread_mutex_t));
@@ -426,7 +426,7 @@ zero_traces( struct trace_t* traces )
             for( k = 0; k < tsegs->num_segments; k++ )
             {
                 struct trace_segment_t *tseg = tsegs->segments + k;
-                memset(tseg->data, 0, sizeof(TRACE_TYPE)*tseg->length);
+                memset( tseg->data, 0, sizeof(TRACE_TYPE)*tseg->length );
             }
         }
     }
@@ -839,7 +839,7 @@ load_trace_segment_from_stream(
         = add_trace_segment_to_trace_segments(tsegs, real_track_id, real_chr_id, 
             real_start, length);
     /* load the data for this trace segment */
-    rv = fread(&(new_segment->data), sizeof(TRACE_TYPE), new_segment->length, is);
+    rv = fread(new_segment->data, sizeof(TRACE_TYPE), new_segment->length, is);
     assert( rv == new_segment->length );
 }
 
@@ -848,21 +848,23 @@ load_trace_segments_from_stream(
     struct trace_segments_t* tsegs,
     FILE* is )
 {
-    int rv;
-
     init_trace_segments_t(tsegs);
 
-    /* load the number of segments from the stream */
-    rv = fread(&(tsegs->num_segments), sizeof(int), 1, is);
+    int rv;
+    int num_segments;
+    rv = fread( &num_segments, sizeof(int), 1, is );
     assert(rv == 1);
-    assert(tsegs->num_segments > 0);
+    assert(num_segments > 0);
 
     /* load the segments */
     int i;
-    for( i = 0; i < tsegs->num_segments; i++ )
+    for( i = 0; i < num_segments; i++ )
     {
         load_trace_segment_from_stream(tsegs, is);
     }
+
+    /* Check that expected number of segments actually loaded */
+    assert( num_segments == tsegs->num_segments );
 }
 
 void
