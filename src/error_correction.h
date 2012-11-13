@@ -70,14 +70,6 @@ struct mapping_metaparams {
     float error_model_params[10];
 };
 
-/*
- * Store separate mapping parameters For
- *  a) index search
- *  b) the final recheck.
- *
- * For now, use the command line parameters for the recheck penalties and
- * generate the index search penalties from the error model.
- */
 struct index_search_params
 {
     float min_match_penalty;

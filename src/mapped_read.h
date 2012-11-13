@@ -393,8 +393,8 @@ void
 join_candidate_mappings( candidate_mappings* mappings, 
                          candidate_mapping*** joined_mappings, 
                          float** penalties,
-                         int* joined_mappings_len );
-
+                         int* joined_mappings_len,
+                         enum bool paired_end );
 void
 filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
                                   float** penalties,

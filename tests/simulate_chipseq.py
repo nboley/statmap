@@ -609,7 +609,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     plt.savefig( os.path.join(curr_dir, png_fname) )
 
 if __name__ == '__main__':
-    paired_end=False
+    paired_end=True
     NUM_MUTS = 3
     
     if False:

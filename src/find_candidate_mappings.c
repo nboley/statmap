@@ -1796,18 +1796,26 @@ build_mapped_read_from_candidate_mappings(
      * problems in the assay (e.g. untemplated G's in CAGE).
      *
      * For now, we assume these corrections all take places on the level of
-     * a read subtemplate / candidate mapping.
-     * */
+     * a read subtemplate / candidate mapping. */
     candidate_mappings* assay_corrected_mappings = NULL;
     init_candidate_mappings( &assay_corrected_mappings );
     make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
             genome );
-    /* the original set of candidate mappings is freed in the calling fn */
+    /* NOTE: the original set of candidate mappings is freed in the calling fn */
+
+    enum bool is_paired;
+    assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
+    if( r->num_subtemplates == 1 ) {
+        is_paired = false;
+    } else {
+        is_paired = true;
+    }
     
     join_candidate_mappings( assay_corrected_mappings,
                              &joined_mappings,
                              &joined_mapping_penalties,
-                             &joined_mappings_len );
+                             &joined_mappings_len,
+                             is_paired );
             
     filter_joined_candidate_mappings( &joined_mappings,
                                       &joined_mapping_penalties,

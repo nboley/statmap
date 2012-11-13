@@ -120,7 +120,8 @@ get_stop_for_sublocations_group(
 
     while( true )
     {
-        if( end_of_sublocations_group( (mapped_read_sublocation*) ptr ) )
+        if( last_sublocation_in_mapped_read_location(
+                (mapped_read_sublocation*) ptr ) )
             break;
 
         ptr += sizeof( mapped_read_sublocation );
@@ -575,29 +576,11 @@ void
 join_candidate_mappings( candidate_mappings* mappings, 
                          candidate_mapping*** joined_mappings, 
                          float** penalties,
-                         int* joined_mappings_len )
+                         int* joined_mappings_len,
+                         enum bool paired_end )
 {
-    /* joined_mappings is a list of pointers to candidate_mappings. Each
-     * "joined mapping" is a list of pointers to candidate_mappings separated
-     * by NULL poiners */
-
-    /* sort the candidate_mappings for efficiency */
+    /* sort the candidate_mappings so we can optimize */
     sort_candidate_mappings( mappings );
-
-    /* TODO special case single end and paired end reads joining, for now */
-
-    enum bool paired_end = false;
-    int i;
-    for( i = 0; i < mappings->length; i++ )
-    {
-        candidate_mapping* mapping = mappings->mappings + i;
-
-        if( mapping->pos_in_template == 1 )
-        {
-            paired_end = true;
-            break;
-        }
-    }
 
     if( paired_end )
     {
