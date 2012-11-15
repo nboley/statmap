@@ -768,13 +768,18 @@ recheck_joined_candidate_mappings(
         current_mapping++;
     }
 
-    /* Get the probability of the given fragment length from the fragment
-     * length distribution */
-    int fl = get_fl_for_joined_candidate_mappings( group_start );
-    float fl_penalty = get_fl_log_prb( fl_dist, fl );
+    /* Add the penalty for the fragment length *if* this read is a full fragment
+       NOTE: this may not be correct for paired RNA-Seq */
+    if( r->prior.frag_type == FULL_GENOME_FRAGMENT ||
+        r->prior.frag_type == FULL_TRANSCRIPTOME_FRAGMENT )
+    {
+        int fl = get_fl_for_joined_candidate_mappings( group_start );
+        rechecked_group_penalty += get_fl_log_prb( fl_dist, fl );
+    }
 
-    /* Save the rechecked group penalty in penalty */
-    *penalty = rechecked_group_penalty + fl_penalty;
+    *penalty = rechecked_group_penalty;
+
+    return;
 }
 
 void
