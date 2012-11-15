@@ -4,11 +4,11 @@ from itertools import izip
 import re
 import gzip
 
-import tests as sc # for genome building and sampling functions
+from tests import *
 
 def build_introns( sequence, n_introns, min_intron_len, max_intron_len ):
     # Generate random sets of intron starts until we have one that won't
-    # produce overlapping introns
+    # produce overlapping introns (this simplifies future error checks)
     intron_starts = None
 
     while(True):
@@ -33,7 +33,6 @@ def build_introns( sequence, n_introns, min_intron_len, max_intron_len ):
             break
 
     introns = []
-
     for intron_start in intron_starts:
         intron_len = random.randint(min_intron_len, max_intron_len)
         introns.append( ( intron_start, intron_start + intron_len ) )
@@ -44,7 +43,6 @@ def splice_introns_from_sequence( sequence, n_introns, min_intron_len,
         max_intron_len ):
     introns = build_introns( sequence, n_introns, min_intron_len,
             max_intron_len )
-
     # Now build the corresponding set of exons
     exons = []
     for i, intron in enumerate(introns):
@@ -52,7 +50,6 @@ def splice_introns_from_sequence( sequence, n_introns, min_intron_len,
             exons.append( (0, intron[0]) )
         else:
             exons.append( ( introns[i-1][1], intron[0] ) )
-
     # add last exon
     exons.append( ( introns[-1][1], len(sequence) ) )
 
@@ -174,17 +171,13 @@ def cigar_match( mapped_read, fragments, introns ):
     """Return True if the cigar string for this mapped read matches the known"""
     read_id = int(mapped_read[0])
     truth = fragments[read_id]
-
     true_cigar = build_cigar_string_for_fragment( truth, introns )
-
-    # cigar string is 6th entry in SAM line
-    if true_cigar == mapped_read[5]:
+    if true_cigar == mapped_read[5]: # cigar is 6th entry in SAM line
         return True
 
     # DEBUG (if match failed)
     #print "Mapped Cigar :", mapped_read[5] # cigar entry in SAM line
     #print "  True Cigar :", true_cigar
-
     return False
 
 def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
@@ -291,7 +284,7 @@ def check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
     return
 
 def check_statmap_output( output_directory, genome, transcriptome, introns,
-        fragments, read_len, indexed_seq_len, num_mutations ):
+        fragments, read_len, indexed_seq_len, num_mutations=0 ):
 
     # Categorize the genome fragments by how they overlap the intron
     categorized_fragments = categorize_fragments( genome,
@@ -299,7 +292,7 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
 
     # count mapping reads
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
-    num_mapped_reads = sum( 1 for mapped_read in sc.iter_sam_reads(sam_fp) )
+    num_mapped_reads = sum( 1 for mapped_read in iter_sam_reads(sam_fp) )
     sam_fp.seek(0)
 
     # nonmapping read ids
@@ -321,7 +314,7 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
             print "Fragment :", fragments[nonmapping_read_id]
             sys.exit(1)
 
-    for mapped_reads in sc.iter_sam_reads(sam_fp): # each read id
+    for mapped_reads in iter_sam_reads(sam_fp): # each read id
         read_id = int(mapped_reads[0][0]) # for error messages
 
         # Make sure at least one of the mappings for this read matches the
@@ -361,62 +354,106 @@ def randomly_mutate_reads( reads, num_mutations ):
         for mut_index in mut_indices:
             orig_bp = mut_seq[mut_index]
             mut_seq[mut_index] = random.choice( list(
-                    sc.bps_set.difference( set( [orig_bp, orig_bp.swapcase()] )
+                    bps_set.difference( set( [orig_bp, orig_bp.swapcase()] )
                 )))
 
         mut_seq = ''.join(mut_seq)
         error_str = 'h'*len(mut_seq) # FOR NOW - doesn't matter to mismatch search type
 
-        mutated_reads.append( sc.mut_read_t( mut_seq, error_str, seq ) )
+        mutated_reads.append( mut_read_t( mut_seq, error_str, seq ) )
 
     return mutated_reads
 
-def main():
-    print "Starting simulate_rnaseq.py ..."
+### read mutation code from test_error_rate_estimation.py
+error_char_mappings = dict(zip('?adfh', [0.65, 0.03, 0.02, 0.01, 0.00]))
 
-    output_directory = "smo_rnaseq_sim"
+def build_error_str(read):
+    # return a complete shit read 10% of the time
+    if random.random() < 0.10:
+        return "?"*len(read)
+    
+    return "".join( random.choice('?adfh') #'?adfh') 
+                    for i in xrange(len(read)) )
+    
+# mutate the reads according to some simple eror model
+def iter_mutated_reads( reads ):
+    for read in reads:
+        error_str = build_error_str(read)
+        error_rates = [ 0.01 + 0.03*float(i)/len(read)
+                        + error_char_mappings[char]
+                        for i, char in enumerate( error_str ) ]
+        
+        mutated_read = []
+        for base, error_prb in izip(read, error_rates):
+            if random.random() < error_prb:
+                mutated_read.append( random.choice('acgtACGT') )
+            else:
+                mutated_read.append( base )
+        mutated_read = ''.join( mutated_read )
+        yield ( mutated_read, error_str, read )
 
-    # Parameters
-    # In order to test RNASeq, indexed_seq_len*2 < read_len - max_intron_len
-    genome_len = 10000
-    frag_len = 100
-    read_len = 100
-    indexed_seq_len = 20
-    max_intron_len = 50
-    n_reads  = 100000
+def rnaseq_test(search_type, dirty=False, genome_len=1000, frag_len=100,
+    read_len=100, indexed_seq_len=20, max_intron_len=50, n_reads=1000, msg=""):
+    
+    assert indexed_seq_len*2 < (read_len - max_intron_len), \
+    "We can only test RNA-Seq if the read is long enough and the probes are short enough to surround the intron"
 
-    genome = sc.build_random_genome( [genome_len,], ["1",] )
+    print "======== START %s" % msg
+
+    output_directory = "smo_rnaseq_sim_%s_%s" % \
+        (search_type, "dirty" if dirty else "clean")
+
+    genome = build_random_genome( [genome_len,], ["1",] )
     introns, transcriptome = splice_introns_from_genome( genome,
             max_intron_len=max_intron_len )
 
     # sample fragments from the transcriptome
-    fragments = sc.sample_uniformly_from_genome(
+    fragments = sample_uniformly_from_genome(
             transcriptome, nsamples=n_reads, frag_len=frag_len )
-    reads = sc.build_reads_from_fragments(
+    reads = build_reads_from_fragments(
             transcriptome, fragments,
             read_len=read_len,
             rev_comp=True,
             paired_end=False )
 
-    num_mutations=1
-    mutated_reads = randomly_mutate_reads( reads, num_mutations=num_mutations )
-
     # Write out the test files
     genome_fnames = ( "tmp.genome.fa", )
     with open( genome_fnames[0], "w" ) as genome_fp:
-        sc.write_genome_to_fasta( genome, genome_fp, 1 )
+        write_genome_to_fasta( genome, genome_fp, 1 )
 
     read_fnames = ( "tmp.fastq", )
     with open( read_fnames[0], "w" ) as reads_fp:
-        sc.build_single_end_fastq_from_mutated_reads( mutated_reads, reads_fp )
+        if dirty:
+            mutated_reads = list(iter_mutated_reads(reads))
+            build_single_end_fastq_from_mutated_reads(mutated_reads, reads_fp)
+        else:
+            build_single_end_fastq_from_seqs(reads, reads_fp)
 
     # Map the data with Statmap
-    sc.map_with_statmap( genome_fnames, read_fnames, output_directory,
-            indexed_seq_len=indexed_seq_len, assay='r', search_type='e' )
+    map_with_statmap(genome_fnames, read_fnames, output_directory,
+            indexed_seq_len=indexed_seq_len, assay='r', search_type=search_type)
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
-            fragments, read_len, indexed_seq_len, num_mutations )
+            fragments, read_len, indexed_seq_len )
 
-    print "PASS:    simulate rnaseq"
+    print "PASS: %s" % msg
 
-if __name__ == "__main__": main()
+def run_tests():
+    # Perfect reads with both error models
+    rnaseq_test('m',
+        msg="rnaseq_test for perfect reads with mismatch error model")
+    rnaseq_test('e',
+        msg="rnaseq_test for perfect reads with estimated error model")
+
+    # Mutated read with both error models
+    rnaseq_test('m', dirty=True,
+        msg="rnaseq_test for mutated reads with mismatch error model")
+    rnaseq_test('e', dirty=True,
+        msg="rnaseq_test for mutated reads with estimated error model")
+
+    # test the error model with lots of reads
+    rnaseq_test('e', dirty=True, genome_len=100000, n_reads=100000,
+        msg="rnaseq_test lots of mutated reads")
+
+if __name__ == "__main__":
+    run_tests()

@@ -10,6 +10,8 @@
 #include <limits.h>
 #include <math.h>
 #include <float.h>
+#include <time.h>
+#include <unistd.h> // for sysconf
 
 #include "statmap.h"
 #include "log.h"
@@ -28,16 +30,19 @@
 float
 subseq_penalty(
         struct read_subtemplate* rst,
-        int offset,
-        int subseq_len,
-        struct penalty_array_t* penalty_array
+        int subseq_offset,
+        int subseq_length,
+        struct penalty_array_t* penalties
     )
 {
-    float penalty = 0;
+    assert( subseq_offset + subseq_length <= rst->length );
 
+    float penalty = 0;
     /* loop over subsequence */
     int pos;
-    for( pos = offset; pos < subseq_len; pos++ )
+    for( pos = subseq_offset;
+         pos < subseq_offset + subseq_length; 
+         pos++ )
     {
         int bp = rst->char_seq[pos];
 
@@ -50,7 +55,7 @@ subseq_penalty(
              * match would then have the best penalty (considering what we know
              * about error rates in positions, for the error scores, etc. from
              * the error model)? */
-            penalty += penalty_array->array[pos].penalties[bp_code(bp)];
+            penalty += penalties->array[pos].penalties[bp_code(bp)];
         }
     }
 
@@ -259,7 +264,7 @@ search_index(
     bkwd_seq = translate_seq( tmp_read, subseq_length );
     assert( bkwd_seq != NULL );
     
-    /* map the full read */
+    /* search the index */
     find_matches_from_root(
             index, 
 
@@ -1518,12 +1523,22 @@ find_candidate_mappings_for_read_subtemplate(
     
     /* Stores the results of the index search for each indexable subtemplate */
     int search_results_length = ists->length;
-    mapped_locations** search_results = malloc(
-            sizeof(mapped_locations*) * search_results_length );
+    mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
+        search_results_length);
 
     /* initialize search parameters for the index probes */
-    struct index_search_params* index_search_params = NULL;
-    init_index_search_params( &index_search_params, ists, mapping_params );
+    struct index_search_params* index_search_params
+        = init_index_search_params(ists, mapping_params);
+
+    #if PROFILE_CANDIDATE_MAPPING
+    /* Log CPU time used by the current thread */
+    int err;
+    struct timespec start, stop;
+    double elapsed;
+
+    assert( sysconf(_POSIX_THREAD_CPUTIME) );
+    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+    #endif
 
     search_index_for_indexable_subtemplates(
             ists,
@@ -1532,6 +1547,15 @@ find_candidate_mappings_for_read_subtemplate(
             index_search_params,
             only_collect_error_data
         );
+
+    #if PROFILE_CANDIDATE_MAPPING
+    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
+
+    elapsed = (stop.tv_sec - start.tv_sec);
+    elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+    statmap_log(LOG_DEBUG, "index_search_time %f", elapsed);
+    #endif
 
     free( index_search_params );
 
@@ -1600,12 +1624,12 @@ find_candidate_mappings_for_read(
 {
     assert( NULL != error_model );
     int rv = -1;
-    
-    int rst_index;
-    for( rst_index=0; rst_index < r->num_subtemplates; rst_index++ )
+
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ )
     {
         // reference to current read subtemplate
-        struct read_subtemplate* rst = r->subtemplates + rst_index;
+        struct read_subtemplate* rst = r->subtemplates + i;
 
         /* initialize the candidate mappings container for this read
          * subtemplate */
@@ -1624,7 +1648,7 @@ find_candidate_mappings_for_read(
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
-        update_pos_in_template( rst_mappings, rst_index );
+        update_pos_in_template( rst_mappings, i );
 
         /* append the candidate mappings from this read subtemplate to the set
          * of candidate mappings for this read */
@@ -1884,6 +1908,7 @@ find_candidate_mappings( void* params )
     enum bool only_collect_error_data = td->only_collect_error_data;
 
     struct mapping_metaparams* metaparams = td->metaparams;
+    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* END parameter 'recreation' */
 
@@ -1906,16 +1931,29 @@ find_candidate_mappings( void* params )
                rdb, &r, td->max_readkey )  
          ) 
     {
+        #if PROFILE_CANDIDATE_MAPPING
+        statmap_log( LOG_DEBUG, "begin read_id %i", r->read_id );
+
+        /* Log CPU time used by the current thread in processing this candidate mapping */
+        int err;
+        struct timespec start, stop;
+        double elapsed;
+
+        assert( sysconf(_POSIX_THREAD_CPUTIME) );
+        err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+        #endif
+
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
         if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
-            statmap_log( LOG_DEBUG, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
+            statmap_log( LOG_INFO, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
         }
 
-        struct mapping_params* mapping_params = NULL;
-        init_mapping_params_for_read(&mapping_params, r, metaparams, error_model);
+        struct mapping_params* mapping_params
+            = init_mapping_params_for_read( r, metaparams, error_model, 
+                reads_min_match_penalty );
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
@@ -1947,7 +1985,7 @@ find_candidate_mappings( void* params )
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            
         }
-        
+
         /* unless we're only collecting error data, build candidate mappings */
         if( !only_collect_error_data )
         {
@@ -1982,6 +2020,15 @@ find_candidate_mappings( void* params )
         }
 
         curr_read_index += 1;
+     
+        #if PROFILE_CANDIDATE_MAPPING
+        err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
+        elapsed = (stop.tv_sec - start.tv_sec);
+        elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+        statmap_log(LOG_DEBUG, "find_candidate_mappings_time %f", elapsed);
+        statmap_log(LOG_DEBUG, "end read_id %i", r->read_id);
+        #endif
 
         /* cleanup memory */
         free_mapping_params( mapping_params );
@@ -2088,6 +2135,7 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->mpd_rds_db = mpd_rds_db;
     
     td_template->metaparams = metaparams;
+    td_template->reads_min_match_penalty = 0;
     td_template->error_data = error_data;
     td_template->error_model = error_model;
 
@@ -2206,6 +2254,23 @@ find_all_candidate_mappings(
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
         
+        if( mapping_metaparams->error_model_type == ESTIMATED )
+        {
+            /* Compute the min match penalty for this block of reads that will
+             * map the desired percentage of reads given in metaparameters */
+            float reads_min_match_penalty
+                = compute_min_match_penalty_for_reads( rdb, error_model,
+                        mapping_metaparams->error_model_params[0] );
+
+            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
+                    reads_min_match_penalty,
+                    td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
+                    td_template.max_readkey );
+
+            /* Save in the mapping metaparameters */
+            td_template.reads_min_match_penalty = reads_min_match_penalty;
+        }
+
         spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */

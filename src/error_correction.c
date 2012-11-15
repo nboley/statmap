@@ -7,12 +7,14 @@
 
 #include "config.h"
 #include "log.h"
+#include "rawread.h"
 #include "read.h"
 #include "quality.h"
 #include "genome.h"
 #include "error_correction.h"
 #include "find_candidate_mappings.h"
 #include "statmap.h"
+#include "util.h"
 
 /*
  *  Code to estiamte error frequencies. Calls R.
@@ -175,7 +177,7 @@ void
 predict_freqs( struct error_data_t* data, int record_index, 
                struct freqs_array* predicted_freqs )
 {
-    statmap_log( LOG_DEBUG, "Predicting the error models for readkeys %i - %i.",
+    statmap_log(LOG_INFO, "Predicting the error models for readkeys %i - %i.",
             data->records[record_index]->min_readkey,
             data->records[record_index]->max_readkey
         );
@@ -294,18 +296,21 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
-get_min_penalty( struct penalty_t* penalty_array )
+get_mismatch_penalty( struct penalty_t* penalty_array )
 {
-    double min_penalty = 0;
+    double mismatch_penalty = 0;
 
+    /* We can safely assume the penalty for a match (in log space) is > any
+    penalty for a mismatch. */
     int i;
     for( i = 0; i < 4; i++ )
     {
-        min_penalty = MIN( penalty_array->penalties[i], min_penalty );
+        mismatch_penalty = MIN( penalty_array->penalties[i], mismatch_penalty );
     }
 
-    return min_penalty;
+    return mismatch_penalty;
 }
+
 
 double
 calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
@@ -324,7 +329,7 @@ calc_min_match_penalty( struct penalty_t* penalties, int penalties_len,
          * the four penalty values (since penalties are negative, this will be
          * the "highest" penalty score. This is wrong when we move to using
          * actual by base mutation rates. */
-        double penalty = get_min_penalty( penalties + i );
+        double penalty = get_mismatch_penalty( penalties + i );
         double mm_prb = pow( 10, penalty );
         mean += mm_prb*penalty;
         mean += (1-mm_prb)*log10((1-mm_prb));
@@ -335,20 +340,33 @@ calc_min_match_penalty( struct penalty_t* penalties, int penalties_len,
     return mean - 4*sqrt( var );
 }
 
+/* Separate penalty mean calculation from below so we can log independently of
+ * the underlying program logic */
+void
+log_penalties_mean( struct penalty_t* penalties, int penalties_len )
+{
+    double mean = 0;
+    int i;
+    for( i = 0; i < penalties_len; i++ ) {
+        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
+        mean += mm_prb;
+    }
+
+    #if PROFILE_CANDIDATE_MAPPING
+    statmap_log(LOG_DEBUG, "penalties_mean %f", mean);
+    #endif
+}
+
 int
 calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
 {
     double mean = 0;
     int i;
-    for( i = 0; i < penalties_len; i++ )
-    {
-        /* we take [0][1] because this is a guaranteed mismatch,
-           but this is wrong when we move to using actual by base
-           mutation rates. */
-        double mm_prb = pow( 10, get_min_penalty( penalties + i ) );
+    for( i = 0; i < penalties_len; i++ ) {
+        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
         mean += mm_prb;
     }
-    
+
     return penalties_len - (int)mean - 1;
 }
 
@@ -360,7 +378,7 @@ filter_penalty_array(
 {
     int effective_seq_len = calc_effective_sequence_length(
         penalties, penalties_len );
-                
+
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
         /*
         statmap_log( LOG_DEBUG, "Filtering Read: %i %i - %e %e",
@@ -392,6 +410,10 @@ filter_read(
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
+        /* WARNING this logging strategy will only work for unpaired reads */
+        log_penalties_mean( mapping_params->fwd_penalty_arrays[i]->array,
+                mapping_params->fwd_penalty_arrays[i]->length );
+
         if( filter_penalty_array( 
                 mapping_params->fwd_penalty_arrays[i]->array, 
                 mapping_params->fwd_penalty_arrays[i]->length,
@@ -416,7 +438,7 @@ filter_indexable_subtemplates(
     }
     
     int effective_genome_len = calc_genome_len( genome );
-    
+
     int i;
     for( i = 0; i < ists->length; i++ )
     {
@@ -432,41 +454,218 @@ filter_indexable_subtemplates(
     return false;
 }
 
-void
-init_mapping_params_for_read(
-        struct mapping_params** p,
-        struct read* r,        
-        struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model
+float
+expected_value_of_rst_subsequence(
+        struct penalty_array_t* rst_pens,
+        int subseq_start,
+        int subseq_length
     )
 {
-    *p = malloc( sizeof( struct mapping_params ));
+    float seq_ev = 0;
+    int i, j;
+    for(i = subseq_start; i < subseq_start + subseq_length; i++)
+    {
+        /* Expected value for this basepair */
+        float bp_ev = 0;
+        for(j = 0; j < 4; j++)
+        {
+            float bp_logprb = rst_pens->array[i].penalties[j];
+            float bp_prb = pow(10, bp_logprb);
+            bp_ev += bp_logprb * bp_prb;
+        }
 
-    (*p)->metaparams = metaparams;
+        seq_ev += bp_ev;
+    }
+    return seq_ev;
+}
+
+float
+expected_value_of_rst(
+        struct read_subtemplate* rst,
+        struct penalty_array_t* rst_pens
+    )
+{
+    return expected_value_of_rst_subsequence(rst_pens, 0, rst->length);
+}
+
+enum bool
+check_sum_of_probabilities(
+        struct penalty_t* bp_penalties
+    )
+{
+    float sum = 0;
+    int i;
+    for( i = 0; i < 4; i++ )
+    {
+        sum += pow(10, bp_penalties->penalties[i] );
+    }
+
+    /* should be equal within a small range around 1.0 to account for rounding
+     * errors */
+    if( sum < (1.0 - ROUND_ERROR) || sum > (1.0 + ROUND_ERROR) ) {
+        statmap_log( LOG_FATAL,
+                "Sum of bp mutation probabilities (%f) is not within range [%f, %f]",
+                sum, 1.0 - ROUND_ERROR, 1.0 + ROUND_ERROR );
+    }
+
+    return true;
+}
+
+float
+sample_bp_penalties(
+        struct penalty_t* bp_penalties
+    )
+{
+    /* Check that the probabilities sum to 1 */
+    assert( check_sum_of_probabilities( bp_penalties ) );
+
+    /* Sample randomly from the bp mutation probabilities */
+    /* Break if the sum is greater than a random number in the range [0,1] */
+    double rand_val = ((double)rand() / (double)RAND_MAX);
+    float sum = 0;
+    int i;
+    for( i = 0; i < 4; i++ )
+    {
+        sum += pow(10, bp_penalties->penalties[i]);
+        if( sum > rand_val )
+            break;
+    }
+
+    /* return the randomly sampled probability */
+    return bp_penalties->penalties[i];
+}
+
+float
+compute_min_match_penalty_for_reads(
+        struct rawread_db_t* rdb,
+        struct error_model_t* error_model,
+        float quantile
+    )
+{
+    struct rawread_db_state saved_state
+        = save_rawread_db_state( rdb );
+
+    /* Sample from the next set of READS_STAT_UPDATE_STEP_SIZE reads */
+    readkey_t max_readkey = rdb->readkey + READS_STAT_UPDATE_STEP_SIZE;
+
+    int num_sample_prbs
+        = READS_STAT_UPDATE_STEP_SIZE * NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+    float* sample_prbs = calloc( num_sample_prbs, sizeof(float) );
+    int sample_prbs_index = 0;
+
+    struct read* r;
+    while( EOF != get_next_read_from_rawread_db(
+                rdb, &r, max_readkey ) )
+    {
+        struct penalty_array_t* penalty_arrays = malloc(
+                sizeof(struct penalty_array_t) * r->num_subtemplates );
+        int st_i;
+        for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
+        {
+            build_penalty_array( penalty_arrays + st_i,
+                                 r->subtemplates + st_i,
+                                 error_model );
+        }
+        free_read( r );
+
+        int sample_i;
+        for( sample_i = 0;
+             sample_i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+             sample_i++ )
+        {
+            float sample_prb = 0;
+
+            int bp_i;
+            for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
+            {
+                for( bp_i = 0; bp_i < penalty_arrays[st_i].length; bp_i++ )
+                {
+                    sample_prb += sample_bp_penalties(
+                            penalty_arrays[st_i].array + bp_i );
+                }
+            }
+
+            assert( sample_prb < 0 );
+            sample_prbs[sample_prbs_index++] = sample_prb;
+        }
+
+        /* cleanup memory */
+        for( st_i = 0; st_i < r->num_subtemplates; st_i++ ) {
+            free_penalty_array( penalty_arrays + st_i );
+        }
+        free( penalty_arrays );
+    }
+
+    restore_rawread_db_state( rdb, saved_state );
+
+    float min_match_penalty = 0;
+
+    if( sample_prbs_index == 0 ) {
+        /* we didn't process any reads - cleanup and return, leaving
+         * min_match_penalty set to 0 (invalid value) */
+        goto cleanup;
+    }
+
+    /* resize the sample_prbs array so it's the exact size of the number of
+     * sample probabilities (if there are fewer than
+     * READS_STAT_UPDATE_STEP_SIZE reads in a block, then they won't match and
+     * that will mess up the qsort. This happens naturally with small data sets
+     * that have less than the step size reads, or in the last set from a large
+     * data set.) */
+    num_sample_prbs = sample_prbs_index;
+    sample_prbs = realloc( sample_prbs, sizeof(float)*num_sample_prbs );
+
+    /* sort the mismatch_prbs and take the specified quantile */
+    qsort( sample_prbs, 
+           num_sample_prbs,
+           sizeof(float),
+           (int(*)(const void*, const void*))cmp_floats );
+
+    assert( quantile > 0.0 && quantile < 1.0 );
+    /* Since these are log prbs, and qsort sorts in ascending order, the
+     * indexes of the quantiles are reversed */
+    min_match_penalty = sample_prbs[(int)(num_sample_prbs*(1-quantile))];
+
+    /* Add fudge factor to account for rounding error */
+    min_match_penalty -= ROUND_ERROR;
+
+cleanup:
+    /* cleanup memory */
+    free( sample_prbs );
+
+    return min_match_penalty;
+}
+
+struct mapping_params*
+init_mapping_params_for_read(
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model,
+        float reads_min_match_penalty
+    )
+{
+    struct mapping_params* p = malloc(sizeof(struct mapping_params));
+
+    p->metaparams = metaparams;
     
     /* build the penalty arrays */
-    (*p)->num_penalty_arrays = r->num_subtemplates;
+    p->num_penalty_arrays = r->num_subtemplates;
     
-    (*p)->fwd_penalty_arrays = calloc( 
-        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
-    (*p)->rev_penalty_arrays = calloc( 
-        sizeof(struct penalty_array_t*), (*p)->num_penalty_arrays );
+    p->fwd_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), p->num_penalty_arrays );
+    p->rev_penalty_arrays = calloc( 
+        sizeof(struct penalty_array_t*), p->num_penalty_arrays );
     
     int i;
-    for( i = 0; i < (*p)->num_penalty_arrays; i++ )
+    for( i = 0; i < p->num_penalty_arrays; i++ )
     {
-        (*p)->fwd_penalty_arrays[i] = calloc( 
-            sizeof(struct penalty_array_t), r->subtemplates[i].length );
-        build_penalty_array( (*p)->fwd_penalty_arrays[i],
-                             r->subtemplates + i, 
-                             error_model );
-        
-        (*p)->rev_penalty_arrays[i] = calloc( 
-            sizeof(struct penalty_array_t), r->subtemplates[i].length );        
-        build_reverse_penalty_array( 
-            (*p)->rev_penalty_arrays[i], 
-            r->subtemplates + i,
+        p->fwd_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
+        build_penalty_array( p->fwd_penalty_arrays[i], r->subtemplates + i, 
             error_model );
+        
+        p->rev_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
+        build_reverse_penalty_array( p->rev_penalty_arrays[i], 
+            r->subtemplates + i, error_model );
     }
 
     /* calculate the total read length. This is just the sum of the read 
@@ -476,6 +675,17 @@ init_mapping_params_for_read(
     {
         total_read_len += r->subtemplates[i].length;
     }
+    p->total_read_length = total_read_len;
+
+    /* compute the expected value over the read. We use this to determine the
+       scaling factor to get the min match penalty for an index probe from the
+       min match penalty for the entire read. */
+    p->read_expected_value = 0;
+    for( i = 0; i < r->num_subtemplates; i++ )
+    {
+        p->read_expected_value += expected_value_of_rst(r->subtemplates + i,
+            p->fwd_penalty_arrays[i]);
+    }
     
     /* now, calcualte the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -484,84 +694,84 @@ init_mapping_params_for_read(
         int max_mm_spread = (int)(
             metaparams->error_model_params[1]*total_read_len)+1;
         
-        (*p)->recheck_min_match_penalty = max_num_mm;
-        (*p)->recheck_max_penalty_spread = max_mm_spread;
+        p->recheck_min_match_penalty = max_num_mm;
+        p->recheck_max_penalty_spread = max_mm_spread;
     } 
     /* if the error model is estiamted, then just pass the meta params
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
-        (*p)->recheck_min_match_penalty = 0;
-        int j;
-        for( j = 0; j < (*p)->num_penalty_arrays; j++ ) 
-        {
-            (*p)->recheck_min_match_penalty += 
-                calc_min_match_penalty( (*p)->fwd_penalty_arrays[j]->array,
-                                        (*p)->fwd_penalty_arrays[j]->length,
-                                        1 - metaparams->error_model_params[0] );
-        }
-        
-        (*p)->recheck_max_penalty_spread = log10(
-                1 - metaparams->error_model_params[0] );
+
+        p->recheck_min_match_penalty = reads_min_match_penalty;
+        p->recheck_max_penalty_spread
+            = -log10(1 - metaparams->error_model_params[0]);
+        assert( p->recheck_max_penalty_spread >= 0 );
+        //p->recheck_max_penalty_spread = 1.3;
 
         if( r->prior.assay == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
-            (*p)->recheck_min_match_penalty +=
-                (MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
+            p->recheck_min_match_penalty = MAX(
+                p->recheck_min_match_penalty,
+                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
         }
     }
 
-    return;
+    return p;
 }
 
-void
+struct index_search_params*
 init_index_search_params(
-        struct index_search_params** isp,
         struct indexable_subtemplates* ists,
         struct mapping_params* mapping_params )
 {
-    /* Allocate memory for an array of index_search_params, one for each index
-     * probe */
-    *isp = malloc( sizeof( struct index_search_params ) * ists->length );
-    
-    /* TODO for now, set the index search params equal to the recheck params */
+    /* Allocate an array of index_search_params structs, one for each index probe */
+    struct index_search_params *isp
+        = malloc(sizeof(struct index_search_params)*ists->length);
+
     int i;
     for( i = 0; i < ists->length; i++ )
     {
         float min_match_penalty = 1;
         float max_penalty_spread = -1;
-        int length = ists->container[i].subseq_length;        
+
+        struct indexable_subtemplate *ist = ists->container + i;
+
         if( mapping_params->metaparams->error_model_type == MISMATCH ) {
+            /* The first metaparam is the expected rate of mapping (assuming 
+            the read came from the genome) */
+            float expected_map_rate
+                = mapping_params->metaparams->error_model_params[0];
 
-            min_match_penalty = -(int)(
-                mapping_params->metaparams->error_model_params[0]*length)-1;
-
-            /* Let the mismatch spread be 1/2 the allowed mismatch rate (for
-             * now */
-            max_penalty_spread = (int)(
-                mapping_params->metaparams->error_model_params[0]*0.5*length)+1;
-
+            min_match_penalty = -(int)(expected_map_rate*ist->subseq_length)-1;
+            /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
+            max_penalty_spread = (int)(expected_map_rate*0.5*ist->subseq_length)+1;
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
-            float expected_map_rate = 
-                mapping_params->metaparams->error_model_params[0];
-            
+
+            float scaling_factor 
+                = ist->expected_value / mapping_params->read_expected_value;
             min_match_penalty 
-                = calc_min_match_penalty( 
-                    ists->container[i].fwd_penalties,
-                    ists->container[i].subseq_length,
-                    1 - expected_map_rate );
-            
+                = scaling_factor * mapping_params->recheck_min_match_penalty;
+            //min_match_penalty = mapping_params->recheck_min_match_penalty;
+
+            #if PROFILE_CANDIDATE_MAPPING
+            statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
+            #endif
+                
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
-        }        
+        }    
+
+        /* Make sure the index search parameters have the correct signs */
+        assert( min_match_penalty <= 0 );
+        assert( max_penalty_spread >= 0 );
         
-        (*isp)[i].min_match_penalty = min_match_penalty;
-        (*isp)[i].max_penalty_spread = max_penalty_spread;
+        isp[i].min_match_penalty = min_match_penalty;
+        isp[i].max_penalty_spread = max_penalty_spread;
     }
     
-    return;
+    return isp;
 }
 
 void

@@ -1102,17 +1102,15 @@ def build_diploid_genome( seq_len, chr_name="chr1", gen_len=1000, n_dups=1,
     p_offset = 0
     m_offset = 0
     for mut in muts:
-        mut_type = random.choice( ['snp', 'indel'] ) # snp or indel?
+        mut_type = random.choice( ['snp', 'indel'] )
 
         if mut_type == 'snp':
-
             # mutate (maternal - doesn't matter) sequence
             curr_bp = mutated_maternal_chr[ mut+m_offset ]
             valid_bps = [ bp for bp in bps_set if bp != curr_bp ]
             mutated_maternal_chr[ mut+m_offset] = random.choice( valid_bps )
 
         elif mut_type == 'indel':
-
             # insert random num bp's on paternal or maternal
             insertion_site = random.choice( ['paternal', 'maternal'] )
             insertion_len = random.choice( xrange(1, 6) )
@@ -1183,13 +1181,12 @@ def map_diploid_genome( genome, genome_fnames, read_len, nreads=1000 ):
 
     # make sure the chr and start locations are identical
     for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
-
         locs = [ (
-                    mapped_reads[i][2],
-                    int(mapped_reads[i][3]),
-                    mapped_reads[i][9],
+                    mapped_reads[i][2],         # chr
+                    int(mapped_reads[i][3]),    # start pos
+                    mapped_reads[i][9],         # sequence
                  )
-                    for i in xrange(len(mapped_reads)) ]
+                for i in xrange(len(mapped_reads)) ]
 
         # mapping reads to one diploid chr should return a maximum of 2 results
         # for each read
@@ -1206,7 +1203,6 @@ def map_diploid_genome( genome, genome_fnames, read_len, nreads=1000 ):
         # compare mapped reads with original genome to make sure they match
         found_read = False
         for loc in locs:
-
             # we may randomly choose a read from one chr that is in fact shared on both
             # this is not an error - but we do want to make sure we got the read we wanted
             # so, check that at least one of the reads matches Truth
@@ -1216,15 +1212,20 @@ def map_diploid_genome( genome, genome_fnames, read_len, nreads=1000 ):
                 if genome[loc[0]][truth[1]:truth[2]] == loc[2]:
                     found_read = True
 
-            # compare mapped read back to original genome
-            if genome[loc[0]][loc[1]:loc[1]+read_len].upper() != loc[2].upper():
-                print "Truth  : ", truth
-                print "Loc    : ", loc
-                print "Genome : %s" % genome[loc[0]][loc[1]:loc[1]+read_len]
-                print "Read   : %s" % loc[2]
-                raise ValueError, \
-                    "Error: Readid %i sequence failed to match at Genome (%s, %i) and Read (%s, %i)" \
-                    % ( int(mapped_reads[0][0]), truth[0], truth[1], loc[0], loc[1] )
+#            since we add SNPs, it is valid to map a read sampled from one
+#            chr to the opposite chr and have some mismatches (caused by snps
+#            or insertions on the opposite chr). Therefore this check is
+#            invalid.
+#
+#            # compare mapped read back to original genome
+#            if genome[loc[0]][loc[1]:loc[1]+read_len].upper() != loc[2].upper():
+#                print "Truth  : ", truth
+#                print "Loc    : ", loc
+#                print "Genome : %s" % genome[loc[0]][loc[1]:loc[1]+read_len]
+#                print "Read   : %s" % loc[2]
+#                raise ValueError, \
+#                    "Error: Readid %i sequence failed to match at Genome (%s, %i) and Read (%s, %i)" \
+#                    % ( int(mapped_reads[0][0]), truth[0], truth[1], loc[0], loc[1] )
 
         if found_read == False:
             print "Truth: ", truth
@@ -1332,8 +1333,8 @@ def map_duplicated_diploid_genome( genome, genome_fnames, read_len, genome_len,
 def test_diploid_genome():
     rls = [ 20, 50, 75 ]
     for rl in rls:
-        genome, output_filenames = build_diploid_genome( rl )
-        map_diploid_genome( genome, output_filenames, rl )
+        genome, genome_fnames = build_diploid_genome( rl )
+        map_diploid_genome( genome, genome_fnames, rl )
         print "PASS: Diploid genome Mapping %i BP Test. ( Statmap appears to be mapping diploid genomes correctly )" % rl
 
 def test_diploid_genome_with_multiple_chrs():

@@ -13,6 +13,7 @@
 /****** configuration options                   ******/
 
 #define N_DEBUG
+#define PROFILE_CANDIDATE_MAPPING true
 
 /* Try to map 99% of the input reads with the estimated error model */
 #define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.99

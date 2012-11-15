@@ -23,7 +23,9 @@ enum bool
 file_is_empty( FILE* fp );
 
 int
-cmp_ints( const int* i1,
-	  const int* i2 );
+cmp_ints( const int* i1, const int* i2 );
+
+int
+cmp_floats( const float *f1, const float *f2 );
 
 #endif /* UTIL_H */

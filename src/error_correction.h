@@ -14,6 +14,9 @@
 #include "read.h"
 #include "genome.h"
 
+#define NUM_SAMPLES_FOR_MIN_PENALTY_COMP 10
+#define ROUND_ERROR 1e-6
+
 struct freqs_array {
     int max_qual_score;
     int max_position;
@@ -83,23 +86,46 @@ struct mapping_params {
     struct penalty_array_t** fwd_penalty_arrays;
     struct penalty_array_t** rev_penalty_arrays;
     
+    int total_read_length;
+    float read_expected_value;
+    
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
 };
 
-void
-init_mapping_params_for_read(
-        struct mapping_params** p,
-        struct read* r,        
-        struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model
+float
+expected_value_of_rst_subsequence(
+        struct penalty_array_t* rst_pens,
+        int subseq_start,
+        int subseq_length
     );
 
-void
+float
+expected_value_of_rst(
+        struct read_subtemplate* rst,
+        struct penalty_array_t* rst_pens
+    );
+
+float
+compute_min_match_penalty_for_reads(
+        struct rawread_db_t* rdb,
+        struct error_model_t* error_model,
+        float quantile
+    );
+
+struct mapping_params*
+init_mapping_params_for_read(
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model,
+        float reads_min_match_penalty
+    );
+
+struct index_search_params*
 init_index_search_params(
-        struct index_search_params** isp,
         struct indexable_subtemplates* ists,
-        struct mapping_params* mapping_params );
+        struct mapping_params* mapping_params
+    );
 
 void
 free_mapping_params( struct mapping_params* p );

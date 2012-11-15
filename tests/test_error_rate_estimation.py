@@ -75,7 +75,7 @@ def test_error_rate_estimation( ):
     ## Map the data
     read_fnames = [ "tmp.fastq", ]
     map_with_statmap( genome_fnames, read_fnames, output_directory,
-            indexed_seq_len, search_type='e', num_threads=8 )
+            indexed_seq_len, search_type='e', num_threads=-1 )
     
     ###### Make sure that the error data looks correct #########################
     records = load_error_data(os.path.join(output_directory, "error_stats.log"))

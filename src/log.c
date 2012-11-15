@@ -12,6 +12,9 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include <unistd.h>
+#include <sys/syscall.h> /* gettid */
+
 #include "config.h"
 #include "log.h"
 #include "util.h"
@@ -123,12 +126,18 @@ log_level_to_string( enum LOG_LEVEL log_level )
     }
 }
 
-/* TODO - add fn name, thread id to log output
- * gettid/getpid for thread id. If program is single threaded, tid == pid. */
-
 void
 statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
 {
+    /* Build timestamp string */
+    time_t rawtime;
+    time( &rawtime );
+    struct tm* timeinfo;
+    timeinfo = localtime( &rawtime );
+
+    char timestamp[100];
+    strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S", timeinfo );
+
     /* Build the log message format string */
     char log_msg[1024];
     va_list args;
@@ -136,9 +145,12 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     vsprintf(log_msg, format, args);
     va_end(args);
 
-    /* Build the log line to output (prepends log level) */
+    /* Get the thread id from the kernel */
+    pid_t thread_id = (pid_t) syscall(SYS_gettid);
+
+    /* Build the log line to output (prepends thread_id, log level) */
     char log_line[1024];
-    sprintf( log_line, "%-12s: %s\n",
+    sprintf( log_line, "[%s] [%d] %-10s: %s\n", timestamp, thread_id,
              log_level_to_string(log_level), log_msg );
 
     /* Print the message to the log file (and stderr if non-trivial) */

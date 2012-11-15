@@ -450,4 +450,73 @@ rawread_db_is_empty( struct rawread_db_t* rdb )
     
 }
 
+struct rawread_db_state
+save_rawread_db_state(
+        struct rawread_db_t *rdb
+    )
+{
+    assert( rdb->mutex != NULL );
+    pthread_mutex_lock( rdb->mutex );
+
+    /* Since the rawread db stores *either* single or paired end reads, it
+     * should be the case that either the single_end_reads fp has been
+     * initialized, or both paired end read fps have been initialized */
+    assert( rdb->single_end_reads != NULL || (
+                rdb->single_end_reads == NULL && (
+                    rdb->paired_end_1_reads != NULL &&
+                    rdb->paired_end_2_reads != NULL )));
+
+    struct rawread_db_state saved_state;
+    saved_state.readkey = rdb->readkey;
+
+    /* Initialize the read positions to -1 for "unset" */
+    saved_state.single_end_reads_pos = -1;
+    saved_state.paired_end_1_reads_pos = -1;
+    saved_state.paired_end_2_reads_pos = -1;
+
+    if( rdb->single_end_reads != NULL ) {
+        saved_state.single_end_reads_pos = ftell(rdb->single_end_reads);
+        assert( saved_state.single_end_reads_pos != -1 );
+    } else {
+        saved_state.paired_end_1_reads_pos = ftell(rdb->paired_end_1_reads);
+        assert( saved_state.paired_end_1_reads_pos != -1 );
+        saved_state.paired_end_2_reads_pos = ftell(rdb->paired_end_2_reads);
+        assert( saved_state.paired_end_2_reads_pos != -1 );
+    }
+
+    pthread_mutex_unlock( rdb->mutex );
+
+    return saved_state;
+}
+
+void
+restore_rawread_db_state(
+        struct rawread_db_t* rdb,
+        struct rawread_db_state state
+    )
+{
+    assert( rdb->mutex != NULL );
+    pthread_mutex_lock( rdb->mutex );
+
+    /* reset the readkey */
+    rdb->readkey = state.readkey;
+
+    int rv;
+    /* reset the underlying file pointers */
+    if( state.single_end_reads_pos != -1 ) {
+        rv = fseek( rdb->single_end_reads, state.single_end_reads_pos,
+                SEEK_SET );
+        assert( rv != -1 );
+    } else {
+        rv = fseek( rdb->paired_end_1_reads, state.paired_end_1_reads_pos,
+                SEEK_SET );
+        assert( rv != -1 );
+        rv = fseek( rdb->paired_end_2_reads, state.paired_end_2_reads_pos,
+                SEEK_SET );
+        assert( rv != -1 );
+    }
+
+    pthread_mutex_unlock( rdb->mutex );
+}
+
 /******* END raw read DB code ********************************************/
