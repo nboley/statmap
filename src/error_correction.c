@@ -353,9 +353,7 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
         mean += mm_prb;
     }
 
-    #if PROFILE_CANDIDATE_MAPPING
     statmap_log(LOG_DEBUG, "penalties_mean %f", mean);
-    #endif
 }
 
 int
@@ -412,8 +410,10 @@ filter_read(
     for( i = 0; i < r->num_subtemplates; i++ )
     {
         /* WARNING this logging strategy will only work for unpaired reads */
+        #if PROFILE_CANDIDATE_MAPPING
         log_penalties_mean( mapping_params->fwd_penalty_arrays[i]->array,
                 mapping_params->fwd_penalty_arrays[i]->length );
+        #endif
 
         if( filter_penalty_array( 
                 mapping_params->fwd_penalty_arrays[i]->array, 
@@ -536,26 +536,48 @@ sample_bp_penalties(
     return bp_penalties->penalties[i];
 }
 
-float
-compute_min_match_penalty_for_reads(
+void
+sort_samples_array(
+        float* samples_array,
+        int num_samples
+    )
+{
+    /* resize the samples_array to match the number of samples it contains. */
+    samples_array = realloc( samples_array, sizeof(float)*num_samples );
+    assert( samples_array != NULL );
+
+    /* sort */
+    qsort( samples_array,
+           num_samples,
+           sizeof(float),
+           (int(*)(const void*, const void*))cmp_floats );
+}
+
+int
+compute_sampled_penalties_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
         struct fragment_length_dist_t* fl_dist,
-        float quantile
+        float quantile,
+        struct sampled_penalties_t* sampled_penalties
     )
 {
+    int rv = 0; // communicate success/failure to caller
+
     struct rawread_db_state saved_state
         = save_rawread_db_state( rdb );
 
     /* Sample from the next set of READS_STAT_UPDATE_STEP_SIZE reads */
     readkey_t max_readkey = rdb->readkey + READS_STAT_UPDATE_STEP_SIZE;
 
-    int num_sample_prbs
+    int num_samples
         = READS_STAT_UPDATE_STEP_SIZE * NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
-    float* sample_prbs = calloc( num_sample_prbs, sizeof(float) );
-    int sample_prbs_index = 0;
+
+    float* read_samples = calloc( num_samples, sizeof(float) );
+    float* read_subtemplate_samples = calloc( num_samples, sizeof(float) );
 
     struct read* r;
+    int sample_index = 0;
     while( EOF != get_next_read_from_rawread_db(
                 rdb, &r, max_readkey ) )
     {
@@ -569,23 +591,26 @@ compute_min_match_penalty_for_reads(
                                  error_model );
         }
 
-        /* Randomly sample the read penalty NUM_SAMPLES_FOR_MIN_PENALTY_COMP times */
-        int sample_i;
-        for( sample_i = 0;
-             sample_i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
-             sample_i++ )
+        /* Randomly sample penalties */
+        int i;
+        for( i = 0; i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP; i++ )
         {
-            float sample_prb = 0;
+            /* the full read sampled penalty is the sum of the sampled
+               subtemplate penalties */
+            float read_prb = 0;
 
-            int bp_i;
             for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
             {
+                int bp_i;
                 for( bp_i = 0; bp_i < penalty_arrays[st_i].length; bp_i++ )
                 {
-                    sample_prb += sample_bp_penalties(
+                    read_prb += sample_bp_penalties(
                             penalty_arrays[st_i].array + bp_i );
                 }
             }
+            assert( read_prb < 0 );
+
+            read_subtemplate_samples[sample_index] = read_prb;
 
             /* if the read is a full fragment, also randomly sample from the
                fragment length distribution */
@@ -593,11 +618,10 @@ compute_min_match_penalty_for_reads(
                 r->prior.frag_type == FULL_TRANSCRIPTOME_FRAGMENT )
             {
                 assert( fl_dist != NULL );
-                sample_prb += sample_fl_dist(fl_dist);
+                read_prb += sample_fl_dist( fl_dist );
             }
 
-            assert( sample_prb < 0 );
-            sample_prbs[sample_prbs_index++] = sample_prb;
+            read_samples[sample_index++] = read_prb;
         }
 
         /* cleanup memory */
@@ -610,42 +634,35 @@ compute_min_match_penalty_for_reads(
 
     restore_rawread_db_state( rdb, saved_state );
 
-    float min_match_penalty = 0;
-
-    if( sample_prbs_index == 0 ) {
-        /* we didn't process any reads - cleanup and return, leaving
-         * min_match_penalty set to 0 (invalid value) */
+    if( sample_index == 0 ) {
+        /* we didn't process any reads - cleanup and return EOF */
+        rv = EOF;
         goto cleanup;
     }
 
     /* resize the sample_prbs array so it's the exact size of the number of
-     * sample probabilities (if there are fewer than
-     * READS_STAT_UPDATE_STEP_SIZE reads in a block, then they won't match and
-     * that will mess up the qsort. This happens naturally with small data sets
-     * that have less than the step size reads, or in the last set from a large
-     * data set.) */
-    num_sample_prbs = sample_prbs_index;
-    sample_prbs = realloc( sample_prbs, sizeof(float)*num_sample_prbs );
-
-    /* sort the mismatch_prbs and take the specified quantile */
-    qsort( sample_prbs, 
-           num_sample_prbs,
-           sizeof(float),
-           (int(*)(const void*, const void*))cmp_floats );
+     * sample probabilities (we could have processed fewer than
+     * READS_STAT_UPDATE_STEP_SIZE reads, and don't want to mess up the qsort) */
+    num_samples = sample_index;
+    sort_samples_array( read_samples, num_samples );
+    sort_samples_array( read_subtemplate_samples, num_samples );
 
     assert( quantile > 0.0 && quantile < 1.0 );
+
     /* Since these are log prbs, and qsort sorts in ascending order, the
      * indexes of the quantiles are reversed */
-    min_match_penalty = sample_prbs[(int)(num_sample_prbs*(1-quantile))];
-
+    int quantile_index = (int)(num_samples*(1-quantile));
     /* Add fudge factor to account for rounding error */
-    min_match_penalty -= ROUND_ERROR;
+    sampled_penalties->read_penalty = read_samples[quantile_index] - ROUND_ERROR;
+    sampled_penalties->read_subtemplate_penalty
+        = read_subtemplate_samples[quantile_index] - ROUND_ERROR;
 
 cleanup:
     /* cleanup memory */
-    free( sample_prbs );
+    free( read_samples );
+    free( read_subtemplate_samples );
 
-    return min_match_penalty;
+    return rv;
 }
 
 struct mapping_params*
@@ -653,7 +670,7 @@ init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
         struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct sampled_penalties_t* sampled_penalties
     )
 {
     struct mapping_params* p = malloc(sizeof(struct mapping_params));
@@ -698,6 +715,8 @@ init_mapping_params_for_read(
         p->read_expected_value += expected_value_of_rst(r->subtemplates + i,
             p->fwd_penalty_arrays[i]);
     }
+
+    p->sampled_penalties = sampled_penalties;
     
     /* now, calcualte the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -714,7 +733,7 @@ init_mapping_params_for_read(
     else {
         assert( metaparams->error_model_type == ESTIMATED );
 
-        p->recheck_min_match_penalty = reads_min_match_penalty;
+        p->recheck_min_match_penalty = sampled_penalties->read_penalty;
         p->recheck_max_penalty_spread
             = -log10(1 - metaparams->error_model_params[0]);
         assert( p->recheck_max_penalty_spread >= 0 );
@@ -750,7 +769,8 @@ init_index_search_params(
 
         struct indexable_subtemplate *ist = ists->container + i;
 
-        if( mapping_params->metaparams->error_model_type == MISMATCH ) {
+        if( mapping_params->metaparams->error_model_type == MISMATCH )
+        {
             /* The first metaparam is the expected rate of mapping (assuming 
             the read came from the genome) */
             float expected_map_rate
@@ -759,13 +779,16 @@ init_index_search_params(
             min_match_penalty = -(int)(expected_map_rate*ist->subseq_length)-1;
             /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
             max_penalty_spread = (int)(expected_map_rate*0.5*ist->subseq_length)+1;
-        } else {
+        }
+        else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
             float scaling_factor 
                 = ist->expected_value / mapping_params->read_expected_value;
+            /* TODO: read_subtemplate_penalty is a potentially confusing name - it is
+               the sampled penalty of all the read subtempaltes, without the fl dist penalty */
             min_match_penalty 
-                = scaling_factor * mapping_params->recheck_min_match_penalty;
+                = scaling_factor * mapping_params->sampled_penalties->read_subtemplate_penalty;
             //min_match_penalty = mapping_params->recheck_min_match_penalty;
 
             #if PROFILE_CANDIDATE_MAPPING

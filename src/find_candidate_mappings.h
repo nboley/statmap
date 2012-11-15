@@ -30,8 +30,9 @@ struct single_map_thread_data {
     struct mapped_reads_db* mpd_rds_db;
     
     struct mapping_metaparams* metaparams;    
-    float reads_min_match_penalty;
+    struct sampled_penalties_t* sampled_penalties;
     struct error_model_t* error_model;
+
     struct error_data_t* error_data;
     enum bool only_collect_error_data;
 };

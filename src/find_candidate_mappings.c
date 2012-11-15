@@ -1896,20 +1896,19 @@ find_candidate_mappings( void* params )
     
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
     
+    struct mapping_metaparams* metaparams = td->metaparams;
+    struct sampled_penalties_t* sampled_penalties = td->sampled_penalties;
+    
     /* Store observed error data from the current thread's 
        execution in scratch */
     struct error_model_t* error_model = td->error_model;
     
     /* store statistics about mapping quality here  */
     struct error_data_t* error_data = td->error_data;
-
     /* if we only want error data, then there is not reason to find antyhing 
        except unique reads. */
     enum bool only_collect_error_data = td->only_collect_error_data;
 
-    struct mapping_metaparams* metaparams = td->metaparams;
-    float reads_min_match_penalty = td->reads_min_match_penalty;
-    
     /* END parameter 'recreation' */
 
     assert( genome->index != NULL );
@@ -1953,7 +1952,7 @@ find_candidate_mappings( void* params )
 
         struct mapping_params* mapping_params
             = init_mapping_params_for_read( r, metaparams, error_model, 
-                reads_min_match_penalty );
+                sampled_penalties );
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
@@ -2135,7 +2134,11 @@ void init_td_template( struct single_map_thread_data* td_template,
     td_template->mpd_rds_db = mpd_rds_db;
     
     td_template->metaparams = metaparams;
-    td_template->reads_min_match_penalty = 0;
+
+    td_template->sampled_penalties = malloc( sizeof( struct sampled_penalties_t ) );
+    td_template->sampled_penalties->read_penalty = 0;
+    td_template->sampled_penalties->read_subtemplate_penalty = 0;
+
     td_template->error_data = error_data;
     td_template->error_model = error_model;
 
@@ -2154,6 +2157,8 @@ free_td_template( struct single_map_thread_data* td_template )
 
     pthread_spin_destroy( td_template->mapped_cnt_lock );
     free( (void*) td_template->mapped_cnt_lock );
+
+    free( td_template->sampled_penalties );
 }
 
 /* bootstrap an already initialized error model */
@@ -2258,18 +2263,18 @@ find_all_candidate_mappings(
         {
             /* Compute the min match penalty for this block of reads that will
              * map the desired percentage of reads given in metaparameters */
-            float reads_min_match_penalty
-                = compute_min_match_penalty_for_reads( rdb, error_model,
-                        mpd_rds_db->fl_dist,
-                        mapping_metaparams->error_model_params[0] );
+
+            /* Note - this function is *slow*. TODO: might be good to separate
+               it from the benchmark for candidate mapping */
+            int rv = compute_sampled_penalties_for_reads( rdb, error_model,
+                    mpd_rds_db->fl_dist, mapping_metaparams->error_model_params[0],
+                    td_template.sampled_penalties );
+            assert( rv != EOF );
 
             statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
-                    reads_min_match_penalty,
+                    td_template.sampled_penalties->read_penalty,
                     td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
                     td_template.max_readkey );
-
-            /* Save in the mapping metaparameters */
-            td_template.reads_min_match_penalty = reads_min_match_penalty;
         }
 
         spawn_find_candidate_mappings_threads( &td_template );

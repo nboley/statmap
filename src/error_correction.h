@@ -80,6 +80,13 @@ struct index_search_params
     float max_penalty_spread;
 };
 
+/* 3 penalties: read penalty, rst penalty, (index probe penalty) */
+struct sampled_penalties_t
+{
+    float read_penalty;
+    float read_subtemplate_penalty;
+};
+
 struct mapping_params {
     struct mapping_metaparams* metaparams;
     
@@ -89,6 +96,8 @@ struct mapping_params {
     
     int total_read_length;
     float read_expected_value;
+
+    struct sampled_penalties_t* sampled_penalties;
     
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
@@ -107,12 +116,13 @@ expected_value_of_rst(
         struct penalty_array_t* rst_pens
     );
 
-float
-compute_min_match_penalty_for_reads(
+int
+compute_sampled_penalties_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
         struct fragment_length_dist_t* fl_dist,
-        float quantile
+        float quantile,
+        struct sampled_penalties_t* sampled_penalties
     );
 
 struct mapping_params*
@@ -120,7 +130,7 @@ init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
         struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct sampled_penalties_t* sampled_penalties
     );
 
 struct index_search_params*
