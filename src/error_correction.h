@@ -13,6 +13,7 @@
 
 #include "read.h"
 #include "genome.h"
+#include "fragment_length.h"
 
 #define NUM_SAMPLES_FOR_MIN_PENALTY_COMP 10
 #define ROUND_ERROR 1e-6
@@ -110,6 +111,7 @@ float
 compute_min_match_penalty_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
+        struct fragment_length_dist_t* fl_dist,
         float quantile
     );
 

@@ -15,6 +15,7 @@
 #include "find_candidate_mappings.h"
 #include "statmap.h"
 #include "util.h"
+#include "fragment_length.h"
 
 /*
  *  Code to estiamte error frequencies. Calls R.
@@ -539,6 +540,7 @@ float
 compute_min_match_penalty_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
+        struct fragment_length_dist_t* fl_dist,
         float quantile
     )
 {
@@ -566,8 +568,8 @@ compute_min_match_penalty_for_reads(
                                  r->subtemplates + st_i,
                                  error_model );
         }
-        free_read( r );
 
+        /* Randomly sample the read penalty NUM_SAMPLES_FOR_MIN_PENALTY_COMP times */
         int sample_i;
         for( sample_i = 0;
              sample_i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
@@ -585,6 +587,15 @@ compute_min_match_penalty_for_reads(
                 }
             }
 
+            /* if the read is a full fragment, also randomly sample from the
+               fragment length distribution */
+            if( r->prior.frag_type == FULL_GENOME_FRAGMENT ||
+                r->prior.frag_type == FULL_TRANSCRIPTOME_FRAGMENT )
+            {
+                assert( fl_dist != NULL );
+                sample_prb += sample_fl_dist(fl_dist);
+            }
+
             assert( sample_prb < 0 );
             sample_prbs[sample_prbs_index++] = sample_prb;
         }
@@ -594,6 +605,7 @@ compute_min_match_penalty_for_reads(
             free_penalty_array( penalty_arrays + st_i );
         }
         free( penalty_arrays );
+        free_read( r );
     }
 
     restore_rawread_db_state( rdb, saved_state );

@@ -2260,6 +2260,7 @@ find_all_candidate_mappings(
              * map the desired percentage of reads given in metaparameters */
             float reads_min_match_penalty
                 = compute_min_match_penalty_for_reads( rdb, error_model,
+                        mpd_rds_db->fl_dist,
                         mapping_metaparams->error_model_params[0] );
 
             statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",

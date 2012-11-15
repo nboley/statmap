@@ -386,3 +386,14 @@ fprint_fl_dist( FILE* fp, struct fragment_length_dist_t* fl_dist )
     
     return;
 }
+
+/* Returns the log probability of a randomly sampled fragment length */
+float
+sample_fl_dist( struct fragment_length_dist_t* fl_dist )
+{
+    int fl_dist_len = fl_dist->max_fl - fl_dist->min_fl;
+    assert( fl_dist_len > 0 );
+
+    int random_fl = (random() % fl_dist_len) + fl_dist->min_fl;
+    return get_fl_log_prb(fl_dist, random_fl);
+}

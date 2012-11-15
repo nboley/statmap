@@ -1,3 +1,6 @@
+#ifndef FRAGMENT_LENGTH_H
+#define FRAGMENT_LENGTH_H
+
 #include <stdio.h>
 
 #define LOWER_FL_CUTOFF_QUANTILE 0.001
@@ -51,3 +54,8 @@ get_fl_log_prb( struct fragment_length_dist_t* fl_dist, int fl );
 
 void
 fprint_fl_dist( FILE* fp, struct fragment_length_dist_t* fl_dist );
+
+float
+sample_fl_dist( struct fragment_length_dist_t* fl_dist );
+
+#endif // FRAGMENT_LENGTH_H
