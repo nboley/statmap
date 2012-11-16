@@ -17,7 +17,7 @@ enum LOG_LEVEL {
 #define LOG_FNAME "log"
 /* all log messages with level >= this level should also be printed to stderr
  * so the user can respond appropriately */
-#define NONTRIVIAL_LOG_LEVEL 3 // LOG_NOTICE
+#define NONTRIVIAL_LOG_LEVEL LOG_INFO
 
 void
 init_initial_logging();

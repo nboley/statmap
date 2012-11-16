@@ -2256,9 +2256,11 @@ find_all_candidate_mappings(
 
             /* Note - this function is *slow*. TODO: might be good to separate
                it from the benchmark for candidate mapping */
+            clock_t sp_comp_start = clock();
             int rv = compute_sampled_penalties_for_reads( rdb, error_model,
                     mpd_rds_db->fl_dist, mapping_metaparams->error_model_params[0],
                     td_template.sampled_penalties );
+            clock_t sp_comp_stop = clock();
 
             if( rv == EOF )
             {
@@ -2267,10 +2269,11 @@ find_all_candidate_mappings(
                 break;
             }
 
-            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
+            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i) in %f seconds",
                     td_template.sampled_penalties->read_penalty,
                     td_template.max_readkey,
-                    td_template.max_readkey + READS_STAT_UPDATE_STEP_SIZE );
+                    td_template.max_readkey + READS_STAT_UPDATE_STEP_SIZE,
+                    ((float)(sp_comp_stop-sp_comp_start))/CLOCKS_PER_SEC );
         }
 
         // Add a new row to store error data in
