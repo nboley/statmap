@@ -538,16 +538,16 @@ sample_bp_penalties(
 
 void
 sort_samples_array(
-        float* samples_array,
+        float** samples_array, // reference parameter (for realloc)
         int num_samples
     )
 {
     /* resize the samples_array to match the number of samples it contains. */
-    samples_array = realloc( samples_array, sizeof(float)*num_samples );
-    assert( samples_array != NULL );
+    *samples_array = realloc( *samples_array, sizeof(float)*num_samples );
+    assert( *samples_array != NULL );
 
     /* sort */
-    qsort( samples_array,
+    qsort( *samples_array,
            num_samples,
            sizeof(float),
            (int(*)(const void*, const void*))cmp_floats );
@@ -644,8 +644,8 @@ compute_sampled_penalties_for_reads(
      * sample probabilities (we could have processed fewer than
      * READS_STAT_UPDATE_STEP_SIZE reads, and don't want to mess up the qsort) */
     num_samples = sample_index;
-    sort_samples_array( read_samples, num_samples );
-    sort_samples_array( read_subtemplate_samples, num_samples );
+    sort_samples_array( &read_samples, num_samples );
+    sort_samples_array( &read_subtemplate_samples, num_samples );
 
     assert( quantile > 0.0 && quantile < 1.0 );
 
