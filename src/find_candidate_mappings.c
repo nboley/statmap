@@ -2249,16 +2249,6 @@ find_all_candidate_mappings(
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        // Add a new row to store error data in
-        add_new_error_data_record( 
-            td_template.error_data, 
-            td_template.max_readkey, 
-            td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
-
-        // update the maximum allowable readkey
-        // update this dynamically
-        td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
-        
         if( mapping_metaparams->error_model_type == ESTIMATED )
         {
             /* Compute the min match penalty for this block of reads that will
@@ -2269,13 +2259,29 @@ find_all_candidate_mappings(
             int rv = compute_sampled_penalties_for_reads( rdb, error_model,
                     mpd_rds_db->fl_dist, mapping_metaparams->error_model_params[0],
                     td_template.sampled_penalties );
-            assert( rv != EOF );
+
+            if( rv == EOF )
+            {
+                /* we did not compute a sampled penalty because there are no more
+                   reads in the rawread_db. Nothing more to do. */
+                break;
+            }
 
             statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
                     td_template.sampled_penalties->read_penalty,
-                    td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
-                    td_template.max_readkey );
+                    td_template.max_readkey,
+                    td_template.max_readkey + READS_STAT_UPDATE_STEP_SIZE );
         }
+
+        // Add a new row to store error data in
+        add_new_error_data_record( 
+            td_template.error_data, 
+            td_template.max_readkey, 
+            td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
+
+        // update the maximum allowable readkey
+        // update this dynamically
+        td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
 
         spawn_find_candidate_mappings_threads( &td_template );
         
