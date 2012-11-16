@@ -150,14 +150,13 @@ class trace_t(OrderedDict):
         # keep a reference to c_trace_p?
         # de-reference the trace
         c_trace = c_trace_p[0]
-        
+
         for track_index in range(c_trace.num_tracks):
             track_name = c_trace.track_names[track_index]
             self[track_name] = OrderedDict()
             for chr_index in range(c_trace.num_chrs):
                 chr_name, chr_len = c_trace.chr_names[chr_index], c_trace.chr_lengths[chr_index]
                 self[track_name][chr_name] = []
-                # load the trace segments
                 trace_segments = c_trace.segments[track_index][chr_index]
                 for trace_segment_i in range(trace_segments.num_segments):
                     trace_segment = trace_segments.segments[trace_segment_i]
@@ -170,12 +169,6 @@ class trace_t(OrderedDict):
                             'data': numpy.fromiter(trace_segment.data, numpy.float,
                                 trace_segment.length),
                         })
-
-    def __unicode__(self):
-        pass
-
-    def __str__(self):
-        return unicode(self).encode('utf-8')
         
 def init_trace( genome_p, track_names ):
     '''
