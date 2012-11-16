@@ -504,7 +504,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
                 plt.subplot(len(genome), 1, index+1)
                 # change the multiplicative factor for neg vs pos stranded data
                 mult_factor = -1 if track_name.find( "bkwd" ) != -1 else 1
-                plt.plot( mult_factor*density[track_name][chr_name]*norm_factor,
+                assert( len(density[track_name][chr_name]) == 1 )
+                #assert density[track_name][chr_name][0]['data'].sum() != 0
+                plt.plot( mult_factor*density[track_name][chr_name][0]['data']*norm_factor,
                           color=color,
                           linestyle='-',
                           marker="",

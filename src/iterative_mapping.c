@@ -804,9 +804,9 @@ update_chipseq_trace_expectation_from_location(
         int track_index;
         if( first_read_is_rev_comp )
         {
-            track_index = 0;
-        } else {
             track_index = 1;
+        } else {
+            track_index = 0;
         }
 
         /* get the set of trace_segments to update */
@@ -1226,9 +1226,8 @@ update_chipseq_mapping_wnc(
     long seconds  = stop.tv_sec  - start.tv_sec;
     long useconds = stop.tv_usec - start.tv_usec;
     
-    statmap_log( LOG_INFO, "Maximized LHD in %.5f seconds\n",
-            ((float)seconds) + ((float)useconds)/1000000
-        );
+    statmap_log( LOG_INFO, "Maximized LHD in %.5f seconds",
+            ((float)seconds) + ((float)useconds)/1000000 );
     
     /* update the NC data based upon the IP data's NC */
     normalize_traces( *ip_trace );
@@ -1310,7 +1309,7 @@ take_chipseq_sample_wnc(
         write_trace_to_file( ip_trace, wig_fname );
                 
         sprintf( wig_fname, "%ssample%i.nc.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_trace_to_file( ip_trace, wig_fname );
+        write_trace_to_file( nc_trace, wig_fname );
 
         /* write the lhd to the meta info folder */
         double log_lhd = calc_log_lhd( 

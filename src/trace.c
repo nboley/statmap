@@ -403,17 +403,17 @@ aggregate_over_trace_pairs(  struct trace_t* update_trace,
     assert( update_trace->num_tracks = other_trace->num_tracks );
     assert( update_trace->num_chrs = other_trace->num_chrs );
 
-    int trace_index, chr, segment_index, bp;
-    for( trace_index = 0; trace_index < update_trace->num_tracks; trace_index++ )
+    int track, chr, segment_index, bp;
+    for( track = 0; track < update_trace->num_tracks; track++ )
     {
         for( chr = 0; chr < update_trace->num_chrs; chr++ )
         {
             assert( update_trace->chr_lengths[chr] == other_trace->chr_lengths[chr] );
             
             struct trace_segments_t *update_tsegs
-                = &(update_trace->segments[trace_index][chr]);
+                = &(update_trace->segments[track][chr]);
             struct trace_segments_t *other_tsegs
-                = &(other_trace->segments[trace_index][chr]);
+                = &(other_trace->segments[track][chr]);
                 
             /* make sure both traces have the same sets of segments */
             assert( update_tsegs->num_segments == other_tsegs->num_segments );
