@@ -182,6 +182,12 @@ map_marginal( struct args_t* args,
         open_mapped_reads_db_for_reading( mpd_rds_db, MAPPED_NC_READS_DB_FNAME );
     }
 
+    /* Reload the fragment length distribution
+       TODO: there might be a cleaner way to do all of this */
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &((*mpd_rds_db)->fl_dist), args->frag_len_fp );
+    }
+
     /* write the non-mapping reads into their own fastq */
     gettimeofday( &start, NULL );
     statmap_log( LOG_NOTICE, "Writing non mapping reads to FASTQ files." );
