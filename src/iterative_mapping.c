@@ -1,6 +1,6 @@
 /* Copyright (c) 2009-2012, Nathan Boley */
 
-#define NDEBUG
+//#define NDEBUG
 
 #include <stdlib.h>
 #include <stdio.h>
