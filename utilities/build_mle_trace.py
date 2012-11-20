@@ -44,7 +44,7 @@ def main():
     
     # init the starting trace 
     track_names = ["fwd_strnd_read_density", "rev_strnd_read_density"]
-    starting_trace = init_trace( smo.genome, track_names )
+    starting_trace = init_full_trace( smo.genome, track_names )
     statmap_o.set_trace_to_uniform( starting_trace, c_double(1.0) )
     statmap_o.normalize_traces( starting_trace )
     

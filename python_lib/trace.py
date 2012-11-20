@@ -171,9 +171,6 @@ class trace_t(OrderedDict):
                         })
         
 def init_trace( genome_p, track_names ):
-    '''
-    Init a trace and return it
-    '''
     # convert python list of strings into C array of char*
     c_track_names = (c_char_p * len(track_names))()
     for i, c_track in enumerate(c_track_names):
@@ -181,6 +178,17 @@ def init_trace( genome_p, track_names ):
 
     c_trace_p = c_void_p()
     statmap_o.init_trace( genome_p, byref(c_trace_p), len(track_names), c_track_names )
+    c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
+    return c_trace_p
+
+def init_full_trace( genome_p, track_names ):
+    # convert python list of strings into C array of char*
+    c_track_names = (c_char_p * len(track_names))()
+    for i, c_track in enumerate(c_track_names):
+        c_track_names[i] = c_char_p( track_names[i] )
+
+    c_trace_p = c_void_p()
+    statmap_o.init_full_trace( genome_p, byref(c_trace_p), len(track_names), c_track_names )
     c_trace_p = cast( c_trace_p, POINTER(c_trace_t) )
     return c_trace_p
 

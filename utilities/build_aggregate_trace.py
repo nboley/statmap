@@ -104,7 +104,7 @@ def main():
 
     # build aggregate two traces at a time
     print >> sys.stderr, "Bootstrapping %i samples" % args.num_bootstrap_samples
-    curr_trace = init_trace( smo.genome, 2, track_names )
+    curr_trace = init_full_trace( smo.genome, 2, track_names )
 
     for i in xrange(1, args.num_bootstrap_samples):
         # NOTE: curr_trace is reset (with zero_trace) in this function

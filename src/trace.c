@@ -162,10 +162,12 @@ find_start_of_trace_segments_to_update(
 }
 
 void
-init_trace( struct genome_data* genome,
-            struct trace_t** traces,
-            int num_tracks,
-            char** track_names )
+init_trace(
+        struct genome_data* genome,
+        struct trace_t** traces,
+        int num_tracks,
+        char** track_names
+    )
 {
     /* Allocate space for the struct */
     *traces = malloc( sizeof( struct trace_t ) );
@@ -215,13 +217,34 @@ init_trace( struct genome_data* genome,
         {
             /* initialize the trace segments object for each chr */
             init_trace_segments_t( &((*traces)->segments[i][j]) );
-            /* for now, initialize a single trace_segment_t for the entire contig */
-            add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
-                i, j, 0, (*traces)->chr_lengths[j] );
         }
     }
     
     return;
+}
+
+void
+init_full_trace(
+        struct genome_data* genome,
+        struct trace_t** traces,
+        int num_tracks,
+        char** track_names
+    )
+{
+    /* Builds the trace metadata with init_trace */
+    init_trace( genome, traces, num_tracks, track_names );
+
+    /* Create a single trace segment for each contig in the genome */
+    int i, j;
+    for( i = 0; i < (*traces)->num_tracks; i++ )
+    {
+        for( j = 0; j < (*traces)->num_chrs; j++ )
+        {
+            add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
+                i, j, 0, (*traces)->chr_lengths[j] );
+            assert( (*traces)->segments[i][j].num_segments == 1 );
+        }
+    }
 }
 
 void

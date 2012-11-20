@@ -711,7 +711,7 @@ sample_random_trace(
     statmap_log( LOG_INFO, "Starting sample %i", sample_index+1 );
 
     struct trace_t* sample_trace;
-    init_trace( genome, &sample_trace, num_tracks, track_names );
+    init_full_trace( genome, &sample_trace, num_tracks, track_names );
 
     /* XXX: print list of segments for this trace */
     /* TODO: what is the correct way to initialize the trace? */
@@ -1186,9 +1186,9 @@ update_chipseq_mapping_wnc(
     /* initialize the trace that we will store the expectation in */
     /* it has dimension 2 - for the negative and positive stranded reads */
     char* ip_track_names[2] = {"IP_fwd_strand", "IP_bkwd_strand"};
-    init_trace( genome, ip_trace, 2, ip_track_names );
+    init_full_trace( genome, ip_trace, 2, ip_track_names );
     char* nc_track_names[2] = {"NC_fwd_strand", "NC_bkwd_strand"};
-    init_trace( genome, nc_trace, 2, nc_track_names );    
+    init_full_trace( genome, nc_trace, 2, nc_track_names );    
 
     if( false == random_start )
     {

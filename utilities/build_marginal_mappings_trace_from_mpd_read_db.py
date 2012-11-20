@@ -34,7 +34,7 @@ def main():
     
     # initialize a trace
     track_names = [ "fwd_strand", "bkwd_strand" ]
-    trace = init_trace( smo.genome, track_names )
+    trace = init_full_trace( smo.genome, track_names )
 
     # update the trace
     update_traces_from_mapped_reads(

@@ -204,7 +204,7 @@ call_peaks_at_local_maxima( struct genome_data* genome, char* samples_dname )
     /* init the trace */
     struct trace_t* peaks_trace;
     /* two tracks correspond to pos and neg strands */
-    init_trace( genome, &peaks_trace, 2, track_names );
+    init_full_trace( genome, &peaks_trace, 2, track_names );
     zero_traces( peaks_trace );
     
     int bi; /* bootstrap index */
@@ -279,7 +279,7 @@ call_peaks( struct genome_data* genome )
     /* open a trace to aggregate over */
     char* track_names[2] = {"fwd_strand_peaks", "bkwd_strand_peaks"};
     struct trace_t* peaks_trace;
-    init_trace( genome, &peaks_trace, 2, track_names );
+    init_full_trace( genome, &peaks_trace, 2, track_names );
     zero_traces( peaks_trace );    
     
     float lhds_sum = 0;
