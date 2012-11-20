@@ -15,6 +15,8 @@
 #include "config.h"
 #include "trace.h"
 #include "genome.h"
+#include "mapped_read.h"
+#include "iterative_mapping.h"
 #include "util.h"
 #include "log.h"
 
@@ -988,4 +990,178 @@ accumulate_from_traces(
     }
 
     return acc;
+}
+
+struct trace_t*
+copy_trace_metadata(
+    struct trace_t* original
+)
+{
+    /* Return a new trace with the same metadata as the original */
+    struct trace_t* new = malloc( sizeof(struct trace_t) );
+
+    new->num_tracks = original->num_tracks;
+
+    /* Copy the track names */
+    int i;
+    new->track_names = malloc( sizeof(char*)*new->num_tracks );
+    for (i = 0; i < new->num_tracks; i++)
+    {
+        new->track_names[i]
+            = malloc( strlen(original->track_names[i])*sizeof(char) );
+        strcpy( new->track_names[i], original->track_names[i] );
+    }
+
+    /* Copy the chr info */
+    new->num_chrs = original->num_chrs;
+    new->chr_lengths = malloc( sizeof(unsigned int)*new->num_chrs );
+    new->chr_names = malloc( sizeof(char*)*new->num_chrs );
+    assert( new->chr_lengths != NULL );
+    assert( new->chr_names != NULL );
+
+    for( i = 0; i < new->num_chrs; i++ )
+    {
+        new->chr_lengths[i] = original->chr_lengths[i];
+        new->chr_names[i]
+            = malloc( strlen(original->chr_names[i])*sizeof(char) );
+        strcpy( new->chr_names[i], original->chr_names[i] );
+    }
+
+
+    /* Allocate pointers to lists of segments for each track */
+    new->segments = malloc( sizeof(struct trace_segments_t*)*new->num_tracks );
+    assert( new->segments != NULL );
+
+    /* Allocate space for the list of segments for each chr */
+    for( i = 0; i < new->num_tracks; i++ )
+    {
+        new->segments[i]
+            = malloc( new->num_chrs*sizeof(struct trace_segments_t) );
+        assert( new->segments[i] );
+
+        int j;
+        for( j = 0; j < new->num_chrs; j++ )
+        {
+            init_trace_segments_t( &(new->segments[i][j]) );
+        }
+    }
+
+    return new;
+}
+
+struct segments_list*
+init_segments_list()
+{
+    struct segments_list* sl = malloc( sizeof(struct segments_list) );
+
+    sl->length = 0;
+    sl->segments = NULL;
+
+    return sl;
+}
+
+void
+free_segments_list(
+        struct segments_list* sl
+    )
+{
+    if( sl->segments != NULL ) {
+        free( sl->segments );
+    }
+    free( sl );
+}
+
+void
+add_segment_to_segments_list(
+    int track_index,
+    int chr_index,
+
+    int start,
+    int stop,
+
+    struct segments_list* sl
+)
+{
+    /* Reallocate segments array to add new segment */
+    sl->length++;
+    sl->segments = realloc( sl->segments, sizeof(struct segment)*sl->length );
+
+    struct segment *new_segment = sl->segments + sl->length - 1;
+    new_segment->track_index = track_index;
+    new_segment->chr_index = chr_index;
+    new_segment->start = start;
+    new_segment->stop = stop;
+
+    return;
+}
+
+struct segments_list*
+segment_traces(
+        struct trace_t* traces,
+        struct mapped_reads_db* mpd_rdb,
+        struct cond_prbs_db_t* cond_prbs_db,
+        void (* const update_trace_expectation_from_location)(
+            const struct trace_t* const traces, 
+            const mapped_read_location* const loc,
+            const float cond_prob )
+    )
+{
+    /* update the original trace from the marginal prbs */
+    update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, traces,
+        update_trace_expectation_from_location );
+
+    struct segments_list* segments_list = init_segments_list();
+
+    int i, j;
+    for( i = 0; i < traces->num_tracks; i++ )
+    {
+        for( j = 0; j < traces->num_chrs; j++ )
+        {
+            /* make sure the original trace was not segmented */
+            struct trace_segments_t* original_segments
+                = &( traces->segments[i][j] );
+            assert( original_segments->num_segments == 1 );
+
+            struct trace_segment_t* original_segment
+                = original_segments->segments + 0;
+
+            int bp = 0;
+            while( bp < original_segment->length )
+            {
+                int segment_start = bp;
+                /* update bp so the segment is at least the minimum length (is
+                   bounded by the end of the trace) */
+                bp = MIN( bp + MIN_TRACE_SEGMENT_SIZE, original_segment->length );
+
+                for( ; bp < original_segment->length; bp++ )
+                {
+                    /* increment bp until we find a base with score zero */
+                    if( original_segment->data[bp] == 0 )
+                        break;
+                }
+
+                add_segment_to_segments_list( i, j, segment_start, bp, 
+                    segments_list );
+            }
+        }
+    }
+
+    return segments_list;
+}
+
+void
+fprintf_segments_list(
+        struct segments_list* sl,
+        FILE* os
+    )
+{
+    int i;
+    for( i = 0; i < sl->length; i++ )
+    {
+        struct segment* s = sl->segments + i;
+        fprintf(os, "Track: %i\tChr:%i\t(%i, %i)\n",
+            s->track_index, s->chr_index, s->start, s->stop );
+    }
+
+    return;
 }

@@ -107,7 +107,7 @@ ML_PRB_TYPE_from_float( float value  )
  * 2) 1 mapped_read_location, which has at least
  *    a) 1 subread
  *
- * Note that we use signed bitfields for except single-fit fields. Signed
+ * Note that we use signed bitfields for all except single-bit fields. Signed
  * bitfields are much better for debugging, but signed 1-bit fields don't make
  * any sense (two's complement means the only two values it can have are 0 and
  * -1). 

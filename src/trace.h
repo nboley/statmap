@@ -1,11 +1,12 @@
 #ifndef TRACE_H
 #define TRACE_H 
 
-#define TRACE_TYPE float
-
-#define TRACE_MAGIC_NUMBER "BTRACE"
-
 #include "genome.h"
+#include "mapped_read.h"
+
+#define TRACE_TYPE float
+#define TRACE_MAGIC_NUMBER "BTRACE"
+#define MIN_TRACE_SEGMENT_SIZE 1000
 
 // define this to use mutexes, otherwise use spinlocks
 // #define USE_MUTEX
@@ -34,7 +35,7 @@ struct trace_t {
     char** chr_names;
     unsigned int* chr_lengths;
 
-    // num_tracks x num_chrs   
+    // num_tracks x num_chrs
     struct trace_segments_t** segments;
 };
 
@@ -140,6 +141,11 @@ trace_agg_min( const TRACE_TYPE a, const TRACE_TYPE b );
 TRACE_TYPE
 trace_agg_max( const TRACE_TYPE a, const TRACE_TYPE b );
 
+/********************************************************************
+ * Generic trace update/accumulate functions
+ *
+ ********************************************************************/
+
 void
 update_trace_segments_from_mapped_read_array(
     struct trace_segments_t* trace_segments,
@@ -174,5 +180,45 @@ accumulate_from_traces(
     int start,
     int stop
 );
+
+/*******************************************************************
+ * Segmented traces
+ *
+ *******************************************************************/
+
+struct segment {
+    int track_index;
+    int chr_index;
+
+    int start;
+    int stop;
+};
+
+struct segments_list {
+    int length;
+    struct segment* segments;
+};
+
+void
+fprintf_segments_list(
+        struct segments_list* sl,
+        FILE* os
+    );
+
+void
+free_segments_list(
+        struct segments_list* sl
+    );
+
+struct segments_list*
+segment_traces(
+        struct trace_t* traces,
+        struct mapped_reads_db* mpd_rdb,
+        struct cond_prbs_db_t* cond_prbs_db,
+        void (* const update_trace_expectation_from_location)(
+            const struct trace_t* const traces, 
+            const mapped_read_location* const loc,
+            const float cond_prob )
+    );
 
 #endif // #define TRACE_H

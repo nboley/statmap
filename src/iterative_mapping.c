@@ -713,6 +713,13 @@ sample_random_trace(
     struct trace_t* sample_trace;
     init_trace( genome, &sample_trace, num_tracks, track_names );
 
+    /* XXX: print list of segments for this trace */
+    /* TODO: what is the correct way to initialize the trace? */
+    struct segments_list* sl = segment_traces( sample_trace, rdb, cond_prbs_db,
+        update_trace_expectation_from_location );
+    fprintf_segments_list( sl, stderr );
+    free_segments_list( sl );
+
     build_random_starting_trace( 
         sample_trace, genome, rdb, cond_prbs_db,
         update_trace_expectation_from_location,

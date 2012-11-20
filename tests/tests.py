@@ -725,7 +725,7 @@ def test_iterative_mapping():
     # TODO why is this so slow?
     rls = [ 25, ]
     for rl in rls:
-        test_dirty_reads( rl, assay='a', num_samples=1 ) # CAGE
+        test_dirty_reads( rl, nreads=10000, assay='a', num_samples=10 ) # CAGE
         print "PASS: Iterative mapping code (%i BP reads) is at least running..." \
                 % rl
 
@@ -1569,6 +1569,9 @@ def test_overlapping_index_probes():
     pass
 
 def main( RUN_SLOW_TESTS ):
+    #print "Starting test_iterative_mapping()"
+    #test_iterative_mapping()
+    #sys.exit(1)
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
     #sys.exit(1)
