@@ -714,18 +714,6 @@ sample_random_trace(
     struct trace_t* sample_trace;
     init_full_trace( genome, &sample_trace, num_tracks, track_names );
 
-    /* XXX: print list of segments for this trace */
-    /* TODO: what is the correct way to initialize the trace? */
-    struct segments_list* slist = segment_traces( sample_trace, rdb,
-        cond_prbs_db, update_trace_expectation_from_location );
-    fprintf_segments_list( slist, stderr );
-
-    struct trace_t* segmented_trace = build_segmented_trace( genome, num_tracks,
-        track_names, slist );
-
-    free_segments_list( slist );
-    close_traces( segmented_trace );
-
     build_random_starting_trace( 
         sample_trace, genome, rdb, cond_prbs_db,
         update_trace_expectation_from_location,
@@ -1194,11 +1182,11 @@ update_chipseq_mapping_wnc(
     char* ip_track_names[2] = {"IP_fwd_strand", "IP_bkwd_strand"};
     init_full_trace( genome, ip_trace, 2, ip_track_names );
     char* nc_track_names[2] = {"NC_fwd_strand", "NC_bkwd_strand"};
-    init_full_trace( genome, nc_trace, 2, nc_track_names );    
+    init_full_trace( genome, nc_trace, 2, nc_track_names );
 
     if( false == random_start )
     {
-        set_trace_to_uniform( *ip_trace, 1 );    
+        set_trace_to_uniform( *ip_trace, 1 );
     } else {
         build_random_starting_trace( 
             *ip_trace, genome, 

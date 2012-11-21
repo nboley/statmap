@@ -236,14 +236,8 @@ free_segments_list(
     );
 
 struct segments_list*
-segment_traces(
-        struct trace_t* traces,
-        struct mapped_reads_db* mpd_rdb,
-        struct cond_prbs_db_t* cond_prbs_db,
-        void (* const update_trace_expectation_from_location)(
-            const struct trace_t* const traces, 
-            const mapped_read_location* const loc,
-            const float cond_prob )
+build_trace_segments_list(
+        struct trace_t* traces
     );
 
 struct trace_t*
@@ -251,7 +245,12 @@ build_segmented_trace(
         struct genome_data* genome,
         int num_tracks,
         char** track_names,
-        struct segments_list* slist
+        struct mapped_reads_db* mpd_rdb,
+        struct cond_prbs_db_t* cond_prbs_db,
+        void (* const update_trace_expectation_from_location)(
+            const struct trace_t* const traces, 
+            const mapped_read_location* const loc,
+            const float cond_prob )
     );
 
 #endif // #define TRACE_H

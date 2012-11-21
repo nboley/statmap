@@ -1182,20 +1182,10 @@ add_segment_to_segments_list(
 }
 
 struct segments_list*
-segment_traces(
-        struct trace_t* traces,
-        struct mapped_reads_db* mpd_rdb,
-        struct cond_prbs_db_t* cond_prbs_db,
-        void (* const update_trace_expectation_from_location)(
-            const struct trace_t* const traces, 
-            const mapped_read_location* const loc,
-            const float cond_prob )
+build_trace_segments_list(
+        struct trace_t* traces
     )
 {
-    /* update the original trace from the marginal prbs */
-    update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, traces,
-        update_trace_expectation_from_location );
-
     struct segments_list* segments_list = init_segments_list();
 
     int i, j;
@@ -1262,10 +1252,25 @@ build_segmented_trace(
         struct genome_data* genome,
         int num_tracks,
         char** track_names,
-        struct segments_list* slist
-    )
+        struct mapped_reads_db* mpd_rdb,
+        struct cond_prbs_db_t* cond_prbs_db,
+        void (* const update_trace_expectation_from_location)(
+            const struct trace_t* const traces, 
+            const mapped_read_location* const loc,
+            const float cond_prob )    )
 {
-    /* Initialize the trace metadata */
+    /* Initialize a full trace that we will use to determine the segments */
+    struct trace_t* full_trace = NULL;
+    init_full_trace( genome, &full_trace, num_tracks, track_names );
+    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
+    update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, full_trace,
+        update_trace_expectation_from_location );
+
+    /* build list of segments from the full trace */
+    struct segments_list *segments_list
+        = build_trace_segments_list( full_trace );
+
+    /* Initialize the segmented trace */
     struct trace_t* segmented_trace = NULL;
     init_trace( genome, &segmented_trace, num_tracks, track_names );
 
@@ -1273,9 +1278,9 @@ build_segmented_trace(
        NOTE: this assumes segments in the segment list are sorted by start
        (they are naturally sorted with out current segment finding algo). */
     int i;
-    for( i = 0; i < slist->length; i++ )
+    for( i = 0; i < segments_list->length; i++ )
     {
-        struct segment *s = slist->segments + i;
+        struct segment *s = segments_list->segments + i;
 
         /* get the list of segments to add to */
         struct trace_segments_t* update_segments
@@ -1284,6 +1289,9 @@ build_segmented_trace(
         add_trace_segment_to_trace_segments( update_segments,
             s->track_index, s->chr_index, s->start, (s->stop - s->start) );
     }
+
+    close_traces( full_trace );
+    free_segments_list( segments_list );    
 
     return segmented_trace;
 }
