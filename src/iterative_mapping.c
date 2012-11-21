@@ -1334,14 +1334,9 @@ take_chipseq_sample_wnc(
     if( NUM_BOOTSTRAP_SAMPLES > 0 )
     {
         char buffer[200];
-        sprintf( buffer, "mkdir %ssample%i/",
+        sprintf( buffer, "%ssample%i",
                  BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1 );
-        int error = system( buffer );
-        if (WIFSIGNALED(error) &&
-            (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
-        {
-            statmap_log( LOG_FATAL, "System call '%s' failed", buffer );
-        }
+        safe_mkdir( buffer );
 
         int j;
         for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
