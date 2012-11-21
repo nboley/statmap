@@ -1,3 +1,12 @@
+46) Refactor the error block estimation code in find_all_candidate_mappings
+    into a function - update_mapping_params, or similar.
+    a) really, want to reconsider how we build mapping params for reads - now
+       that we are sampling the error data, it can no longer be cleanly built
+       for each read
+45) Cleanup rawread_db_is_empty logic so it correctly deals with the case where
+    the number of reads in the DB is a multiple of the update size, i.e. the
+    case where we need to read one more byte to set the EOF flag.
+
 Nathan:
   implement provided error model
    - use the provided error estimates as the predictor
