@@ -122,12 +122,22 @@ class frag_len_generator_t():
 
 
 # build a random chr from which to simulate chipseq
-def build_chipseq_region(  ):
-    fp = open( BCD_REGION_FNAME )
-    genome = []
-    for line in fp:
-        if line.startswith( ">" ): continue
-        genome.append( line.strip().upper() )
+def build_chipseq_region( extended_second_region=False ):
+    with open( BCD_REGION_FNAME ) as fp:
+        genome = []
+        for line in fp:
+            if line.startswith( ">" ): continue
+            genome.append( line.strip().upper() )
+        
+        if extended_second_region:
+            genome.append( 'N'*2000 )
+            genome.append( ''.join( bps[random.randint(0,3)]
+                                        for i in xrange(2000) ) )
+            # add in a binding site
+            genome.append( 'CCTAATCCCC' )
+            genome.append( ''.join( bps[random.randint(0,3)]
+                                        for i in xrange(2000) ) )
+    
     return ''.join(genome)
 
 def score_binding_sites( region, motif ):
@@ -233,10 +243,10 @@ def parse_bwtout( fname, genome, paired_end ):
     fp.close()
     return tracks
 
-def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
+def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True, extended_second_region=True ):
     DIRTY = True
     
-    region = build_chipseq_region( )
+    region = build_chipseq_region(extended_second_region)
     bind_site_scores = score_binding_sites( region, bcd_motif )
     bind_prbs = assign_bind_prbs( bind_site_scores )
     fragments = build_fragments( region, bind_prbs, NUM_READS )
@@ -279,8 +289,11 @@ def test_cage_region( num_mutations, wig_fname = 'tmp.wig', iterative=True ):
     
     return
 
-def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, polymorphic=True ):
-    region = build_chipseq_region( )
+def build_random_chipseq_reads( num_mutations, DIRTY=True, are_paired_end=True, 
+                                polymorphic=True, extended_second_region=True ):
+    region = build_chipseq_region( extended_second_region )
+    if extended_second_region:
+        num_mutations *= 3
     
     # simulate the ip reads
     bind_site_scores = score_binding_sites( region, bcd_motif )
@@ -466,8 +479,8 @@ def map_with_bowtie( paired_end = True ):
                tmp.1.fastq mapped_reads.bwtout"        
     subprocess.call( cmd, shell=True )
     
-def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=True ):
-    region = build_chipseq_region( )
+def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=True, extended_second_region=True ):
+    region = build_chipseq_region( extended_second_region )
     if polymorphic:
         genome = { 'chr2L_paternal': region, 'chr2L_maternal': region }
     else: 
@@ -612,6 +625,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
 
 if __name__ == '__main__':
     paired_end=True
+    extended_second_region=True
     NUM_MUTS = 3
     
     if False:
@@ -622,13 +636,11 @@ if __name__ == '__main__':
             pass
 
     if True:
-        mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end, polymorphic=True )
-        #print mut_indexes
+        mut_indexes = build_random_chipseq_reads( NUM_MUTS, are_paired_end=paired_end, polymorphic=True, extended_second_region=extended_second_region )
         map_with_bowtie( paired_end )
         map_with_statmap( paired_end=paired_end )
         call_peaks()
-        #mut_indexes = [ 1327, 3755, 261 ]
-        plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes, polymorphic=True )
+        plot_bootstrap_bounds( "bootstrap_bnds.png", paired_end, mut_indexes, polymorphic=True, extended_second_region=extended_second_region )
         # plot_wig_bounds( "./smo_chipseq_sim/samples/", "relaxed_samples.png")
         # plot_wig_bounds( "./smo_chipseq_sim/starting_samples/", "starting_samples.png")
         if False and sc.CLEANUP:
