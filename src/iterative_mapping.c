@@ -711,8 +711,10 @@ sample_random_trace(
 {
     statmap_log( LOG_INFO, "Starting sample %i", sample_index+1 );
 
-    struct trace_t* sample_trace;
-    init_full_trace( genome, &sample_trace, num_tracks, track_names );
+    struct trace_t* sample_trace
+        = build_segmented_trace( genome, num_tracks, track_names, rdb,
+            cond_prbs_db, update_trace_expectation_from_location );
+    //init_full_trace( genome, &sample_trace, num_tracks, track_names );
 
     build_random_starting_trace( 
         sample_trace, genome, rdb, cond_prbs_db,
@@ -1180,9 +1182,15 @@ update_chipseq_mapping_wnc(
     /* initialize the trace that we will store the expectation in */
     /* it has dimension 2 - for the negative and positive stranded reads */
     char* ip_track_names[2] = {"IP_fwd_strand", "IP_bkwd_strand"};
-    init_full_trace( genome, ip_trace, 2, ip_track_names );
+    //init_full_trace( genome, ip_trace, 2, ip_track_names );
     char* nc_track_names[2] = {"NC_fwd_strand", "NC_bkwd_strand"};
-    init_full_trace( genome, nc_trace, 2, nc_track_names );
+    //init_full_trace( genome, nc_trace, 2, nc_track_names );
+
+    /* try building segmented traces heres */
+    *ip_trace = build_segmented_trace( genome, 2, ip_track_names, ip_rdb,
+        ip_cond_prbs_db, update_chipseq_trace_expectation_from_location );
+    *nc_trace = build_segmented_trace( genome, 2, nc_track_names, nc_rdb,
+        nc_cond_prbs_db, update_chipseq_trace_expectation_from_location );
 
     if( false == random_start )
     {
