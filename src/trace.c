@@ -784,7 +784,7 @@ write_merged_trace_segments_to_stream(
         struct trace_segment_t* current_segment
             = trace_segments->segments + i;
         memcpy( data_ptr, current_segment->data,
-            current_segment->length*sizeof(float) );
+            current_segment->length*sizeof(TRACE_TYPE) );
         data_ptr += current_segment->length;
     }
 
