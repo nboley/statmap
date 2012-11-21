@@ -489,7 +489,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     # Get current directory so we can create temporary files
     curr_dir = os.getcwd()
     
-    density_max = 1.0 # max( density[0].max(), density[1].max() )
+    # initialize figure (default figure for plt)
+    plt.figure(figsize=(16,12), dpi=100) # figsize is in inches
+
     if polymorphic: # Set titles on subplots
         plt.subplot(2, 1, 1)
         plt.title('Paternal')
@@ -588,9 +590,9 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
         plt.subplot(len(genome), 1, index+1)
         plt.axhline( y=nf*0.95, color='red', linewidth=0.5, linestyle='--' )
         plt.axhline( y=nf*-0.95, color='red', linewidth=0.5, linestyle='--' )
-
     
     """
+    density_max = 1.0 # max( density[0].max(), density[1].max() )
     density = parse_trace( "./smo_chipseq_sim/relaxed_mapping.wig", genome )
     if len( density ) > 0:
         rpy.r.points( density[0]/density_max, type='l', col='green', lwd=1.5, main='', xlab='', ylab='', lty=1 )
