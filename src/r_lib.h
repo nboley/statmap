@@ -9,7 +9,17 @@ load_statmap_source( char* statmap_dir )
     char r_code_fname[512];
     strcpy( r_code_fname, statmap_dir );
     strcat( r_code_fname, "/../R_lib/error_model.R" );
-    eval( lang2(install("source"), mkString(r_code_fname)), R_GlobalEnv );
+
+    int error_occurred;
+    R_tryEval( lang2(install("source"),
+               mkString(r_code_fname)),
+               R_GlobalEnv,
+               &error_occurred );
+    if( error_occurred ) {
+        statmap_log( LOG_FATAL,
+            "An error occurred while the R interpreter was running." );
+    }
+    
     return;
 }
 

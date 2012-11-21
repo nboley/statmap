@@ -203,7 +203,13 @@ predict_freqs( struct error_data_t* data, int record_index,
                   *mm_cnts, *cnts, *poss, *qual_scores, 
                   mkString(plot_str) );
     
-    SEXP res = eval( call, R_GlobalEnv );
+    int error_occurred;
+    SEXP res = R_tryEval( call, R_GlobalEnv, &error_occurred );
+    if( error_occurred ) {
+        statmap_log( LOG_FATAL,
+            "An error occurred while the R interpreter was running." );
+    }
+
     double *flat_freqs = REAL( res );
     
     update_freqs_array( predicted_freqs, data, flat_freqs );
