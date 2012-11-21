@@ -1,3 +1,4 @@
+47) Nathan - fix error model plotting to deal with NC data.
 46) Refactor the error block estimation code in find_all_candidate_mappings
     into a function - update_mapping_params, or similar.
     a) really, want to reconsider how we build mapping params for reads - now
