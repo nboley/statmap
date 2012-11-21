@@ -195,7 +195,11 @@ X 17) Write config file parser, and use it
 
 # Longstanding
 
+1) A basis for profiling Statmap: create a test with a genome that is all the
+   same bp, sample reads, map, and profile. There should be an exponential number
+   of mappings, and this may give insight into slow parts of the program.
+     a) consider - we haven't been able to reliably isolate what reads make
+        Statmap super slow at mapping. Keep an eye out.
 0) Determine what types of mappings are possible for specific assay types.
    This would affect, for example, our consideration of what a valid mapping is
    (considering strand and position for paired end, for example ).
-
