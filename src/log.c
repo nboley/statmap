@@ -173,8 +173,14 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     /* If this was a fatal log message, exit */
     if( log_level == LOG_FATAL )
     {
-        assert( false );
-        exit(1);
+        /*
+           abort is a good choice here because
+             a) it doesn't automatically destroy the program state, so we can
+                easily use GDB
+             b) it generates core dumps, which we would want an end user to
+                provide us with to assist in debugging
+        */
+        abort();
     }
 }
 
