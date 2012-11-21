@@ -202,6 +202,7 @@ struct segment {
     int stop;
 };
 
+/* TODO: could structure as a 2d array of track_index x chr_index */
 struct segments_list {
     int length;
     struct segment* segments;
@@ -227,6 +228,14 @@ segment_traces(
             const struct trace_t* const traces, 
             const mapped_read_location* const loc,
             const float cond_prob )
+    );
+
+struct trace_t*
+build_segmented_trace(
+        struct genome_data* genome,
+        int num_tracks,
+        char** track_names,
+        struct segments_list* slist
     );
 
 #endif // #define TRACE_H

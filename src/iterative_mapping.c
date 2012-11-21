@@ -715,10 +715,15 @@ sample_random_trace(
 
     /* XXX: print list of segments for this trace */
     /* TODO: what is the correct way to initialize the trace? */
-    struct segments_list* sl = segment_traces( sample_trace, rdb, cond_prbs_db,
-        update_trace_expectation_from_location );
-    fprintf_segments_list( sl, stderr );
-    free_segments_list( sl );
+    struct segments_list* slist = segment_traces( sample_trace, rdb,
+        cond_prbs_db, update_trace_expectation_from_location );
+    fprintf_segments_list( slist, stderr );
+
+    struct trace_t* segmented_trace = build_segmented_trace( genome, num_tracks,
+        track_names, slist );
+
+    free_segments_list( slist );
+    close_traces( segmented_trace );
 
     build_random_starting_trace( 
         sample_trace, genome, rdb, cond_prbs_db,

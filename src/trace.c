@@ -1188,3 +1188,34 @@ fprintf_segments_list(
 
     return;
 }
+
+struct trace_t*
+build_segmented_trace(
+        struct genome_data* genome,
+        int num_tracks,
+        char** track_names,
+        struct segments_list* slist
+    )
+{
+    /* Initialize the trace metadata */
+    struct trace_t* segmented_trace = NULL;
+    init_trace( genome, &segmented_trace, num_tracks, track_names );
+
+    /* Add the segments as specified by the segment list
+       NOTE: this assumes segments in the segment list are sorted by start
+       (they are naturally sorted with out current segment finding algo). */
+    int i;
+    for( i = 0; i < slist->length; i++ )
+    {
+        struct segment *s = slist->segments + i;
+
+        /* get the list of segments to add to */
+        struct trace_segments_t* update_segments
+            = &(segmented_trace->segments[s->track_index][s->chr_index]);
+
+        add_trace_segment_to_trace_segments( update_segments,
+            s->track_index, s->chr_index, s->start, (s->stop - s->start) );
+    }
+
+    return segmented_trace;
+}
