@@ -225,9 +225,8 @@ struct segments_list {
 };
 
 void
-fprintf_segments_list(
-        struct segments_list* sl,
-        FILE* os
+log_segments_list(
+        struct segments_list* sl
     );
 
 void

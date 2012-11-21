@@ -1232,16 +1232,15 @@ build_trace_segments_list(
 }
 
 void
-fprintf_segments_list(
-        struct segments_list* sl,
-        FILE* os
+log_segments_list(
+        struct segments_list* sl
     )
 {
     int i;
     for( i = 0; i < sl->length; i++ )
     {
         struct segment* s = sl->segments + i;
-        fprintf(os, "Track: %i\tChr:%i\t(%i, %i)\n",
+        statmap_log( LOG_DEBUG, "Track: %i\tChr:%i\t(%i, %i)",
             s->track_index, s->chr_index, s->start, s->stop );
     }
 
@@ -1270,6 +1269,9 @@ build_segmented_trace(
     /* build list of segments from the full trace */
     struct segments_list *segments_list
         = build_trace_segments_list( full_trace );
+
+    // DEBUG
+    log_segments_list( segments_list );
 
     /* Initialize the segmented trace */
     struct trace_t* segmented_trace = NULL;
