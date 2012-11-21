@@ -13,6 +13,8 @@
 #define USE_SPINLOCK
 
 struct trace_segment_t {
+    /* TODO: should this metadata be stored in the trace_segments container instead?
+       it should be identical across all segments in a given set */
     int real_track_id;
     int real_chr_id;
     int real_start;
@@ -38,6 +40,20 @@ struct trace_t {
     // num_tracks x num_chrs
     struct trace_segments_t** segments;
 };
+
+void
+init_trace_segment_t(
+        struct trace_segment_t *ts,
+        int real_track_id,
+        int real_chr_id,
+        int real_start,
+        int length
+    );
+
+void
+free_trace_segment_t(
+        struct trace_segment_t* ts
+    );
 
 void
 init_trace( struct genome_data* genome,

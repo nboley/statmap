@@ -31,6 +31,7 @@
 #include "genome.h"
 #include "fragment_length.h"
 #include "sam.h"
+#include "util.h"
 #include "log.h"
 
 struct fragment_length_dist_t* global_fl_dist;

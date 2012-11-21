@@ -240,9 +240,14 @@ init_full_trace(
     {
         for( j = 0; j < (*traces)->num_chrs; j++ )
         {
-            add_trace_segment_to_trace_segments( &((*traces)->segments[i][j]),
-                i, j, 0, (*traces)->chr_lengths[j] );
-            assert( (*traces)->segments[i][j].num_segments == 1 );
+            /* HACK: don't add a segment for the pseudo chromosome */
+            if( (*traces)->chr_lengths[j] > 0 )
+            {
+                add_trace_segment_to_trace_segments(
+                    &((*traces)->segments[i][j]),
+                    i, j, 0, (*traces)->chr_lengths[j] );
+                assert( (*traces)->segments[i][j].num_segments == 1 );
+            }
         }
     }
 }
@@ -730,6 +735,64 @@ write_trace_segments_to_stream(
 }
 
 void
+write_merged_trace_segments_to_stream(
+    struct trace_segments_t* trace_segments,
+    FILE* os
+)
+{
+    /* Once iterative mapping is done, it is no longer necessary to mantain
+       segmented traces. Therefore, we merge all trace segments into a single
+       trace segment when we write the trace out to the file */
+    int num_segments = trace_segments->num_segments;
+
+    if( num_segments == 0 )
+    {
+        /* Write out that there are 0 segments and return (no segments to write) */
+        fwrite( &num_segments, sizeof(int), 1, os );
+        return;
+    }
+
+    assert( trace_segments->num_segments > 0 );
+    /* or - if no segments, write out 0 and return? */
+
+    /* For now, we'll maintain the same file format as the previous code, which
+       wrote the trace out explicitly. */
+
+    /* write out the number of segments (always 1) */
+    num_segments = 1;
+    fwrite( &num_segments, sizeof(int), 1, os );
+
+    /* build a new trace segment that merges all of the trace segments */
+    int merged_length = 0;
+    int i;
+    for( i = 0; i < trace_segments->num_segments; i++ )
+    {
+        merged_length += trace_segments->segments[i].length;
+    }
+
+    struct trace_segment_t *merged_segment
+        = malloc( sizeof(struct trace_segment_t) );
+    init_trace_segment_t( merged_segment,
+        trace_segments->segments[0].real_track_id,
+        trace_segments->segments[0].real_chr_id,
+        0, merged_length );
+
+    /* copy data from each trace segment into the contiguous data field */
+    TRACE_TYPE* data_ptr = merged_segment->data;
+    for( i = 0; i < trace_segments->num_segments; i++ )
+    {
+        struct trace_segment_t* current_segment
+            = trace_segments->segments + i;
+        memcpy( data_ptr, current_segment->data, current_segment->length );
+        data_ptr += current_segment->length;
+    }
+
+    write_trace_segment_to_stream( merged_segment, os );
+    free_trace_segment_t( merged_segment );
+    free( merged_segment );
+}
+
+void
 write_trace_to_stream( struct trace_t* trace, FILE* os )
 {
     write_trace_header_to_stream( trace, os );
@@ -740,7 +803,7 @@ write_trace_to_stream( struct trace_t* trace, FILE* os )
         int j;
         for( j = 0; j < trace->num_chrs; j++ )
         {
-            write_trace_segments_to_stream(&(trace->segments[i][j]), os);
+            write_merged_trace_segments_to_stream(&(trace->segments[i][j]), os);
         }
     }
     
@@ -797,7 +860,7 @@ load_trace_segments_from_stream(
     int num_segments;
     rv = fread( &num_segments, sizeof(int), 1, is );
     assert(rv == 1);
-    assert(num_segments > 0);
+    assert(num_segments >= 0);
 
     /* load the segments */
     int i;
@@ -1143,6 +1206,11 @@ segment_traces(
             /* make sure the original trace was not segmented */
             struct trace_segments_t* original_segments
                 = &( traces->segments[i][j] );
+
+            /* make sure the original trace was not pseudo, or segmented */
+            if( original_segments->num_segments == 0 ) {
+                continue;
+            }
             assert( original_segments->num_segments == 1 );
 
             struct trace_segment_t* original_segment
