@@ -154,13 +154,21 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
              log_level_to_string(log_level), log_msg );
 
     /* Print the message to the log file (and stderr if non-trivial) */
-    pthread_mutex_lock( &log_mutex );
-    fputs( log_line, log_fp );
-    if( log_level >= NONTRIVIAL_LOG_LEVEL )
+    if( log_fp != NULL )
     {
+        pthread_mutex_lock( &log_mutex );
+        fputs( log_line, log_fp );
+        if( log_level >= NONTRIVIAL_LOG_LEVEL )
+        {
+            fputs( log_line, stderr );
+        }
+        pthread_mutex_unlock( &log_mutex );
+    } else {
+        /* if no logfile has been allocated (should be extremely rare - can
+           happen if call is made before init_initial_logging), just print to
+           stderr */
         fputs( log_line, stderr );
     }
-    pthread_mutex_unlock( &log_mutex );
 
     /* If this was a fatal log message, exit */
     if( log_level == LOG_FATAL )
