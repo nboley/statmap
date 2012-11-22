@@ -17,8 +17,8 @@ clean:
 check: 
 	cd tests; rm -rf smo_* *.fa *.map; python tests.py \
 		&& python test_error_rate_estimation.py \
-		&& python simulate_rnaseq.py \
-		#&& python simulate_chipseq.py;
+		&& python simulate_chipseq.py \
+		&& python simulate_rnaseq.py;
 
 tags:
 	cd src; ctags *.c;
