@@ -1207,23 +1207,44 @@ build_trace_segments_list(
             struct trace_segment_t* original_segment
                 = original_segments->segments + 0;
 
-            int bp = 0;
-            while( bp < original_segment->length )
+            if( original_segment->length < MIN_TRACE_SEGMENT_SIZE )
             {
-                int segment_start = bp;
-                /* update bp so the segment is at least the minimum length (is
-                   bounded by the end of the trace) */
-                bp = MIN( bp + MIN_TRACE_SEGMENT_SIZE, original_segment->length );
-
-                for( ; bp < original_segment->length; bp++ )
-                {
-                    /* increment bp until we find a base with score zero */
-                    if( original_segment->data[bp] == 0 )
-                        break;
-                }
-
-                add_segment_to_segments_list( i, j, segment_start, bp, 
+                /* add a trace segment that covers the full contig, and warn
+                   that trace segments with length less than the minimum are
+                   being created */
+                statmap_log( LOG_WARNING, 
+                    "Found contig (track %i, chr %i) with length %i (< %i). Adding trace segment with length less than the minimum.",
+                    i, j, original_segment->length, MIN_TRACE_SEGMENT_SIZE );
+                add_segment_to_segments_list( i, j, 0, original_segment->length,
                     segments_list );
+            }
+            else {
+                int bp = 0;
+                while( bp < original_segment->length )
+                {
+                    int segment_start = bp;
+                    /* update bp so the segment is at least the minimum length */
+                    bp += MIN_TRACE_SEGMENT_SIZE;
+
+                    for( ; bp < original_segment->length; bp++ )
+                    {
+                        /* increment bp until we find a base with score zero */
+                        if( original_segment->data[bp] == 0 )
+                            break;
+                    }
+
+                    /* look ahead to see if there are enough bp's left in the trace
+                       to build at least one more segment. if not, include them
+                       in this segment as well. this way, we never add a trace
+                       with length < MIN_TRACE_SEGMENT_SIZE */
+                    if( original_segment->length - bp < MIN_TRACE_SEGMENT_SIZE )
+                    {
+                        bp = original_segment->length;
+                    }
+
+                    add_segment_to_segments_list( i, j, segment_start, bp, 
+                        segments_list );
+                }
             }
         }
     }
