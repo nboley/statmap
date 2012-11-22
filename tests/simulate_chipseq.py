@@ -529,7 +529,7 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
     
     def plot_traces( dir, color, lty=1, lwd=0.5, filter=""  ):
         fnames = []
-        os.chdir(dir)
+        os.chdir(dir)   
         for file in os.listdir("./"):
             if fnmatch.fnmatch(file, '*%s.bin.trace' % filter):
                 fnames.append( file )
@@ -538,6 +538,21 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
             density = parse_trace( fname )
             plot_trace( density, color )
         os.chdir(curr_dir)
+
+    def normalize_y_axes_across_subplots():
+        min_y = 0
+        max_y = 0
+        for index in xrange(len(genome)):
+            plt.subplot(len(genome), 1, index+1)
+            xmin, xmax, ymin, ymax = plt.axis()
+            min_y = min(min_y, ymin)
+            max_y = max(max_y, ymax)
+
+        # If you want manual xlim and ylim, set after plotting is done
+        for index in xrange(len(genome)):
+            plt.subplot(len(genome), 1, index+1)
+            xmin, xmax, ymin, ymax = plt.axis()
+            plt.axis((xmin, xmax, min_y, max_y))
 
     plot_traces( "./smo_chipseq_sim/samples/", 'gray', lty=3, lwd=1, filter=".nc" )
     plot_traces( "./smo_chipseq_sim/samples/", 'black', lty=1, lwd=0.5, filter=".ip" )
@@ -616,11 +631,8 @@ def plot_bootstrap_bounds( png_fname, paired_end, mut_indexes=[], polymorphic=Tr
              lwd=c(0.5,0.5,0.5,0.5,0.5,2,2,0.5,0.5), lty=c(1,1,1,1,1,3,3,2,2) )"" )
     """
 
-    # If you want manual xlim and ylim, set after plotting is done
-    #for index in xrange(len(genome)):
-    #    plt.subplot(len(genome), 1, index+1)
-    #    plt.xlim((0,5000))
-    #    plt.ylim((-0.65, 0.65))
+    # normalize the y axis across each subplot so we can compare them
+    normalize_y_axes_across_subplots()
 
     # Save plot as png
     plt.savefig( os.path.join(curr_dir, png_fname) )
