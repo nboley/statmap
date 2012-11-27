@@ -12,6 +12,8 @@
 #include <float.h>
 #include <pthread.h>
 
+#include "igraph.h"
+
 #include "config.h"
 #include "trace.h"
 #include "genome.h"

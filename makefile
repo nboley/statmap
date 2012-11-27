@@ -1,8 +1,12 @@
 CC=clang
 CFLAGS=-O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
 	-Wunreachable-code -Wunused \
-	-I/usr/share/R/include
+	-I/usr/share/R/include \
+	-I/usr/local/include/igraph
+
 RLIB=/usr/lib/R/lib/libR.so
+IGRAPHLIB=/usr/local/lib/libigraph.so
+
 src_objects := $(patsubst %.c,%.o,$(wildcard src/*.c))
 
 #### Global targets
@@ -28,16 +32,19 @@ tags:
 ### the 'src' subdirectory
 statmap: $(src_objects)
 	$(CC) -o src/statmap \
-	$(src_objects) $(RLIB) \
+	$(src_objects) $(RLIB) $(IGRAPHLIB) \
 	$(CFLAGS) \
-	-lm -lpthread -L/usr/lib/R/lib -lR 
+	-lm -lpthread \
+	-L/usr/lib/R/lib -lR \
+	-L/usr/local/lib -ligraph
 	cp src/statmap ./bin/
 
 statmap.so : $(src_objects)
 	$(CC) $(CFLAGS) \
 	-fpic -shared -Wl,-soname,libstatmap.so.1 -o src/libstatmap.so \
 	-L/usr/lib/R/lib -lR \
-	$(wildcard src/*.c) $(RLIB)
+	-L/usr/local/lib -ligraph \
+	$(wildcard src/*.c) $(RLIB) $(IGRAPHLIB)
 
 ### the 'utilities' subdirectory
 verify_mapped_read_locations : utilities/verify_mapped_read_locations.c
