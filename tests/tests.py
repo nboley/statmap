@@ -722,7 +722,6 @@ def test_build_index():
 
 def test_iterative_mapping():
     """Run Statmap on some basic data and do iterative mapping just to see if it works"""
-    # TODO why is this so slow?
     rls = [ 25, ]
     for rl in rls:
         test_dirty_reads( rl, nreads=10000, assay='a', num_samples=10 ) # CAGE

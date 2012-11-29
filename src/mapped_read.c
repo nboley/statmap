@@ -1587,7 +1587,7 @@ reset_all_read_cond_probs( struct mapped_reads_db* rdb,
     rewind_mapped_reads_db( rdb );
     mapped_read_t* r;
 
-    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )
     {
         reset_read_cond_probs( cond_prbs_db, r, rdb );
     }

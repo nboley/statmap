@@ -252,4 +252,10 @@ build_segmented_trace(
             const float cond_prob )
     );
 
+void
+build_segmented_trace_graph(
+        struct segments_list *segments_list,
+        struct mapped_reads_db* rdb
+    );
+
 #endif // #define TRACE_H

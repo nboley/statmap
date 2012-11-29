@@ -1296,6 +1296,9 @@ build_segmented_trace(
     // DEBUG
     log_segments_list( segments_list );
 
+    /* build the segmented trace graph and log it for debugging */
+    build_segmented_trace_graph( segments_list, mpd_rdb );
+
     /* Initialize the segmented trace */
     struct trace_t* segmented_trace = NULL;
     init_trace( genome, &segmented_trace, num_tracks, track_names );
@@ -1320,4 +1323,248 @@ build_segmented_trace(
     free_segments_list( segments_list );    
 
     return segmented_trace;
+}
+
+/******************************************************************************
+ * Segmented Trace Graph
+ *
+ ******************************************************************************/
+
+void
+log_segmented_trace_graph_to_gml(
+        igraph_t *st_graph
+    )
+{
+    /* Maintain a steadily increasing counter of logged segmented trace graphs.
+       Originally used timestamps, but resolution was not small enough. Note:
+       static variables are dangerous. This might need a lock. */
+    static int graph_num = 0;
+
+    char buf[200];
+    sprintf( buf, "STG-%i.gml", graph_num );
+
+    statmap_log( LOG_INFO, "Logging segmented trace graph to %s", buf );
+
+    FILE* graphml_fp = fopen( buf, "w" );
+    igraph_write_graph_gml( st_graph, graphml_fp, NULL, NULL );
+    fclose( graphml_fp );
+
+    graph_num++;
+}
+
+void
+log_segmented_trace_graph(
+        igraph_t *st_graph
+    )
+{
+    /* useful - # vertices, # edges. for each edge, print segment info and weight */
+    statmap_log( LOG_DEBUG, "# vertices : %i", igraph_vcount(st_graph) );
+    statmap_log( LOG_DEBUG, "# edges    : %i", igraph_ecount(st_graph) );
+
+    igraph_es_t all_edges_selector = igraph_ess_all( IGRAPH_EDGEORDER_FROM );
+    igraph_eit_t all_edges_iterator;
+    igraph_eit_create( st_graph, all_edges_selector, &all_edges_iterator );
+
+    while( !IGRAPH_EIT_END(all_edges_iterator) )
+    {
+        int edge_id = IGRAPH_EIT_GET(all_edges_iterator);
+
+        int from, to;
+        igraph_edge( st_graph, edge_id, &from, &to );
+        int edge_weight = EAN( st_graph, "weight", edge_id );
+
+        int from_track = VAN( st_graph, "track", from );
+        int from_chr = VAN( st_graph, "chr", from );
+        int from_start = VAN( st_graph, "start", from );
+        int from_stop = VAN( st_graph, "stop", from );
+
+        int to_track = VAN( st_graph, "track", to );
+        int to_chr = VAN( st_graph, "chr", to );
+        int to_start = VAN( st_graph, "start", to );
+        int to_stop = VAN( st_graph, "stop", to );
+
+        /* from -- to weight=n [from info] [to info] */
+        statmap_log( LOG_DEBUG,
+            "%i -- %i weight=%i from=(%i, %i, %i, %i) to=(%i, %i, %i, %i)",
+            from, to, edge_weight,
+            from_track, from_chr, from_start, from_stop,
+            to_track, to_chr, to_start, to_stop );
+
+        IGRAPH_EIT_NEXT(all_edges_iterator);
+    }
+
+    /* output graph to GraphML file. Disabled for now, since there is no easy way
+       to render this using the attributes as labels. */
+    //log_segmented_trace_graph_to_gml( st_graph );
+}
+
+int
+cmp_segments_for_mapped_read_location(
+        const struct segment* seg,
+        const mapped_read_location* loc
+    )
+{
+    int loc_track, loc_chr, loc_start, loc_stop;
+
+    enum bool first_read_is_rev_comp
+        = first_read_in_mapped_read_location_is_rev_comp( loc );
+    if( first_read_is_rev_comp ) {
+        loc_track = 1;
+    } else {
+        loc_track = 0;
+    }
+
+    loc_chr = get_chr_from_mapped_read_location( loc );
+    loc_start = get_start_from_mapped_read_location( loc );
+    loc_stop = get_stop_from_mapped_read_location( loc );
+
+    if( seg->track_index != loc_track )
+        return seg->track_index - loc_track;
+
+    if( seg->chr_index != loc_chr )
+        return seg->chr_index - loc_chr;
+
+    /* Check if loc_start is contained in the segment */
+    if( seg->start <= loc_start )
+        return -1;
+    else
+        return 1;
+}
+
+
+/* TODO: this code could be made more efficient if we used the track x chr repr.
+   in the segment list that is used in the trace_t. However, this would require
+   careful coding to make sure the segment list can be accessed as both a single
+   contigious list and also as a track x chr x segments list structure. */
+int
+get_segment_index_of_mapped_read_location(
+    struct segments_list* segments,
+    mapped_read_location* loc )
+{
+    /* bisect to find segment that contains the start of this location */
+    int lo = 0;
+    int hi = segments->length - 1;
+
+    while( lo < hi )
+    {
+        int mid = lo + (hi - lo) / 2;
+
+        struct segment *mid_segment = segments->segments + mid;
+
+        if( cmp_segments_for_mapped_read_location(mid_segment, loc) < 0 ) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    /* make sure the binary search is working */
+    assert(lo <= hi);
+    assert(lo <= segments->length);
+    assert(lo >= 0);
+
+    return lo;
+}
+
+void
+update_edge_in_segmented_trace_graph(
+        igraph_t *st_graph,
+        int e_from,
+        int e_to
+    )
+{
+    /* Don't add loops. In the segmented trace graph, this occurs if two
+       mappings are from the same segment, in which case no edge needs to be 
+       dded/updated */
+    if( e_from == e_to )
+        return;
+
+    /* Check to see if there is an edge between these nodes in the graph */
+    int rv;
+    int edge_id;
+    rv = igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
+    
+    if( edge_id == -1 )
+    {
+        /* no edge was found; add a new one */
+        igraph_add_edge( st_graph, e_from, e_to );
+
+        /* get the edge id and initialize the weight attribute */
+        rv = igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
+        SETEAN(st_graph, "weight", edge_id, 0);
+    }
+
+    /* increment the weight of the edge */
+    SETEAN( st_graph, "weight", edge_id, EAN(st_graph, "weight", edge_id)+1 );
+}
+
+void
+update_edges_in_segmented_trace_graph(
+        igraph_t *st_graph,
+        int* segment_indexes,
+        int num_indexes
+    )
+{
+    /* Enumerate all possible pairs of mapped segment indices */
+    int i, j;
+    for( i = 0; i < num_indexes; i++ )
+    {
+        for( j = i+1; j < num_indexes; j++ )
+        {
+            update_edge_in_segmented_trace_graph( st_graph, segment_indexes[i],
+                segment_indexes[j] );
+        }
+    }
+}
+
+void
+build_segmented_trace_graph(
+        struct segments_list *segments_list,
+        struct mapped_reads_db* rdb
+    )
+{
+    /* Create a graph with one vertex for each trace segment and no edges.
+       NOTE: the index of a segment corresponds to its vertex ID in the graph */
+    igraph_t graph;
+    igraph_empty( &graph, segments_list->length, IGRAPH_UNDIRECTED );
+
+    /* Label each vertex with segment information NOTE: necessary? */
+    int i;
+    for( i = 0; i < segments_list->length; i++ )
+    {
+        struct segment *current_segment = segments_list->segments + i;
+        SETVAN( &graph, "track", i, current_segment->track_index );
+        SETVAN( &graph, "chr", i, current_segment->chr_index );
+        SETVAN( &graph, "start", i, current_segment->start );
+        SETVAN( &graph, "stop", i, current_segment->stop );
+    }
+
+    /* Add edges between segments for each mapped read */
+    rewind_mapped_reads_db( rdb );
+
+    mapped_read_t* rd;
+    while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
+    {
+        mapped_read_index* rd_index = build_mapped_read_index( rd );
+
+        /* Store the segment index of each of this mapped read's mappings */
+        int* segment_indexes = malloc( rd_index->num_mappings*sizeof(int) );
+
+        MPD_RD_ID_T mi;
+        for( mi = 0; mi < rd_index->num_mappings; mi++ )
+        {
+            segment_indexes[mi] = get_segment_index_of_mapped_read_location(
+                segments_list, rd_index->mappings[mi] );
+        }
+
+        update_edges_in_segmented_trace_graph( &graph, segment_indexes, 
+            rd_index->num_mappings );
+
+        free( segment_indexes );
+        free_mapped_read_index( rd_index );
+    }
+
+    log_segmented_trace_graph( &graph );
+
+    igraph_destroy( &graph );
 }
