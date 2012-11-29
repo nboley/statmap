@@ -22,6 +22,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include "igraph.h"
+
 #include "log.h"
 #include "config_parsing.h"
 #include "statmap.h"
@@ -389,6 +391,11 @@ main( int argc, char** argv )
 {
     /* Seed the random number generator */
     srand ( time(NULL) );
+
+    /* Turn on attribute handling.
+       Manual recommends "set at the beginning of main and never touch again":
+       http://igraph.sourceforge.net/doc/html/ch12s02.html */
+    igraph_i_set_attribute_table(&igraph_cattribute_table);
 
     /* Log to a temporary log file until we are ready to create the real log
      * file (must wait until the Statmap output directory has been created) */
