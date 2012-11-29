@@ -1331,25 +1331,33 @@ build_segmented_trace(
  ******************************************************************************/
 
 void
-log_segmented_trace_graph_to_gml(
-        igraph_t *st_graph
+log_segmented_trace_graph_to_file(
+        igraph_t *st_graph,
+        char* format
     )
 {
+    /* make sure we requested a supported file format for graph output */
+    assert( strcmp(format, "graphml") == 0 ||
+            strcmp(format, "gml")     == 0 );
+
     /* Maintain a steadily increasing counter of logged segmented trace graphs.
        Originally used timestamps, but resolution was not small enough. Note:
        static variables are dangerous. This might need a lock. */
     static int graph_num = 0;
 
     char buf[200];
-    sprintf( buf, "STG-%i.gml", graph_num );
-
+    sprintf( buf, "STG-%i.%s", graph_num, format );
     statmap_log( LOG_INFO, "Logging segmented trace graph to %s", buf );
 
-    FILE* graphml_fp = fopen( buf, "w" );
-    igraph_write_graph_gml( st_graph, graphml_fp, NULL, NULL );
-    fclose( graphml_fp );
+    FILE* graph_fp = fopen( buf, "w" );
+    if( strcmp(format, "graphml") == 0 ) {
+        igraph_write_graph_graphml( st_graph, graph_fp );
+    } else if ( strcmp(format, "gml") == 0 ) {
+        igraph_write_graph_gml( st_graph, graph_fp, NULL, NULL );
+    }
+    fclose( graph_fp );
 
-    graph_num++;
+    graph_num++; /* TODO lock this increment operation (?) */
 }
 
 void
@@ -1393,9 +1401,10 @@ log_segmented_trace_graph(
         IGRAPH_EIT_NEXT(all_edges_iterator);
     }
 
-    /* output graph to GraphML file. Disabled for now, since there is no easy way
-       to render this using the attributes as labels. */
-    //log_segmented_trace_graph_to_gml( st_graph );
+    igraph_eit_destroy( &all_edges_iterator );
+    igraph_es_destroy( &all_edges_selector );
+
+    log_segmented_trace_graph_to_file( st_graph, "gml" );
 }
 
 int
@@ -1480,17 +1489,15 @@ update_edge_in_segmented_trace_graph(
         return;
 
     /* Check to see if there is an edge between these nodes in the graph */
-    int rv;
     int edge_id;
-    rv = igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
+    igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
     
     if( edge_id == -1 )
     {
         /* no edge was found; add a new one */
         igraph_add_edge( st_graph, e_from, e_to );
-
-        /* get the edge id and initialize the weight attribute */
-        rv = igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
+        /* get the edge id and initialize the weight attribute to 0 */
+        igraph_get_eid( st_graph, &edge_id, e_from, e_to, false, false );
         SETEAN(st_graph, "weight", edge_id, 0);
     }
 
@@ -1528,7 +1535,7 @@ build_segmented_trace_graph(
     igraph_t graph;
     igraph_empty( &graph, segments_list->length, IGRAPH_UNDIRECTED );
 
-    /* Label each vertex with segment information NOTE: necessary? */
+    /* label each vertex with segment information */
     int i;
     for( i = 0; i < segments_list->length; i++ )
     {
