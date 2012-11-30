@@ -1,3 +1,11 @@
+48) Trace segmentation is not perfect. There appear to be two problems:
+    1) in the case of CAGE, we cannot actually do accurate trace segmentation.
+       the cage trace update function only updates values at promoter
+       positions, so the segmentation algorithm does not know enough to build
+       segments that don't have mapped reads overlapping multiple segments.
+    2) in the case of chipseq, there is enough information. There appears to be
+       some slight boundary problem though - i.e., some reads are mapping
+       with fragments just 1 bp beyond the edge of a trace segment.
 47) Nathan - fix error model plotting to deal with NC data.
 46) Refactor the error block estimation code in find_all_candidate_mappings
     into a function - update_mapping_params, or similar.

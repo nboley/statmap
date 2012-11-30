@@ -122,9 +122,10 @@ free_trace_segments_t(
 
 int
 find_start_of_trace_segments_to_update(
-    struct trace_segments_t* trace_segments,
-    int start_bp
-)
+        struct trace_segments_t* trace_segments,
+        int start,
+        int stop
+    )
 {
     /* assume the trace_segments are sorted by start position and non-overlapping. */
 
@@ -143,9 +144,17 @@ find_start_of_trace_segments_to_update(
         int mid = lo + (hi - lo) / 2;
         struct trace_segment_t* mid_segment = trace_segments->segments + mid;
 
-        if( (mid_segment->real_start + mid_segment->length) < start_bp ) {
+        if( (mid_segment->real_start + mid_segment->length) < start ) {
             lo = mid + 1;
-        } else if( mid_segment->real_start <= start_bp ) {
+        } else if( mid_segment->real_start <= start ) {
+            /* TODO: if the trace algorithm behaved properly for every assay
+             * type, this check would not be necessary */
+            if( (mid_segment->real_start + mid_segment->length) < stop ) {
+                statmap_log( LOG_FATAL,
+                    "Trace segmentation failed: found mapped read fragment (%i, %i) and trace segment (%i, %i)",
+                    start, stop, mid_segment->real_start,
+                    mid_segment->real_start + mid_segment->length );
+            }
             key_index = mid;
             break;
         } else {
@@ -946,7 +955,7 @@ update_trace_segments_from_mapped_read_array(
     /* update_vals is from start->stop */
 
     /* Find the index of the first trace segment to update */
-    int st_index = find_start_of_trace_segments_to_update(trace_segments, start);
+    int st_index = find_start_of_trace_segments_to_update(trace_segments, start, stop);
 
     int bp = start; // need to maintain last bp updated over multiple segments
     //int update_vals_index = 0;
@@ -1022,7 +1031,7 @@ accumulate_from_trace(
     struct trace_segments_t* trace_segments
         = &(traces->segments[track_index][chr_index]);
 
-    int ss_i = find_start_of_trace_segments_to_update(trace_segments, start);
+    int ss_i = find_start_of_trace_segments_to_update(trace_segments, start, stop);
 
     int bp = start; // need to maintain last bp updated over multiple segments
 
@@ -1430,14 +1439,20 @@ cmp_segments_for_mapped_read_location(
         return segment->chr_index - loc_chr;
 
     /* Check if loc_start is contained in the segment */
-    if( segment->stop <= loc_start )
+    if( segment->stop <= loc_start ) {
         return -1;
-    else if( segment->start <= loc_start )
+    } else if( segment->start <= loc_start ) {
         /* if the mapping overlaps multiple segments, this will return the
          * segment it starts in */
+        if( segment->stop < loc_stop ) {
+            statmap_log( LOG_FATAL,
+                "Trace segmentation failed: found mapped read fragment (%i, %i) and trace segment (%i, %i)",
+                loc_start, loc_stop, segment->start, segment->stop );
+        }
         return 0;
-    else
+    } else {
         return 1;
+    }
 }
 
 
