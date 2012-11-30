@@ -19,8 +19,9 @@ clean:
 	-rm utilities/verify_mapped_read_locations
 
 check: 
-	cd tests; rm -rf smo_* *.fa *.map; python tests.py \
-		&& python test_error_rate_estimation.py \
+	cd tests; rm -rf smo_* *.fa *.map log; \
+		   python tests.py \
+		&& python test_error_rate_estimation.py
 		&& python simulate_chipseq.py \
 		&& python simulate_rnaseq.py;
 

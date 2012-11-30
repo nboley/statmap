@@ -7,3 +7,6 @@ tmp*
 *.fastq
 *.map
 *.bwtout
+
+# Statmap log output (from calling build_index.py in tests/)
+log
