@@ -137,30 +137,26 @@ find_start_of_trace_segments_to_update(
     /* otherwise, bisect to find the segment containing this location */
     int lo = 0;
     int hi = trace_segments->num_segments;
+    int key_index = -1;
     while(lo < hi)
     {
         int mid = lo + (hi - lo) / 2;
-        if(trace_segments->segments[mid].real_start < start_bp) {
+        struct trace_segment_t* mid_segment = trace_segments->segments + mid;
+
+        if( (mid_segment->real_start + mid_segment->length) < start_bp ) {
             lo = mid + 1;
+        } else if( mid_segment->real_start <= start_bp ) {
+            key_index = mid;
+            break;
         } else {
             hi = mid;
         }
     }
 
     /* make sure the binary search is working */
-    assert(lo <= hi);
-    assert(lo <= trace_segments->num_segments);
-    assert(lo >= 0);
+    assert( key_index >= 0 );
 
-    int bisect_result;
-    if(trace_segments->segments[lo].real_start == start_bp) {
-        bisect_result = lo;
-    } else {
-        assert(lo > 0);
-        bisect_result = lo - 1;
-    }
-
-    return bisect_result;
+    return key_index;
 }
 
 void
@@ -1409,7 +1405,7 @@ log_segmented_trace_graph(
 
 int
 cmp_segments_for_mapped_read_location(
-        const struct segment* seg,
+        const struct segment* segment,
         const mapped_read_location* loc
     )
 {
@@ -1427,15 +1423,19 @@ cmp_segments_for_mapped_read_location(
     loc_start = get_start_from_mapped_read_location( loc );
     loc_stop = get_stop_from_mapped_read_location( loc );
 
-    if( seg->track_index != loc_track )
-        return seg->track_index - loc_track;
+    if( segment->track_index != loc_track )
+        return segment->track_index - loc_track;
 
-    if( seg->chr_index != loc_chr )
-        return seg->chr_index - loc_chr;
+    if( segment->chr_index != loc_chr )
+        return segment->chr_index - loc_chr;
 
     /* Check if loc_start is contained in the segment */
-    if( seg->start <= loc_start )
+    if( segment->stop <= loc_start )
         return -1;
+    else if( segment->start <= loc_start )
+        /* if the mapping overlaps multiple segments, this will return the
+         * segment it starts in */
+        return 0;
     else
         return 1;
 }
@@ -1452,27 +1452,30 @@ get_segment_index_of_mapped_read_location(
 {
     /* bisect to find segment that contains the start of this location */
     int lo = 0;
-    int hi = segments->length - 1;
+    int hi = segments->length;
+    int key_index = -1;
 
     while( lo < hi )
     {
         int mid = lo + (hi - lo) / 2;
 
         struct segment *mid_segment = segments->segments + mid;
+        int cmp_val = cmp_segments_for_mapped_read_location( mid_segment, loc );
 
-        if( cmp_segments_for_mapped_read_location(mid_segment, loc) < 0 ) {
+        if( cmp_val < 0 ) {
             lo = mid + 1;
+        } else if( cmp_val == 0 ) {
+            key_index = mid;
+            break;
         } else {
             hi = mid;
         }
     }
 
     /* make sure the binary search is working */
-    assert(lo <= hi);
-    assert(lo <= segments->length);
-    assert(lo >= 0);
+    assert( key_index >= 0 );
 
-    return lo;
+    return key_index;
 }
 
 void
