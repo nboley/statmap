@@ -21,7 +21,6 @@ import StringIO
 import tempfile
 
 import numpy
-import pysam
 
 # add python_lib to the path relative to the location of tests.py
 sys.path.insert(0, os.path.normpath( sys.path[0] + "/../python_lib") )
@@ -134,7 +133,7 @@ def map_with_statmap( genome_fnames, read_fnames, output_dir, indexed_seq_len,
             % str( ret_code )
 
     # run statmap
-    call = "%s -g tmp.genome.fa.bin %s -o %s -t %i -q 0" \
+    call = "%s -g tmp.genome.fa.bin %s -o %s -t %i" \
         % ( STATMAP_PATH, read_fname_str, output_dir, num_threads )
 
     if mapping_metaparameter != None:
@@ -1483,6 +1482,13 @@ def sam_lines_match( line1, line2 ):
     return True
 
 def test_sam_output():
+    try:
+        import pysam
+    except ImportError:
+        print \
+"WARNING : pysam not found - needed for optional test to check Statmap's SAM output. Skipping test_sam_output()"
+        return
+
     output_directory = "smo_test_sam_output"
 
     n_reads=1000
