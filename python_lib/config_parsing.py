@@ -32,8 +32,6 @@ struct args_t {
 
     float mapping_metaparameter;
 
-    int min_num_hq_bps;
-
     int num_starting_locations;
 
     int num_threads;
@@ -70,8 +68,6 @@ struct args_t {
         
         ("mapping_metaparameter", c_float),
 
-        ("min_num_hq_bps", c_int),
-
         ("num_starting_locations", c_int),
 
         ("num_threads", c_int),
@@ -103,14 +99,11 @@ def test():
 
     # test working with global variables
     print statmap_o.get_num_threads()
-    print statmap_o.get_min_num_hq_bps()
 
     # set global variables
     statmap_o.set_num_threads( 4 )
-    statmap_o.set_min_num_hq_bps( 10 )
 
     # print them again
     print statmap_o.get_num_threads()
-    print statmap_o.get_min_num_hq_bps()
 
 if __name__ == "__main__": test()
