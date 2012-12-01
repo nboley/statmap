@@ -352,7 +352,7 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
         mean += mm_prb;
     }
 
-    #if PROFILE_CANDIDATE_MAPPING
+    #ifdef PROFILE_CANDIDATE_MAPPING
     statmap_log(LOG_DEBUG, "penalties_mean %f", mean);
     #endif
 }
@@ -756,7 +756,7 @@ init_index_search_params(
                 = scaling_factor * mapping_params->recheck_min_match_penalty;
             //min_match_penalty = mapping_params->recheck_min_match_penalty;
 
-            #if PROFILE_CANDIDATE_MAPPING
+            #ifdef PROFILE_CANDIDATE_MAPPING
             statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
             #endif
                 
