@@ -24,10 +24,6 @@ static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static FILE* log_fp = NULL;
 static char* tmp_logfile_path = NULL;
 
-/* all log messages with level >= this level should also be printed to stderr
- * so the user can respond appropriately */
-enum LOG_LEVEL nontrivial_log_level;
-
 void
 init_initial_logging()
 {
@@ -61,11 +57,11 @@ init_initial_logging()
                 tmp_logfile_path );
         assert(false);
         exit(1);
-    }    
+    }
 }
 
 void
-init_logging( enum LOG_LEVEL min_nontrivial_log_level )
+init_logging()
 {
     int rv;
 
@@ -111,9 +107,6 @@ init_logging( enum LOG_LEVEL min_nontrivial_log_level )
         assert(false);
         exit(1);
     }
-    
-    nontrivial_log_level = min_nontrivial_log_level;
-
 }
 
 static inline const char*
@@ -163,15 +156,12 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     /* Print the message to the log file (and stderr if non-trivial) */
     pthread_mutex_lock( &log_mutex );
     fputs( log_line, log_fp );
-    if( log_level >= nontrivial_log_level )
+    if( log_level >= NONTRIVIAL_LOG_LEVEL )
     {
         fputs( log_line, stderr );
     }
     pthread_mutex_unlock( &log_mutex );
-    
-    /* flush the log buffer */
-    fflush( log_fp );
-    
+
     /* If this was a fatal log message, exit */
     if( log_level == LOG_FATAL )
     {

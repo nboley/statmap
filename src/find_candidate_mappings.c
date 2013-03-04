@@ -1941,12 +1941,6 @@ find_candidate_mappings( void* params )
                          r->read_id, *mapped_cnt );
         }
 
-        if( r->read_id > 0 && 0 == (r->read_id%1000) )
-        {
-            statmap_log( LOG_DEBUG, "Mapped %u reads, %i successfully",  
-                         r->read_id, *mapped_cnt );
-        }
-
         struct mapping_params* mapping_params
             = init_mapping_params_for_read( r, metaparams, error_model, 
                 reads_min_match_penalty );
