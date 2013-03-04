@@ -187,7 +187,7 @@ build_indexable_subtemplates_from_read_subtemplate(
         num_partitions = MIN( indexable_length / subseq_length,
                 MAX_NUM_INDEX_PROBES );
     }
-    int partition_len = ceil((float)indexable_length / num_partitions);
+    int partition_len = floor((float)indexable_length / num_partitions);
 
     int i;
     for( i = 0; i < num_partitions; i++ )
@@ -1937,7 +1937,8 @@ find_candidate_mappings( void* params )
          */
         if( r->read_id > 0 && 0 == r->read_id%MAPPING_STATUS_GRANULARITY )
         {
-            statmap_log( LOG_INFO, "Mapped %u reads, %i successfully",  r->read_id, *mapped_cnt );
+            statmap_log( LOG_INFO, "Mapped %u reads, %i successfully",  
+                         r->read_id, *mapped_cnt );
         }
 
         struct mapping_params* mapping_params
@@ -2185,7 +2186,7 @@ bootstrap_estimated_error_model(
     add_new_error_data_record( error_data, 0, td_template.max_readkey );
 
     spawn_find_candidate_mappings_threads( &td_template );
-        
+    
     clock_t stop = clock();
     statmap_log( LOG_NOTICE,
             "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
@@ -2193,7 +2194,7 @@ bootstrap_estimated_error_model(
             ((float)(stop-start))/CLOCKS_PER_SEC,
             (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
-
+    
     free_td_template( &td_template );
     
     rewind_rawread_db( rdb );

@@ -44,7 +44,8 @@
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
 int max_reference_insert_len = -1;
-/* TODO check for conflicts with variable name before removing leading underscore */
+/* TODO check for conflicts with variable name before removing 
+   leading underscore */
 enum assay_type_t _assay_type = UNKNOWN;
 /* TODO should this be global? */
 int softclip_len = 0;
@@ -109,7 +110,7 @@ map_marginal( struct args_t* args,
         statmap_log( LOG_NOTICE, "Bootstrapping error model" );
         init_error_model( &error_model, ESTIMATED );
         
-        statmap_log( LOG_NOTICE, "Setting bootstrap mismatch rates to %f and %f",
+        statmap_log( LOG_NOTICE,"Setting bootstrap mismatch rates to %f and %f",
                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE  );
 
         mapping_metaparams.error_model_type = MISMATCH;
@@ -130,17 +131,19 @@ map_marginal( struct args_t* args,
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
     } else if(args->error_model_type == FASTQ_MODEL) {
-        statmap_log( LOG_FATAL, "FASTQ_MODEL (provided error scores) is not implemented yet" );
+        statmap_log( LOG_FATAL, 
+            "FASTQ_MODEL (provided error scores) is not implemented yet" );
         exit( 1 );
     } else if(args->error_model_type == MISMATCH) {
         /* initialize the meta params */
         mapping_metaparams.error_model_type = MISMATCH;
-        mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
-        mapping_metaparams.error_model_params[1] = args->mapping_metaparameter / 2;
+        mapping_metaparams.error_model_params[0]=args->mapping_metaparameter;
+        mapping_metaparams.error_model_params[1]=args->mapping_metaparameter/2;
         
         init_error_model( &error_model, MISMATCH );
     } else {
-        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  args->error_model_type );
+        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  
+                     args->error_model_type );
         assert( false );
         exit( 1 );
     }
@@ -309,7 +312,8 @@ map_chipseq_data(  struct args_t* args )
     gettimeofday( &stop, NULL );
     
     statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
-            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000
+            (float)(stop.tv_sec - start.tv_sec) + 
+                 ((float)(stop.tv_usec - start.tv_usec))/1000000
         );
         
     /***** END Genome processing */
@@ -319,7 +323,7 @@ map_chipseq_data(  struct args_t* args )
     map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
 
     if( args->frag_len_fp != NULL ) {
-        init_fl_dist_from_file( &(chip_mpd_rds_db->fl_dist), args->frag_len_fp );
+        init_fl_dist_from_file(&(chip_mpd_rds_db->fl_dist), args->frag_len_fp);
     } else {
         build_fl_dist( args, chip_mpd_rds_db );
     }
@@ -338,7 +342,8 @@ map_chipseq_data(  struct args_t* args )
         map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
         
         if( args->frag_len_fp != NULL ) {
-            init_fl_dist_from_file( &(NC_mpd_rds_db->fl_dist), args->frag_len_fp );
+            init_fl_dist_from_file( &(NC_mpd_rds_db->fl_dist), 
+                                    args->frag_len_fp);
         } else {
             build_fl_dist( args, NC_mpd_rds_db );
         }
@@ -361,7 +366,7 @@ map_chipseq_data(  struct args_t* args )
        scheme as the generic version. iterative_mapping takes care of 
        everything ( output, iterative, etc. ). We dont touch peak calling - 
        ( we dont really know how to do it well inside our probability model
-         without a NC because of chromatin solubility, etc., so we leave that for
+         without a NC because of chromatin solubility, etc., so we leave that
          people that have taken the time to build effective heiristics. ie. 
          peak callers.  )
     */
