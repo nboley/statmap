@@ -687,7 +687,7 @@ init_mapping_params_for_read(
             p->fwd_penalty_arrays[i]);
     }
     
-    /* now, calcualte the model parameters */
+    /* now, calculate the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
         int max_num_mm = -(int)(
             metaparams->error_model_params[0]*total_read_len)-1;
@@ -744,9 +744,15 @@ init_index_search_params(
             float expected_map_rate
                 = mapping_params->metaparams->error_model_params[0];
 
-            min_match_penalty = -(int)(expected_map_rate*ist->subseq_length)-1;
+            min_match_penalty = -(expected_map_rate*ist->subseq_length);
             /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
-            max_penalty_spread = (int)(expected_map_rate*0.5*ist->subseq_length)+1;
+            max_penalty_spread = (expected_map_rate*0.5*ist->subseq_length);
+            
+            /* make the multiple index probe correction. This should actually be
+               qbinom( 0.5, 20, min_match_rate**n ), but this is actually nearly
+               linear over reasonable probe lengths */
+            min_match_penalty = (int) ceil(min_match_penalty*ists->length);
+            max_penalty_spread = (int) floor(max_penalty_spread*ists->length);
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
