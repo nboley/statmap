@@ -201,9 +201,16 @@ populate_rawread_from_fastq_file(
             statmap_log( LOG_ERROR, "Read end should be know" );
             assert(false);
         }
-            
+
+        /* Casava 1.8 and the NCBI dd additional information after whitespace. 
+           We don't want this ( for now ) so eliminate it*/
+        char* first_whitespace = strrchr ( readname, ' ' );
+        if( NULL != first_whitespace ) {
+            *first_whitespace = '\0';
+        }
+        
         /*** get the actual read */
-        rv = safe_get_next_line(input_file, read, READ_BUFFER_SIZE, '\0', false);
+        rv = safe_get_next_line(input_file, read, READ_BUFFER_SIZE, '\0',false);
         if( 1 == rv )
             continue;
         
