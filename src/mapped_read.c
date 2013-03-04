@@ -408,13 +408,13 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
         if( mapping->pos_in_template == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
-            num_pair_1 = i-1;
+            num_pair_1 = i;
         }
     }
 
-    if( pair_2_start == -1 )
+    if( num_pair_1 <= 0 || pair_2_start == -1 )
     {
-        /* Don't build a mapped read if there are no second pair reads */
+        /* Don't build a mapped read if each pair doesnt have a read */
         return;
     }
     /* sanity check */
