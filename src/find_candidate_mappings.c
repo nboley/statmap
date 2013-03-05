@@ -1821,11 +1821,12 @@ build_mapped_read_from_candidate_mappings(
      * */
     candidate_mappings* assay_corrected_mappings = NULL;
     init_candidate_mappings( &assay_corrected_mappings );
-    make_assay_specific_corrections( mappings, assay_corrected_mappings, r,
-            genome );
+    make_assay_specific_corrections( 
+        mappings, assay_corrected_mappings, r, genome );
     /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,
+                             r,
                              &joined_mappings,
                              &joined_mapping_penalties,
                              &joined_mappings_len );

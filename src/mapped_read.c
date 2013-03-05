@@ -389,6 +389,7 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
 
 void
 join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
+                                        struct read* r,
                                         candidate_mapping*** joined_mappings, 
                                         float** penalties,
                                         int* joined_mappings_len )
@@ -450,7 +451,17 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
                 continue;
 
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
-
+            
+            /* make sure this fragment length is allowed */
+            int frag_start = MIN( pair_1_mapping->start_bp, 
+                                  pair_1_mapping->start_bp );
+            int frag_stop = MAX( 
+                pair_1_mapping->start_bp + pair_1_mapping->mapped_length, 
+                pair_2_mapping->start_bp + pair_2_mapping->mapped_length );
+            int frag_len = frag_stop - frag_start;
+            if( frag_len > r->prior.max_fragment_length )
+                continue;
+            
             /* third to last pointer is 1st candidate mapping */
             (*joined_mappings)[3*num_joined_mappings] = pair_1_mapping;
 
@@ -505,6 +516,7 @@ cleanup:
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
+                         struct read* r,
                          candidate_mapping*** joined_mappings, 
                          float** penalties,
                          int* joined_mappings_len )
@@ -515,33 +527,22 @@ join_candidate_mappings( candidate_mappings* mappings,
 
     /* sort the candidate_mappings for efficiency */
     sort_candidate_mappings( mappings );
-
-    /* TODO special case single end and paired end reads joining, for now */
-
-    enum bool paired_end = false;
-    int i;
-    for( i = 0; i < mappings->length; i++ )
+    
+    /* decide which joining function to call */
+    if( r->num_subtemplates == 1 )
     {
-        candidate_mapping* mapping = mappings->mappings + i;
-
-        if( mapping->pos_in_template == 1 )
-        {
-            paired_end = true;
-            break;
-        }
-    }
-
-    if( paired_end )
-    {
-        join_candidate_mappings_for_paired_end( mappings,
-                                                joined_mappings,
-                                                penalties,
-                                                joined_mappings_len );
-    } else {
         join_candidate_mappings_for_single_end( mappings,
                                                 joined_mappings,
                                                 penalties,
                                                 joined_mappings_len );
+    } else if( r->num_subtemplates == 2 ) {
+        join_candidate_mappings_for_paired_end( mappings,
+                                                r,
+                                                joined_mappings,
+                                                penalties,
+                                                joined_mappings_len );
+    } else {
+        statmap_log(LOG_FATAL, "Only 2 or less subtempaltes are currently supported in candidate read joining.");
     }
 
     return;
