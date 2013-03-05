@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include "config.h"
+#include "log.h"
 #include "error_correction.h"
 
 /* Store parsed command line options */
@@ -31,8 +32,6 @@ struct args_t {
     
     float mapping_metaparameter;
 
-    int min_num_hq_bps;
-
     int num_starting_locations;
     
     int num_threads;
@@ -45,6 +44,8 @@ struct args_t {
     int max_reference_insert_len;
 
     int softclip_len;
+
+    enum LOG_LEVEL nontrivial_log_level;
 };
 
 struct args_t
@@ -56,7 +57,7 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  );
 /* this assumes that we have moved intot he output directory */
 void
 read_config_file_fname_from_disk( char* fname, struct args_t** args  );
-
+;
 void
 read_config_file_from_disk( struct args_t** args  );
 

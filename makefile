@@ -1,11 +1,11 @@
 CC=clang
-CFLAGS=-O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
+CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
 	-Wunreachable-code -Wunused \
 	-I/usr/share/R/include \
-	-I/usr/local/include/igraph
+	-I/usr/include/igraph
 
 RLIB=/usr/lib/R/lib/libR.so
-IGRAPHLIB=/usr/local/lib/libigraph.so
+IGRAPHLIB=/usr/lib/libigraph.so
 
 src_objects := $(patsubst %.c,%.o,$(wildcard src/*.c))
 

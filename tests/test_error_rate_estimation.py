@@ -1,5 +1,8 @@
 from tests import *
 
+error_chars = '?adfh'
+error_char_rates = [0.65, 0.03, 0.02, 0.01, 0.00]
+
 def test_error_rate_estimation( ):
     """Test to ensure that the error modelling code is working properly.
     
@@ -15,7 +18,7 @@ def test_error_rate_estimation( ):
         f: +0.01
         h: +0.00
     """
-    error_char_mappings = dict(zip('?adfh', [0.65, 0.03, 0.02, 0.01, 0.00] ))
+    error_char_mappings = dict(zip(error_chars, error_char_rates ))
     
     rl = read_len = 50
     indexed_seq_len = 20
@@ -42,7 +45,7 @@ def test_error_rate_estimation( ):
         if random.random() < 0.10:
             return "?"*len(read)
         
-        return "".join( random.choice('?adfh') #'?adfh') 
+        return "".join( random.choice(error_chars) 
                         for i in xrange(len(read)) )
         
     

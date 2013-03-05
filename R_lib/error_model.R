@@ -70,7 +70,7 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
       data = data.frame(mm.cnts=mm.cnts, cnts=cnts, pos=pos, qual=qual);
       pos.smooth.marginal = build.marginal(mm.cnts, cnts, pos)
       qual.smooth.marginal = build.marginal(mm.cnts, cnts, qual)
-
+      
       data = merge( data, qual.smooth.marginal, by.x="qual", by.y="pred" )
       names(data)[5] <- "qual.smooth.prb";
       
@@ -78,8 +78,12 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
       names(data)[6] <- "pos.smooth.prb";
       
       response = cbind( data$mm.cnts, data$cnts-data$mm.cnts );
-      mo = glm( response~qual.smooth.prb*pos.smooth.prb,
-        data=data, family=binomial );
+      if( nrow(qual.smooth.marginal) > 2 ) {
+        error.formula = formula( response~qual.smooth.prb*pos.smooth.prb );
+      } else {
+        error.formula = formula( response~pos.smooth.prb );
+      }
+      mo = glm( error.formula, data=data, family=binomial );
       print( summary( mo ) );
       
       data$pred.freqs = logistic( predict( mo ) );

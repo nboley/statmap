@@ -256,8 +256,6 @@ static struct argp_option options[] =
      "In iterative mapping, number of samples to take from the mapping posterior", 0},
     {"threads", 't', "THREADS", 0,
      "Number of threads to use. Defaults to all available, but no more than 8.", 0},
-    {"min-num-hq-bps", 'q', "NUM", 0,
-     "Number of HQ (above 99% prob correctness) bps needed in order to map a read", 0},
     {"frag-len-dist", 'f', "DIST", 0,
      "Fragment length distribution file", 0},
     {"output-dir", 'o', "DIR", 0,
@@ -275,6 +273,10 @@ static struct argp_option options[] =
      "(not implemented yet)", 0 },
     {"soft-clip-length", 'S', "LEN", 0,
      "Number of basepair's to soft clip from the start of each read (default 0)", 0 },
+    {"verbose", 'V', NULL, OPTION_ARG_OPTIONAL,
+     "Set the logging level to NOTICE", 0 },
+    {"debug-verbose", 'D', NULL, OPTION_ARG_OPTIONAL,
+     "Set the logging level to DEBUG", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -342,9 +344,6 @@ parse_opt( int key, char *arg, struct argp_state *state )
         case 'f':
             args->frag_len_fname = arg;
             break;
-        case 'q':
-            args->min_num_hq_bps = atoi(arg);
-            break;
         case 'n':
             args->num_starting_locations = atoi(arg);
             break;
@@ -388,6 +387,12 @@ parse_opt( int key, char *arg, struct argp_state *state )
             break;
         case 'S':
             args->softclip_len = atoi( arg );
+            break;
+        case 'V':
+            args->nontrivial_log_level = LOG_INFO;
+            break;
+        case 'D':
+            args->nontrivial_log_level = LOG_DEBUG;
             break;
 
             /* utility options */
@@ -448,8 +453,6 @@ parse_arguments( int argc, char** argv )
 
     args.mapping_metaparameter = -1;
 
-    args.min_num_hq_bps = -1;
-
     args.num_starting_locations = -1;
 
     args.num_threads = -1;
@@ -460,6 +463,8 @@ parse_arguments( int argc, char** argv )
 
     args.max_reference_insert_len = -1;
     args.softclip_len = 0;
+
+    args.nontrivial_log_level = LOG_NOTICE;
 
     /* parse arguments with argp */
     argp_parse( &argp, argc, argv, 0, 0, &args );
@@ -663,7 +668,7 @@ parse_arguments( int argc, char** argv )
 
     /* Now that we've chdir'ed into the output directory , we can initialize
      * the real logfile. */
-    init_logging();
+    init_logging( args.nontrivial_log_level );
 
     /* Make sub directories to store wiggle samples */
     if( SAVE_STARTING_SAMPLES )
@@ -745,13 +750,6 @@ parse_arguments( int argc, char** argv )
         statmap_log( LOG_NOTICE, "Number of threads is being set to %i",  args.num_threads );
     }
 
-    /* set the min num hq basepairs if it's unset */
-    if( args.min_num_hq_bps == -1 )
-    {
-        args.min_num_hq_bps = 12;
-        statmap_log( LOG_NOTICE, "Number of min hq bps is being set to %i",  args.min_num_hq_bps );
-    }
-
     /* Set the maximum allowed reference gap between indexable subtemplates */
     if( args.assay_type == RNA_SEQ )
     {
@@ -764,7 +762,6 @@ parse_arguments( int argc, char** argv )
 
     /* Set the global variables */
     num_threads = args.num_threads;
-    min_num_hq_bps = args.min_num_hq_bps;
     max_reference_insert_len = args.max_reference_insert_len;
     softclip_len = args.softclip_len;
 
@@ -828,8 +825,6 @@ write_config_file_to_stream( FILE* arg_fp, struct args_t* args  )
         arg_fp, "sam_output_fname", args->sam_output_fname );
     
     fprintf( arg_fp, "mapping_metaparameter:\t%.4f\n", args->mapping_metaparameter );
-
-    fprintf( arg_fp, "min_num_hq_bps:\t%i\n", args->min_num_hq_bps );
 
     fprintf( arg_fp, "num_starting_locations:\t%i\n", args->num_starting_locations );
     
@@ -919,9 +914,6 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
     
     fscanf( arg_fp, "mapping_metaparameter:\t%f\n",
             &((*args)->mapping_metaparameter) );
-
-    fscanf( arg_fp, "min_num_hq_bps:\t%i\n", 
-            &((*args)->min_num_hq_bps) );
 
     fscanf( arg_fp, "num_starting_locations:\t%i\n", 
             &((*args)->num_starting_locations) );

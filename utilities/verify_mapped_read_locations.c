@@ -15,7 +15,6 @@
 #include "../src/iterative_mapping.h"
 
 /* make it possible to link */
-int min_num_hq_bps = -1;
 int num_threads = 1;
 
 void usage()

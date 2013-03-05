@@ -462,12 +462,15 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
 
 void
 join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
+                                        struct read* r,
                                         candidate_mapping*** joined_mappings, 
                                         float** penalties,
                                         int* joined_mappings_len )
 {
     int pair_1_start = 0;
     int pair_2_start = -1;
+    int num_pair_1 = 0;
+    int num_pair_2 = 0;
 
     /* find the start of the second pair candidate mappings */
     int i;
@@ -478,56 +481,33 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
         if( mapping->pos_in_template == 1 && pair_2_start == -1 )
         {
             pair_2_start = i;
-            break;
+            num_pair_1 = i;
         }
     }
 
-    if( pair_2_start == -1 || pair_2_start <= pair_1_start )
+    if( num_pair_1 <= 0 || pair_2_start == -1 )
     {
-        /* Don't build a mapped read if there are no second pair reads */
+        /* Don't build a mapped read if each pair doesnt have a read */
         return;
     }
     /* sanity check */
     assert( pair_2_start > pair_1_start );
+    num_pair_2 = (i-1) - pair_2_start;
 
-    /* Count the number of valid joined combinations of reads */
-    int num_joined_mappings = 0;
-    int j;
-    for( i = pair_1_start; i < pair_2_start; i++ )
-    {
-        for( j = pair_2_start; j < mappings->length; j++ )
-        {
-            candidate_mapping* pair_1_mapping = mappings->mappings + i;
-            candidate_mapping* pair_2_mapping = mappings->mappings + j;
-
-            /* If the chrs mismatch, since these are sorted we know there is no 
-             * need to continue. */
-            if( pair_2_mapping->chr > pair_1_mapping->chr )
-                break;
-
-            if( pair_2_mapping->chr < pair_1_mapping->chr )
-                continue;
-
-            assert( pair_1_mapping->chr == pair_2_mapping->chr );
-
-            num_joined_mappings++;
-        }
-    }
-
-    /* Allocate memory.
-     * We have counted the number of valid ways to join paired end reads for
-     * this set of candidate mappings. For each set of joined mappings, we need
+    /* Build the initial memory allocation.
+     * For each set of joined mappings, we need
      * to allocate 3 pointers - one for the first mapping, one for the second
      * mapping, and one for the NULL delimiter. */
+    const int allcd_step_size = 100;
+    int allcd_size = allcd_step_size;
     *joined_mappings = malloc(
-            sizeof(candidate_mapping*) * (num_joined_mappings*3));
-    *penalties = malloc( sizeof(float) * num_joined_mappings );
+            sizeof(candidate_mapping*) * (allcd_size*3));
+    *penalties = malloc( sizeof(float) * allcd_size );
 
-    int joined_mappings_index = 0;
-    int penalties_index = 0;
-
+    int num_joined_mappings = 0;
     for( i = pair_1_start; i < pair_2_start; i++ )
     {
+        int j;
         for( j = pair_2_start; j < mappings->length; j++ )
         {
             candidate_mapping* pair_1_mapping = mappings->mappings + i;
@@ -542,30 +522,63 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
                 continue;
 
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
-
+            
+            /* make sure this fragment length is allowed */
+            int frag_start = MIN( pair_1_mapping->start_bp, 
+                                  pair_1_mapping->start_bp );
+            int frag_stop = MAX( 
+                pair_1_mapping->start_bp + pair_1_mapping->mapped_length, 
+                pair_2_mapping->start_bp + pair_2_mapping->mapped_length );
+            int frag_len = frag_stop - frag_start;
+            if( frag_len > r->prior.max_fragment_length )
+                continue;
+            
             /* third to last pointer is 1st candidate mapping */
-            (*joined_mappings)[joined_mappings_index] = pair_1_mapping;
+            (*joined_mappings)[3*num_joined_mappings] = pair_1_mapping;
 
             /* second to last pointer is 2nd candidate mapping */
-            (*joined_mappings)[joined_mappings_index + 1] = pair_2_mapping;
+            (*joined_mappings)[3*num_joined_mappings + 1] = pair_2_mapping;
 
             /* last pointer is NULL pointer indicating the end of this set of
              * joined candidate mappings */
-            (*joined_mappings)[joined_mappings_index + 2] = NULL;
+            (*joined_mappings)[3*num_joined_mappings + 2] = NULL;
 
             /* add the penalty for this (joined) candidate mapping. Simply
              * add the penalties from both candidate mappings (since these are
              * log probabilities, adding is equivalent to the product of the
              * marginal probabilities) */
-            (*penalties)[penalties_index]
+            (*penalties)[num_joined_mappings]
                 = pair_1_mapping->penalty
                 + pair_2_mapping->penalty;
 
+            /* After we've used this as an index, make it a count */
+            num_joined_mappings += 1;
+            
             /* Update the array indices */
-            joined_mappings_index += 3;
-            penalties_index += 1;
+            if( num_joined_mappings > MAX_NUM_CAND_MAPPINGS )
+                goto cleanup;
+
+            if( num_joined_mappings == allcd_size )
+            {
+                allcd_size += allcd_step_size;
+                *joined_mappings = realloc( 
+                    *joined_mappings, 
+                    sizeof(candidate_mapping*)*(allcd_size*3)
+                );
+                *penalties = realloc( *penalties, sizeof(float)*allcd_size );
+            }
         }
     }
+
+cleanup:
+    
+    /* recalim unused memory */
+    *joined_mappings = realloc( 
+        *joined_mappings, 
+        sizeof(candidate_mapping*)*(num_joined_mappings*3)
+    );
+    *penalties = realloc( *penalties, sizeof(float)*num_joined_mappings );
+
 
     *joined_mappings_len = num_joined_mappings;
 
@@ -574,25 +587,30 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
+                         struct read* r,
                          candidate_mapping*** joined_mappings, 
                          float** penalties,
-                         int* joined_mappings_len,
-                         enum bool paired_end )
+                         int* joined_mappings_len
+                       )
 {
     /* sort the candidate_mappings so we can optimize */
     sort_candidate_mappings( mappings );
-
-    if( paired_end )
+    
+    /* decide which joining function to call */
+    if( r->num_subtemplates == 1 )
     {
-        join_candidate_mappings_for_paired_end( mappings,
-                                                joined_mappings,
-                                                penalties,
-                                                joined_mappings_len );
-    } else {
         join_candidate_mappings_for_single_end( mappings,
                                                 joined_mappings,
                                                 penalties,
                                                 joined_mappings_len );
+    } else if( r->num_subtemplates == 2 ) {
+        join_candidate_mappings_for_paired_end( mappings,
+                                                r,
+                                                joined_mappings,
+                                                penalties,
+                                                joined_mappings_len );
+    } else {
+        statmap_log(LOG_FATAL, "Only 2 or less subtempaltes are currently supported in candidate read joining.");
     }
 
     return;
@@ -1631,7 +1649,7 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     rdb->mmapped_data
         = mmap( NULL, rdb->mmapped_data_size,  
                 PROT_READ|PROT_WRITE, 
-		MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
+                MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
 
     if( rdb->mmapped_data == (void*) -1 ) {
         statmap_log( LOG_FATAL, "Can not mmap the fdescriptor '%i'", fdin );

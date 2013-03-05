@@ -45,7 +45,6 @@
 
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
-int min_num_hq_bps = -1;
 int max_reference_insert_len = -1;
 /* TODO should this be global? */
 int softclip_len = 0;
@@ -53,8 +52,6 @@ int softclip_len = 0;
 /* Getters and setters for utilities written using ctypes */
 int get_num_threads() { return num_threads;}
 void set_num_threads(int n) { num_threads = n; }
-int get_min_num_hq_bps() { return min_num_hq_bps; }
-void set_min_num_hq_bps(int n) { min_num_hq_bps = n; }
 int get_max_reference_insert_len() { return max_reference_insert_len; }
 void set_max_reference_insert_len(int n) { max_reference_insert_len = n; }
 
@@ -112,7 +109,7 @@ map_marginal( struct args_t* args,
         statmap_log( LOG_NOTICE, "Bootstrapping error model" );
         init_error_model( &error_model, ESTIMATED );
         
-        statmap_log( LOG_NOTICE, "Setting bootstrap mismatch rates to %f and %f",
+        statmap_log( LOG_NOTICE,"Setting bootstrap mismatch rates to %f and %f",
                 MAX_NUM_MM_RATE, MAX_NUM_MM_SPREAD_RATE  );
 
         mapping_metaparams.error_model_type = MISMATCH;
@@ -133,17 +130,19 @@ map_marginal( struct args_t* args,
         /* rewind rawread db to beginning for mapping */
         rewind_rawread_db( rdb );
     } else if(args->error_model_type == FASTQ_MODEL) {
-        statmap_log( LOG_FATAL, "FASTQ_MODEL (provided error scores) is not implemented yet" );
+        statmap_log( LOG_FATAL, 
+            "FASTQ_MODEL (provided error scores) is not implemented yet" );
         exit( 1 );
     } else if(args->error_model_type == MISMATCH) {
         /* initialize the meta params */
         mapping_metaparams.error_model_type = MISMATCH;
-        mapping_metaparams.error_model_params[0] = args->mapping_metaparameter;
-        mapping_metaparams.error_model_params[1] = args->mapping_metaparameter / 2;
+        mapping_metaparams.error_model_params[0]=args->mapping_metaparameter;
+        mapping_metaparams.error_model_params[1]=args->mapping_metaparameter/2;
         
         init_error_model( &error_model, MISMATCH );
     } else {
-        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  args->error_model_type );
+        statmap_log( LOG_FATAL, "Invalid index search type '%i'",  
+                     args->error_model_type );
         assert( false );
         exit( 1 );
     }
@@ -296,10 +295,18 @@ map_chipseq_data(  struct args_t* args )
     struct genome_data* genome;
 
     /* store clock times - useful for benchmarking */
-    //struct timeval start, stop;    
+    struct timeval start, stop;    
     
     /* load the genome */
     load_genome( &genome, args );
+    gettimeofday( &stop, NULL );
+    
+    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + 
+                 ((float)(stop.tv_usec - start.tv_usec))/1000000
+        );
+        
+    /***** END Genome processing */
     
     /* map the real ( IP ) data */
     statmap_log(LOG_NOTICE, "Mapping the real (IP) data");
@@ -336,7 +343,7 @@ map_chipseq_data(  struct args_t* args )
        scheme as the generic version. iterative_mapping takes care of 
        everything ( output, iterative, etc. ). We dont touch peak calling - 
        ( we dont really know how to do it well inside our probability model
-         without a NC because of chromatin solubility, etc., so we leave that for
+         without a NC because of chromatin solubility, etc., so we leave that
          people that have taken the time to build effective heiristics. ie. 
          peak callers.  )
     */

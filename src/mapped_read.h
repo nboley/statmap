@@ -393,10 +393,11 @@ advance_pointer_to_start_of_next_joined_candidate_mappings(
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
+                         struct read *r,
                          candidate_mapping*** joined_mappings, 
                          float** penalties,
-                         int* joined_mappings_len,
-                         enum bool paired_end );
+                         int* joined_mappings_len
+                        );
 void
 filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
                                   float** penalties,
