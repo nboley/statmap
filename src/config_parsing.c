@@ -273,6 +273,10 @@ static struct argp_option options[] =
      "(not implemented yet)", 0 },
     {"soft-clip-length", 'S', "LEN", 0,
      "Number of basepair's to soft clip from the start of each read (default 0)", 0 },
+    {"verbose", 'V', NULL, OPTION_ARG_OPTIONAL,
+     "Set the logging level to NOTICE", 0 },
+    {"debug-verbose", 'D', NULL, OPTION_ARG_OPTIONAL,
+     "Set the logging level to DEBUG", 0 },
 
     /* must end with an entry containing all zeros */
     {0,0,0,0,0,0}
@@ -389,6 +393,12 @@ parse_opt( int key, char *arg, struct argp_state *state )
         case 'S':
             args->softclip_len = atoi( arg );
             break;
+        case 'V':
+            args->nontrivial_log_level = LOG_INFO;
+            break;
+        case 'D':
+            args->nontrivial_log_level = LOG_DEBUG;
+            break;
 
             /* utility options */
             /* --help and --version are automatically provied by argp */
@@ -458,6 +468,8 @@ parse_arguments( int argc, char** argv )
 
     args.max_reference_insert_len = -1;
     args.softclip_len = 0;
+
+    args.nontrivial_log_level = LOG_NOTICE;
 
     /* parse arguments with argp */
     argp_parse( &argp, argc, argv, 0, 0, &args );
@@ -662,7 +674,7 @@ parse_arguments( int argc, char** argv )
 
     /* Now that we've chdir'ed into the output directory , we can initialize
      * the real logfile. */
-    init_logging();
+    init_logging( args.nontrivial_log_level );
 
     /* Make sub directories to store wiggle samples */
     if( SAVE_STARTING_SAMPLES )
