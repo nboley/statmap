@@ -13,7 +13,7 @@
 /****** configuration options                   ******/
 
 #define MAX_SEARCH_TIME 1.0
-#define MAX_NUM_CAND_MAPPINGS 1000
+#define MAX_NUM_CAND_MAPPINGS 5000
 
 #define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
