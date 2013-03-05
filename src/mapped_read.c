@@ -422,44 +422,20 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
 
     num_pair_2 = (i-1) - pair_2_start;
 
-    /* Count the number of valid joined combinations of reads */
-    int num_joined_mappings = 0;
-    int j;
-    for( i = pair_1_start; i < pair_2_start; i++ )
-    {
-        for( j = pair_2_start; j < mappings->length; j++ )
-        {
-            candidate_mapping* pair_1_mapping = mappings->mappings + i;
-            candidate_mapping* pair_2_mapping = mappings->mappings + j;
-
-            /* If the chrs mismatch, since these are sorted we know there is no 
-             * need to continue. */
-            if( pair_2_mapping->chr > pair_1_mapping->chr )
-                break;
-
-            if( pair_2_mapping->chr < pair_1_mapping->chr )
-                continue;
-
-            assert( pair_1_mapping->chr == pair_2_mapping->chr );
-
-            num_joined_mappings++;
-        }
-    }
-
-    /* Allocate memory.
-     * We have counted the number of valid ways to join paired end reads for
-     * this set of candidate mappings. For each set of joined mappings, we need
+    /* Build the initial memory allocation.
+     * For each set of joined mappings, we need
      * to allocate 3 pointers - one for the first mapping, one for the second
      * mapping, and one for the NULL delimiter. */
+    const int allcd_step_size = 100;
+    int allcd_size = allcd_step_size;
     *joined_mappings = malloc(
-            sizeof(candidate_mapping*) * (num_joined_mappings*3));
-    *penalties = malloc( sizeof(float) * num_joined_mappings );
+            sizeof(candidate_mapping*) * (allcd_size*3));
+    *penalties = malloc( sizeof(float) * allcd_size );
 
-    int joined_mappings_index = 0;
-    int penalties_index = 0;
-
+    int num_joined_mappings = 0;
     for( i = pair_1_start; i < pair_2_start; i++ )
     {
+        int j;
         for( j = pair_2_start; j < mappings->length; j++ )
         {
             candidate_mapping* pair_1_mapping = mappings->mappings + i;
@@ -476,28 +452,51 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
 
             /* third to last pointer is 1st candidate mapping */
-            (*joined_mappings)[joined_mappings_index] = pair_1_mapping;
+            (*joined_mappings)[3*num_joined_mappings] = pair_1_mapping;
 
             /* second to last pointer is 2nd candidate mapping */
-            (*joined_mappings)[joined_mappings_index + 1] = pair_2_mapping;
+            (*joined_mappings)[3*num_joined_mappings + 1] = pair_2_mapping;
 
             /* last pointer is NULL pointer indicating the end of this set of
              * joined candidate mappings */
-            (*joined_mappings)[joined_mappings_index + 2] = NULL;
+            (*joined_mappings)[3*num_joined_mappings + 2] = NULL;
 
             /* add the penalty for this (joined) candidate mapping. Simply
              * add the penalties from both candidate mappings (since these are
              * log probabilities, adding is equivalent to the product of the
              * marginal probabilities) */
-            (*penalties)[penalties_index]
+            (*penalties)[num_joined_mappings]
                 = pair_1_mapping->penalty
                 + pair_2_mapping->penalty;
 
+            /* After we've used this as an index, make it a count */
+            num_joined_mappings += 1;
+            
             /* Update the array indices */
-            joined_mappings_index += 3;
-            penalties_index += 1;
+            if( num_joined_mappings > MAX_NUM_CAND_MAPPINGS )
+                goto cleanup;
+
+            if( num_joined_mappings == allcd_size )
+            {
+                allcd_size += allcd_step_size;
+                *joined_mappings = realloc( 
+                    *joined_mappings, 
+                    sizeof(candidate_mapping*)*(allcd_size*3)
+                );
+                *penalties = realloc( *penalties, sizeof(float)*allcd_size );
+            }
         }
     }
+
+cleanup:
+    
+    /* recalim unused memory */
+    *joined_mappings = realloc( 
+        *joined_mappings, 
+        sizeof(candidate_mapping*)*(num_joined_mappings*3)
+    );
+    *penalties = realloc( *penalties, sizeof(float)*num_joined_mappings );
+
 
     *joined_mappings_len = num_joined_mappings;
 

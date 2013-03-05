@@ -1829,7 +1829,13 @@ build_mapped_read_from_candidate_mappings(
                              &joined_mappings,
                              &joined_mapping_penalties,
                              &joined_mappings_len );
-            
+    if( joined_mappings_len > MAX_NUM_CAND_MAPPINGS ) {
+        statmap_log( LOG_DEBUG, 
+                     "Skipping read %i: too many candidate mappings ( %i )",
+                     r->read_id, joined_mappings_len  );
+        return NULL;
+    }
+    
     filter_joined_candidate_mappings( &joined_mappings,
                                       &joined_mapping_penalties,
                                       &joined_mappings_len,

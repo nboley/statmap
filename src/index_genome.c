@@ -1029,9 +1029,30 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                         curr_penalty, 
                         min_match_penalty, max_penalty_spread );
 
+    // get current time
+    struct timespec start;
+    struct timespec stop;
+    int err;
+    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+    int cntr = 0;
     while( pmatch_stack_length( stack ) > 0 )
     {
-
+        cntr += 1;
+        if( cntr%1000 == 0 )
+        {
+            double elapsed;
+            err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
+            elapsed = (stop.tv_sec - start.tv_sec);
+            elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
+            if( elapsed > MAX_SEARCH_TIME )
+            {
+                statmap_log( LOG_NOTICE, 
+                             "Terminating index search (%e sec elapsed)", 
+                             elapsed );
+                results->length = 0;
+                goto cleanup;            
+            }
+        }
         potential_match match = pop_pmatch( stack );
 
         /* add the index offset so that this is a phsyical location */
@@ -1236,8 +1257,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 results,
                 penalties,
                 genome
-            );
-            
+            );            
             
             /* 
                If we are only looking for unique sequences,
