@@ -751,8 +751,8 @@ init_index_search_params(
             /* make the multiple index probe correction. This should actually be
                qbinom( 0.5, 20, min_match_rate**n ), but this is actually nearly
                linear over reasonable probe lengths */
-            min_match_penalty = (int) ceil(min_match_penalty*ists->length);
-            max_penalty_spread = (int) floor(max_penalty_spread*ists->length);
+            min_match_penalty = ceil(min_match_penalty*ists->length);
+            max_penalty_spread = floor(max_penalty_spread*ists->length);
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
