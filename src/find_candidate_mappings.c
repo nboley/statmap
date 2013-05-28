@@ -57,7 +57,7 @@ subseq_penalty(
              * the error model)? */
             penalty += penalties->array[pos].penalties[bp_code(bp)];
         }
-    }
+   }
 
     return penalty;
 }
@@ -84,7 +84,7 @@ find_optimal_subseq_offset(
     */
     int optimal_offset = region_start;
     float max_so_far = -FLT_MAX;
-
+        
     int i;
     /* each possible start bp in the subsequence */
     for( i = region_start;
@@ -113,7 +113,9 @@ build_indexable_subtemplate(
 
         // area of the read subtemplate to take an indexable subtemplate from
         int range_start,
-        int range_length
+        int range_length,
+        
+        enum bool choose_random_offset
     )
 {
     int subseq_length = index->seq_length;
@@ -136,13 +138,20 @@ build_indexable_subtemplate(
             subseq_offset = range_start + range_length - subseq_length;
         }
     } else {
-        subseq_offset = find_optimal_subseq_offset(
+        if( choose_random_offset ) {
+            double rn = ((double) rand() / (RAND_MAX));
+            subseq_offset = range_start + MIN( 
+                rn*(range_length - subseq_length), 
+                range_length - subseq_length-1 );
+        } else {
+            subseq_offset = find_optimal_subseq_offset(
                 rst,
                 fwd_penalty_array,
                 subseq_length,
                 range_start,
                 range_length
             );
+        }
     }
 
     struct indexable_subtemplate* ist = NULL;
@@ -157,7 +166,8 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct read_subtemplate* rst,
         struct index_t* index,
         struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        struct penalty_array_t* rev_penalty_array,
+        enum bool use_random_subtemplate_offset
     )
 {
     int subseq_length = index->seq_length;
@@ -183,12 +193,16 @@ build_indexable_subtemplates_from_read_subtemplate(
         /* for RNA-seq, always use two probes at either end of the read so we
          * can maximize the space for finding introns */
         num_partitions = 2;
-    } else { 
+    } else {
+        #ifdef ONLY_USE_1_READ_SUBTEMPLATE
+        num_partitions = 1;
+        #else
         num_partitions = MIN( indexable_length / subseq_length,
-                MAX_NUM_INDEX_PROBES );
+                MAX_NUM_INDEX_PROBES );        
+        #endif
     }
     int partition_len = floor((float)indexable_length / num_partitions);
-
+    
     int i;
     for( i = 0; i < num_partitions; i++ )
     {
@@ -198,9 +212,11 @@ build_indexable_subtemplates_from_read_subtemplate(
 
         /* partition the read into equal sized sections and try to find the
          * best subsequence within each section to use as an index probe */
-        ist = build_indexable_subtemplate( rst, index,
-                fwd_penalty_array, rev_penalty_array,
-                partition_start, partition_len );
+        ist = build_indexable_subtemplate( 
+            rst, index,
+            fwd_penalty_array, rev_penalty_array,
+            partition_start, partition_len,
+            use_random_subtemplate_offset );
 
         if( ist == NULL ) {
             free_indexable_subtemplates( ists );
@@ -1509,7 +1525,8 @@ find_candidate_mappings_for_read_subtemplate(
        build_indexable_subtemplates_from_read_subtemplate(
            rst, genome->index,
            mapping_params->fwd_penalty_arrays[rst_pos],
-           mapping_params->rev_penalty_arrays[rst_pos]
+           mapping_params->rev_penalty_arrays[rst_pos],
+           only_collect_error_data
        );
     
     /* if the set of probe's is too low quality, don't try and map this read */
@@ -2131,7 +2148,7 @@ void init_td_template( struct single_map_thread_data* td_template,
                             PTHREAD_PROCESS_PRIVATE );
     assert( rc == 0 );
 
-    td_template->max_readkey = 0;
+    td_template->max_readkey = -1;
 
     td_template->rdb = rdb;
     
@@ -2192,7 +2209,6 @@ bootstrap_estimated_error_model(
     td_template.only_collect_error_data = true;
 
     // Detyermine how many reads we should look through for the bootstrap
-    #define NUM_READS_TO_BOOTSTRAP READS_STAT_UPDATE_STEP_SIZE
     td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
 
     // Add a new row to store error data in
@@ -2252,7 +2268,7 @@ find_all_candidate_mappings(
             td_template.error_data, 
             td_template.max_readkey, 
             td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
-
+         
         // update the maximum allowable readkey
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
@@ -2262,13 +2278,16 @@ find_all_candidate_mappings(
             /* Compute the min match penalty for this block of reads that will
              * map the desired percentage of reads given in metaparameters */
             float reads_min_match_penalty
-                = compute_min_match_penalty_for_reads( rdb, error_model,
-                        mapping_metaparams->error_model_params[0] );
+                = compute_min_match_penalty_for_reads( 
+                    rdb, error_model, 
+                    MAX(0, td_template.max_readkey - rdb->readkey),
+                    mapping_metaparams->error_model_params[0] );
 
-            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i]",
-                    reads_min_match_penalty,
-                    td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
-                    td_template.max_readkey );
+            statmap_log( LOG_INFO,
+                "Computed min_match_penalty %f for reads [%i, %i]",
+                reads_min_match_penalty,
+                td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
+                td_template.max_readkey );
 
             /* Save in the mapping metaparameters */
             td_template.reads_min_match_penalty = reads_min_match_penalty;
@@ -2277,7 +2296,9 @@ find_all_candidate_mappings(
         spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */
+        #ifdef INCREMENTLY_UPDATE_ERROR_MODEL
         update_error_model_from_error_data(error_model, td_template.error_data);
+        #endif
     }
     
     /* Print out performance information */

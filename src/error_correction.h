@@ -14,7 +14,8 @@
 #include "read.h"
 #include "genome.h"
 
-#define NUM_SAMPLES_FOR_MIN_PENALTY_COMP 10
+#define NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP 5000
+#define NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP 10
 #define ROUND_ERROR 1e-6
 
 struct freqs_array {
@@ -118,6 +119,7 @@ float
 compute_min_match_penalty_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
+        int num_reads,
         float quantile
     );
 

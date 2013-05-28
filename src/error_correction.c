@@ -539,6 +539,7 @@ float
 compute_min_match_penalty_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
+        int num_reads,
         float quantile
     )
 {
@@ -546,16 +547,18 @@ compute_min_match_penalty_for_reads(
         = save_rawread_db_state( rdb );
 
     /* Sample from the next set of READS_STAT_UPDATE_STEP_SIZE reads */
-    readkey_t max_readkey = rdb->readkey + READS_STAT_UPDATE_STEP_SIZE;
-
-    int num_sample_prbs
-        = READS_STAT_UPDATE_STEP_SIZE * NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+    readkey_t max_readkey = rdb->readkey + num_reads;
+    
+    int num_sample_prbs = 
+        NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP
+            *NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
     float* sample_prbs = calloc( num_sample_prbs, sizeof(float) );
     int sample_prbs_index = 0;
 
     struct read* r;
     while( EOF != get_next_read_from_rawread_db(
-                rdb, &r, max_readkey ) )
+                rdb, &r, max_readkey )
+           && sample_prbs_index < num_sample_prbs )
     {
         struct penalty_array_t* penalty_arrays = malloc(
                 sizeof(struct penalty_array_t) * r->num_subtemplates );
@@ -570,7 +573,7 @@ compute_min_match_penalty_for_reads(
 
         int sample_i;
         for( sample_i = 0;
-             sample_i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
+             sample_i < NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
              sample_i++ )
         {
             float sample_prb = 0;
@@ -587,6 +590,8 @@ compute_min_match_penalty_for_reads(
 
             assert( sample_prb < 0 );
             sample_prbs[sample_prbs_index++] = sample_prb;
+            if( sample_prbs_index == num_sample_prbs )
+                break;
         }
 
         /* cleanup memory */
