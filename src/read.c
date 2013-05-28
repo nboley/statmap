@@ -244,8 +244,15 @@ get_next_read_from_rawread_db(
             /* make sure the mate is empty as well */
             rv = populate_rawread_from_fastq_file(
                 rdb->paired_end_2_reads, &r2, SECOND );
-            assert( rv == EOF );
+            if( rv != EOF ) {
+                statmap_log(LOG_WARNING, "Read pairs appear out of sync. Skipping extra pair 2 reads.");
+                while( rv != EOF ) {
+                    rv = populate_rawread_from_fastq_file(
+                        rdb->paired_end_2_reads, &r2, SECOND );
+                }
+            }
 
+            assert( rv == EOF );
             assert( rawread_db_is_empty( rdb ) );
 
             *r = NULL;
