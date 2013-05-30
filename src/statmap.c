@@ -267,7 +267,7 @@ map_generic_data(  struct args_t* args )
     load_genome( &genome, args );
     
     gettimeofday( &stop, NULL );
-    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
+    statmap_log( LOG_INFO, "Loaded Genome in %.2lf seconds",
             (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
         
     /***** END Genome processing */
@@ -284,12 +284,14 @@ map_generic_data(  struct args_t* args )
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
 
+    /*
     if( args->frag_len_fp != NULL ) {
         init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
     } else {
         build_fl_dist( args, mpd_rds_db );
     }
-
+    */
+    
     close_mapped_reads_db( &mpd_rds_db );
     
     free_genome( genome );

@@ -1851,7 +1851,8 @@ build_mapped_read_from_candidate_mappings(
         statmap_log( LOG_DEBUG, 
                      "Skipping read %i: too many candidate mappings ( %i )",
                      r->read_id, joined_mappings_len  );
-        return NULL;
+        rd = NULL;
+        goto cleanup;
     }
     
     filter_joined_candidate_mappings( &joined_mappings,
@@ -1868,8 +1869,8 @@ build_mapped_read_from_candidate_mappings(
     rd = build_mapped_read_from_joined_candidate_mappings( r->read_id,
             joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
+cleanup:
     free_candidate_mappings( assay_corrected_mappings );
-    
     free( joined_mappings );
     free( joined_mapping_penalties );
     

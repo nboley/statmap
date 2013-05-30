@@ -688,7 +688,8 @@ init_mapping_params_for_read(
     p->read_expected_value = 0;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
-        p->read_expected_value += expected_value_of_rst(r->subtemplates + i,
+        p->read_expected_value += expected_value_of_rst(
+            r->subtemplates + i,
             p->fwd_penalty_arrays[i]);
     }
     
@@ -763,6 +764,8 @@ init_index_search_params(
 
             float scaling_factor 
                 = ist->expected_value / mapping_params->read_expected_value;
+            scaling_factor = ((double)ist->subseq_length )
+                /mapping_params->total_read_length;
             min_match_penalty 
                 = scaling_factor * mapping_params->recheck_min_match_penalty;
             //min_match_penalty = mapping_params->recheck_min_match_penalty;

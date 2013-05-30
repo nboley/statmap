@@ -1218,7 +1218,9 @@ init_mapped_reads_db(
     (*rdb)->unmappable_fp = fopen( fname_buffer, mode );
     if( (*rdb)->unmappable_fp == NULL )
     {
-        statmap_log( LOG_FATAL, "Could not open unmappable reads file %s",  fname_buffer  );
+        statmap_log( LOG_FATAL, 
+                     "Could not open unmappable reads file %s",  
+                     fname_buffer  );
         assert(false);
         exit(-1);
     }
@@ -1234,7 +1236,9 @@ init_mapped_reads_db(
     (*rdb)->nonmapping_fp = fopen( fname_buffer, mode );
     if( (*rdb)->nonmapping_fp == NULL )
     {
-        statmap_log( LOG_FATAL, "Could not open nonmapping reads file %s",  fname_buffer );
+        statmap_log( LOG_FATAL, 
+                     "Could not open nonmapping reads file %s",  
+                     fname_buffer );
         assert(false);
         exit(-1);
     }
@@ -1325,11 +1329,6 @@ close_writing_specific_portions_of_mapped_reads_db( struct mapped_reads_db* rdb 
     fseek( rdb->mapped_fp, 0, SEEK_SET );
     fwrite( &(rdb->num_mapped_reads), sizeof(MPD_RD_ID_T), 1, rdb->mapped_fp );
     
-    /* close the file pointers */
-    fclose( rdb->mapped_fp );
-    fclose( rdb->unmappable_fp );
-    fclose( rdb->nonmapping_fp );
-
     return;
 }
 
@@ -1345,10 +1344,17 @@ close_mapped_reads_db( struct mapped_reads_db** rdb )
     } else if( (*rdb)->mode == 'w' ) {
         close_writing_specific_portions_of_mapped_reads_db( *rdb );
     } else {
-        statmap_log( LOG_FATAL, "Unrecognized mode '%c' for open mapped reads db.",  (*rdb)->mode  );
+        statmap_log( LOG_FATAL, 
+                     "Unrecognized mode '%c' for open mapped reads db.",  
+                     (*rdb)->mode  );
         assert( false );
         exit( -1 );
     }
+    
+    /* close the file pointers */
+    fclose( (*rdb)->mapped_fp );
+    fclose( (*rdb)->unmappable_fp );
+    fclose( (*rdb)->nonmapping_fp );
     
     /* clean up the mutexes */
     pthread_mutex_destroy( (*rdb)->mapped_mutex );
