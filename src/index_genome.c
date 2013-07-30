@@ -1046,7 +1046,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
             if( elapsed > MAX_SEARCH_TIME )
             {
-                statmap_log( LOG_NOTICE, 
+                statmap_log( LOG_DEBUG, 
                              "Terminating index search (%e sec elapsed)", 
                              elapsed );
                 results->length = 0;

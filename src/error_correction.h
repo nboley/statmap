@@ -15,7 +15,8 @@
 #include "genome.h"
 #include "fragment_length.h"
 
-#define NUM_SAMPLES_FOR_MIN_PENALTY_COMP 10
+#define NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP 5000
+#define NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP 10
 #define ROUND_ERROR 1e-6
 
 struct freqs_array {
@@ -120,9 +121,8 @@ int
 compute_sampled_penalties_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
-        struct fragment_length_dist_t* fl_dist,
-        float quantile,
-        struct sampled_penalties_t* sampled_penalties
+        int num_reads,
+        float quantile
     );
 
 struct mapping_params*
@@ -130,7 +130,7 @@ init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
         struct error_model_t* error_model,
-        struct sampled_penalties_t* sampled_penalties
+        float reads_min_match_penalty
     );
 
 struct index_search_params*

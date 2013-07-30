@@ -46,6 +46,9 @@
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
 int max_reference_insert_len = -1;
+/* TODO check for conflicts with variable name before removing 
+   leading underscore */
+enum assay_type_t _assay_type = UNKNOWN;
 /* TODO should this be global? */
 int softclip_len = 0;
 
@@ -261,12 +264,18 @@ map_generic_data(  struct args_t* args )
     struct genome_data* genome;
     
     /* store clock times - useful for benchmarking */
-    //struct timeval start, stop;    
+    struct timeval start, stop;    
     
     /* load the genome */
     load_genome( &genome, args );
-
-    struct mapped_reads_db* mpd_rds_db;
+    
+    gettimeofday( &stop, NULL );
+    statmap_log( LOG_INFO, "Loaded Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+        
+    /***** END Genome processing */
+    
+    struct mapped_reads_db* mpd_rds_db;    
     map_marginal( args, genome, args->rdb, &mpd_rds_db, false );
     
     /* Free the genome index */
@@ -275,15 +284,19 @@ map_generic_data(  struct args_t* args )
     free_ondisk_index( genome->index );
     genome->index = NULL;
     
-    /* TODO estimate fl dist from mapped reads if none provided (?) */
-    if( args->frag_len_fp == NULL ) {
-        build_fl_dist( args, mpd_rds_db );
-    }
-
     /* iterative mapping */
     iterative_mapping( args, genome, mpd_rds_db );
 
-    close_mapped_reads_db( &mpd_rds_db );    
+    /*
+    if( args->frag_len_fp != NULL ) {
+        init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
+    } else {
+        build_fl_dist( args, mpd_rds_db );
+    }
+    */
+    
+    close_mapped_reads_db( &mpd_rds_db );
+    
     free_genome( genome );
 
     return;

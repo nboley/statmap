@@ -22,6 +22,8 @@ Nathan:
   use a dynamic step size
      in find cand mappings, we now use global param to update read error models         
 
+  Take read pair into account in error model estimation
+
 -44) Clean up candidate_mapping struct.
      a) maybe get rid of RECHECK. Since reads are often longer than the index
         probes, it's probably a good idea to always recheck them. Instead of

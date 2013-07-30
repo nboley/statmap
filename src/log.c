@@ -39,10 +39,8 @@ init_initial_logging()
      * avoid the case where multiple Statmap processes are started at the same
      * time, say, by a script, which could cause them all to overwrite each
      * other's temporary log files) */
-    time_t rawtime;
-    time( &rawtime );
-    struct tm* timeinfo;
-    timeinfo = localtime( &rawtime );
+    time_t rawtime = time( NULL );
+    struct tm* timeinfo = localtime( &rawtime );
 
     char buffer[255];
     char* buf_pos = buffer;
@@ -61,7 +59,7 @@ init_initial_logging()
                 tmp_logfile_path );
         assert(false);
         exit(1);
-    }    
+    }        
 }
 
 void
@@ -87,13 +85,14 @@ init_logging( enum LOG_LEVEL min_nontrivial_log_level )
         if (WIFSIGNALED(error) &&
                 (WTERMSIG(error) == SIGINT || WTERMSIG(error) == SIGQUIT))
         {
-            fprintf( stderr, "FATAL : Could not copy temporary log file '%s' to log file '%s'\n",
+            fprintf( stderr, 
+                     "FATAL : Could not copy temporary log file '%s' to log file '%s'\n",
                      tmp_logfile_path, LOG_FNAME );
             assert(false);
             exit(1);
         }
 
-        remove( tmp_logfile_path );
+        free( tmp_logfile_path );
     }
 
     /* Initialize the log fp. We append to the file because it already exists
@@ -137,13 +136,15 @@ void
 statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
 {
     /* Build timestamp string */
-    time_t rawtime;
-    time( &rawtime );
-    struct tm* timeinfo;
-    timeinfo = localtime( &rawtime );
-
     char timestamp[100];
-    strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S", timeinfo );
+    time_t rawtime = time( NULL );
+    struct tm* timeinfo;
+    if( false && (time_t)-1 != rawtime ) {
+        timeinfo = localtime( &rawtime );
+        strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S", timeinfo );
+    } else {
+        strcpy( timestamp, "UNKNOWN-TIME" );
+    }
 
     /* Build the log message format string */
     char log_msg[1024];

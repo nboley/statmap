@@ -57,7 +57,7 @@ subseq_penalty(
              * the error model)? */
             penalty += penalties->array[pos].penalties[bp_code(bp)];
         }
-    }
+   }
 
     return penalty;
 }
@@ -84,7 +84,7 @@ find_optimal_subseq_offset(
     */
     int optimal_offset = region_start;
     float max_so_far = -FLT_MAX;
-
+        
     int i;
     /* each possible start bp in the subsequence */
     for( i = region_start;
@@ -111,7 +111,7 @@ build_indexable_subtemplate(
         struct penalty_array_t* rev_penalty_array,
         int range_start,
         int range_length,
-        enum assay_type_t assay
+        enum bool choose_random_offset
     )
 {
     int subseq_length = index->seq_length;
@@ -123,29 +123,24 @@ build_indexable_subtemplate(
      * search. */
     int subseq_offset = 0;
 
-    if( assay == RNA_SEQ ) // Gapped assay
-    {
-        /* FIXME soft clipping for gapped assays? */
-        if( range_start == 0 ) {
-            /* subseq_offset = softclip_len ? will that mess up the matching
-             * code later? */
-            subseq_offset = 0;
+        if( choose_random_offset ) {
+            double rn = ((double) rand() / (RAND_MAX));
+            subseq_offset = range_start + MIN( 
+                rn*(range_length - subseq_length), 
+                range_length - subseq_length-1 );
         } else {
-            subseq_offset = range_start + range_length - subseq_length;
-        }
-    } else {
-        subseq_offset = find_optimal_subseq_offset(
+            subseq_offset = find_optimal_subseq_offset(
                 rst,
                 fwd_penalty_array,
                 subseq_length,
                 range_start,
                 range_length
-            );
+                );
     }
 
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
-            fwd_penalty_array, rev_penalty_array );
+                                fwd_penalty_array, rev_penalty_array );
 
     return ist;
 }
@@ -156,7 +151,7 @@ build_indexable_subtemplates_from_read_subtemplate(
         struct index_t* index,
         struct penalty_array_t* fwd_penalty_array,
         struct penalty_array_t* rev_penalty_array,
-        enum assay_type_t assay
+        enum bool use_random_subtemplate_offset
     )
 {
     int subseq_length = index->seq_length;
@@ -178,16 +173,20 @@ build_indexable_subtemplates_from_read_subtemplate(
     /* for now, try to build the maximum number of indexable subtemplates up to
      * a maximum */
     int num_partitions;
-    if( assay == RNA_SEQ ) {
+    if( _assay_type == RNA_SEQ ) {
         /* for RNA-seq, always use two probes at either end of the read so we
          * can maximize the space for finding introns */
         num_partitions = 2;
-    } else { 
+    } else {
+        #ifdef ONLY_USE_1_READ_SUBTEMPLATE
+        num_partitions = 1;
+        #else
         num_partitions = MIN( indexable_length / subseq_length,
-                MAX_NUM_INDEX_PROBES );
+                MAX_NUM_INDEX_PROBES );        
+        #endif
     }
     int partition_len = floor((float)indexable_length / num_partitions);
-
+    
     int i;
     for( i = 0; i < num_partitions; i++ )
     {
@@ -197,11 +196,12 @@ build_indexable_subtemplates_from_read_subtemplate(
 
         /* partition the read into equal sized sections and try to find the
          * best subsequence within each section to use as an index probe */
-        ist = build_indexable_subtemplate( rst, index,
-                fwd_penalty_array, rev_penalty_array,
-                partition_start, partition_len,
-                assay );
-
+        ist = build_indexable_subtemplate( 
+            rst, index,
+            fwd_penalty_array, rev_penalty_array,
+            partition_start, partition_len,
+            use_random_subtemplate_offset );
+        
         if( ist == NULL ) {
             free_indexable_subtemplates( ists );
             return NULL;
@@ -1498,8 +1498,7 @@ find_candidate_mappings_for_read_subtemplate(
         struct error_data_record_t* scratch_error_data_record,
         enum bool only_collect_error_data,
 
-        struct mapping_params* mapping_params,
-        enum assay_type_t assay
+        struct mapping_params* mapping_params
     )
 {
     /* the index of the read subtemplate that we are using */
@@ -1511,7 +1510,7 @@ find_candidate_mappings_for_read_subtemplate(
            rst, genome->index,
            mapping_params->fwd_penalty_arrays[rst_pos],
            mapping_params->rev_penalty_arrays[rst_pos],
-           assay
+           only_collect_error_data
        );
     
     /* if the set of probe's is too low quality, don't try and map this read */
@@ -1642,8 +1641,7 @@ find_candidate_mappings_for_read(
                 genome,
                 scratch_error_data_record,
                 only_collect_error_data,
-                mapping_params,
-                r->prior.assay
+                mapping_params
             );
         
         /* Update pos in READ_TYPE with the index of the underlying read
@@ -1837,7 +1835,8 @@ build_mapped_read_from_candidate_mappings(
         statmap_log( LOG_DEBUG, 
                      "Skipping read %i: too many candidate mappings ( %i )",
                      r->read_id, joined_mappings_len  );
-        return NULL;
+        rd = NULL;
+        goto cleanup;
     }
     
     filter_joined_candidate_mappings( &joined_mappings,
@@ -1854,8 +1853,8 @@ build_mapped_read_from_candidate_mappings(
     rd = build_mapped_read_from_joined_candidate_mappings( r->read_id,
             joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
+cleanup:
     free_candidate_mappings( assay_corrected_mappings );
-    
     free( joined_mappings );
     free( joined_mapping_penalties );
     
@@ -1896,7 +1895,7 @@ find_candidate_mappings( void* params )
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
     
     struct mapping_metaparams* metaparams = td->metaparams;
-    struct sampled_penalties_t* sampled_penalties = td->sampled_penalties;
+    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* Store observed error data from the current thread's 
        execution in scratch */
@@ -1957,8 +1956,8 @@ find_candidate_mappings( void* params )
         }
 
         struct mapping_params* mapping_params
-            = init_mapping_params_for_read( r, metaparams, error_model, 
-                sampled_penalties );
+            = init_mapping_params_for_read( r, metaparams, error_model,
+                reads_min_match_penalty);
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
@@ -2133,17 +2132,13 @@ void init_td_template( struct single_map_thread_data* td_template,
                             PTHREAD_PROCESS_PRIVATE );
     assert( rc == 0 );
 
-    td_template->max_readkey = 0;
+    td_template->max_readkey = -1;
 
     td_template->rdb = rdb;
     
     td_template->mpd_rds_db = mpd_rds_db;
     
     td_template->metaparams = metaparams;
-
-    td_template->sampled_penalties = malloc( sizeof( struct sampled_penalties_t ) );
-    td_template->sampled_penalties->read_penalty = 0;
-    td_template->sampled_penalties->read_subtemplate_penalty = 0;
 
     td_template->error_data = error_data;
     td_template->error_model = error_model;
@@ -2163,8 +2158,6 @@ free_td_template( struct single_map_thread_data* td_template )
 
     pthread_spin_destroy( td_template->mapped_cnt_lock );
     free( (void*) td_template->mapped_cnt_lock );
-
-    free( td_template->sampled_penalties );
 }
 
 /* bootstrap an already initialized error model */
@@ -2200,7 +2193,6 @@ bootstrap_estimated_error_model(
     td_template.only_collect_error_data = true;
 
     // Detyermine how many reads we should look through for the bootstrap
-    #define NUM_READS_TO_BOOTSTRAP READS_STAT_UPDATE_STEP_SIZE
     td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
 
     // Add a new row to store error data in
@@ -2234,11 +2226,11 @@ bootstrap_estimated_error_model(
 
 void
 find_all_candidate_mappings(
-        struct genome_data* genome,
-        struct rawread_db_t* rdb,
-        struct mapped_reads_db* mpd_rds_db,
+    struct genome_data* genome,
+    struct rawread_db_t* rdb,
+    struct mapped_reads_db* mpd_rds_db,
         
-        struct mapping_metaparams* mapping_metaparams,
+    struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model
     )
 {
@@ -2255,56 +2247,51 @@ find_all_candidate_mappings(
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        if( mapping_metaparams->error_model_type == ESTIMATED )
-        {
-            /* Compute the min match penalty for this block of reads that will
-             * map the desired percentage of reads given in metaparameters */
-
-            /* Note - this function is *slow*. TODO: might be good to separate
-               it from the benchmark for candidate mapping */
-            clock_t sp_comp_start = clock();
-            int rv = compute_sampled_penalties_for_reads( rdb, error_model,
-                    mpd_rds_db->fl_dist, mapping_metaparams->error_model_params[0],
-                    td_template.sampled_penalties );
-            clock_t sp_comp_stop = clock();
-
-            if( rv == EOF )
-            {
-                /* we did not compute a sampled penalty because there are no more
-                   reads in the rawread_db. Nothing more to do. */
-                break;
-            }
-
-            statmap_log( LOG_INFO, "Computed min_match_penalty %f for reads [%i, %i) in %f seconds",
-                    td_template.sampled_penalties->read_penalty,
-                    td_template.max_readkey,
-                    td_template.max_readkey + READS_STAT_UPDATE_STEP_SIZE,
-                    ((float)(sp_comp_stop-sp_comp_start))/CLOCKS_PER_SEC );
-        }
-
         // Add a new row to store error data in
         add_new_error_data_record( 
             td_template.error_data, 
             td_template.max_readkey, 
             td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
-
+         
         // update the maximum allowable readkey
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
+        
+        if( mapping_metaparams->error_model_type == ESTIMATED )
+        {
+            /* Compute the min match penalty for this block of reads that will
+             * map the desired percentage of reads given in metaparameters */
+            float reads_min_match_penalty
+                = compute_sampled_penalties_for_reads( 
+                    rdb, error_model, 
+                    MAX(0, td_template.max_readkey - rdb->readkey),
+                    mapping_metaparams->error_model_params[0] );
+
+            statmap_log( LOG_INFO,
+                         "Computed min_match_penalty %f for reads [%i, %i]",
+                         reads_min_match_penalty,
+                         td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
+                         td_template.max_readkey );
+
+            /* Save in the mapping metaparameters */
+            td_template.reads_min_match_penalty = reads_min_match_penalty;
+        }
 
         spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */
+        #ifdef INCREMENTLY_UPDATE_ERROR_MODEL
         update_error_model_from_error_data(error_model, td_template.error_data);
+        #endif
     }
     
     /* Print out performance information */
     clock_t stop = clock();
     statmap_log( LOG_NOTICE,
-            "Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )",
-            *(td_template.mapped_cnt), rdb->readkey,
-            ((float)(stop-start))/CLOCKS_PER_SEC,
-            (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
+                 "Mapped (%i/%u) Partial Reads in %.2lf seconds ( %e/thread-hour )",
+                 *(td_template.mapped_cnt), rdb->readkey,
+                 ((float)(stop-start))/CLOCKS_PER_SEC,
+                 (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
         );
 
     FILE* error_data_ofp = fopen( ERROR_STATS_LOG, "w" );

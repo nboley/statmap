@@ -8,13 +8,14 @@
 
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
-#define MAPPING_STATUS_GRANULARITY 100000
+#define MAPPING_STATUS_GRANULARITY 50000
 
 /****** configuration options                   ******/
 
 #define MAX_SEARCH_TIME 1.0
 #define MAX_NUM_CAND_MAPPINGS 5000
 
+#define ONLY_USE_1_READ_SUBTEMPLATE
 #define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
 
@@ -24,13 +25,15 @@
 #define DEFAULT_MISMATCH_METAPARAMTER 0.1
 
 /* Mismatch rates for the estimated error model bootstrap */
+#define NUM_READS_TO_BOOTSTRAP 100000
 #define MAX_NUM_MM_RATE 0.10
-#define MAX_NUM_MM_SPREAD_RATE 0.05
+#define MAX_NUM_MM_SPREAD_RATE 0.09
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
 
 // the num of reads that we map before updating the error estimates
-#define READS_STAT_UPDATE_STEP_SIZE 50000
+#define READS_STAT_UPDATE_STEP_SIZE 100000
+#define DONT_INCREMENTLY_UPDATE_ERROR_MODEL
 
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500
@@ -45,7 +48,7 @@
 #define SAM_MARGINAL_OFNAME "mapped_reads.sam"
 #define SAM_MARGINAL_NC_OFNAME "mapped_reads.nc.sam"
 
-/********** Iterative Mapping **************************************************/
+/********** Iterative Mapping *************************************************/
 // this says that we will setup the iterative mapping framework,
 // but not actually take any samples ( they can be taken later with 
 // sample mappings )

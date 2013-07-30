@@ -561,32 +561,29 @@ int
 compute_sampled_penalties_for_reads(
         struct rawread_db_t* rdb,
         struct error_model_t* error_model,
-        struct fragment_length_dist_t* fl_dist,
-        float quantile,
-        struct sampled_penalties_t* sampled_penalties
+        int num_reads,
+        float quantile
     )
 {
-    int rv = 0; // communicate success/failure to caller
-
     struct rawread_db_state saved_state
         = save_rawread_db_state( rdb );
 
     /* Sample from the next set of READS_STAT_UPDATE_STEP_SIZE reads */
-    readkey_t max_readkey = rdb->readkey + READS_STAT_UPDATE_STEP_SIZE;
-
-    int num_samples
-        = READS_STAT_UPDATE_STEP_SIZE * NUM_SAMPLES_FOR_MIN_PENALTY_COMP;
-
-    float* read_samples = calloc( num_samples, sizeof(float) );
-    float* read_subtemplate_samples = calloc( num_samples, sizeof(float) );
+    readkey_t max_readkey = rdb->readkey + num_reads;
+    
+    int num_sample_prbs = 
+        NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP
+        *NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
+    float* sample_prbs = calloc( num_sample_prbs, sizeof(float) );
+    int sample_prbs_index = 0;
 
     struct read* r;
-    int sample_index = 0;
     while( EOF != get_next_read_from_rawread_db(
-                rdb, &r, max_readkey ) )
+               rdb, &r, max_readkey )
+           && sample_prbs_index < num_sample_prbs )
     {
         struct penalty_array_t* penalty_arrays = malloc(
-                sizeof(struct penalty_array_t) * r->num_subtemplates );
+            sizeof(struct penalty_array_t) * r->num_subtemplates );
         int st_i;
         for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
         {
@@ -594,38 +591,29 @@ compute_sampled_penalties_for_reads(
                                  r->subtemplates + st_i,
                                  error_model );
         }
+        free_read( r );
 
-        /* Randomly sample penalties */
-        int i;
-        for( i = 0; i < NUM_SAMPLES_FOR_MIN_PENALTY_COMP; i++ )
+        int sample_i;
+        for( sample_i = 0;
+             sample_i < NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
+             sample_i++ )
         {
-            /* the full read sampled penalty is the sum of the sampled
-               subtemplate penalties */
-            float read_prb = 0;
+            float sample_prb = 0;
 
+            int bp_i;
             for( st_i = 0; st_i < r->num_subtemplates; st_i++ )
             {
-                int bp_i;
                 for( bp_i = 0; bp_i < penalty_arrays[st_i].length; bp_i++ )
                 {
-                    read_prb += sample_bp_penalties(
-                            penalty_arrays[st_i].array + bp_i );
+                    sample_prb += sample_bp_penalties(
+                        penalty_arrays[st_i].array + bp_i );
                 }
             }
-            assert( read_prb < 0 );
 
-            read_subtemplate_samples[sample_index] = read_prb;
-
-            /* if the read is a full fragment, also randomly sample from the
-               fragment length distribution */
-            if( r->prior.frag_type == FULL_GENOME_FRAGMENT ||
-                r->prior.frag_type == FULL_TRANSCRIPTOME_FRAGMENT )
-            {
-                assert( fl_dist != NULL );
-                read_prb += sample_fl_dist( fl_dist );
-            }
-
-            read_samples[sample_index++] = read_prb;
+            assert( sample_prb < 0 );
+            sample_prbs[sample_prbs_index++] = sample_prb;
+            if( sample_prbs_index == num_sample_prbs )
+                break;
         }
 
         /* cleanup memory */
@@ -633,48 +621,54 @@ compute_sampled_penalties_for_reads(
             free_penalty_array( penalty_arrays + st_i );
         }
         free( penalty_arrays );
-        free_read( r );
     }
 
     restore_rawread_db_state( rdb, saved_state );
 
-    if( sample_index == 0 ) {
-        /* we didn't process any reads - cleanup and return EOF */
-        rv = EOF;
+    float min_match_penalty = 0;
+
+    if( sample_prbs_index == 0 ) {
+        /* we didn't process any reads - cleanup and return, leaving
+         * min_match_penalty set to 0 (invalid value) */
         goto cleanup;
     }
 
     /* resize the sample_prbs array so it's the exact size of the number of
-     * sample probabilities (we could have processed fewer than
-     * READS_STAT_UPDATE_STEP_SIZE reads, and don't want to mess up the qsort) */
-    num_samples = sample_index;
-    sort_samples_array( &read_samples, num_samples );
-    sort_samples_array( &read_subtemplate_samples, num_samples );
+     * sample probabilities (if there are fewer than
+     * READS_STAT_UPDATE_STEP_SIZE reads in a block, then they won't match and
+     * that will mess up the qsort. This happens naturally with small data sets
+     * that have less than the step size reads, or in the last set from a large
+     * data set.) */
+    num_sample_prbs = sample_prbs_index;
+    sample_prbs = realloc( sample_prbs, sizeof(float)*num_sample_prbs );
+
+    /* sort the mismatch_prbs and take the specified quantile */
+    qsort( sample_prbs, 
+           num_sample_prbs,
+           sizeof(float),
+           (int(*)(const void*, const void*))cmp_floats );
 
     assert( quantile > 0.0 && quantile < 1.0 );
-
     /* Since these are log prbs, and qsort sorts in ascending order, the
      * indexes of the quantiles are reversed */
-    int quantile_index = (int)(num_samples*(1-quantile));
+    min_match_penalty = sample_prbs[(int)(num_sample_prbs*(1-quantile))];
+
     /* Add fudge factor to account for rounding error */
-    sampled_penalties->read_penalty = read_samples[quantile_index] - ROUND_ERROR;
-    sampled_penalties->read_subtemplate_penalty
-        = read_subtemplate_samples[quantile_index] - ROUND_ERROR;
+    min_match_penalty -= ROUND_ERROR;
 
 cleanup:
     /* cleanup memory */
-    free( read_samples );
-    free( read_subtemplate_samples );
+    free( sample_prbs );
 
-    return rv;
+    return min_match_penalty;
 }
 
 struct mapping_params*
 init_mapping_params_for_read(
-        struct read* r,        
-        struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model,
-        struct sampled_penalties_t* sampled_penalties
+    struct read* r,        
+    struct mapping_metaparams* metaparams,
+    struct error_model_t* error_model,
+        float reads_min_match_penalty
     )
 {
     struct mapping_params* p = malloc(sizeof(struct mapping_params));
@@ -694,11 +688,11 @@ init_mapping_params_for_read(
     {
         p->fwd_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
         build_penalty_array( p->fwd_penalty_arrays[i], r->subtemplates + i, 
-            error_model );
+                             error_model );
         
         p->rev_penalty_arrays[i] = malloc( sizeof(struct penalty_array_t) );
         build_reverse_penalty_array( p->rev_penalty_arrays[i], 
-            r->subtemplates + i, error_model );
+                                     r->subtemplates + i, error_model );
     }
 
     /* calculate the total read length. This is just the sum of the read 
@@ -716,11 +710,10 @@ init_mapping_params_for_read(
     p->read_expected_value = 0;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
-        p->read_expected_value += expected_value_of_rst(r->subtemplates + i,
+        p->read_expected_value += expected_value_of_rst(
+            r->subtemplates + i,
             p->fwd_penalty_arrays[i]);
     }
-
-    p->sampled_penalties = sampled_penalties;
     
     /* now, calculate the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -737,13 +730,13 @@ init_mapping_params_for_read(
     else {
         assert( metaparams->error_model_type == ESTIMATED );
 
-        p->recheck_min_match_penalty = sampled_penalties->read_penalty;
+        p->recheck_min_match_penalty = reads_min_match_penalty;
         p->recheck_max_penalty_spread
             = -log10(1 - metaparams->error_model_params[0]);
         assert( p->recheck_max_penalty_spread >= 0 );
         //p->recheck_max_penalty_spread = 1.3;
 
-        if( r->prior.assay == CAGE )
+        if( _assay_type == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
@@ -794,8 +787,8 @@ init_index_search_params(
 
             float scaling_factor 
                 = ist->expected_value / mapping_params->read_expected_value;
-            /* TODO: read_subtemplate_penalty is a potentially confusing name - it is
-               the sampled penalty of all the read subtempaltes, without the fl dist penalty */
+            scaling_factor = ((double)ist->subseq_length )
+                /mapping_params->total_read_length;
             min_match_penalty 
                 = scaling_factor * mapping_params->sampled_penalties->read_subtemplate_penalty;
             //min_match_penalty = mapping_params->recheck_min_match_penalty;
