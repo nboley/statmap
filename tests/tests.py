@@ -675,13 +675,13 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
 
 
 def test_fivep_sequence_finding( ):
-    rls = [ 15, 25, 50, 75  ]
+    rls = [ 25, 50, 75  ]
     for rl in rls:
         test_sequence_finding( rl, False )
         print "PASS: Forward Mapping %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_untemplated_g_finding( ):
-    #rls = [ 15, 25, 50, 75  ]
+    #rls = [ 25, 50, 75  ]
     rls = [ 25, ]
     for rl in rls:
         test_sequence_finding( rl, False, rl-4, untemplated_gs_perc=0.25,
@@ -689,7 +689,7 @@ def test_untemplated_g_finding( ):
         print "PASS: Untemplated Gs %i BP Test. ( Statmap appears to be mapping 5', perfect reads correctly )" % rl
 
 def test_threep_sequence_finding( ):
-    rls = [ 15, 75  ]
+    rls = [ 75  ]
     for rl in rls:
         test_sequence_finding( rl, True ) 
         print "PASS: Reverse Mapping %i BP test. ( Statmap appears to be mapping 3', perfect reads correctly )" % rl

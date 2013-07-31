@@ -142,7 +142,7 @@ build_indexable_subtemplate(
             double rn = ((double) rand() / (RAND_MAX));
             subseq_offset = range_start + MIN( 
                 rn*(range_length - subseq_length), 
-                range_length - subseq_length-1 );
+                range_length - subseq_length );
         } else {
             subseq_offset = find_optimal_subseq_offset(
                 rst,
@@ -154,6 +154,7 @@ build_indexable_subtemplate(
         }
     }
 
+    assert( subseq_offset >= 0 );
     struct indexable_subtemplate* ist = NULL;
     init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
             fwd_penalty_array, rev_penalty_array );

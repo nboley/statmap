@@ -803,6 +803,8 @@ index_diploid_chrs(
             loc.chr = maternal_chr_index;
         }
         else {
+            // silence the compiler
+            start_pos = -1;
             statmap_log( LOG_FATAL,
                     "Impossible sequence segment : %i, %i, %i",
                     segments[i].paternal_start_pos,
