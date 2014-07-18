@@ -718,9 +718,8 @@ init_mapping_params_for_read(
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
-            p->recheck_min_match_penalty = MAX(
-                p->recheck_min_match_penalty,
-                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
+            p->recheck_min_match_penalty += 
+                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB;
         }
     }
 
