@@ -178,10 +178,11 @@ build_indexable_subtemplates_from_read_subtemplate(
     int indexable_length = rst->length - softclip_len;
     if( indexable_length < subseq_length )
     {
-        statmap_log( LOG_FATAL,
+        statmap_log( LOG_WARNING,
                 "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
                 softclip_len
             );
+        return NULL;
     }
 
    struct indexable_subtemplates* ists = NULL;
@@ -1529,6 +1530,14 @@ find_candidate_mappings_for_read_subtemplate(
            mapping_params->rev_penalty_arrays[rst_pos],
            only_collect_error_data
        );
+
+    /* if we couldn't build indexable sub templates, ie the read was too short, 
+       then don't try and map this read */
+    if( ists == NULL )
+    {
+        return CANT_BUILD_READ_SUBTEMPLATES;
+    }
+
     
     /* if the set of probe's is too low quality, don't try and map this read */
     if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
@@ -1848,6 +1857,7 @@ build_mapped_read_from_candidate_mappings(
                              &joined_mappings,
                              &joined_mapping_penalties,
                              &joined_mappings_len );
+    
     if( joined_mappings_len > MAX_NUM_CAND_MAPPINGS ) {
         statmap_log( LOG_DEBUG, 
                      "Skipping read %i: too many candidate mappings ( %i )",
@@ -2209,7 +2219,7 @@ bootstrap_estimated_error_model(
        index as soon as we know that a mapping isn't unique.
     */
     td_template.only_collect_error_data = true;
-
+    
     // Detyermine how many reads we should look through for the bootstrap
     td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
 

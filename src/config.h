@@ -8,12 +8,12 @@
 
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
-#define MAPPING_STATUS_GRANULARITY 50000
+#define MAPPING_STATUS_GRANULARITY 100000
 
 /****** configuration options                   ******/
 
 #define MAX_SEARCH_TIME 1.0
-#define MAX_NUM_CAND_MAPPINGS 5000
+#define MAX_NUM_CAND_MAPPINGS 500
 
 #define ONLY_USE_1_READ_SUBTEMPLATE
 #define N_DEBUG
