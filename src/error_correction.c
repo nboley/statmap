@@ -556,9 +556,10 @@ compute_min_match_penalty_for_reads(
     int sample_prbs_index = 0;
 
     struct read* r;
-    while( EOF != get_next_read_from_rawread_db(
-                rdb, &r, max_readkey )
-           && sample_prbs_index < num_sample_prbs )
+    while( sample_prbs_index < num_sample_prbs
+           && EOF != get_next_read_from_rawread_db(
+               rdb, &r, max_readkey )
+        )
     {
         struct penalty_array_t* penalty_arrays = malloc(
                 sizeof(struct penalty_array_t) * r->num_subtemplates );
@@ -569,8 +570,7 @@ compute_min_match_penalty_for_reads(
                                  r->subtemplates + st_i,
                                  error_model );
         }
-        free_read( r );
-
+        
         int sample_i;
         for( sample_i = 0;
              sample_i < NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
@@ -599,6 +599,7 @@ compute_min_match_penalty_for_reads(
             free_penalty_array( penalty_arrays + st_i );
         }
         free( penalty_arrays );
+        free_read( r );
     }
 
     restore_rawread_db_state( rdb, saved_state );

@@ -65,8 +65,7 @@ subseq_penalty(
 int
 find_optimal_subseq_offset( 
     struct read_subtemplate* rst,
-    struct penalty_array_t* penalty_array,
-
+    
     int subseq_len,
 
     /* define region of underlying read to search for optimal subsequences */
@@ -91,7 +90,7 @@ find_optimal_subseq_offset(
          i < (region_start + region_length - subseq_len);
          i++ )
     {
-        float ss_pen = subseq_penalty(rst, i, subseq_len, penalty_array);
+        float ss_pen = subseq_penalty(rst, i, subseq_len, rst->fwd_penalty_array);
         if( ss_pen > max_so_far ) {
             max_so_far = ss_pen;
             optimal_offset = i;
@@ -107,10 +106,7 @@ struct indexable_subtemplate*
 build_indexable_subtemplate(
         struct read_subtemplate* rst,
         struct index_t* index,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array,
-
+        
         // area of the read subtemplate to take an indexable subtemplate from
         int range_start,
         int range_length,
@@ -146,7 +142,6 @@ build_indexable_subtemplate(
         } else {
             subseq_offset = find_optimal_subseq_offset(
                 rst,
-                fwd_penalty_array,
                 subseq_length,
                 range_start,
                 range_length
@@ -156,9 +151,8 @@ build_indexable_subtemplate(
 
     assert( subseq_offset >= 0 );
     struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset,
-            fwd_penalty_array, rev_penalty_array );
-
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset);
+    
     return ist;
 }
 
@@ -166,8 +160,6 @@ struct indexable_subtemplates*
 build_indexable_subtemplates_from_read_subtemplate(
         struct read_subtemplate* rst,
         struct index_t* index,
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array,
         enum bool use_random_subtemplate_offset
     )
 {
@@ -216,7 +208,6 @@ build_indexable_subtemplates_from_read_subtemplate(
          * best subsequence within each section to use as an index probe */
         ist = build_indexable_subtemplate( 
             rst, index,
-            fwd_penalty_array, rev_penalty_array,
             partition_start, partition_len,
             use_random_subtemplate_offset );
 
@@ -328,7 +319,7 @@ can_be_used_to_update_error_data(
     /* skip empty mappings */
     if( NULL == mappings )
         return false;
-        
+    
     /*** we only want unique mappers for the error estiamte updates */        
     // We allow lengths of 2 because we may have diploid locations
     if( mappings->length < 1 || mappings->length > 2 ) {
@@ -383,18 +374,24 @@ update_error_data_record_from_candidate_mappings(
     struct error_data_record_t* error_data_record
 )
 {
-    if( !can_be_used_to_update_error_data( mappings, genome ) )
-        return;
+    //if( !can_be_used_to_update_error_data( mappings, genome ) )
+    //    return;
     
-    /* we need at least one valid mapping ( although this case should be handled
-       above by can_be_used_to_update_error_data */
+    /* we need at least one valid mapping */
     if( mappings->length == 0 )
         return;
     
-    // emphasize the array aspect with the + 0
-    // but, since all of the sequence is identical,
-    // we only need to deal with this read
-    candidate_mapping* cm = mappings->mappings + 0;         
+    // use the index with the lowest penalty to update the error structure
+    candidate_mapping* cm = mappings->mappings + 0;
+    int i;
+    for( i = 1; i < mappings->length; i++ ) {
+        if( mappings->mappings[i].penalty > cm->penalty )
+            cm = mappings->mappings + i;
+    }
+    
+    // Ignore reads that are reverse complemented - we need to fix this
+    if(cm->rd_strnd == BKWD) return;
+
     int mapped_length = cm->mapped_length;
     
     char* genome_seq = find_seq_ptr( 
@@ -420,7 +417,7 @@ update_error_data_record_from_candidate_mappings(
 
     update_error_data_record( 
         error_data_record, genome_seq, read_seq, error_str, mapped_length );
-
+    
     /* free memory if we allocated it */
     if( cm->rd_strnd == BKWD )
         free( read_seq );
@@ -1526,9 +1523,7 @@ find_candidate_mappings_for_read_subtemplate(
     struct indexable_subtemplates* ists = 
        build_indexable_subtemplates_from_read_subtemplate(
            rst, genome->index,
-           mapping_params->fwd_penalty_arrays[rst_pos],
-           mapping_params->rev_penalty_arrays[rst_pos],
-           only_collect_error_data
+           false && only_collect_error_data
        );
 
     /* if we couldn't build indexable sub templates, ie the read was too short, 
@@ -1829,7 +1824,6 @@ build_mapped_read_from_candidate_mappings(
         candidate_mappings* mappings,
         struct genome_data* genome,
         struct read* r,
-        struct error_model_t* error_model,
         struct fragment_length_dist_t* fl_dist,
 
         struct mapping_params* mapping_params
@@ -1872,7 +1866,6 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       genome,
                                       r,
-                                      error_model,
                                       fl_dist,
                                               
                                       mapping_params );
@@ -1987,6 +1980,13 @@ find_candidate_mappings( void* params )
             = init_mapping_params_for_read( r, metaparams, error_model, 
                 reads_min_match_penalty );
         
+        assert( r->num_subtemplates == mapping_params->num_penalty_arrays );
+        int i;
+        for( i = 0; i < r->num_subtemplates; i++ ) {
+            r->subtemplates[i].fwd_penalty_array = mapping_params->fwd_penalty_arrays[i];
+            r->subtemplates[i].rev_penalty_array = mapping_params->rev_penalty_arrays[i];
+        }
+        
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
         {
@@ -2006,7 +2006,7 @@ find_candidate_mappings( void* params )
                     genome,
                     error_model,
                     scratch_error_data_record,
-                    only_collect_error_data,
+                    true, //only_collect_error_data,
                     mapping_params
             );
         
@@ -2026,7 +2026,6 @@ find_candidate_mappings( void* params )
                     mappings,
                     genome,
                     r,
-                    error_model,
                     mpd_rds_db->fl_dist,
                     mapping_params
                 );

@@ -297,10 +297,7 @@ init_indexable_subtemplate(
         struct read_subtemplate* rst,
 
         int subseq_length,
-        int subseq_offset,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        int subseq_offset
     )
 {
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
@@ -310,17 +307,18 @@ init_indexable_subtemplate(
 
     (*ist)->char_seq = rst->char_seq + subseq_offset;
 
-    (*ist)->fwd_penalties = fwd_penalty_array->array + subseq_offset;
+    (*ist)->fwd_penalties = rst->fwd_penalty_array->array + subseq_offset;
 
     /* The reverse penalty array is built from the reverse complemented read
      * sequence. Since subseq_offset is the distance of the offset from the 5'
      * start of the read, subseq_offset will actually be at the end of the
      * penalty array. The offset we want then is the length of the subsequence
      * plus the length of the offset subtracted from the total read length. */
-    (*ist)->rev_penalties = rev_penalty_array->array
+    (*ist)->rev_penalties = rst->rev_penalty_array->array
         + ( rst->length - (subseq_offset + subseq_length));
 
-    (*ist)->expected_value = expected_value_of_rst_subsequence(fwd_penalty_array,
+    (*ist)->expected_value = expected_value_of_rst_subsequence(
+        rst->fwd_penalty_array,
         subseq_offset, subseq_length);
 }
 

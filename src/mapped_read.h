@@ -392,7 +392,6 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   
                                   struct genome_data* genome,
                                   struct read* r,
-                                  struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
                                   struct mapping_params* mapping_params

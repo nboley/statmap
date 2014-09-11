@@ -552,20 +552,10 @@ void
 recheck_candidate_mapping(
         candidate_mapping* mapping,
         struct read_subtemplate* rst,
-        struct genome_data* genome,
-        struct error_model_t* error_model
+        struct genome_data* genome
     )
 {
     float rechecked_penalty = 0;
-
-    /* build penalty array from the underlying read subtemplate.
-     *
-     * Since we actually reverse complement the full *genome*
-     * sequence in the recheck (to simplify the algorithm when rechecking
-     * gapped reads), the read is being compared to the sequence that it mapped
-     * to. Therefore, we only need to build the fwd penalty array. */
-    struct penalty_array_t pa;
-    build_penalty_array( &pa, rst, error_model );
 
     /* Get the entire region of the genome covered by this fragment */
     int full_fragment_length = get_length_from_cigar_string( mapping);
@@ -605,10 +595,15 @@ recheck_candidate_mapping(
 
         if( entry.op == 'M' )
         {
+            /* Since we actually reverse complement the full *genome*
+             * sequence in the recheck (to simplify the algorithm when rechecking
+             * gapped reads), the read is being compared to the sequence that it mapped
+             * to. Therefore, we only use the fwd penalty array. */
+            
             rechecked_penalty += recheck_penalty(
                     mapped_seq + ref_pos,
                     rst->char_seq + read_pos,
-                    pa.array + read_pos,
+                    rst->fwd_penalty_array->array + read_pos,
                     entry.len
                 );
 
@@ -636,8 +631,7 @@ recheck_candidate_mapping(
 
     /* cleanup memory */
     free( mapped_seq );
-    free_penalty_array( &pa );
-
+    
     return;
 }
 
@@ -696,7 +690,6 @@ recheck_joined_candidate_mappings(
         
         struct genome_data* genome,
         struct read* r,
-        struct error_model_t* error_model,
         struct fragment_length_dist_t* fl_dist )
 {
     float rechecked_group_penalty = 0;
@@ -709,7 +702,7 @@ recheck_joined_candidate_mappings(
         struct read_subtemplate* rst
             = r->subtemplates + (*current_mapping)->pos_in_template;
 
-        recheck_candidate_mapping( *current_mapping, rst, genome, error_model );
+        recheck_candidate_mapping( *current_mapping, rst, genome );
 
         /* Add the log probability (equivalent to product) */
         rechecked_group_penalty += (*current_mapping)->penalty;
@@ -808,7 +801,6 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
                                   
                                   struct genome_data* genome,
                                   struct read* r,
-                                  struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
                                   struct mapping_params* mapping_params
@@ -831,7 +823,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     {
         recheck_joined_candidate_mappings( 
             current_mapping, (*joined_mapping_penalties) + i,
-            genome, r, error_model, fl_dist 
+            genome, r, fl_dist 
         );
 
         /* we may need to update the max penalty */

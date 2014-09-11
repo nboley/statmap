@@ -22,6 +22,10 @@ struct pos_in_template {
 struct read_subtemplate {
     char* char_seq;
     char* error_str;
+    
+    struct penalty_array_t* fwd_penalty_array;
+    struct penalty_array_t* rev_penalty_array;
+    
     int length;
     struct pos_in_template pos_in_template;
 };
@@ -110,10 +114,7 @@ init_indexable_subtemplate(
         struct read_subtemplate* rst,
 
         int subseq_length,
-        int subseq_offset,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        int subseq_offset
     );
 
 void

@@ -59,9 +59,9 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
           pred.prb=initial.smoothing( agg$mm, agg$cnts ));
         
         if( do.plot ) {
-          obs.logit.prbs = logit((agg$mm+0.0001)/(agg$cnts+0.01))
-          plot( agg$pred, obs.logit.prbs );
-          lines( agg$pred, pred.smooth$pred.prb, col='red' );
+          obs.log.prbs = log10((agg$mm+0.0001)/(agg$cnts+0.01))
+          plot( agg$pred, obs.log.prbs, xlab="Position in Read", ylab="log10 Predicted Mismatch Rate" );
+          lines( agg$pred, log10(logistic(pred.smooth$pred.prb)), col='red' );
         }
 
         return( pred.smooth );
@@ -154,14 +154,14 @@ predict_freqs_for_record = function( mm.cnts, cnts, pos, qual, plot.str=NULL ) {
     {
       # set the seed so that Identical models yield identical plots
       #set.seed( 0 );
-      plot( ecdf( new.data$mm.cnts/new.data$cnts ), col='blue' );
+      plot( ecdf( new.data$mm.cnts/new.data$cnts ), xlab="Reads Mismatch Fraction", col='blue' );
       for( i in 1:10 ) {
         r.sample = rbinom( length(new.data$cnts), new.data$cnts, new.data$pred.freqs );
         lines( ecdf( r.sample/new.data$cnts ), col='red' );      
       }
       lines( ecdf( new.data$mm.cnts/new.data$cnts ), col='blue' );
       
-      qqplot( new.data$mm.cnts/new.data$cnts, r.sample/new.data$cnts );
+      qqplot( new.data$mm.cnts/new.data$cnts, r.sample/new.data$cnts, xlab="Observed Mismatch Fraction", ylab="Predicted Mismatch Fraction" );
       abline( a=0, b=1 )
         
       dev.off();
