@@ -328,7 +328,9 @@ can_be_used_to_update_error_data(
     /* skip empty mappings */
     if( NULL == mappings )
         return false;
-        
+    
+    return true;
+    
     /*** we only want unique mappers for the error estiamte updates */        
     // We allow lengths of 2 because we may have diploid locations
     if( mappings->length < 1 || mappings->length > 2 ) {
@@ -395,17 +397,34 @@ update_error_data_record_from_candidate_mappings(
     // but, since all of the sequence is identical,
     // we only need to deal with this read
     candidate_mapping* cm = mappings->mappings + 0;         
+    int i;
+    for( i = 1; i < mappings->length; i++ ) {
+        if( mappings->mappings[i].penalty > cm->penalty)
+            cm = mappings->mappings + i;
+    }
     int mapped_length = cm->mapped_length;
     
-    char* genome_seq = find_seq_ptr( 
-        genome, 
-        cm->chr, 
-        cm->start_bp,
-        mapped_length
-    );            
-        
+    if( cm->rd_strnd == BKWD )
+        return;
+    
+    char* genome_seq;
+    char* genome_seq_ptr = find_seq_ptr( 
+            genome, 
+            cm->chr, 
+            cm->start_bp,
+            mapped_length
+        );
+    if( cm->rd_strnd == BKWD )
+    {
+        genome_seq = calloc( mapped_length + 1, sizeof(char) );
+        rev_complement_read( genome_seq_ptr, genome_seq, mapped_length);
+    } else {
+        genome_seq = genome_seq_ptr;
+    }
+    
     /* get the read sequence - rev complement if on reverse strand */
-    char* read_seq;
+    char* read_seq = rst->char_seq + cm->trimmed_length;
+    /*
     if( cm->rd_strnd == BKWD )
     {
         read_seq = calloc( mapped_length + 1, sizeof(char) );
@@ -414,6 +433,7 @@ update_error_data_record_from_candidate_mappings(
     } else {
         read_seq = rst->char_seq + cm->trimmed_length;
     }
+    */
     
     /* Is this correct for rev comp? */
     char* error_str = rst->error_str + cm->trimmed_length;
@@ -423,7 +443,7 @@ update_error_data_record_from_candidate_mappings(
 
     /* free memory if we allocated it */
     if( cm->rd_strnd == BKWD )
-        free( read_seq );
+        free( genome_seq );
     
     return;
 }
@@ -1244,7 +1264,7 @@ build_candidate_mappings_from_search_results(
          * original location */
         mapped_locations* expanded_base_locs = expand_base_mapped_locations(
                 base_loc, base_locs->probe, genome );
-
+        
         /* match across each of the expanded locations */
         for( j = 0; j < expanded_base_locs->length; j++ )
         {
@@ -2006,7 +2026,7 @@ find_candidate_mappings( void* params )
                     genome,
                     error_model,
                     scratch_error_data_record,
-                    only_collect_error_data,
+                    false, //only_collect_error_data,
                     mapping_params
             );
         

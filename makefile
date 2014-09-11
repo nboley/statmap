@@ -1,5 +1,6 @@
 CC=clang
-CFLAGS=-O3 -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
+#-Wextra -Wall
+CFLAGS=-O0 -msse2 -D_FILE_OFFSET_BITS=64 \
 	-Wunreachable-code -Wunused \
 	-I/usr/share/R/include
 RLIB=/usr/lib/R/lib/libR.so
