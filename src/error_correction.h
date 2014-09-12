@@ -254,7 +254,8 @@ update_error_data_record(
     char* genome_seq,
     char* read,
     char* error_str,
-    int read_length
+    int read_length,
+    int location_offset
 );
 
 void

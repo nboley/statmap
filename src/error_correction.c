@@ -1063,7 +1063,8 @@ update_error_data_record(
     char* genome_seq,
     char* read,
     char* error_str,
-    int read_length
+    int read_length,
+    int location_offset
 )
 {
     data->num_unique_reads += 1;
@@ -1075,10 +1076,10 @@ update_error_data_record(
         {
             // Add 1 because read positions are 1 based
             unsigned char error_char = (unsigned char) error_str[i];
-            data->base_type_mismatch_cnts[error_char][i+1] += 1;
+            data->base_type_mismatch_cnts[error_char][i+1+location_offset] += 1;
         }
         
-        data->base_type_cnts[(unsigned char) error_str[i]][i+1] += 1;
+        data->base_type_cnts[(unsigned char) error_str[i]][i+1+location_offset] += 1;
     }
     
     return;

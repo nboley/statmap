@@ -415,8 +415,9 @@ update_error_data_record_from_candidate_mappings(
     /* Is this correct for rev comp? */
     char* error_str = rst->error_str + cm->trimmed_length;
 
+    /* the offset is always 0 because this is a candidate mapping */
     update_error_data_record( 
-        error_data_record, genome_seq, read_seq, error_str, mapped_length );
+        error_data_record, genome_seq, read_seq, error_str, mapped_length, 0 );
     
     /* free memory if we allocated it */
     if( cm->rd_strnd == BKWD )
@@ -1513,7 +1514,7 @@ find_candidate_mappings_for_read_subtemplate(
     struct indexable_subtemplates* ists = 
        build_indexable_subtemplates_from_read_subtemplate(
            rst, genome->index,
-           false && only_collect_error_data
+           only_collect_error_data
        );
 
     /* if we couldn't build indexable sub templates, ie the read was too short, 
@@ -1556,7 +1557,44 @@ find_candidate_mappings_for_read_subtemplate(
             genome,
             index_search_params
         );
+    
+    if( only_collect_error_data ) {
+        /* Update the error data record */
+        int i, j;
+        for( i = 0; i < ists->length; i++ ) {
+            if (search_results[i]->length == 0) continue;
+            mapped_location* best_mapped_location = search_results[i]->locations + 0;
+            for ( j= 1; j < search_results[i]->length; j++ ) {
+                if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
+                    best_mapped_location = search_results[i]->locations + j;
+                }
+            }
+            
+            // XXX
+            if( best_mapped_location->strnd == BKWD ) continue;
+            
+            /* Is this correct for rev comp? */
+            char* error_str = rst->error_str + ists->container[i].subseq_offset;
+            
+            char* genome_seq = find_seq_ptr( 
+                genome, 
+                best_mapped_location->chr, 
+                best_mapped_location->loc,
+                ists->container[i].subseq_length
+            );            
 
+            update_error_data_record( 
+                scratch_error_data_record, 
+                genome_seq, 
+                ists->container[i].char_seq, 
+                error_str, 
+                ists->container[i].subseq_length, 
+                ists->container[i].subseq_offset );            
+        }
+        
+        goto cleanup_index_search;
+    }
+    
     #ifdef PROFILE_CANDIDATE_MAPPING
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
 
@@ -1566,15 +1604,10 @@ find_candidate_mappings_for_read_subtemplate(
     statmap_log(LOG_DEBUG, "index_search_time %f", elapsed);
     #endif
 
-    free( index_search_params );
     candidate_mappings* mappings
         = build_candidate_mappings_from_search_results( search_results,
                 search_results_length, rst, genome, mapping_params );
     
-    /* NOTE search_results contains references to memory allocated in the
-     * indexable_subtemplates. search_results must be freed before ists */
-    free_search_results( search_results, search_results_length );
-
     /* Return the set of gapped mappings - if mappings were ungapped, they were
      * included in this set of candidate mappings as-is (so for an ungapped
      * assay, gapped_mappings and mappings are identical). */
@@ -1588,16 +1621,24 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     free_candidate_mappings( mappings );
-    free_indexable_subtemplates( ists );
-
+    
     /* update the thread local copy of error data (need the error data
      * and the subtemplate to do this) */
+    #ifdef INCREMENTLY_UPDATE_ERROR_MODEL
     update_error_data_record_from_candidate_mappings(
             genome,
             final_mappings,
             rst,
             scratch_error_data_record
         );
+    #endif
+    
+cleanup_index_search:
+    /* NOTE search_results contains references to memory allocated in the
+     * indexable_subtemplates. search_results must be freed before ists */
+    free( index_search_params );
+    free_search_results( search_results, search_results_length );
+    free_indexable_subtemplates( ists );
     
     return 0;
 }
@@ -1992,7 +2033,7 @@ find_candidate_mappings( void* params )
                     genome,
                     error_model,
                     scratch_error_data_record,
-                    true, //only_collect_error_data,
+                    only_collect_error_data,
                     mapping_params
             );
         
