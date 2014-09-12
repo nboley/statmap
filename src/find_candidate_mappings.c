@@ -390,7 +390,7 @@ update_error_data_record_from_candidate_mappings(
     }
     
     // Ignore reads that are reverse complemented - we need to fix this
-    if(cm->rd_strnd == BKWD) return;
+    if(cm->rd_strnd == BKWD) return; // XXX TODO
 
     int mapped_length = cm->mapped_length;
     
@@ -432,9 +432,7 @@ search_index_for_indexable_subtemplates(
 
         struct genome_data* genome,
 
-        struct index_search_params* index_search_params,
-
-        enum bool only_collect_error_data
+        struct index_search_params* index_search_params
     )
 {
     int i;
@@ -447,7 +445,7 @@ search_index_for_indexable_subtemplates(
                 ists->container + i,
                 index_search_params + i,
                 &results,
-                only_collect_error_data
+                false
             );
 
         search_results[i] = results;
@@ -735,7 +733,7 @@ build_candidate_mapping_from_match(
     cm.start_bp = read_location;
 
     cm.penalty = compute_candidate_mapping_penalty_from_match( match );
-
+    
     build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
 
     add_candidate_mapping( mappings, &cm );
@@ -1304,9 +1302,7 @@ build_gapped_candidate_mappings_for_candidate_mapping(
         candidate_mapping* cm,
         candidate_mappings* gapped_mappings,
         struct read_subtemplate* rst,
-        struct genome_data* genome,
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa )
+        struct genome_data* genome)
 {
     /* Build the initial proposed gapped candidate mapping. */
     candidate_mapping gapped_cm = *cm;
@@ -1323,10 +1319,10 @@ build_gapped_candidate_mappings_for_candidate_mapping(
 
     if( gapped_cm.rd_strnd == FWD ) {
         memcpy( mapped_seq, rst->char_seq, sizeof(char)*rst->length );
-        penalty_array = fwd_pa;
+        penalty_array = rst->fwd_penalty_array;
     } else {
         rev_complement_read( rst->char_seq, mapped_seq, rst->length );
-        penalty_array = rev_pa;
+        penalty_array = rst->fwd_penalty_array;
     }
 
     /* The full length of the fragment, including the gap */
@@ -1417,8 +1413,6 @@ find_potential_gapped_candidate_mappings(
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
         struct genome_data* genome,
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa,
         struct mapping_params* mapping_params )
 {
     int num_gaps = count_gaps_in_candidate_mapping( cm );
@@ -1440,8 +1434,7 @@ find_potential_gapped_candidate_mappings(
             cm,
             potential_gapped_mappings,
             rst,
-            genome,
-            fwd_pa, rev_pa
+            genome
         );
 
     /* Only return gapped mappings that have a penalty over the minimum. The
@@ -1473,8 +1466,6 @@ build_gapped_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
         struct indexable_subtemplates* ists,
         struct genome_data* genome,
-        struct penalty_array_t* fwd_pa,
-        struct penalty_array_t* rev_pa,
         struct mapping_params* mapping_params )
 {
     int i;
@@ -1489,7 +1480,6 @@ build_gapped_candidate_mappings_for_read_subtemplate(
                 rst,
                 ists,
                 genome,
-                fwd_pa, rev_pa,
                 mapping_params
             );
 
@@ -1564,8 +1554,7 @@ find_candidate_mappings_for_read_subtemplate(
             ists,
             search_results,
             genome,
-            index_search_params,
-            only_collect_error_data
+            index_search_params
         );
 
     #ifdef PROFILE_CANDIDATE_MAPPING
@@ -1578,11 +1567,10 @@ find_candidate_mappings_for_read_subtemplate(
     #endif
 
     free( index_search_params );
-
     candidate_mappings* mappings
         = build_candidate_mappings_from_search_results( search_results,
                 search_results_length, rst, genome, mapping_params );
-
+    
     /* NOTE search_results contains references to memory allocated in the
      * indexable_subtemplates. search_results must be freed before ists */
     free_search_results( search_results, search_results_length );
@@ -1596,8 +1584,6 @@ find_candidate_mappings_for_read_subtemplate(
             rst,
             ists,
             genome,
-            mapping_params->fwd_penalty_arrays[rst_pos],
-            mapping_params->rev_penalty_arrays[rst_pos],
             mapping_params
         );
 

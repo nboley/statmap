@@ -22,7 +22,7 @@ def test_error_rate_estimation( ):
     
     rl = read_len = 100
     indexed_seq_len = 20
-    nsamples = 1000000
+    nsamples = 1000
     output_directory = "smo_test_error_rate_estimation"
     
     ###### Prepare the data for the test #######################################
@@ -30,7 +30,7 @@ def test_error_rate_estimation( ):
     r_genome = build_random_genome( [2000,2000], ["1","2"] )
     genome_fnames = ( "tmp.genome.fa", )
     with open( genome_fnames[0], "w" ) as genome_of:
-        write_genome_to_fasta( r_genome, genome_of, 1 )
+        write_genome_to_fasta( r_genome, genome_of, 10 )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in
