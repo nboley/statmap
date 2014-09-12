@@ -8,11 +8,11 @@
 
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
-#define MAPPING_STATUS_GRANULARITY 100000
+#define MAPPING_STATUS_GRANULARITY 10000
 
 /****** configuration options                   ******/
 
-#define MAX_SEARCH_TIME 1.0
+#define MAX_SEARCH_TIME 0.1
 #define MAX_NUM_CAND_MAPPINGS 500
 
 #define ONLY_USE_1_READ_SUBTEMPLATE
@@ -20,13 +20,13 @@
 // #define PROFILE_CANDIDATE_MAPPING
 
 /* Try to map 99% of the input reads with the estimated error model */
-#define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.99
+#define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.90
 /* Allow up to 10% of the bp's in a read to be mismatches in a mapping */
 #define DEFAULT_MISMATCH_METAPARAMTER 0.1
 
 /* Mismatch rates for the estimated error model bootstrap */
-#define NUM_READS_TO_BOOTSTRAP 100000
-#define MAX_NUM_MM_RATE 0.15
+#define NUM_READS_TO_BOOTSTRAP 10000
+#define MAX_NUM_MM_RATE 0.10
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2

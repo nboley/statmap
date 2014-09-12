@@ -23,7 +23,7 @@ locations_node*
 add_location_to_locations_node( locations_node* node,
                                 INDEX_LOC_TYPE loc );
 
-inline void
+/*inline*/ void
 get_locations_from_locations_node( const locations_node* const node, 
                                    mapped_locations* results,
                                    const float penalty,
@@ -175,19 +175,19 @@ struct mapped_locations;
 
 /**** BITMAP functions ********************************************************/
 
-inline int 
+/*inline*/ int 
 check_bit( byte* bitmap, int index );
 
-inline void 
+/*inline*/ void 
 set_bit( byte* bitmap, int index );
 
-inline void
+/*inline*/ void
 clear_bit( byte* bitmap, int index );
 
-inline void 
+/*inline*/ void 
 print_bitmap( byte* bitmap, int size );
 
-inline size_t
+/*inline*/ size_t
 bitmap_size( int num_seqs );
 
 /**** attribute access methods for sequence node ******************************/
@@ -199,68 +199,68 @@ bitmap_size( int num_seqs );
  *
  */
 
-inline NUM_SEQ_IN_SEQ_NODE_TYPE
+/*inline*/ NUM_SEQ_IN_SEQ_NODE_TYPE
 get_num_sequence_types( const sequences_node* const seqs );
 
-inline void
+/*inline*/ void
 set_num_sequence_types( sequences_node* seqs, 
                         NUM_SEQ_IN_SEQ_NODE_TYPE value );
 
-inline MEMORY_SEGMENT_SIZE
+/*inline*/ MEMORY_SEGMENT_SIZE
 get_num_used_bytes( sequences_node* seqs );
 
-inline void
+/*inline*/ void
 set_num_used_bytes( sequences_node* seqs,
                     MEMORY_SEGMENT_SIZE value  );
 
-inline MEMORY_SEGMENT_SIZE
+/*inline*/ MEMORY_SEGMENT_SIZE
 get_num_allocated_bytes( sequences_node* seqs );
 
-inline void
+/*inline*/ void
 set_num_allocated_bytes( sequences_node* seqs,
                          MEMORY_SEGMENT_SIZE value  );
 
-inline byte* 
+/*inline*/ byte* 
 get_bitmap_start( const sequences_node* const seqs );
 
-inline sequences_node* 
+/*inline*/ sequences_node* 
 insert_bit_into_bitmap( sequences_node* seqs, int insert_position );
 
 /* return true if the genome_location at the given index is a ptr ( vs loc ) */
-inline int
+/*inline*/ int
 check_sequence_type_ptr( const sequences_node* const seqs, 
                          int index );
 
-inline void
+/*inline*/ void
 set_sequence_type_to_ptr( sequences_node* seqs, int index );
 
-inline LETTER_TYPE* 
+/*inline*/ LETTER_TYPE* 
 get_sequences_array_start( const sequences_node* const seqs, 
                            LEVEL_TYPE seq_length );
 
-inline locs_union* 
+/*inline*/ locs_union* 
 get_genome_locations_array_start( const sequences_node* const seqs, 
                                   LEVEL_TYPE seq_num_letters );
 
-inline INDEX_LOC_TYPE* 
+/*inline*/ INDEX_LOC_TYPE* 
 get_overflow_genome_locations_array_start( 
     const sequences_node* const seqs, 
     LEVEL_TYPE seq_num_letters
 );
 
 /* return the number of bytes between the start of seqs and ptr */
-inline MEMORY_SEGMENT_SIZE
+/*inline*/ MEMORY_SEGMENT_SIZE
 bytes_before( sequences_node* seqs, void* ptr );
 
 /* return the number of bytes between the start of ptr and the end of seqs */
-inline MEMORY_SEGMENT_SIZE
+/*inline*/ MEMORY_SEGMENT_SIZE
 bytes_after( sequences_node* seqs, void* ptr );
 
 /* 
  * make empty space of size size at pointer. Ie, if the memory is 
  * 11111 ( in bytes ) then insert_empty_space( 2, 2  ) makes 1100111
  */
-inline void
+/*inline*/ void
 insert_memory ( sequences_node* seqs, 
                 void* start,
                 MEMORY_SEGMENT_SIZE size, 
