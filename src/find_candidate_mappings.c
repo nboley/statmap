@@ -270,8 +270,11 @@ search_index(
     LETTER_TYPE *bkwd_seq;
     char* tmp_read = calloc(subseq_length + 1, sizeof(char));
     rev_complement_read( sub_read, tmp_read, subseq_length );
+    free( sub_read );
+    
     bkwd_seq = translate_seq( tmp_read, subseq_length );
     assert( bkwd_seq != NULL );
+    free( tmp_read );
     
     /* search the index */
     find_matches_from_root(
@@ -299,10 +302,7 @@ search_index(
     /* Cleanup memory */
     free( fwd_seq );
     free( bkwd_seq );
-
-    free( sub_read );
-    free( tmp_read );
-
+    
     return;
 };
 
@@ -1735,144 +1735,6 @@ increment_counter_with_lock( unsigned int *counter, pthread_spinlock_t* lock )
     pthread_spin_unlock( lock );
 }
 
-void* 
-collect_error_data( void* params ) 
-{
-    /* 
-     * recreate the struct parameters for readability
-     * this should be optimized out 
-     */
-
-    struct single_map_thread_data* td = params;
-    
-    struct genome_data* genome = td->genome;
-    
-    struct rawread_db_t* rdb = td->rdb;
-    
-    struct error_model_t* error_model = td->error_model;
-    
-    /* store statistics about mapping quality here  */
-    struct error_data_t* error_data = td->error_data;
-    
-    struct mapping_metaparams* metaparams = td->metaparams;
-    float reads_min_match_penalty = td->reads_min_match_penalty;
-    
-    /* END parameter 'recreation' */
-
-    assert( genome->index != NULL );
-    
-    /* create a thread local copy of the error data to avoid excess locking */
-    struct error_data_record_t* scratch_error_data_record;
-    init_error_data_record( &scratch_error_data_record, 
-                            error_data->max_read_length, 
-                            error_data->max_qual_score );
-    
-    /* The current read of interest */
-    struct read* r;
-    /* 
-     * While there are still mappable reads in the read DB. All locking is done
-     * in the get next read functions. 
-     */
-    while( EOF != get_next_read_from_rawread_db(
-               rdb, &r, td->max_readkey )  
-         ) 
-    {
-        /* We dont memory lock mapped_cnt because it's read only and we dont 
-           really care if it's wrong 
-         */
-        struct mapping_params* mapping_params
-            = init_mapping_params_for_read( r, metaparams, error_model, 
-                reads_min_match_penalty );
-        cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
-
-        int i;
-        for( i = 0; i < r->num_subtemplates; i++ )
-        {
-            // reference to current read subtemplate
-            struct read_subtemplate* rst = r->subtemplates + i;
-            
-            // build a set of indexable subtemplates from this read subtemplate
-            struct indexable_subtemplates* ists = 
-                build_indexable_subtemplates_from_read_subtemplate(
-                    rst, genome->index, false );
-            // if we can't build indexable subtemplates (e.g. the index probe
-            // is too short ) then skip this read subtemplate
-            if( ists == NULL ) continue;
-
-            /* Stores the results of the index search for each indexable subtemplate */
-            int search_results_length = ists->length;
-            mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
-                                                       search_results_length);
-
-            /* initialize search parameters for the index probes */
-            struct index_search_params* index_search_params
-                = init_index_search_params(ists, mapping_params);
-
-            search_index_for_indexable_subtemplates(
-                ists,
-                search_results,
-                genome,
-                index_search_params
-                );
-            
-
-            /* Update the error data record */
-            int i, j;
-            for( i = 0; i < ists->length; i++ ) 
-            {
-                if (search_results[i]->length == 0) continue;
-                mapped_location* best_mapped_location = search_results[i]->locations + 0;
-                for ( j= 1; j < search_results[i]->length; j++ ) {
-                    if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
-                        best_mapped_location = search_results[i]->locations + j;
-                    }
-                }
-            
-                // XXX
-                if( best_mapped_location->strnd == BKWD ) continue;
-            
-                /* Is this correct for rev comp? */
-                char* error_str = rst->error_str + ists->container[i].subseq_offset;
-            
-                char* genome_seq = find_seq_ptr( 
-                    genome, 
-                    best_mapped_location->chr, 
-                    best_mapped_location->loc,
-                    ists->container[i].subseq_length
-                    );            
-
-                update_error_data_record( 
-                    scratch_error_data_record, 
-                    genome_seq, 
-                    ists->container[i].char_seq, 
-                    error_str, 
-                    ists->container[i].subseq_length, 
-                    ists->container[i].subseq_offset );            
-
-                // cleanup
-                free( index_search_params );
-                free_search_results( search_results, search_results_length );
-                free_indexable_subtemplates( ists );
-
-            }
-        }
-
-        /* cleanup memory */
-        free_mapping_params( mapping_params );
-        free_read( r );
-    }
-
-    /********* update the global error data *********/
-
-    // add error_data to scratch_error_data
-    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
-    
-    // free local copy of error data
-    free_error_data_record( scratch_error_data_record );
-
-    return NULL;
-}
-
 /* TODO - revisit the read length vs seq length distinction */
 /* 
  * I use a struct for the parameters so that I can initialzie threads
@@ -1958,13 +1820,7 @@ find_candidate_mappings( void* params )
         struct mapping_params* mapping_params
             = init_mapping_params_for_read( r, metaparams, error_model, 
                 reads_min_match_penalty );
-        
-        assert( r->num_subtemplates == mapping_params->num_penalty_arrays );
-        int i;
-        for( i = 0; i < r->num_subtemplates; i++ ) {
-            r->subtemplates[i].fwd_penalty_array = mapping_params->fwd_penalty_arrays[i];
-            r->subtemplates[i].rev_penalty_array = mapping_params->rev_penalty_arrays[i];
-        }
+        cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
         
         // Make sure this read has "enough" HQ bps before trying to map it
         if( filter_read( r, mapping_params, genome ) )
@@ -2154,12 +2010,166 @@ free_td_template( struct single_map_thread_data* td_template )
     free( (void*) td_template->mapped_cnt_lock );
 }
 
+void*
+update_error_data_from_index_search_results(
+    struct read_subtemplate* rst,
+    struct indexable_subtemplates *ists, 
+    mapped_locations** search_results, 
+    struct genome_data* genome, 
+    struct error_data_record_t* error_data_record)
+{
+    /* Update the error data record */
+    int i;
+    for( i = 0; i < ists->length; i++ ) 
+    {
+        if (search_results[i]->length == 0) continue;
+        
+        int j;
+        mapped_location* best_mapped_location = search_results[i]->locations + 0;
+        for ( j= 1; j < search_results[i]->length; j++ ) {
+            if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
+                best_mapped_location = search_results[i]->locations + j;
+            }
+        }
+            
+        // XXX
+        if( best_mapped_location->strnd == BKWD ) continue;
+            
+        /* Is this correct for rev comp? */
+        char* error_str = rst->error_str + ists->container[i].subseq_offset;
+            
+        char* genome_seq = find_seq_ptr( 
+            genome, 
+            best_mapped_location->chr, 
+            best_mapped_location->loc,
+            ists->container[i].subseq_length
+            );            
+
+        update_error_data_record( 
+            error_data_record, 
+            genome_seq, 
+            ists->container[i].char_seq, 
+            error_str, 
+            ists->container[i].subseq_length, 
+            ists->container[i].subseq_offset );
+    }
+}
+
+void* 
+collect_error_data( void* params ) 
+{
+    /* 
+     * recreate the struct parameters for readability
+     * this should be optimized out 
+     */
+
+    struct single_map_thread_data* td = params;
+    
+    struct genome_data* genome = td->genome;
+    
+    struct rawread_db_t* rdb = td->rdb;
+    
+    struct error_model_t* error_model = td->error_model;
+    
+    /* store statistics about mapping quality here  */
+    struct error_data_t* error_data = td->error_data;
+    
+    struct mapping_metaparams* metaparams = td->metaparams;
+    float reads_min_match_penalty = td->reads_min_match_penalty;
+    
+    /* END parameter 'recreation' */
+
+    assert( genome->index != NULL );
+    
+    /* create a thread local copy of the error data to avoid excess locking */
+    struct error_data_record_t* scratch_error_data_record;
+    init_error_data_record( &scratch_error_data_record, 
+                            error_data->max_read_length, 
+                            error_data->max_qual_score );
+    
+    /* The current read of interest */
+    struct read* r;
+    /* 
+     * While there are still mappable reads in the read DB. All locking is done
+     * in the get next read functions. 
+     */
+    while( EOF != get_next_read_from_rawread_db(
+               rdb, &r, td->max_readkey )  
+         ) 
+    {
+        /* We dont memory lock mapped_cnt because it's read only and we dont 
+           really care if it's wrong 
+         */
+        struct mapping_params* mapping_params
+            = init_mapping_params_for_read( r, metaparams, error_model, 
+                reads_min_match_penalty );
+        cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
+
+        int i;
+        for( i = 0; i < r->num_subtemplates; i++ )
+        {
+            // reference to current read subtemplate
+            struct read_subtemplate* rst = r->subtemplates + i;
+            
+            // build a set of indexable subtemplates from this read subtemplate
+            struct indexable_subtemplates* ists = 
+                build_indexable_subtemplates_from_read_subtemplate(
+                    rst, genome->index, true );
+            
+            // if we can't build indexable subtemplates (e.g. the index probe
+            // is too short ) then skip this read subtemplate
+            if( ists == NULL ) continue;
+
+            /* Stores the results of the index search for each indexable subtemplate */
+            int search_results_length = ists->length;
+            mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
+                                                       search_results_length);
+
+            /* initialize search parameters for the index probes */
+            struct index_search_params* index_search_params
+                = init_index_search_params(ists, mapping_params);
+
+            search_index_for_indexable_subtemplates(
+                ists,
+                search_results,
+                genome,
+                index_search_params
+            );
+            
+            update_error_data_from_index_search_results(
+                rst,
+                ists,
+                search_results,
+                genome,
+                scratch_error_data_record
+            );
+
+            // cleanup
+            free( index_search_params );
+            free_search_results( search_results, search_results_length );
+            free_indexable_subtemplates( ists );
+        }
+        
+        free_mapping_params( mapping_params );
+        free_read( r );
+    }
+
+    /********* update the global error data *********/
+
+    // add error_data to scratch_error_data
+    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
+    
+    // free local copy of error data
+    free_error_data_record( scratch_error_data_record );
+
+    return NULL;
+}
+
 /* bootstrap an already initialized error model */
 void
 bootstrap_estimated_error_model( 
         struct genome_data* genome,
         struct rawread_db_t* rdb,
-        struct mapped_reads_db* mpd_rds_db, // TODO set to NULL for bootstrap?
         struct mapping_metaparams* mapping_metaparams,
         struct error_model_t* error_model
     ) 
@@ -2176,23 +2186,16 @@ bootstrap_estimated_error_model(
     
     /* put the search arguments into a structure */
     struct single_map_thread_data td_template;
-    init_td_template( &td_template, genome, rdb, mpd_rds_db, 
+    init_td_template( &td_template, genome, rdb, NULL, 
                       mapping_metaparams, bootstrap_error_model, error_data   );
-    
-    /* 
-       only use unique mappers for the initial bootstrap. This is just a small
-       performance optimization, it prevents us from going too deeply into the 
-       index as soon as we know that a mapping isn't unique.
-    */
-    td_template.only_collect_error_data = true;
-    
-    // Detyermine how many reads we should look through for the bootstrap
+        
+    // Determine how many reads we should look through for the bootstrap
     td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
 
     // Add a new row to store error data in
     add_new_error_data_record( error_data, 0, td_template.max_readkey );
 
-    spawn_find_candidate_mappings_threads( &td_template );
+    collect_error_data(&td_template);
     
     clock_t stop = clock();
     statmap_log( LOG_NOTICE,

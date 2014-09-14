@@ -120,7 +120,6 @@ map_marginal( struct args_t* args,
         bootstrap_estimated_error_model( 
             genome,
             rdb,
-            *mpd_rds_db,
             &mapping_metaparams,
             error_model
         );
