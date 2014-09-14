@@ -53,7 +53,7 @@ def test_error_rate_estimation( ):
     def iter_mutated_reads( reads ):
         for read in reads:
             error_str = build_error_str(read)
-            error_rates = [ 0.01 + 0.15*float(i)/len(read)
+            error_rates = [ 0.10 #+ 0.15*float(i)/len(read)
                             #+ error_char_mappings[char]
                             for i, char in enumerate( error_str ) ]
             

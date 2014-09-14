@@ -2053,6 +2053,8 @@ update_error_data_from_index_search_results(
             ists->container[i].subseq_length, 
             ists->container[i].subseq_offset );
     }
+
+    return NULL;
 }
 
 void* 
@@ -2175,6 +2177,14 @@ bootstrap_estimated_error_model(
     ) 
 {
     assert( error_model != NULL );
+    
+    int rc = 0;
+    void* status;
+    
+    pthread_t thread[num_threads];
+    pthread_attr_t attrs[num_threads];
+    
+    struct single_map_thread_data tds[num_threads];
 
     clock_t start = clock();
     
@@ -2195,14 +2205,45 @@ bootstrap_estimated_error_model(
     // Add a new row to store error data in
     add_new_error_data_record( error_data, 0, td_template.max_readkey );
 
-    collect_error_data(&td_template);
+    if( num_threads == 1 )
+    {
+        collect_error_data(&td_template);
+    } else {        
+        int t;
+        for( t = 0; t < num_threads; t++ )
+        {  
+            memcpy( tds+t,  &td_template, sizeof(struct single_map_thread_data) );
+            tds[t].thread_id = t;
+        
+            pthread_attr_init(attrs + t);
+            pthread_attr_setdetachstate(attrs + t, PTHREAD_CREATE_JOINABLE);
+            pthread_create( thread + t, 
+                            attrs + t, 
+                            collect_error_data, 
+                            (void *)(tds + t) );
+            if (rc) {
+                statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
+            }
+        }
+    
+        /* Free attribute and wait for the other threads */    
+        for(t=0; t < num_threads; t++) {
+            rc = pthread_join(thread[t], &status);
+            pthread_attr_destroy(attrs+t);
+            if (rc) {
+                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
+            }
+        }
+    }
     
     clock_t stop = clock();
     statmap_log( LOG_NOTICE,
             "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
-            *(td_template.mapped_cnt), rdb->readkey,
+            error_data->records[0]->num_unique_reads, rdb->readkey,
             ((float)(stop-start))/CLOCKS_PER_SEC,
-            (((float)*(td_template.mapped_cnt))*CLOCKS_PER_SEC*3600)/(stop-start)
+            ((float)(
+                error_data->records[0]->num_unique_reads*CLOCKS_PER_SEC*3600)
+             /(stop-start))
         );
     
     free_td_template( &td_template );

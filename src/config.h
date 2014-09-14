@@ -15,18 +15,18 @@
 #define MAX_SEARCH_TIME 0.1
 #define MAX_NUM_CAND_MAPPINGS 500
 
-#define DONT_ONLY_USE_1_READ_SUBTEMPLATE
+#define ONLY_USE_1_READ_SUBTEMPLATE
 #define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
 
 /* Try to map 99% of the input reads with the estimated error model */
-#define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.90
+#define DEFAULT_ESTIMATED_ERROR_METAPARAMETER 0.99
 /* Allow up to 10% of the bp's in a read to be mismatches in a mapping */
 #define DEFAULT_MISMATCH_METAPARAMTER 0.1
 
 /* Mismatch rates for the estimated error model bootstrap */
-#define NUM_READS_TO_BOOTSTRAP 10000
-#define MAX_NUM_MM_RATE 0.10
+#define NUM_READS_TO_BOOTSTRAP 100000
+#define MAX_NUM_MM_RATE 0.20
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
