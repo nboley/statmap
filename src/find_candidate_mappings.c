@@ -2008,6 +2008,7 @@ update_error_data_from_index_search_results(
     for( i = 0; i < ists->length; i++ ) 
     {
         if (search_results[i]->length == 0) continue;
+        struct indexable_subtemplate* ist = ists->container + i;
         
         int j;
         mapped_location* best_mapped_location = search_results[i]->locations + 0;
@@ -2018,24 +2019,37 @@ update_error_data_from_index_search_results(
         }
         
         /* Is this correct for rev comp? */
-        char* error_str = rst->error_str + ists->container[i].subseq_offset;
+        char* error_str = rst->error_str + ist->subseq_offset;
             
-        char* genome_seq = find_seq_ptr( 
+        char* fwd_genome_seq = find_seq_ptr( 
             genome, 
             best_mapped_location->chr, 
             best_mapped_location->loc,
-            ists->container[i].subseq_length
-            );            
+            ist->subseq_length
+            );
+        
+        char* genome_seq;
+        if( best_mapped_location->strnd == BKWD )
+        {
+            genome_seq = calloc( ists->container[i].subseq_length+1, 
+                                 sizeof(char) );
+            rev_complement_read(fwd_genome_seq, genome_seq, ist->subseq_length);
+        } else {
+            genome_seq = fwd_genome_seq;
+        }
         
         update_error_data( 
             error_data, 
             genome_seq, 
-            ists->container[i].char_seq, 
+            ist->char_seq, 
             error_str, 
-            ists->container[i].subseq_length, 
+            ist->subseq_length, 
             rst->pos_in_template.pos,
             best_mapped_location->strnd,
-            ists->container[i].subseq_offset );
+            ist->subseq_offset );
+
+        if( best_mapped_location->strnd == BKWD )
+            free(genome_seq);
     }
 
     return NULL;
