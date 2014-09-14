@@ -33,7 +33,9 @@ error_prb(
     char obs,
     char error_score,
     int pos,
-    struct error_model_t* error_model
+    struct error_model_t* error_model,
+    int read_subtemplate_index,
+    enum STRAND strand
 );
 
 /* 

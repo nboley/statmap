@@ -175,6 +175,7 @@ enum STRAND {
  *  should never happen, but it's included for consistency 
  */
 
+#define MAX_NUM_RD_SUBTEMPLATES 2
 enum READ_END {
     // UNKNOWN = 0,
     NORMAL = 1,

@@ -93,10 +93,13 @@ error_prb_for_estimated_model(
         char obs,
         char error_score,
         int pos,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        int read_subtemplate_index,
+        enum STRAND strand
     )
 {
-    struct freqs_array* freqs = error_model->data;
+    struct freqs_array* freqs = ((struct freqs_array**)error_model->data)[
+        read_subtemplate_index*2 + ((int)strand-1)];
     double prb = freqs->freqs[(unsigned char)error_score][pos];
 
     /* Fudge factor - don't take the log of 0 */
@@ -123,7 +126,9 @@ error_prb(
         char obs,
         char error_score,
         int pos,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        int read_subtemplate_index,
+        enum STRAND strand
     )
 {
     /* normalize to upper case */
@@ -145,7 +150,8 @@ error_prb(
         return 0;
     case ESTIMATED:
         return error_prb_for_estimated_model( 
-            ref, obs, error_score, pos, error_model );
+            ref, obs, error_score, pos, 
+            error_model, read_subtemplate_index, strand );
     default:
         assert( false );
     }
@@ -207,7 +213,9 @@ build_penalty_array(
                         code_bp(bp),
                         rst->error_str[pos],
                         pos,
-                        error_model
+                        error_model,
+                        rst->pos_in_template.pos,
+                        FWD
                     );
         }
     }
@@ -239,7 +247,9 @@ build_reverse_penalty_array(
                     code_bp(bp),
                     rst->error_str[ rst->length - pos - 1 ],
                     pos,
-                    error_model
+                    error_model,
+                    rst->pos_in_template.pos,
+                    BKWD
                 );
         }
     }

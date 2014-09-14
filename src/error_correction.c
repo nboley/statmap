@@ -59,7 +59,7 @@ init_int_vector( int data_len, int* input_data )
 
 void
 build_vectors_from_error_data( 
-    struct error_data_t* data,
+    struct error_data_t* data, int record_index,
     SEXP** r_poss, SEXP** r_qual_scores,
     SEXP** r_mm_cnts, SEXP** r_cnts
 )
@@ -78,31 +78,27 @@ build_vectors_from_error_data(
     qual_scores = calloc( flat_vector_len, sizeof(double) );
     mm_cnts = calloc( flat_vector_len, sizeof(int) );
     cnts = calloc( flat_vector_len, sizeof(int) );
-
-    int record_index;
+    
     int pos, qual_score, flat_vec_pos;
-    for( record_index = 0; record_index < data->num_records; record_index++ )
+    flat_vec_pos = 0;
+    struct error_data_record_t* record = data->records[record_index];
+    for( pos = 0; pos < num_read_pos; pos++ )
     {
-        flat_vec_pos = 0;
-        struct error_data_record_t* record = data->records[record_index];
-        for( pos = 0; pos < num_read_pos; pos++ )
+        for( qual_score = 0;
+             qual_score < num_qual_scores; 
+             qual_score++ )
         {
-            for( qual_score = 0;
-                 qual_score < num_qual_scores; 
-                 qual_score++ )
-            {
-                poss[ flat_vec_pos ] = pos;
-                qual_scores[ flat_vec_pos ] = qual_score;
-                mm_cnts[ flat_vec_pos ] += 
-                    record->base_type_mismatch_cnts[qual_score][pos];
-                cnts[ flat_vec_pos ] +=
-                    record->base_type_cnts[qual_score][pos];
+            poss[ flat_vec_pos ] = pos;
+            qual_scores[ flat_vec_pos ] = qual_score;
+            mm_cnts[ flat_vec_pos ] += 
+                record->base_type_mismatch_cnts[qual_score][pos];
+            cnts[ flat_vec_pos ] +=
+                record->base_type_cnts[qual_score][pos];
             
-                flat_vec_pos += 1;
-            }
+            flat_vec_pos += 1;
         }
     }
-
+    
     *r_poss = init_double_vector( flat_vector_len, poss );
     *r_qual_scores = init_double_vector( flat_vector_len, qual_scores );
     *r_mm_cnts = init_int_vector( flat_vector_len, mm_cnts );
@@ -130,7 +126,8 @@ init_freqs_array_from_error_data( struct freqs_array** est_freqs,
     int i;
     for( i = 0; i <= error_data->max_qual_score; i++ )
     {
-        (*est_freqs)->freqs[i] = calloc( error_data->max_read_length+1, sizeof(double) );
+        (*est_freqs)->freqs[i] = calloc( 
+            error_data->max_read_length+1, sizeof(double) );
     }
     
     return;
@@ -188,15 +185,16 @@ predict_freqs( struct error_data_t* data, int record_index,
     SEXP *qual_scores = NULL;
 
     build_vectors_from_error_data( 
-        data, &poss, &qual_scores, &mm_cnts, &cnts
+        data, record_index, &poss, &qual_scores, &mm_cnts, &cnts
     );
     
     SEXP call;
     char plot_str[500];
-    sprintf( plot_str, "error_dist_BS%i_%i_%i", 
-             1,
+    sprintf( plot_str, "error_dist Rd Keys:%i-%i Strand:%i Rd Pair:%i", 
              data->records[record_index]->min_readkey, 
-             data->records[record_index]->max_readkey );
+             data->records[record_index]->max_readkey,
+             data->records[record_index]->strand, 
+             data->records[record_index]->read_subtemplate_index );
     
     call = lang6( install("predict_freqs"), 
                   *mm_cnts, *cnts, *poss, *qual_scores, 
@@ -246,16 +244,22 @@ update_estimated_error_model_from_error_data(
     struct error_data_t* data
 )
 {    
-    struct freqs_array* pred_freqs = error_model->data;
+    struct freqs_array** pred_freqs = error_model->data;
 
     if( pred_freqs == NULL )
     {
-        init_freqs_array_from_error_data( &pred_freqs, data );    
+        pred_freqs = calloc(sizeof(struct freqs_array*), data->num_records);
     }
     
-    predict_freqs( data, data->num_records-1, pred_freqs );
+    int i;
+    for(i = 0; i < data->num_records; i++) {
+        if( pred_freqs[i] == NULL ) {
+            init_freqs_array_from_error_data( &(pred_freqs[i]), data );
+        }
+        predict_freqs( data, i, pred_freqs[i] );
+    }
     error_model->data = pred_freqs;
-
+    
     return;
 }
 
@@ -288,7 +292,12 @@ void free_error_model( struct error_model_t* error_model )
 {
     if( error_model->error_model_type == ESTIMATED )
     {
-        free_freqs_array( error_model->data );
+        int i;
+        for( i = 0; i < MAX_NUM_RD_SUBTEMPLATES*2; i++ ) 
+        {
+            free_freqs_array( ((struct freqs_array**)error_model->data)[i] );
+        }
+        free( (struct freqs_array**)error_model->data );        
     }
 
     free( error_model );
@@ -763,7 +772,7 @@ init_index_search_params(
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
             float scaling_factor 
-                = ist->expected_value / mapping_params->read_expected_value;
+                = 1.; //ist->expected_value / mapping_params->read_expected_value;
             scaling_factor = ((double)ist->subseq_length )
                 /mapping_params->total_read_length;
             min_match_penalty 
@@ -824,8 +833,9 @@ init_error_data( struct error_data_t** data )
 {
     *data = calloc( sizeof(struct error_data_t), 1 );
 
-    (*data)->num_records = 0;
-    (*data)->records = NULL;
+    (*data)->num_records = MAX_NUM_RD_SUBTEMPLATES*2;
+    (*data)->records = calloc(
+        sizeof(struct error_data_t*), (*data)->num_records);
     
     (*data)->max_read_length = MAX_READ_LEN;
     (*data)->max_qual_score = MAX_QUAL_SCORE;
@@ -840,6 +850,23 @@ init_error_data( struct error_data_t** data )
     rc = pthread_mutex_init( (*data)->mutex, &mta );
 
     assert( rc == 0 );
+    
+    /* add a error data record for each strand, and for each possible 
+       read template */
+    int subtemplate_index, strand;
+    for( subtemplate_index= 0; 
+         subtemplate_index < MAX_NUM_RD_SUBTEMPLATES; 
+         subtemplate_index++ )
+    {
+        for( strand = 1; strand < 3; strand++ ) 
+        {
+            init_error_data_record( 
+                (*data)->records + 2*subtemplate_index + (strand-1),
+                subtemplate_index, (enum STRAND)strand,
+                (*data)->max_read_length, 
+                (*data)->max_qual_score );
+        }
+    }
     
     return;
 };
@@ -868,6 +895,7 @@ free_error_data( struct error_data_t* data )
     free( data );
 };
 
+/*
 void
 add_new_error_data_record( 
     struct error_data_t* data, int min_readkey, int max_readkey )
@@ -892,22 +920,22 @@ add_new_error_data_record(
     
     return;
 }
+*/
 
 void
-merge_in_error_data_record( struct error_data_t* data, int record_index,
-                            struct error_data_record_t* record )
+merge_in_error_data( struct error_data_t* data_to_update, 
+                     struct error_data_t* data )
 {
-    /* if the record index is < 0, use the last index */
-    if( record_index < 0 ) {
-        record_index = data->num_records - 1;
+    int i;
+    assert( data_to_update->num_records == data->num_records );
+    pthread_mutex_lock( data_to_update->mutex );
+    for( i = 0; i < data_to_update->num_records; i++ )
+    {
+        sum_error_data_records( 
+            data_to_update->records[i], 
+            data->records[i] );
     }
-    
-    assert( record_index < data->num_records && record_index >= 0 );
-    
-    
-    pthread_mutex_lock( data->mutex );
-    sum_error_data_records( data->records[record_index], record );
-    pthread_mutex_unlock( data->mutex );
+    pthread_mutex_unlock( data_to_update->mutex );
     
     return;
 }
@@ -1006,13 +1034,18 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
  */
 void
 init_error_data_record( struct error_data_record_t** data, 
+                        int read_subtemplate_index, enum STRAND strand,
                         int max_read_len, int max_qual_score )
 {
     *data = malloc( sizeof(struct error_data_record_t) );
     
     (*data)->num_unique_reads = 0;
+    
     (*data)->max_read_length = max_read_len;
     (*data)->max_qual_score = max_qual_score;
+
+    (*data)->read_subtemplate_index = read_subtemplate_index;
+    (*data)->strand = strand;
 
     (*data)->min_readkey = -1;
     (*data)->max_readkey = -1;
@@ -1058,16 +1091,21 @@ free_error_data_record( struct error_data_record_t* data )
 }
 
 void
-update_error_data_record(
-    struct error_data_record_t* data,
+update_error_data(
+    struct error_data_t* data,
     char* genome_seq,
     char* read,
     char* error_str,
     int read_length,
+    int subtemplate_index,
+    enum STRAND strand,
     int location_offset
 )
 {
-    data->num_unique_reads += 1;
+    /* find the correct error data record */
+    struct error_data_record_t* record = data->records[
+        2*subtemplate_index + ((int)strand - 1)];
+    record->num_unique_reads += 1;
     
     int i;    
     for( i = 0; i < read_length; i++ )
@@ -1076,10 +1114,10 @@ update_error_data_record(
         {
             // Add 1 because read positions are 1 based
             unsigned char error_char = (unsigned char) error_str[i];
-            data->base_type_mismatch_cnts[error_char][i+1+location_offset] += 1;
+            record->base_type_mismatch_cnts[error_char][i+1+location_offset] += 1;
         }
         
-        data->base_type_cnts[(unsigned char) error_str[i]][i+1+location_offset] += 1;
+        record->base_type_cnts[(unsigned char) error_str[i]][i+1+location_offset] += 1;
     }
     
     return;

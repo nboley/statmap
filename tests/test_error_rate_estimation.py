@@ -81,7 +81,7 @@ def test_error_rate_estimation( ):
             indexed_seq_len, search_type='e', num_threads=-1 )
     
     ###### Make sure that the error data looks correct #########################
-    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
+    # records = load_error_data(os.path.join(output_directory, "error_stats.log"))
     
     ###### Cleanup the created files ###########################################
     if CLEANUP:

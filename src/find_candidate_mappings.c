@@ -1764,21 +1764,12 @@ find_candidate_mappings( void* params )
        execution in scratch */
     struct error_model_t* error_model = td->error_model;
     
-    /* store statistics about mapping quality here  */
-    struct error_data_t* error_data = td->error_data;
-    
     struct mapping_metaparams* metaparams = td->metaparams;
     float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* END parameter 'recreation' */
 
     assert( genome->index != NULL );
-    
-    /* create a thread local copy of the error data to avoid excess locking */
-    struct error_data_record_t* scratch_error_data_record;
-    init_error_data_record( &scratch_error_data_record, 
-                            error_data->max_read_length, 
-                            error_data->max_qual_score );
     
     /* The current read of interest */
     struct read* r;
@@ -1891,13 +1882,7 @@ find_candidate_mappings( void* params )
     }
 
     /********* update the global error data *********/
-
-    // add error_data to scratch_error_data
-    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
     
-    // free local copy of error data
-    free_error_data_record( scratch_error_data_record );
-
     return NULL;
 }
 
@@ -2016,7 +2001,7 @@ update_error_data_from_index_search_results(
     struct indexable_subtemplates *ists, 
     mapped_locations** search_results, 
     struct genome_data* genome, 
-    struct error_data_record_t* error_data_record)
+    struct error_data_t* error_data)
 {
     /* Update the error data record */
     int i;
@@ -2031,10 +2016,7 @@ update_error_data_from_index_search_results(
                 best_mapped_location = search_results[i]->locations + j;
             }
         }
-            
-        // XXX
-        if( best_mapped_location->strnd == BKWD ) continue;
-            
+        
         /* Is this correct for rev comp? */
         char* error_str = rst->error_str + ists->container[i].subseq_offset;
             
@@ -2044,13 +2026,15 @@ update_error_data_from_index_search_results(
             best_mapped_location->loc,
             ists->container[i].subseq_length
             );            
-
-        update_error_data_record( 
-            error_data_record, 
+        
+        update_error_data( 
+            error_data, 
             genome_seq, 
             ists->container[i].char_seq, 
             error_str, 
             ists->container[i].subseq_length, 
+            rst->pos_in_template.pos,
+            best_mapped_location->strnd,
             ists->container[i].subseq_offset );
     }
 
@@ -2084,10 +2068,8 @@ collect_error_data( void* params )
     assert( genome->index != NULL );
     
     /* create a thread local copy of the error data to avoid excess locking */
-    struct error_data_record_t* scratch_error_data_record;
-    init_error_data_record( &scratch_error_data_record, 
-                            error_data->max_read_length, 
-                            error_data->max_qual_score );
+    struct error_data_t* scratch_error_data;
+    init_error_data( &scratch_error_data );
     
     /* The current read of interest */
     struct read* r;
@@ -2143,7 +2125,7 @@ collect_error_data( void* params )
                 ists,
                 search_results,
                 genome,
-                scratch_error_data_record
+                scratch_error_data
             );
 
             // cleanup
@@ -2159,10 +2141,10 @@ collect_error_data( void* params )
     /********* update the global error data *********/
 
     // add error_data to scratch_error_data
-    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
+    merge_in_error_data( error_data, scratch_error_data );
     
     // free local copy of error data
-    free_error_data_record( scratch_error_data_record );
+    free_error_data( scratch_error_data );
 
     return NULL;
 }
@@ -2201,10 +2183,7 @@ bootstrap_estimated_error_model(
         
     // Determine how many reads we should look through for the bootstrap
     td_template.max_readkey = NUM_READS_TO_BOOTSTRAP;
-
-    // Add a new row to store error data in
-    add_new_error_data_record( error_data, 0, td_template.max_readkey );
-
+    
     if( num_threads == 1 )
     {
         collect_error_data(&td_template);
@@ -2285,12 +2264,6 @@ find_all_candidate_mappings(
     /* initialize the threads */
     while( false == rawread_db_is_empty( rdb ) )
     {
-        // Add a new row to store error data in
-        add_new_error_data_record( 
-            td_template.error_data, 
-            td_template.max_readkey, 
-            td_template.max_readkey+READS_STAT_UPDATE_STEP_SIZE-1  );
-         
         // update the maximum allowable readkey
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
