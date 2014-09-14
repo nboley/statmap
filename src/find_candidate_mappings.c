@@ -2011,7 +2011,7 @@ update_error_data_from_index_search_results(
         
         int j;
         mapped_location* best_mapped_location = search_results[i]->locations + 0;
-        for ( j= 1; j < search_results[i]->length; j++ ) {
+        for ( j = 1; j < search_results[i]->length; j++ ) {
             if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
                 best_mapped_location = search_results[i]->locations + j;
             }

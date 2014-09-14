@@ -772,7 +772,7 @@ init_index_search_params(
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
 
             float scaling_factor 
-                = 1.; //ist->expected_value / mapping_params->read_expected_value;
+                = ist->expected_value / mapping_params->read_expected_value;
             scaling_factor = ((double)ist->subseq_length )
                 /mapping_params->total_read_length;
             min_match_penalty 
