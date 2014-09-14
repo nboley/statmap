@@ -18,6 +18,12 @@
 #define NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP 10
 #define ROUND_ERROR 1e-6
 
+struct indexable_subtemplates; // fwd declaration (?)
+struct read_subtemplate;
+struct penalty_t;
+struct read;
+
+
 struct freqs_array {
     int max_qual_score;
     int max_position;

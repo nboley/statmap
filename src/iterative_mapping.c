@@ -52,6 +52,7 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
+/* This isn't being used...
 static inline void
 update_stranded_read_start_density_from_location( 
     const struct trace_t* const traces, 
@@ -107,7 +108,7 @@ update_stranded_read_start_density_from_location(
     
     return;
 }
-
+*/
 
 /*
  * This is technically a non-parametric bootstrap

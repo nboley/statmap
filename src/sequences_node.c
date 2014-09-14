@@ -953,8 +953,6 @@ find_sequences_in_sequences_node(
         /* the maximum allowable penalty */
         float min_match_penalty,
 
-        /* the seq of interest */
-        const LETTER_TYPE* const seq,
         /* the length of a full sequence */
         const int seq_length,
         /* the total num of letters in a seq */

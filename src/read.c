@@ -370,3 +370,16 @@ add_indexable_subtemplate_to_indexable_subtemplates(
 
     ists->container[ists->length-1] = *ist;
 }
+
+void
+cache_penalty_arrays_in_read_subtemplates(
+    struct read* r, struct mapping_params* mapping_params )
+{
+    assert( r->num_subtemplates == mapping_params->num_penalty_arrays );
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ ) {
+        r->subtemplates[i].fwd_penalty_array = mapping_params->fwd_penalty_arrays[i];
+        r->subtemplates[i].rev_penalty_array = mapping_params->rev_penalty_arrays[i];
+    }
+    return;
+}

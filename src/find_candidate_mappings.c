@@ -306,125 +306,6 @@ search_index(
     return;
 };
 
-/* 
-   Returns true if these candidate mappigns can be used to update the error 
-   data. Basically, we just test for uniqueness. 
-*/
-static inline enum bool
-can_be_used_to_update_error_data(
-    candidate_mappings* mappings,
-    struct genome_data* genome
-)
-{
-    /* skip empty mappings */
-    if( NULL == mappings )
-        return false;
-    
-    /*** we only want unique mappers for the error estiamte updates */        
-    // We allow lengths of 2 because we may have diploid locations
-    if( mappings->length < 1 || mappings->length > 2 ) {
-        return false;
-    }
-    
-    /* we know that the length is at least 1 from directly above */
-    assert( mappings->length >= 1 );
-    
-    candidate_mapping* loc = mappings->mappings + 0; 
-    int mapped_length = loc->mapped_length;
-    
-    char* genome_seq = find_seq_ptr( 
-        genome, 
-        loc->chr, 
-        loc->start_bp, 
-        mapped_length
-    );
-        
-    /* 
-       if there are two mappings, make sure that they have the same 
-       genome sequence. They actually may not be mapping to the same, 
-       corresponding diploid locations, but as long as there isn't a second
-       competing sequence, we really don't care because the mutation rates 
-       should still be fine.
-    */
-    if( mappings->length > 1 )
-    {
-        /* this is guaranteed at the start of the function */
-        assert( mappings->length == 2 );
-
-        char* genome_seq_2 = find_seq_ptr( 
-            genome, 
-            mappings->mappings[1].chr, 
-            mappings->mappings[1].start_bp, 
-            mapped_length
-        );
-        
-        /* if the sequences aren't identical, then return */
-        if( 0 != strncmp( genome_seq, genome_seq_2, mapped_length ) )
-            return false;
-    }
-    
-    return true;
-}
-
-static inline void
-update_error_data_record_from_candidate_mappings(
-    struct genome_data* genome,
-    candidate_mappings* mappings,
-    struct read_subtemplate* rst,
-    struct error_data_record_t* error_data_record
-)
-{
-    //if( !can_be_used_to_update_error_data( mappings, genome ) )
-    //    return;
-    
-    /* we need at least one valid mapping */
-    if( mappings->length == 0 )
-        return;
-    
-    // use the index with the lowest penalty to update the error structure
-    candidate_mapping* cm = mappings->mappings + 0;
-    int i;
-    for( i = 1; i < mappings->length; i++ ) {
-        if( mappings->mappings[i].penalty > cm->penalty )
-            cm = mappings->mappings + i;
-    }
-    
-    // Ignore reads that are reverse complemented - we need to fix this
-    if(cm->rd_strnd == BKWD) return; // XXX TODO
-
-    int mapped_length = cm->mapped_length;
-    
-    char* genome_seq = find_seq_ptr( 
-        genome, 
-        cm->chr, 
-        cm->start_bp,
-        mapped_length
-    );            
-        
-    /* get the read sequence - rev complement if on reverse strand */
-    char* read_seq;
-    if( cm->rd_strnd == BKWD )
-    {
-        read_seq = calloc( mapped_length + 1, sizeof(char) );
-        rev_complement_read( rst->char_seq + cm->trimmed_length,
-                read_seq, mapped_length );
-    } else {
-        read_seq = rst->char_seq + cm->trimmed_length;
-    }
-    
-    /* Is this correct for rev comp? */
-    char* error_str = rst->error_str + cm->trimmed_length;
-
-    /* the offset is always 0 because this is a candidate mapping */
-    update_error_data_record( 
-        error_data_record, genome_seq, read_seq, error_str, mapped_length, 0 );
-    
-    /* free memory if we allocated it */
-    if( cm->rd_strnd == BKWD )
-        free( read_seq );
-    
-    return;
-}
 
 void
 search_index_for_indexable_subtemplates(
@@ -1501,21 +1382,13 @@ find_candidate_mappings_for_read_subtemplate(
         candidate_mappings* final_mappings,
         struct genome_data* genome,
         
-        struct error_data_record_t* scratch_error_data_record,
-        enum bool only_collect_error_data,
-
         struct mapping_params* mapping_params
     )
 {
-    /* the index of the read subtemplate that we are using */
-    int rst_pos = rst->pos_in_template.pos;
-    
     // build a set of indexable subtemplates from this read subtemplate
     struct indexable_subtemplates* ists = 
        build_indexable_subtemplates_from_read_subtemplate(
-           rst, genome->index,
-           only_collect_error_data
-       );
+           rst, genome->index, false );
 
     /* if we couldn't build indexable sub templates, ie the read was too short, 
        then don't try and map this read */
@@ -1523,7 +1396,6 @@ find_candidate_mappings_for_read_subtemplate(
     {
         return CANT_BUILD_READ_SUBTEMPLATES;
     }
-
     
     /* if the set of probe's is too low quality, don't try and map this read */
     if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
@@ -1557,44 +1429,7 @@ find_candidate_mappings_for_read_subtemplate(
             genome,
             index_search_params
         );
-    
-    if( only_collect_error_data ) {
-        /* Update the error data record */
-        int i, j;
-        for( i = 0; i < ists->length; i++ ) {
-            if (search_results[i]->length == 0) continue;
-            mapped_location* best_mapped_location = search_results[i]->locations + 0;
-            for ( j= 1; j < search_results[i]->length; j++ ) {
-                if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
-                    best_mapped_location = search_results[i]->locations + j;
-                }
-            }
-            
-            // XXX
-            if( best_mapped_location->strnd == BKWD ) continue;
-            
-            /* Is this correct for rev comp? */
-            char* error_str = rst->error_str + ists->container[i].subseq_offset;
-            
-            char* genome_seq = find_seq_ptr( 
-                genome, 
-                best_mapped_location->chr, 
-                best_mapped_location->loc,
-                ists->container[i].subseq_length
-            );            
-
-            update_error_data_record( 
-                scratch_error_data_record, 
-                genome_seq, 
-                ists->container[i].char_seq, 
-                error_str, 
-                ists->container[i].subseq_length, 
-                ists->container[i].subseq_offset );            
-        }
         
-        goto cleanup_index_search;
-    }
-    
     #ifdef PROFILE_CANDIDATE_MAPPING
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
 
@@ -1621,19 +1456,7 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     free_candidate_mappings( mappings );
-    
-    /* update the thread local copy of error data (need the error data
-     * and the subtemplate to do this) */
-    #ifdef INCREMENTLY_UPDATE_ERROR_MODEL
-    update_error_data_record_from_candidate_mappings(
-            genome,
-            final_mappings,
-            rst,
-            scratch_error_data_record
-        );
-    #endif
-    
-cleanup_index_search:
+        
     /* NOTE search_results contains references to memory allocated in the
      * indexable_subtemplates. search_results must be freed before ists */
     free( index_search_params );
@@ -1663,8 +1486,6 @@ find_candidate_mappings_for_read(
         struct genome_data* genome,
 
         struct error_model_t* error_model,
-        struct error_data_record_t* scratch_error_data_record,
-        enum bool only_collect_error_data,
 
         struct mapping_params* mapping_params
     )
@@ -1687,8 +1508,6 @@ find_candidate_mappings_for_read(
                 rst,
                 rst_mappings,
                 genome,
-                scratch_error_data_record,
-                only_collect_error_data,
                 mapping_params
             );
         
@@ -1916,6 +1735,144 @@ increment_counter_with_lock( unsigned int *counter, pthread_spinlock_t* lock )
     pthread_spin_unlock( lock );
 }
 
+void* 
+collect_error_data( void* params ) 
+{
+    /* 
+     * recreate the struct parameters for readability
+     * this should be optimized out 
+     */
+
+    struct single_map_thread_data* td = params;
+    
+    struct genome_data* genome = td->genome;
+    
+    struct rawread_db_t* rdb = td->rdb;
+    
+    struct error_model_t* error_model = td->error_model;
+    
+    /* store statistics about mapping quality here  */
+    struct error_data_t* error_data = td->error_data;
+    
+    struct mapping_metaparams* metaparams = td->metaparams;
+    float reads_min_match_penalty = td->reads_min_match_penalty;
+    
+    /* END parameter 'recreation' */
+
+    assert( genome->index != NULL );
+    
+    /* create a thread local copy of the error data to avoid excess locking */
+    struct error_data_record_t* scratch_error_data_record;
+    init_error_data_record( &scratch_error_data_record, 
+                            error_data->max_read_length, 
+                            error_data->max_qual_score );
+    
+    /* The current read of interest */
+    struct read* r;
+    /* 
+     * While there are still mappable reads in the read DB. All locking is done
+     * in the get next read functions. 
+     */
+    while( EOF != get_next_read_from_rawread_db(
+               rdb, &r, td->max_readkey )  
+         ) 
+    {
+        /* We dont memory lock mapped_cnt because it's read only and we dont 
+           really care if it's wrong 
+         */
+        struct mapping_params* mapping_params
+            = init_mapping_params_for_read( r, metaparams, error_model, 
+                reads_min_match_penalty );
+        cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
+
+        int i;
+        for( i = 0; i < r->num_subtemplates; i++ )
+        {
+            // reference to current read subtemplate
+            struct read_subtemplate* rst = r->subtemplates + i;
+            
+            // build a set of indexable subtemplates from this read subtemplate
+            struct indexable_subtemplates* ists = 
+                build_indexable_subtemplates_from_read_subtemplate(
+                    rst, genome->index, false );
+            // if we can't build indexable subtemplates (e.g. the index probe
+            // is too short ) then skip this read subtemplate
+            if( ists == NULL ) continue;
+
+            /* Stores the results of the index search for each indexable subtemplate */
+            int search_results_length = ists->length;
+            mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
+                                                       search_results_length);
+
+            /* initialize search parameters for the index probes */
+            struct index_search_params* index_search_params
+                = init_index_search_params(ists, mapping_params);
+
+            search_index_for_indexable_subtemplates(
+                ists,
+                search_results,
+                genome,
+                index_search_params
+                );
+            
+
+            /* Update the error data record */
+            int i, j;
+            for( i = 0; i < ists->length; i++ ) 
+            {
+                if (search_results[i]->length == 0) continue;
+                mapped_location* best_mapped_location = search_results[i]->locations + 0;
+                for ( j= 1; j < search_results[i]->length; j++ ) {
+                    if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
+                        best_mapped_location = search_results[i]->locations + j;
+                    }
+                }
+            
+                // XXX
+                if( best_mapped_location->strnd == BKWD ) continue;
+            
+                /* Is this correct for rev comp? */
+                char* error_str = rst->error_str + ists->container[i].subseq_offset;
+            
+                char* genome_seq = find_seq_ptr( 
+                    genome, 
+                    best_mapped_location->chr, 
+                    best_mapped_location->loc,
+                    ists->container[i].subseq_length
+                    );            
+
+                update_error_data_record( 
+                    scratch_error_data_record, 
+                    genome_seq, 
+                    ists->container[i].char_seq, 
+                    error_str, 
+                    ists->container[i].subseq_length, 
+                    ists->container[i].subseq_offset );            
+
+                // cleanup
+                free( index_search_params );
+                free_search_results( search_results, search_results_length );
+                free_indexable_subtemplates( ists );
+
+            }
+        }
+
+        /* cleanup memory */
+        free_mapping_params( mapping_params );
+        free_read( r );
+    }
+
+    /********* update the global error data *********/
+
+    // add error_data to scratch_error_data
+    merge_in_error_data_record( error_data, -1, scratch_error_data_record );
+    
+    // free local copy of error data
+    free_error_data_record( scratch_error_data_record );
+
+    return NULL;
+}
+
 /* TODO - revisit the read length vs seq length distinction */
 /* 
  * I use a struct for the parameters so that I can initialzie threads
@@ -1947,11 +1904,7 @@ find_candidate_mappings( void* params )
     
     /* store statistics about mapping quality here  */
     struct error_data_t* error_data = td->error_data;
-
-    /* if we only want error data, then there is not reason to find antyhing 
-       except unique reads. */
-    enum bool only_collect_error_data = td->only_collect_error_data;
-
+    
     struct mapping_metaparams* metaparams = td->metaparams;
     float reads_min_match_penalty = td->reads_min_match_penalty;
     
@@ -1967,7 +1920,6 @@ find_candidate_mappings( void* params )
     
     /* The current read of interest */
     struct read* r;
-    int curr_read_index = 0;
     /* 
      * While there are still mappable reads in the read DB. All locking is done
      * in the get next read functions. 
@@ -2032,8 +1984,6 @@ find_candidate_mappings( void* params )
                     mappings,
                     genome,
                     error_model,
-                    scratch_error_data_record,
-                    only_collect_error_data,
                     mapping_params
             );
         
@@ -2045,40 +1995,30 @@ find_candidate_mappings( void* params )
             continue; // skip the unmappable read            
         }
 
-        /* unless we're only collecting error data, build candidate mappings */
-        if( !only_collect_error_data )
-        {
-            mapped_read_t* mapped_read = 
-                build_mapped_read_from_candidate_mappings(
-                    mappings,
-                    genome,
-                    r,
-                    mpd_rds_db->fl_dist,
-                    mapping_params
+        mapped_read_t* mapped_read = 
+            build_mapped_read_from_candidate_mappings(
+                mappings,
+                genome,
+                r,
+                mpd_rds_db->fl_dist,
+                mapping_params
                 );
             
-            if( mapped_read != NULL )
-            {
-                /* mapped count is the number of reads that successfully mapped
-                 * (not the number of mappings) */
-                increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
+        if( mapped_read != NULL )
+        {
+            /* mapped count is the number of reads that successfully mapped
+             * (not the number of mappings) */
+            increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
 
-                /* the read has at least one mapping - add it to the mapped
-                 * reads database */
-                add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
-                free_mapped_read( mapped_read );
-            } else {
-                /* the read was declared mappable, but did not map */
-                add_nonmapping_read_to_mapped_reads_db( r, mpd_rds_db );
-            }
+            /* the read has at least one mapping - add it to the mapped
+             * reads database */
+            add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
+            free_mapped_read( mapped_read );
         } else {
-            /* Update the number of bootstrapped reads (also uses mapped_cnt) */
-            if( mappings->length > 0 )
-                increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
+            /* the read was declared mappable, but did not map */
+            add_nonmapping_read_to_mapped_reads_db( r, mpd_rds_db );
         }
-
-        curr_read_index += 1;
-     
+        
         #ifdef PROFILE_CANDIDATE_MAPPING
         err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
         elapsed = (stop.tv_sec - start.tv_sec);

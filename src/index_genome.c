@@ -1253,7 +1253,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             find_sequences_in_sequences_node( 
                 node, 
                 curr_penalty, min_match_penalty,
-                seq, seq_length, num_letters, node_level, strnd,
+                seq_length, num_letters, node_level, strnd,
                 results,
                 penalties,
                 genome

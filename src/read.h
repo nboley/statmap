@@ -6,8 +6,10 @@
 #include "config.h"
 #include "rawread.h"
 #include "quality.h"
+#include "error_correction.h"
 
 struct penalty_array_t; // fwd declaration (?)
+struct mapping_params; // fwd declaration (?)
 
 #define POS_SINGLE_END 0
 #define POS_PAIRED_END_1 0
@@ -136,6 +138,11 @@ void
 add_indexable_subtemplate_to_indexable_subtemplates(
         struct indexable_subtemplate* ist,
         struct indexable_subtemplates* ists
+    );
+
+void
+cache_penalty_arrays_in_read_subtemplates(
+    struct read* r, struct mapping_params* mapping_params 
     );
 
 #endif // READ_HEADER

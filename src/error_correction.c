@@ -1152,3 +1152,135 @@ fprintf_error_data_record(
     
     fprintf( stream, "\n" );
 }
+
+/*******************************************************************************
+ *
+ *
+ * Error data updating code
+ *
+ *
+ ******************************************************************************/
+
+/* 
+   Returns true if these candidate mappigns can be used to update the error 
+   data. Basically, we just test for uniqueness. 
+*/
+#ifdef INCREMENTLY_UPDATE_ERROR_MODEL
+
+static inline enum bool
+can_be_used_to_update_error_data(
+    candidate_mappings* mappings,
+    struct genome_data* genome
+)
+{
+    /* skip empty mappings */
+    if( NULL == mappings )
+        return false;
+    
+    /*** we only want unique mappers for the error estiamte updates */        
+    // We allow lengths of 2 because we may have diploid locations
+    if( mappings->length < 1 || mappings->length > 2 ) {
+        return false;
+    }
+    
+    /* we know that the length is at least 1 from directly above */
+    assert( mappings->length >= 1 );
+    
+    candidate_mapping* loc = mappings->mappings + 0; 
+    int mapped_length = loc->mapped_length;
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp, 
+        mapped_length
+    );
+        
+    /* 
+       if there are two mappings, make sure that they have the same 
+       genome sequence. They actually may not be mapping to the same, 
+       corresponding diploid locations, but as long as there isn't a second
+       competing sequence, we really don't care because the mutation rates 
+       should still be fine.
+    */
+    if( mappings->length > 1 )
+    {
+        /* this is guaranteed at the start of the function */
+        assert( mappings->length == 2 );
+
+        char* genome_seq_2 = find_seq_ptr( 
+            genome, 
+            mappings->mappings[1].chr, 
+            mappings->mappings[1].start_bp, 
+            mapped_length
+        );
+        
+        /* if the sequences aren't identical, then return */
+        if( 0 != strncmp( genome_seq, genome_seq_2, mapped_length ) )
+            return false;
+    }
+    
+    return true;
+}
+
+static inline void
+update_error_data_record_from_candidate_mappings(
+    struct genome_data* genome,
+    candidate_mappings* mappings,
+    struct read_subtemplate* rst,
+    struct error_data_record_t* error_data_record
+)
+{
+    if( !can_be_used_to_update_error_data( mappings, genome ) )
+        return;
+    
+    /* we need at least one valid mapping */
+    if( mappings->length == 0 )
+        return;
+    
+    // use the index with the lowest penalty to update the error structure
+    candidate_mapping* cm = mappings->mappings + 0;
+    int i;
+    for( i = 1; i < mappings->length; i++ ) {
+        if( mappings->mappings[i].penalty > cm->penalty )
+            cm = mappings->mappings + i;
+    }
+    
+    // Ignore reads that are reverse complemented - we need to fix this
+    if(cm->rd_strnd == BKWD) return; // XXX TODO
+
+    int mapped_length = cm->mapped_length;
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        cm->chr, 
+        cm->start_bp,
+        mapped_length
+    );            
+        
+    /* get the read sequence - rev complement if on reverse strand */
+    char* read_seq;
+    if( cm->rd_strnd == BKWD )
+    {
+        read_seq = calloc( mapped_length + 1, sizeof(char) );
+        rev_complement_read( rst->char_seq + cm->trimmed_length,
+                read_seq, mapped_length );
+    } else {
+        read_seq = rst->char_seq + cm->trimmed_length;
+    }
+    
+    /* Is this correct for rev comp? */
+    char* error_str = rst->error_str + cm->trimmed_length;
+
+    /* the offset is always 0 because this is a candidate mapping */
+    update_error_data_record( 
+        error_data_record, genome_seq, read_seq, error_str, mapped_length, 0 );
+    
+    /* free memory if we allocated it */
+    if( cm->rd_strnd == BKWD )
+        free( read_seq );
+    
+    return;
+}
+
+#endif
