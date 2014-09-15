@@ -94,6 +94,7 @@ free_mapped_locations( mapped_locations* results )
         return;
     
     free( results->locations  );
+    //free_indexable_subtemplates( results->probe );
     free( results  );
     return;
 }

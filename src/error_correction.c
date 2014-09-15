@@ -1210,7 +1210,7 @@ update_error_data_from_index_search_results(
     /* Update the error data record */
     int i;
     mapped_location curr_loc;
-    for( i = 0; i < MAX_NUM_RD_SUBTEMPLATES; i++ ) 
+    for( i = 0; NULL != search_results[i]; i++ ) 
     {
         /* if there aren't any results, there is nothing to do */
         if (search_results[i]->length == 0) continue;

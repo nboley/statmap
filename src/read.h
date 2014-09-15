@@ -30,6 +30,8 @@ struct read_subtemplate {
     
     int length;
     struct pos_in_template pos_in_template;
+    
+    struct indexable_subtemplates* ists;
 };
 
 struct prior_read_information {

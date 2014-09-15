@@ -313,31 +313,30 @@ search_index_for_read_subtemplate(
     )
 {
     // build a set of indexable subtemplates from this read subtemplate
-    struct indexable_subtemplates* ists = 
-       build_indexable_subtemplates_from_read_subtemplate(
-           rst, genome->index, false );
+    rst->ists = build_indexable_subtemplates_from_read_subtemplate(
+        rst, genome->index, false );
 
     /* if we couldn't build indexable sub templates, ie the read was too short, 
        then don't try and map this read */
-    if( ists == NULL ) {
+    if( rst->ists == NULL ) {
         return CANT_BUILD_READ_SUBTEMPLATES;
     }
         
     /* Stores the results of the index search for each indexable subtemplate */
-    int search_results_length = ists->length;
+    int search_results_length = rst->ists->length;
     *search_results = calloc(sizeof(mapped_locations*),search_results_length+1);
         
 
     /* initialize search parameters for the index probes */
     struct index_search_params* index_search_params
-        = init_index_search_params(ists, mapping_params);
+        = init_index_search_params(rst->ists, mapping_params);
 
     int i;
-    for( i = 0; i < ists->length; i++ )
+    for( i = 0; i < rst->ists->length; i++ )
     {
         search_index(
                 genome,
-                ists->container + i,
+                rst->ists->container + i,
                 index_search_params + i,
                 &((*search_results)[i]),
                 false
@@ -346,14 +345,12 @@ search_index_for_read_subtemplate(
         if((*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)
         {
             free( index_search_params );
-            free_indexable_subtemplates( ists );
             free_search_results( *search_results );
             return TOO_MANY_CANDIDATE_MAPPINGS;
         }
     }    
 
     free( index_search_params );
-    free_indexable_subtemplates( ists );
     
     return 0;
 }

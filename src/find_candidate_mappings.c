@@ -318,6 +318,7 @@ build_candidate_mappings_from_search_results(
             
             build_candidate_mapping_from_match(
                 base_match, mappings, rst, genome );
+            free_ml_match(base_match);
         }
         
         free_mapped_locations( expanded_base_locs );
@@ -343,7 +344,8 @@ find_candidate_mappings_for_read_subtemplate(
     
     *mappings = build_candidate_mappings_from_search_results( 
         search_results, rst, genome, mapping_params);
-    
+
+    free_search_results(search_results);
     /* Return the set of gapped mappings - if mappings were ungapped, they were
      * included in this set of candidate mappings as-is (so for an ungapped
      * assay, gapped_mappings and mappings are identical). */
@@ -418,7 +420,6 @@ find_candidate_mappings_for_read(
         append_candidate_mappings( read_mappings, rst_mappings );
 
         free_candidate_mappings( rst_mappings );
-        
     }
     
     if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {

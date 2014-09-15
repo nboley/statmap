@@ -41,6 +41,9 @@ free_read_subtemplate( struct read_subtemplate* st )
 
     /* Don't free the read subtemplate itself - it is allocated as part of a
      * contiguous array. */
+    if( st->ists != NULL )
+        free_indexable_subtemplates(st->ists);
+    
     return;
 }
 
@@ -93,6 +96,8 @@ add_subtemplate_to_read(
     rst->pos_in_template.pos = pos_in_template;
     rst->pos_in_template.number_of_reads_in_template = num_reads_in_template;
     rst->pos_in_template.is_full_fragment = false;
+    
+    rst->ists = NULL;
 }
 
 void
