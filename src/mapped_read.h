@@ -21,6 +21,14 @@ struct genome_data;
 struct rawread_db_t;
 struct cond_prbs_db_t;
 
+float
+calc_candidate_mapping_penalty(
+        candidate_mapping* mapping,
+        struct read_subtemplate* rst,
+        struct genome_data* genome
+    );
+
+
 /*************************************************************************
  *
  *  Mapped Reads

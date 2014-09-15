@@ -265,10 +265,10 @@ build_candidate_mapping_from_match(
     if( read_location < 0 ) // the read location was invalid; skip this matched set
         return;
     cm.start_bp = read_location;
-
-    cm.penalty = compute_candidate_mapping_penalty_from_match( match );
     
     build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
+
+    cm.penalty = calc_candidate_mapping_penalty( &cm, rst, genome );
 
     add_candidate_mapping( mappings, &cm );
 }
@@ -408,6 +408,8 @@ find_candidate_mappings_for_read(
                 mapping_params
             );
         if( rv != 0 ) {
+            free_candidate_mappings( rst_mappings );
+            free_candidate_mappings( read_mappings );
             return rv;
         }
         
