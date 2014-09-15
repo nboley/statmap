@@ -306,11 +306,13 @@ build_candidate_mappings_from_search_results(
     
     /* consider each base location */
     int index_probe_i, i, j;
-    for( index_probe_i = 0; search_results[index_probe_i] != NULL; index_probe_i++ )
+    for( index_probe_i = 0; 
+         search_results[index_probe_i] != NULL; 
+         index_probe_i++ )
     {
-        /* Always use the mapped locations from the first indexable subtemplate as
-         * the basis for building matches across the whole read subtemplate. We
-         * always build matches from 5' -> 3' */
+        /* Always use the mapped locations from the first indexable subtemplate
+         * as the basis for building matches across the whole read subtemplate.
+         * We always build matches from 5' -> 3' */
         mapped_locations* locs = search_results[index_probe_i];
         
         for( i = 0; i < locs->length; i++ )
@@ -318,8 +320,8 @@ build_candidate_mappings_from_search_results(
             mapped_location* loc = locs->locations + i;
 
             /* If the loc is a pseudo location, build a set of all its
-             * possible expansions to consider for matching. Otherwise, returns the
-             * original location */
+             * possible expansions to consider for matching. Otherwise, returns
+             * the original location */
             mapped_locations* expanded_locs = expand_base_mapped_locations(
                 loc, locs->probe, genome );
 
@@ -332,11 +334,9 @@ build_candidate_mappings_from_search_results(
                                           match, 
                                           expanded_locs->probe->subseq_length,
                                           expanded_locs->probe->subseq_offset);
-            
-                add_candidate_mapping( 
-                    mappings,
-                    build_candidate_mapping_from_match(match, rst, genome ) );
-                        
+                candidate_mapping* mapping = 
+                    build_candidate_mapping_from_match(match, rst, genome );
+                if( NULL != mapping )add_candidate_mapping(mappings, mapping);
                 free_ml_match(match);
             }
         
@@ -358,6 +358,8 @@ find_candidate_mappings_for_read_subtemplate(
     )
 {
     mapped_locations **search_results;
+    *mappings = NULL;
+    
     int rv = search_index_for_read_subtemplate( 
         rst, mapping_params, &search_results, genome, false);
     if( rv != 0 ) return rv;
