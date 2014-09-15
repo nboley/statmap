@@ -975,8 +975,9 @@ collect_error_data( void* params )
             struct read_subtemplate* rst = r->subtemplates + i;
             
             mapped_locations** search_results;
-            search_index_for_read_subtemplate(
+            int rv = search_index_for_read_subtemplate(
                 rst, mapping_params, &search_results, genome, true );
+            if( rv != 0 ) continue;
             
             update_error_data_from_index_search_results(
                 rst,
