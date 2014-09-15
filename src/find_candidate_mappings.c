@@ -1406,33 +1406,25 @@ find_candidate_mappings_for_read_subtemplate(
     /* initialize search parameters for the index probes */
     struct index_search_params* index_search_params
         = init_index_search_params(ists, mapping_params);
-
-    #ifdef PROFILE_CANDIDATE_MAPPING
-    /* Log CPU time used by the current thread */
-    int err;
-    struct timespec start, stop;
-    double elapsed;
-
-    assert( sysconf(_POSIX_THREAD_CPUTIME) );
-    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-    #endif
-
+    
     search_index_for_indexable_subtemplates(
             ists,
             search_results,
             genome,
             index_search_params
         );
+    int i;
+    for( i=0; i < ists->length; i++) 
+    {
+        if(search_results[i]->length > MAX_NUM_CAND_MAPPINGS)
+        {
+            free( index_search_params );
+            free_search_results( search_results, search_results_length );
+            free_indexable_subtemplates( ists );
+            return TOO_MANY_CANDIDATE_MAPPINGS;
+        }
+    }
         
-    #ifdef PROFILE_CANDIDATE_MAPPING
-    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
-
-    elapsed = (stop.tv_sec - start.tv_sec);
-    elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
-
-    statmap_log(LOG_DEBUG, "index_search_time %f", elapsed);
-    #endif
-
     candidate_mappings* mappings
         = build_candidate_mappings_from_search_results( search_results,
                 search_results_length, rst, genome, mapping_params );
@@ -1504,6 +1496,7 @@ find_candidate_mappings_for_read(
                 genome,
                 mapping_params
             );
+        if( rv != 0 ) return rv;
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
@@ -1515,12 +1508,13 @@ find_candidate_mappings_for_read(
 
         free_candidate_mappings( rst_mappings );
         
-        if( rv != 0 )
-        {
-            return rv;
-        }
     }
     
+    if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {
+        free_candidate_mappings(read_mappings);
+        return TOO_MANY_CANDIDATE_MAPPINGS;
+    }
+
     return 0;
 }
 
@@ -1830,7 +1824,7 @@ find_candidate_mappings( void* params )
         
         if( rv != 0 )
         {
-            assert(rv == CANT_BUILD_READ_SUBTEMPLATES);
+            add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            

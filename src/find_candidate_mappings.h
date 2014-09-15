@@ -14,6 +14,7 @@
 #define UNTEMPLATED_G_MARGINAL_LOG_PRB -1.30103
 
 #define CANT_BUILD_READ_SUBTEMPLATES 1
+#define TOO_MANY_CANDIDATE_MAPPINGS 2
 
 struct single_map_thread_data {
     int thread_id;
