@@ -26,7 +26,7 @@
 
 /* Mismatch rates for the estimated error model bootstrap */
 #define NUM_READS_TO_BOOTSTRAP 100000
-#define MAX_NUM_MM_RATE 0.20
+#define MAX_NUM_MM_RATE 0.10
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2

@@ -2016,6 +2016,10 @@ update_error_data_from_index_search_results(
             /* Find the location for the full read corresponding to 
                this mapped location, assuming that it is ungapped */
             curr_loc = search_results[i]->locations[j];
+            
+            /* skip pseudo locations */
+            if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
+
             int read_subtemplate_start = 
                 modify_mapped_read_location_for_index_probe_offset(
                     curr_loc.loc, curr_loc.chr, curr_loc.strnd, 
