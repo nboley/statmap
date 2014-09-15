@@ -1401,33 +1401,25 @@ find_candidate_mappings_for_read_subtemplate(
     /* initialize search parameters for the index probes */
     struct index_search_params* index_search_params
         = init_index_search_params(ists, mapping_params);
-
-    #ifdef PROFILE_CANDIDATE_MAPPING
-    /* Log CPU time used by the current thread */
-    int err;
-    struct timespec start, stop;
-    double elapsed;
-
-    assert( sysconf(_POSIX_THREAD_CPUTIME) );
-    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-    #endif
-
+    
     search_index_for_indexable_subtemplates(
             ists,
             search_results,
             genome,
             index_search_params
         );
+    int i;
+    for( i=0; i < ists->length; i++) 
+    {
+        if(search_results[i]->length > MAX_NUM_CAND_MAPPINGS)
+        {
+            free( index_search_params );
+            free_search_results( search_results, search_results_length );
+            free_indexable_subtemplates( ists );
+            return TOO_MANY_CANDIDATE_MAPPINGS;
+        }
+    }
         
-    #ifdef PROFILE_CANDIDATE_MAPPING
-    err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stop);
-
-    elapsed = (stop.tv_sec - start.tv_sec);
-    elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
-
-    statmap_log(LOG_DEBUG, "index_search_time %f", elapsed);
-    #endif
-
     candidate_mappings* mappings
         = build_candidate_mappings_from_search_results( search_results,
                 search_results_length, rst, genome, mapping_params );
@@ -1499,6 +1491,7 @@ find_candidate_mappings_for_read(
                 genome,
                 mapping_params
             );
+        if( rv != 0 ) return rv;
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
@@ -1510,12 +1503,13 @@ find_candidate_mappings_for_read(
 
         free_candidate_mappings( rst_mappings );
         
-        if( rv != 0 )
-        {
-            return rv;
-        }
     }
     
+    if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {
+        free_candidate_mappings(read_mappings);
+        return TOO_MANY_CANDIDATE_MAPPINGS;
+    }
+
     return 0;
 }
 
@@ -1825,7 +1819,7 @@ find_candidate_mappings( void* params )
         
         if( rv != 0 )
         {
-            assert(rv == CANT_BUILD_READ_SUBTEMPLATES);
+            add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            
@@ -1994,21 +1988,68 @@ update_error_data_from_index_search_results(
 {
     /* Update the error data record */
     int i;
+    mapped_location curr_loc;
     for( i = 0; i < ists->length; i++ ) 
     {
+        /* if there aren't any results, there is nothing to do */
         if (search_results[i]->length == 0) continue;
-
+        
         struct indexable_subtemplate* ist = ists->container + i;
-        mapped_location* best_mapped_location = search_results[i]->locations + 0;
+        
+        double highest_penalty = -1e9;
+        mapped_location* best_mapped_location= NULL;
         
         int j;
-        for ( j = 1; j < search_results[i]->length; j++ ) {
-            if(search_results[i]->locations[j].penalty > best_mapped_location->penalty ) {
-                best_mapped_location = search_results[i]->locations + j;
+        for ( j = 0; j < search_results[i]->length; j++ ) 
+        {
+            /* Find the location for the full read corresponding to 
+               this mapped location, assuming that it is ungapped */
+            curr_loc = search_results[i]->locations[j];
+            
+            /* skip pseudo locations */
+            if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
+
+            int read_subtemplate_start = 
+                modify_mapped_read_location_for_index_probe_offset(
+                    curr_loc.loc, curr_loc.chr, curr_loc.strnd, 
+                    ist->subseq_offset, ist->subseq_length, rst->length,
+                    genome);
+            /* if we can't find a valid read location, then skip this*/
+            if( read_subtemplate_start < 0 ) continue;
+            
+            /* Find the genome sequence */
+            char* fwd_genome_seq = find_seq_ptr( 
+                genome, curr_loc.chr, read_subtemplate_start, rst->length);
+            char* genome_seq;
+            
+            struct penalty_t *penalty_array;
+            if( curr_loc.strnd == BKWD )
+            {
+                genome_seq = calloc( rst->length+1, sizeof(char) );
+                rev_complement_read(fwd_genome_seq, genome_seq, rst->length);
+                penalty_array = rst->rev_penalty_array->array;
+            } else {
+                genome_seq = fwd_genome_seq;
+                penalty_array = rst->fwd_penalty_array->array;
             }
+            
+            /* find the penalty for the full sequence */
+            float curr_loc_penalty = recheck_penalty(
+                genome_seq, rst->char_seq, 
+                penalty_array, rst->length);
+            
+            /* if this is the best, then set it as such */
+            if( curr_loc_penalty > highest_penalty )
+            {
+                best_mapped_location = search_results[i]->locations + j;
+                highest_penalty = curr_loc_penalty;
+            }
+
+            /* cleanup memory */
+            if( curr_loc.strnd == BKWD )
+                free( genome_seq );
         }
         
-        /* Is this correct for rev comp? */
         char* error_str = rst->error_str + ist->subseq_offset;
             
         char* fwd_genome_seq = find_seq_ptr( 
@@ -2084,6 +2125,11 @@ collect_error_data( void* params )
                rdb, &r, td->max_readkey )  
          ) 
     {
+        if( rdb->readkey%1000 == 0 ) 
+        {
+            statmap_log(LOG_DEBUG, "Bootstrapped %i reads", rdb->readkey);
+        }
+        
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
