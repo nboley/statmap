@@ -39,6 +39,9 @@ def test_error_rate_estimation( ):
         r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
+
+    reads2 = build_reads_from_fragments( 
+        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
     
     def build_error_str(read):
         # return a complete shit read 10% of the time
@@ -50,11 +53,11 @@ def test_error_rate_estimation( ):
         
     
     # mutate the reads according to some simple eror model
-    def iter_mutated_reads( reads ):
+    def iter_mutated_reads( reads, base_error_rate=0.10 ):
         for read in reads:
             error_str = build_error_str(read)
-            error_rates = [ 0.10 #+ 0.15*float(i)/len(read)
-                            #+ error_char_mappings[char]
+            error_rates = [ base_error_rate + 0.15*float(i)/len(read)
+                            + error_char_mappings[char]
                             for i, char in enumerate( error_str ) ]
             
             mutated_read = []
@@ -67,7 +70,8 @@ def test_error_rate_estimation( ):
             yield ( mutated_read, error_str, read )
 
     mutated_reads = list( iter_mutated_reads( reads ) )
-
+    mutated_reads += list(iter_mutated_reads(reads2, 0.01))
+    
     # build and write the reads    
     reads_of = open("tmp.fastq", "w")
     build_single_end_fastq_from_mutated_reads( mutated_reads, reads_of )

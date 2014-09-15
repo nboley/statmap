@@ -135,10 +135,8 @@ build_indexable_subtemplate(
         }
     } else {
         if( choose_random_offset ) {
-            double rn = ((double) rand() / (RAND_MAX));
-            subseq_offset = range_start + MIN( 
-                rn*(range_length - subseq_length), 
-                range_length - subseq_length );
+            double rn = ((double) rand() / ((double) RAND_MAX));
+            subseq_offset = range_start + (int) (rn*(range_length - subseq_length));
         } else {
             subseq_offset = find_optimal_subseq_offset(
                 rst,
@@ -188,12 +186,8 @@ build_indexable_subtemplates_from_read_subtemplate(
          * can maximize the space for finding introns */
         num_partitions = 2;
     } else {
-        #ifdef ONLY_USE_1_READ_SUBTEMPLATE
-        num_partitions = 1;
-        #else
         num_partitions = MIN( indexable_length / subseq_length,
-                MAX_NUM_INDEX_PROBES );        
-        #endif
+                              MAX_NUM_INDEX_PROBES );        
     }
     int partition_len = floor((float)indexable_length / num_partitions);
     
@@ -2008,12 +2002,13 @@ update_error_data_from_index_search_results(
     for( i = 0; i < ists->length; i++ ) 
     {
         if (search_results[i]->length == 0) continue;
+
         struct indexable_subtemplate* ist = ists->container + i;
+        mapped_location* best_mapped_location = search_results[i]->locations + 0;
         
         int j;
-        mapped_location* best_mapped_location = search_results[i]->locations + 0;
         for ( j = 1; j < search_results[i]->length; j++ ) {
-            if(search_results[i]->locations[j].penalty < best_mapped_location->penalty ) {
+            if(search_results[i]->locations[j].penalty > best_mapped_location->penalty ) {
                 best_mapped_location = search_results[i]->locations + j;
             }
         }
@@ -2031,8 +2026,7 @@ update_error_data_from_index_search_results(
         char* genome_seq;
         if( best_mapped_location->strnd == BKWD )
         {
-            genome_seq = calloc( ists->container[i].subseq_length+1, 
-                                 sizeof(char) );
+            genome_seq = calloc( ist->subseq_length+1, sizeof(char) );
             rev_complement_read(fwd_genome_seq, genome_seq, ist->subseq_length);
         } else {
             genome_seq = fwd_genome_seq;
@@ -2047,7 +2041,7 @@ update_error_data_from_index_search_results(
             rst->pos_in_template.pos,
             best_mapped_location->strnd,
             ist->subseq_offset );
-
+        
         if( best_mapped_location->strnd == BKWD )
             free(genome_seq);
     }
@@ -2228,29 +2222,31 @@ bootstrap_estimated_error_model(
             }
         }
     }
-    
-    clock_t stop = clock();
-    statmap_log( LOG_NOTICE,
-            "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
-            error_data->records[0]->num_unique_reads, rdb->readkey,
-            ((float)(stop-start))/CLOCKS_PER_SEC,
-            ((float)(
-                error_data->records[0]->num_unique_reads*CLOCKS_PER_SEC*3600)
-             /(stop-start))
-        );
-    
     free_td_template( &td_template );
     
-    rewind_rawread_db( rdb );
+    clock_t stop = clock();
+    int num_bootstrapped_reads = 0;
+    int i;
+    for(i=0; i<error_data->num_records; i++) 
+        num_bootstrapped_reads += error_data->records[i]->num_unique_reads;
+    statmap_log( LOG_NOTICE,
+            "Bootstrapped (%i/%u) Unique Reads in %.2lf seconds ( %e/thread-hour )",
+            num_bootstrapped_reads, rdb->readkey,
+            ((float)(stop-start))/CLOCKS_PER_SEC,
+            ((float)(num_bootstrapped_reads*CLOCKS_PER_SEC*3600)/(stop-start))
+        );
     
-    update_error_model_from_error_data( error_model, td_template.error_data );
+    update_error_model_from_error_data( error_model, error_data );
     
     FILE* error_data_ofp = fopen( BOOTSTRAP_ERROR_STATS_LOG, "w" );
     log_error_data( error_data_ofp, error_data );
     fclose( error_data_ofp );
+
     free_error_data( error_data );
     
     free_error_model( bootstrap_error_model );
+    
+    rewind_rawread_db( rdb );
 
     return;
 }

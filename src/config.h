@@ -15,7 +15,7 @@
 #define MAX_SEARCH_TIME 1.0
 #define MAX_NUM_CAND_MAPPINGS 500
 
-#define ONLY_USE_1_READ_SUBTEMPLATE
+#define MAX_NUM_INDEX_PROBES 1
 #define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
 
@@ -26,7 +26,7 @@
 
 /* Mismatch rates for the estimated error model bootstrap */
 #define NUM_READS_TO_BOOTSTRAP 100000
-#define MAX_NUM_MM_RATE 0.10
+#define MAX_NUM_MM_RATE 0.20
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
