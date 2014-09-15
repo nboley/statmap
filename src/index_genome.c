@@ -309,12 +309,13 @@ search_index_for_read_subtemplate(
         
         mapped_locations*** search_results,
 
-        struct genome_data* genome
+        struct genome_data* genome,
+        enum bool use_random_subtemplate_offset
     )
 {
     // build a set of indexable subtemplates from this read subtemplate
     rst->ists = build_indexable_subtemplates_from_read_subtemplate(
-        rst, genome->index, false );
+        rst, genome->index, use_random_subtemplate_offset );
 
     /* if we couldn't build indexable sub templates, ie the read was too short, 
        then don't try and map this read */

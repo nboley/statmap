@@ -28,7 +28,8 @@ search_index_for_read_subtemplate(
         
         mapped_locations*** search_results,
 
-        struct genome_data* genome);
+        struct genome_data* genome,
+        enum bool use_random_subtemplate_offset);
 
 /* a hash to store chromosome name */
 char* chr_names[CHR_NUM_MAX+1];

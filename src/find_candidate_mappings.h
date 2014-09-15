@@ -35,6 +35,14 @@ struct single_map_thread_data {
 void*
 find_candidate_mappings( void* params );
 
+candidate_mapping* 
+build_ungapped_candidate_mapping_from_mapped_location(
+    mapped_location* ml, 
+    struct read_subtemplate* rst,
+    struct indexable_subtemplate* ist,
+    struct genome_data* genome
+);
+
 void
 bootstrap_estimated_error_model( 
         struct genome_data* genome,

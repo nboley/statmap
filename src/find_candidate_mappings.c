@@ -211,34 +211,33 @@ compute_candidate_mapping_penalty_from_match(
     return cum_penalty;
 }
 
-void
+candidate_mapping*
 build_candidate_mapping_from_match(
         struct ml_match* match,
-        candidate_mappings* mappings,
         struct read_subtemplate* rst,
         struct genome_data* genome )
 {
     /* Make sure this is a valid, completed match */
     assert( match->len > 0 && match->matched == match->len );
 
-    candidate_mapping cm;
-    memset( &cm, 0, sizeof(candidate_mapping) );
+    candidate_mapping* cm;
+    cm = calloc( sizeof(candidate_mapping), 1 );
 
     mapped_location* base = match->locations + 0;
-    cm.chr = base->chr;
-    cm.rd_strnd = base->strnd;
+    cm->chr = base->chr;
+    cm->rd_strnd = base->strnd;
 
     /* the length of the sequence that was mapped */
-    cm.trimmed_length = softclip_len;
-    cm.mapped_length = rst->length - cm.trimmed_length;
+    cm->trimmed_length = softclip_len;
+    cm->mapped_length = rst->length - cm->trimmed_length;
 
     /* The first location in the match is the first location in the mapping,
      * relative to the strand. We want to normalize to the start in the 5'
      * genome. */
     int norm_start_loc_index;
 
-    assert( cm.rd_strnd == FWD || cm.rd_strnd == BKWD );
-    if( cm.rd_strnd == FWD ) {
+    assert( cm->rd_strnd == FWD || cm->rd_strnd == BKWD );
+    if( cm->rd_strnd == FWD ) {
         /* If this is a forward mapped read, then the start relative to the
          * forward strand is in the first index probe's mapped location, since
          * index probes are chosen from 5' to 3' across the read */
@@ -263,15 +262,31 @@ build_candidate_mapping_from_match(
             );
 
     if( read_location < 0 ) // the read location was invalid; skip this matched set
-        return;
-    cm.start_bp = read_location;
+        return NULL;
+    cm->start_bp = read_location;
     
-    build_candidate_mapping_cigar_string_from_match( &cm, match, rst );
+    build_candidate_mapping_cigar_string_from_match( cm, match, rst );
 
-    cm.penalty = calc_candidate_mapping_penalty( &cm, rst, genome );
+    cm->penalty = calc_candidate_mapping_penalty( cm, rst, genome );
 
-    add_candidate_mapping( mappings, &cm );
+    return cm;
 }
+
+candidate_mapping* 
+build_ungapped_candidate_mapping_from_mapped_location(
+    mapped_location* ml, 
+    struct read_subtemplate* rst,
+    struct indexable_subtemplate* ist,
+    struct genome_data* genome) 
+{
+    struct ml_match* match = NULL;
+    init_ml_match( &match, 1 );
+    add_location_to_ml_match( ml, match, ist->subseq_length, ist->subseq_offset);
+    candidate_mapping* mapping = build_candidate_mapping_from_match(
+        match, rst, genome );
+    free_ml_match(match);
+    return mapping;
+};
 
 candidate_mappings*
 build_candidate_mappings_from_search_results(
@@ -288,42 +303,47 @@ build_candidate_mappings_from_search_results(
 
     /* sort each mapped_locations in order to use optimized merge algorithm */
     sort_search_results( search_results );
-
-    /* Always use the mapped locations from the first indexable subtemplate as
-     * the basis for building matches across the whole read subtemplate. We
-     * always build matches from 5' -> 3' */
-    mapped_locations* base_locs = search_results[0];
     
     /* consider each base location */
-    int i, j;
-    for( i = 0; i < base_locs->length; i++ )
+    int index_probe_i, i, j;
+    for( index_probe_i = 0; search_results[index_probe_i] != NULL; index_probe_i++ )
     {
-        mapped_location* base_loc = base_locs->locations + i;
-
-        /* If the base_loc is a pseudo location, build a set of all its
-         * possible expansions to consider for matching. Otherwise, returns the
-         * original location */
-        mapped_locations* expanded_base_locs = expand_base_mapped_locations(
-                base_loc, base_locs->probe, genome );
-
-        /* match across each of the expanded locations */
-        for( j = 0; j < expanded_base_locs->length; j++ )
-        {
-            struct ml_match* base_match = NULL;
-            init_ml_match( &base_match, 1 );
-            add_location_to_ml_match( expanded_base_locs->locations + j, 
-                                      base_match, 
-                                      expanded_base_locs->probe->subseq_length,
-                                      expanded_base_locs->probe->subseq_offset);
-            
-            build_candidate_mapping_from_match(
-                base_match, mappings, rst, genome );
-            free_ml_match(base_match);
-        }
+        /* Always use the mapped locations from the first indexable subtemplate as
+         * the basis for building matches across the whole read subtemplate. We
+         * always build matches from 5' -> 3' */
+        mapped_locations* locs = search_results[index_probe_i];
         
-        free_mapped_locations( expanded_base_locs );
+        for( i = 0; i < locs->length; i++ )
+        {
+            mapped_location* loc = locs->locations + i;
+
+            /* If the loc is a pseudo location, build a set of all its
+             * possible expansions to consider for matching. Otherwise, returns the
+             * original location */
+            mapped_locations* expanded_locs = expand_base_mapped_locations(
+                loc, locs->probe, genome );
+
+            /* match across each of the expanded locations */
+            for( j = 0; j < expanded_locs->length; j++ )
+            {
+                struct ml_match* match = NULL;
+                init_ml_match( &match, 1 );
+                add_location_to_ml_match( expanded_locs->locations + j, 
+                                          match, 
+                                          expanded_locs->probe->subseq_length,
+                                          expanded_locs->probe->subseq_offset);
+            
+                add_candidate_mapping( 
+                    mappings,
+                    build_candidate_mapping_from_match(match, rst, genome ) );
+                        
+                free_ml_match(match);
+            }
+        
+            free_mapped_locations( expanded_locs );
+        }
     }
-    
+
     return mappings;
 }
 
@@ -339,7 +359,7 @@ find_candidate_mappings_for_read_subtemplate(
 {
     mapped_locations **search_results;
     int rv = search_index_for_read_subtemplate( 
-        rst, mapping_params, &search_results, genome);
+        rst, mapping_params, &search_results, genome, false);
     if( rv != 0 ) return rv;
     
     *mappings = build_candidate_mappings_from_search_results( 
@@ -956,7 +976,7 @@ collect_error_data( void* params )
             
             mapped_locations** search_results;
             search_index_for_read_subtemplate(
-                rst, mapping_params, &search_results, genome );
+                rst, mapping_params, &search_results, genome, true );
             
             update_error_data_from_index_search_results(
                 rst,

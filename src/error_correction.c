@@ -1230,45 +1230,16 @@ update_error_data_from_index_search_results(
             /* skip pseudo locations */
             if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
 
-            int read_subtemplate_start = 
-                modify_mapped_read_location_for_index_probe_offset(
-                    curr_loc.loc, curr_loc.chr, curr_loc.strnd, 
-                    ist->subseq_offset, ist->subseq_length, rst->length,
-                    genome);
-            /* if we can't find a valid read location, then skip this*/
-            if( read_subtemplate_start < 0 ) continue;
-            
-            /* Find the genome sequence */
-            char* fwd_genome_seq = find_seq_ptr( 
-                genome, curr_loc.chr, read_subtemplate_start, rst->length);
-            char* genome_seq;
-            
-            struct penalty_t *penalty_array;
-            if( curr_loc.strnd == BKWD )
-            {
-                genome_seq = calloc( rst->length+1, sizeof(char) );
-                rev_complement_read(fwd_genome_seq, genome_seq, rst->length);
-                penalty_array = rst->rev_penalty_array->array;
-            } else {
-                genome_seq = fwd_genome_seq;
-                penalty_array = rst->fwd_penalty_array->array;
-            }
-            
-            /* find the penalty for the full sequence */
-            float curr_loc_penalty = recheck_penalty(
-                genome_seq, rst->char_seq, 
-                penalty_array, rst->length);
+            candidate_mapping* curr_mapping = 
+                build_ungapped_candidate_mapping_from_mapped_location(
+                    &curr_loc, rst, ist, genome );
+            if( NULL == curr_mapping ) continue;
             
             /* if this is the best, then set it as such */
-            if( curr_loc_penalty > highest_penalty )
+            if( curr_mapping->penalty > highest_penalty )
             {
-                best_mapped_location = search_results[i]->locations + j;
-                highest_penalty = curr_loc_penalty;
+                best_mapped_location = &curr_loc;
             }
-
-            /* cleanup memory */
-            if( curr_loc.strnd == BKWD )
-                free( genome_seq );
         }
         
         char* error_str = rst->error_str + ist->subseq_offset;
