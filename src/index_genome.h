@@ -246,12 +246,7 @@ find_matches_from_root(
 
         /* the length of the two reads ( below ) */
         const int read_len,
-
-        /* the fwd stranded data */
-        LETTER_TYPE* fwd_seq, 
-        /* the bkwd stranded data */
-        LETTER_TYPE* rev_seq, 
-
+        
         struct penalty_t* fwd_penalties,
         struct penalty_t* rev_penalties,
 

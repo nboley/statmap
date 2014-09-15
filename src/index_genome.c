@@ -995,11 +995,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
               struct genome_data* genome,
 
-              /* fwd stranded data  */
-              LETTER_TYPE* fwd_seq, 
-              /* rev stranded data */
-              LETTER_TYPE* rev_seq, 
-
               struct penalty_t* fwd_penalties,
               struct penalty_t* rev_penalties,
 
@@ -1034,6 +1029,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     struct timespec stop;
     int err;
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+    assert( err == 0 );
+    
     int cntr = 0;
     while( pmatch_stack_length( stack ) > 0 )
     {
@@ -1070,13 +1067,10 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         enum STRAND strnd = match.strnd;
         
         /* select sequence and penalty_array depending on fwd/bkwd strand */
-        LETTER_TYPE* seq;
         struct penalty_t* penalties;
         if( strnd == FWD ) {
-            seq = fwd_seq;
             penalties = fwd_penalties;
         } else {
-            seq = rev_seq;
             penalties = rev_penalties;
         }
 
@@ -1320,12 +1314,7 @@ find_matches_from_root(
 
         /* the length of the two reads ( below ) */
         const int read_len,
-
-        /* the fwd stranded data */
-        LETTER_TYPE* fwd_seq, 
-        /* the bkwd stranded data */
-        LETTER_TYPE* rev_seq, 
-
+        
         struct penalty_t* fwd_penalties,
         struct penalty_t* rev_penalties,
 
@@ -1345,10 +1334,7 @@ find_matches_from_root(
                          results,
 
                          genome,
-
-                         fwd_seq,
-                         rev_seq,
-
+                         
                          fwd_penalties,
                          rev_penalties,
 

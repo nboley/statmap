@@ -265,7 +265,6 @@ get_start_from_mapped_read_location( const mapped_read_location* loc )
 
     MRL_START_POS_TYPE start = first_subloc->start_pos;
 
-    assert( start >= LOCATION_MIN );
     assert( start <= LOCATION_MAX );
 
     return start;
@@ -278,8 +277,7 @@ get_stop_from_mapped_read_location( const mapped_read_location* loc )
         = get_start_of_sublocations_in_mapped_read_location( loc );
 
     MRL_STOP_POS_TYPE stop = get_stop_for_sublocations_group( sl_start );
-
-    assert( stop >= LOCATION_MIN );
+    
     assert( stop <= LOCATION_MAX );
 
     return stop;
@@ -290,8 +288,7 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
 {
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
     MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc );
-
-    assert( stop - start >= FRAGMENT_LENGTH_MIN );
+    
     assert( stop - start <= FRAGMENT_LENGTH_MAX );
 
     return (MRL_FL_TYPE) stop - start;

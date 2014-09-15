@@ -281,12 +281,7 @@ search_index(
 
             /* length of the reads */
             subseq_length,
-
-            /* the fwd stranded sequence */
-            fwd_seq, 
-            /* the bkwd stranded sequence */
-            bkwd_seq, 
-
+            
             ist->fwd_penalties,
             ist->rev_penalties,
 

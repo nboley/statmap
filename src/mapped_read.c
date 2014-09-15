@@ -398,7 +398,6 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     int pair_2_start = -1;
 
     int num_pair_1 = 0;
-    int num_pair_2 = 0;
 
     /* find the start of the second pair candidate mappings */
     int i;
@@ -420,9 +419,7 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
     }
     /* sanity check */
     assert( pair_2_start > pair_1_start );
-
-    num_pair_2 = (i-1) - pair_2_start;
-
+    
     /* Build the initial memory allocation.
      * For each set of joined mappings, we need
      * to allocate 3 pointers - one for the first mapping, one for the second

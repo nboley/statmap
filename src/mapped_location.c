@@ -132,7 +132,7 @@ add_new_mapped_location( mapped_locations* results,
     /* set the location */
     new_loc->chr = chr;
     new_loc->loc = loc;
-    assert( new_loc->loc >= 0 );
+    // assert( new_loc->loc >= 0 ); // always true
     
     /* set the read strand */
     new_loc->strnd = strnd;
