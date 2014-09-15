@@ -430,7 +430,9 @@ find_candidate_mappings_for_read(
                 mapping_params
             );
         if( rv != 0 ) {
-            free_candidate_mappings( rst_mappings );
+            if( NULL != rst_mappings )
+                free_candidate_mappings( rst_mappings );
+            
             free_candidate_mappings( read_mappings );
             return rv;
         }
