@@ -246,7 +246,7 @@ build_reverse_penalty_array(
                     rev_seq[pos],
                     code_bp(bp),
                     rst->error_str[ rst->length - pos - 1 ],
-                    pos,
+                    rst->length - pos - 1,
                     error_model,
                     rst->pos_in_template.pos,
                     BKWD
