@@ -14,6 +14,22 @@
 #include "mapped_location.h"
 #include "error_correction.h"
 
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        enum bool use_random_subtemplate_offset
+    );
+
+int
+search_index_for_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct mapping_params* mapping_params,
+        
+        mapped_locations*** search_results,
+
+        struct genome_data* genome);
+
 /* a hash to store chromosome name */
 char* chr_names[CHR_NUM_MAX+1];
 

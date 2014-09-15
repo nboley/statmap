@@ -5,13 +5,14 @@
 #include <math.h>
 #include <string.h>
 
+#include "error_correction.h"
+
 #include "config.h"
 #include "log.h"
 #include "rawread.h"
 #include "read.h"
 #include "quality.h"
 #include "genome.h"
-#include "error_correction.h"
 #include "find_candidate_mappings.h"
 #include "statmap.h"
 #include "util.h"
@@ -1199,12 +1200,118 @@ fprintf_error_data_record(
  *
  ******************************************************************************/
 
+void*
+update_error_data_from_index_search_results(
+    struct read_subtemplate* rst,
+    mapped_locations** search_results, 
+    struct genome_data* genome, 
+    struct error_data_t* error_data)
+{
+    /* Update the error data record */
+    int i;
+    mapped_location curr_loc;
+    for( i = 0; i < MAX_NUM_RD_SUBTEMPLATES; i++ ) 
+    {
+        /* if there aren't any results, there is nothing to do */
+        if (search_results[i]->length == 0) continue;
+        
+        struct indexable_subtemplate* ist = search_results[i]->probe;
+        
+        double highest_penalty = -1e9;
+        mapped_location* best_mapped_location= NULL;
+        
+        int j;
+        for ( j = 0; j < search_results[i]->length; j++ ) 
+        {
+            /* Find the location for the full read corresponding to 
+               this mapped location, assuming that it is ungapped */
+            curr_loc = search_results[i]->locations[j];
+            
+            /* skip pseudo locations */
+            if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
+
+            int read_subtemplate_start = 
+                modify_mapped_read_location_for_index_probe_offset(
+                    curr_loc.loc, curr_loc.chr, curr_loc.strnd, 
+                    ist->subseq_offset, ist->subseq_length, rst->length,
+                    genome);
+            /* if we can't find a valid read location, then skip this*/
+            if( read_subtemplate_start < 0 ) continue;
+            
+            /* Find the genome sequence */
+            char* fwd_genome_seq = find_seq_ptr( 
+                genome, curr_loc.chr, read_subtemplate_start, rst->length);
+            char* genome_seq;
+            
+            struct penalty_t *penalty_array;
+            if( curr_loc.strnd == BKWD )
+            {
+                genome_seq = calloc( rst->length+1, sizeof(char) );
+                rev_complement_read(fwd_genome_seq, genome_seq, rst->length);
+                penalty_array = rst->rev_penalty_array->array;
+            } else {
+                genome_seq = fwd_genome_seq;
+                penalty_array = rst->fwd_penalty_array->array;
+            }
+            
+            /* find the penalty for the full sequence */
+            float curr_loc_penalty = recheck_penalty(
+                genome_seq, rst->char_seq, 
+                penalty_array, rst->length);
+            
+            /* if this is the best, then set it as such */
+            if( curr_loc_penalty > highest_penalty )
+            {
+                best_mapped_location = search_results[i]->locations + j;
+                highest_penalty = curr_loc_penalty;
+            }
+
+            /* cleanup memory */
+            if( curr_loc.strnd == BKWD )
+                free( genome_seq );
+        }
+        
+        char* error_str = rst->error_str + ist->subseq_offset;
+            
+        char* fwd_genome_seq = find_seq_ptr( 
+            genome, 
+            best_mapped_location->chr, 
+            best_mapped_location->loc,
+            ist->subseq_length
+            );
+        
+        char* genome_seq;
+        if( best_mapped_location->strnd == BKWD )
+        {
+            genome_seq = calloc( ist->subseq_length+1, sizeof(char) );
+            rev_complement_read(fwd_genome_seq, genome_seq, ist->subseq_length);
+        } else {
+            genome_seq = fwd_genome_seq;
+        }
+        
+        update_error_data( 
+            error_data, 
+            genome_seq, 
+            ist->char_seq, 
+            error_str, 
+            ist->subseq_length, 
+            rst->pos_in_template.pos,
+            best_mapped_location->strnd,
+            ist->subseq_offset );
+        
+        if( best_mapped_location->strnd == BKWD )
+            free(genome_seq);
+    }
+
+    return NULL;
+}
+
+#ifdef INCREMENTLY_UPDATE_ERROR_MODEL
+
 /* 
    Returns true if these candidate mappigns can be used to update the error 
    data. Basically, we just test for uniqueness. 
 */
-#ifdef INCREMENTLY_UPDATE_ERROR_MODEL
-
 static inline enum bool
 can_be_used_to_update_error_data(
     candidate_mappings* mappings,

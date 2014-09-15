@@ -254,10 +254,39 @@ print_mapped_locations( mapped_locations* results )
     return;
 }
 
+void
+sort_search_results(mapped_locations** search_results)        
+{
+    int i;
+    for(i = 0; search_results[i] != NULL; i++ )
+    {
+        sort_mapped_locations_by_location( search_results[i] );
+    }
+
+    return;
+}
+
+void
+free_search_results( mapped_locations** search_results )
+{
+    /* free each of the mapped_locations stored in the array */
+    int i;
+    for( i = 0; search_results[i] != NULL; i++ )
+    {
+        free_mapped_locations( search_results[i] );
+    }
+
+    /* free the array of pointers */
+    free( search_results );
+
+    return;
+}
+
 /*
  *  END Mapped Location
  *
  **************************************************************************/
+
 
 /***** ml_match *****/
 

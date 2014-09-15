@@ -19,6 +19,7 @@
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
 #include "error_correction.h"
+#include "mapped_location.h"
 
 #include "log.h"
 
@@ -27,6 +28,336 @@
 static size_t index_offset = 0;
 
 #define DONT_MMAP_INDEX
+
+/******************************************************************************/
+/* Functions for finding seqeunces in thre tree                               */
+/******************************************************************************/
+
+float
+subseq_penalty(
+        struct read_subtemplate* rst,
+        int subseq_offset,
+        int subseq_length,
+        struct penalty_array_t* penalties
+    )
+{
+    assert( subseq_offset + subseq_length <= rst->length );
+
+    float penalty = 0;
+    /* loop over subsequence */
+    int pos;
+    for( pos = subseq_offset;
+         pos < subseq_offset + subseq_length; 
+         pos++ )
+    {
+        int bp = rst->char_seq[pos];
+
+        if( bp == 'N' || bp == 'n' )
+        {
+            penalty += N_penalty;
+        } else {
+            /* take the match penalty for this bp - assuming we can find
+             * a perfect match to a given subsequence in the genome, which
+             * match would then have the best penalty (considering what we know
+             * about error rates in positions, for the error scores, etc. from
+             * the error model)? */
+            penalty += penalties->array[pos].penalties[bp_code(bp)];
+        }
+   }
+
+    return penalty;
+}
+
+int
+find_optimal_subseq_offset( 
+    struct read_subtemplate* rst,
+    
+    int subseq_len,
+
+    /* define region of underlying read to search for optimal subsequences */
+    int region_start,
+    int region_length
+) {
+    /* Make sure the search region makes sense */
+    assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
+    assert( region_length <= rst->length );
+    assert( (region_start + region_length - subseq_len) >= 0 );
+    
+    /*
+       error_prb returns the inverse log probability of error:
+       log10(1 - P(error)) for matches
+    */
+    int optimal_offset = region_start;
+    float max_so_far = -FLT_MAX;
+        
+    int i;
+    /* each possible start bp in the subsequence */
+    for( i = region_start;
+         i < (region_start + region_length - subseq_len);
+         i++ )
+    {
+        float ss_pen = subseq_penalty(rst, i, subseq_len, rst->fwd_penalty_array);
+        if( ss_pen > max_so_far ) {
+            max_so_far = ss_pen;
+            optimal_offset = i;
+        }
+    }
+
+    /* Return the offset of the optimal index probe from the start of the read
+     * subtemplate */
+    return optimal_offset;
+};
+
+struct indexable_subtemplate*
+build_indexable_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        
+        // area of the read subtemplate to take an indexable subtemplate from
+        int range_start,
+        int range_length,
+        
+        enum bool choose_random_offset
+    )
+{
+    int subseq_length = index->seq_length;
+
+    /* Our strategy for choosing indexable subtemplates depends on the type of
+     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
+     * between probes in order to optimize intron finding. For ungapped assays,
+     * we want to use the highest quality subsequence in the read for the index
+     * search. */
+    int subseq_offset = 0;
+
+    if( _assay_type == RNA_SEQ ) // Gapped assay
+    {
+        /* FIXME soft clipping for gapped assays? */
+        if( range_start == 0 ) {
+            /* subseq_offset = softclip_len ? will that mess up the matching
+             * code later? */
+            subseq_offset = 0;
+        } else {
+            subseq_offset = range_start + range_length - subseq_length;
+        }
+    } else {
+        if( choose_random_offset ) {
+            double rn = ((double) rand() / ((double) RAND_MAX));
+            subseq_offset = range_start + (int) (rn*(range_length - subseq_length));
+        } else {
+            subseq_offset = find_optimal_subseq_offset(
+                rst,
+                subseq_length,
+                range_start,
+                range_length
+            );
+        }
+    }
+
+    assert( subseq_offset >= 0 );
+    struct indexable_subtemplate* ist = NULL;
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset);
+    
+    return ist;
+}
+
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        enum bool use_random_subtemplate_offset
+    )
+{
+    int subseq_length = index->seq_length;
+    
+    /* Make sure we the read is long enough for us to build index probes
+     * (considering any softclipped bases from the start of the rst) */
+    int indexable_length = rst->length - softclip_len;
+    if( indexable_length < subseq_length )
+    {
+        statmap_log( LOG_WARNING,
+                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
+                softclip_len
+            );
+        return NULL;
+    }
+
+   struct indexable_subtemplates* ists = NULL;
+   init_indexable_subtemplates( &ists );
+
+    /* for now, try to build the maximum number of indexable subtemplates up to
+     * a maximum */
+    int num_partitions;
+    if( _assay_type == RNA_SEQ ) {
+        /* for RNA-seq, always use two probes at either end of the read so we
+         * can maximize the space for finding introns */
+        num_partitions = 2;
+    } else {
+        num_partitions = MIN( indexable_length / subseq_length,
+                              MAX_NUM_INDEX_PROBES );        
+    }
+    int partition_len = floor((float)indexable_length / num_partitions);
+    
+    int i;
+    for( i = 0; i < num_partitions; i++ )
+    {
+        struct indexable_subtemplate* ist = NULL;
+
+        int partition_start = softclip_len + i * partition_len;
+
+        /* partition the read into equal sized sections and try to find the
+         * best subsequence within each section to use as an index probe */
+        ist = build_indexable_subtemplate( 
+            rst, index,
+            partition_start, partition_len,
+            use_random_subtemplate_offset );
+
+        if( ist == NULL ) {
+            free_indexable_subtemplates( ists );
+            return NULL;
+        }
+
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
+    }
+    
+    return ists;
+}
+
+void
+search_index(
+        struct genome_data* genome,
+        struct indexable_subtemplate* ist,
+        struct index_search_params* search_params,
+        mapped_locations** results,
+        enum bool only_find_unique_sequence
+    )
+{
+    // reference to index
+    struct index_t* index = genome->index;
+
+    int subseq_length = index->seq_length;
+    
+    /* prepare the results container */
+    init_mapped_locations( results, ist );
+    
+    /* Build bitpacked copies of the fwd and rev strand versions of this
+     * indexable subtemplate */
+
+    /* Store a copy of the read */
+    /* This read has N's replaced with A's, and might be RC'd */
+    char* sub_read = calloc(subseq_length + 1, sizeof(char));
+    assert( sub_read != NULL );
+    /* note that the NULL ending is pre-set from the calloc */
+    memcpy( sub_read, ist->char_seq,
+            sizeof(char)*(subseq_length) );
+    replace_ns_inplace( sub_read, subseq_length );
+
+    /** Deal with the read on the fwd strand */
+    /* Store the translated sequences here */
+    LETTER_TYPE *fwd_seq;
+    fwd_seq = translate_seq( sub_read, subseq_length );
+    /* If we couldnt translate it */
+    if( fwd_seq == NULL )
+    {
+        // fprintf(stderr, "Could Not Translate: %s\n", st->char_seq);
+        return;
+    }
+    assert( fwd_seq != NULL );
+    
+    /** Deal with the read on the opposite strand */
+    LETTER_TYPE *bkwd_seq;
+    char* tmp_read = calloc(subseq_length + 1, sizeof(char));
+    rev_complement_read( sub_read, tmp_read, subseq_length );
+    free( sub_read );
+    
+    bkwd_seq = translate_seq( tmp_read, subseq_length );
+    assert( bkwd_seq != NULL );
+    free( tmp_read );
+    
+    /* search the index */
+    find_matches_from_root(
+            index, 
+
+            search_params,
+            *results,
+
+            genome,
+
+            /* length of the reads */
+            subseq_length,
+            
+            ist->fwd_penalties,
+            ist->rev_penalties,
+
+            only_find_unique_sequence
+        );
+
+    /* Cleanup memory */
+    free( fwd_seq );
+    free( bkwd_seq );
+    
+    return;
+};
+
+
+int
+search_index_for_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct mapping_params* mapping_params,
+        
+        mapped_locations*** search_results,
+
+        struct genome_data* genome
+    )
+{
+    // build a set of indexable subtemplates from this read subtemplate
+    struct indexable_subtemplates* ists = 
+       build_indexable_subtemplates_from_read_subtemplate(
+           rst, genome->index, false );
+
+    /* if we couldn't build indexable sub templates, ie the read was too short, 
+       then don't try and map this read */
+    if( ists == NULL ) {
+        return CANT_BUILD_READ_SUBTEMPLATES;
+    }
+        
+    /* Stores the results of the index search for each indexable subtemplate */
+    int search_results_length = ists->length;
+    *search_results = calloc(sizeof(mapped_locations*),search_results_length+1);
+        
+
+    /* initialize search parameters for the index probes */
+    struct index_search_params* index_search_params
+        = init_index_search_params(ists, mapping_params);
+
+    int i;
+    for( i = 0; i < ists->length; i++ )
+    {
+        search_index(
+                genome,
+                ists->container + i,
+                index_search_params + i,
+                &((*search_results)[i]),
+                false
+            );
+        
+        if((*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)
+        {
+            free( index_search_params );
+            free_indexable_subtemplates( ists );
+            free_search_results( *search_results );
+            return TOO_MANY_CANDIDATE_MAPPINGS;
+        }
+    }    
+
+    free( index_search_params );
+    free_indexable_subtemplates( ists );
+    
+    return 0;
+}
+
 
 /******************************************************************************/
 /* Memory function for  building the index      */
@@ -1896,7 +2227,3 @@ print_memory_usage_stats()
     return;
 }
 #endif
-
-
-
-

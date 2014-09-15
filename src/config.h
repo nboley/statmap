@@ -97,6 +97,10 @@
 #define ERROR_STATS_LOG "error_stats.log"
 #define BOOTSTRAP_ERROR_STATS_LOG "bootstrap_error_stats.log"
 
+/**** eror codes       ****/
+
+#define CANT_BUILD_READ_SUBTEMPLATES 1
+#define TOO_MANY_CANDIDATE_MAPPINGS 2
 
 /**** set global constantsa for maximum read length, etc.       ****/
 
@@ -282,6 +286,22 @@ enum input_file_type_t {
 /*** Globally useful macros ***/
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
+typedef struct {
+    unsigned int chr; // TODO use MRL_CHR_TYPE, etc. ?
+    unsigned int loc; // maybe put some unified types in config.h?
+    enum STRAND strnd;
+    float penalty;
+} mapped_location;
+
+typedef struct {
+    /* An array of mapped locations */
+    mapped_location* locations;
+    int length;
+    int allocated_length;
+
+    struct indexable_subtemplate* probe;
+} mapped_locations;
 
 
 #endif

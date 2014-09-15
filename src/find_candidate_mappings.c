@@ -27,427 +27,90 @@
 #include "mapped_read.h"
 #include "pseudo_location.h"
 
-float
-subseq_penalty(
-        struct read_subtemplate* rst,
-        int subseq_offset,
-        int subseq_length,
-        struct penalty_array_t* penalties
-    )
-{
-    assert( subseq_offset + subseq_length <= rst->length );
-
-    float penalty = 0;
-    /* loop over subsequence */
-    int pos;
-    for( pos = subseq_offset;
-         pos < subseq_offset + subseq_length; 
-         pos++ )
-    {
-        int bp = rst->char_seq[pos];
-
-        if( bp == 'N' || bp == 'n' )
-        {
-            penalty += N_penalty;
-        } else {
-            /* take the match penalty for this bp - assuming we can find
-             * a perfect match to a given subsequence in the genome, which
-             * match would then have the best penalty (considering what we know
-             * about error rates in positions, for the error scores, etc. from
-             * the error model)? */
-            penalty += penalties->array[pos].penalties[bp_code(bp)];
-        }
-   }
-
-    return penalty;
-}
-
-int
-find_optimal_subseq_offset( 
-    struct read_subtemplate* rst,
-    
-    int subseq_len,
-
-    /* define region of underlying read to search for optimal subsequences */
-    int region_start,
-    int region_length
-) {
-    /* Make sure the search region makes sense */
-    assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
-    assert( region_length <= rst->length );
-    assert( (region_start + region_length - subseq_len) >= 0 );
-    
-    /*
-       error_prb returns the inverse log probability of error:
-       log10(1 - P(error)) for matches
-    */
-    int optimal_offset = region_start;
-    float max_so_far = -FLT_MAX;
-        
-    int i;
-    /* each possible start bp in the subsequence */
-    for( i = region_start;
-         i < (region_start + region_length - subseq_len);
-         i++ )
-    {
-        float ss_pen = subseq_penalty(rst, i, subseq_len, rst->fwd_penalty_array);
-        if( ss_pen > max_so_far ) {
-            max_so_far = ss_pen;
-            optimal_offset = i;
-        }
-    }
-
-    /* Return the offset of the optimal index probe from the start of the read
-     * subtemplate */
-    return optimal_offset;
-};
-
-struct indexable_subtemplate*
-build_indexable_subtemplate(
-        struct read_subtemplate* rst,
-        struct index_t* index,
-        
-        // area of the read subtemplate to take an indexable subtemplate from
-        int range_start,
-        int range_length,
-        
-        enum bool choose_random_offset
-    )
-{
-    int subseq_length = index->seq_length;
-
-    /* Our strategy for choosing indexable subtemplates depends on the type of
-     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
-     * between probes in order to optimize intron finding. For ungapped assays,
-     * we want to use the highest quality subsequence in the read for the index
-     * search. */
-    int subseq_offset = 0;
-
-    if( _assay_type == RNA_SEQ ) // Gapped assay
-    {
-        /* FIXME soft clipping for gapped assays? */
-        if( range_start == 0 ) {
-            /* subseq_offset = softclip_len ? will that mess up the matching
-             * code later? */
-            subseq_offset = 0;
-        } else {
-            subseq_offset = range_start + range_length - subseq_length;
-        }
-    } else {
-        if( choose_random_offset ) {
-            double rn = ((double) rand() / ((double) RAND_MAX));
-            subseq_offset = range_start + (int) (rn*(range_length - subseq_length));
-        } else {
-            subseq_offset = find_optimal_subseq_offset(
-                rst,
-                subseq_length,
-                range_start,
-                range_length
-            );
-        }
-    }
-
-    assert( subseq_offset >= 0 );
-    struct indexable_subtemplate* ist = NULL;
-    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset);
-    
-    return ist;
-}
-
-struct indexable_subtemplates*
-build_indexable_subtemplates_from_read_subtemplate(
-        struct read_subtemplate* rst,
-        struct index_t* index,
-        enum bool use_random_subtemplate_offset
-    )
-{
-    int subseq_length = index->seq_length;
-    
-    /* Make sure we the read is long enough for us to build index probes
-     * (considering any softclipped bases from the start of the rst) */
-    int indexable_length = rst->length - softclip_len;
-    if( indexable_length < subseq_length )
-    {
-        statmap_log( LOG_WARNING,
-                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
-                softclip_len
-            );
-        return NULL;
-    }
-
-   struct indexable_subtemplates* ists = NULL;
-   init_indexable_subtemplates( &ists );
-
-    /* for now, try to build the maximum number of indexable subtemplates up to
-     * a maximum */
-    int num_partitions;
-    if( _assay_type == RNA_SEQ ) {
-        /* for RNA-seq, always use two probes at either end of the read so we
-         * can maximize the space for finding introns */
-        num_partitions = 2;
-    } else {
-        num_partitions = MIN( indexable_length / subseq_length,
-                              MAX_NUM_INDEX_PROBES );        
-    }
-    int partition_len = floor((float)indexable_length / num_partitions);
-    
-    int i;
-    for( i = 0; i < num_partitions; i++ )
-    {
-        struct indexable_subtemplate* ist = NULL;
-
-        int partition_start = softclip_len + i * partition_len;
-
-        /* partition the read into equal sized sections and try to find the
-         * best subsequence within each section to use as an index probe */
-        ist = build_indexable_subtemplate( 
-            rst, index,
-            partition_start, partition_len,
-            use_random_subtemplate_offset );
-
-        if( ist == NULL ) {
-            free_indexable_subtemplates( ists );
-            return NULL;
-        }
-
-       // copy indexable subtemplate into set of indexable subtemplates
-       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
-       // free working copy
-       free_indexable_subtemplate( ist );
-    }
-    
-    return ists;
-}
+/*******************************************************************************
+ *
+ * Psuedo location expansion code
+ *
+ ******************************************************************************/
 
 void
-search_index(
-        struct genome_data* genome,
-        struct indexable_subtemplate* ist,
-        struct index_search_params* search_params,
-        mapped_locations** results,
-        enum bool only_find_unique_sequence
+add_pseudo_loc_to_mapped_locations(
+        INDEX_LOC_TYPE* gen_loc,
+        mapped_locations* results,
+        mapped_location* loc
     )
 {
-    // reference to index
-    struct index_t* index = genome->index;
+    mapped_location tmp_loc;
+    copy_mapped_location( &tmp_loc, loc );
 
-    int subseq_length = index->seq_length;
-    
-    /* prepare the results container */
-    init_mapped_locations( results, ist );
-    
-    /* Build bitpacked copies of the fwd and rev strand versions of this
-     * indexable subtemplate */
+    tmp_loc.chr = gen_loc->chr;
+    tmp_loc.loc = gen_loc->loc;
 
-    /* Store a copy of the read */
-    /* This read has N's replaced with A's, and might be RC'd */
-    char* sub_read = calloc(subseq_length + 1, sizeof(char));
-    assert( sub_read != NULL );
-    /* note that the NULL ending is pre-set from the calloc */
-    memcpy( sub_read, ist->char_seq,
-            sizeof(char)*(subseq_length) );
-    replace_ns_inplace( sub_read, subseq_length );
+    add_mapped_location( &tmp_loc, results );
 
-    /** Deal with the read on the fwd strand */
-    /* Store the translated sequences here */
-    LETTER_TYPE *fwd_seq;
-    fwd_seq = translate_seq( sub_read, subseq_length );
-    /* If we couldnt translate it */
-    if( fwd_seq == NULL )
-    {
-        // fprintf(stderr, "Could Not Translate: %s\n", st->char_seq);
-        return;
-    }
-    assert( fwd_seq != NULL );
-    
-    /** Deal with the read on the opposite strand */
-    LETTER_TYPE *bkwd_seq;
-    char* tmp_read = calloc(subseq_length + 1, sizeof(char));
-    rev_complement_read( sub_read, tmp_read, subseq_length );
-    free( sub_read );
-    
-    bkwd_seq = translate_seq( tmp_read, subseq_length );
-    assert( bkwd_seq != NULL );
-    free( tmp_read );
-    
-    /* search the index */
-    find_matches_from_root(
-            index, 
-
-            search_params,
-            *results,
-
-            genome,
-
-            /* length of the reads */
-            subseq_length,
-            
-            ist->fwd_penalties,
-            ist->rev_penalties,
-
-            only_find_unique_sequence
-        );
-
-    /* Cleanup memory */
-    free( fwd_seq );
-    free( bkwd_seq );
-    
     return;
-};
-
+}
 
 void
-search_index_for_indexable_subtemplates(
-        struct indexable_subtemplates* ists,
-        mapped_locations** search_results,
-
-        struct genome_data* genome,
-
-        struct index_search_params* index_search_params
+expand_pseudo_location_into_mapped_locations(
+        mapped_location* loc,
+        mapped_locations* results,
+        struct genome_data* genome
     )
 {
+    assert( loc->chr == PSEUDO_LOC_CHR_INDEX );
+
+    struct pseudo_locations_t* ps_locs = genome->index->ps_locs;
+
+    int ps_loc_index = loc->loc;
+    struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
+
+    /* add every location to the results list */
+    INDEX_LOC_TYPE* gen_locs = ps_loc->locs;
     int i;
-    for( i = 0; i < ists->length; i++ )
+    for( i = 0; i < ps_loc->num; i++ )
     {
-        mapped_locations *results = NULL;
-
-        search_index(
-                genome,
-                ists->container + i,
-                index_search_params + i,
-                &results,
-                false
+        add_pseudo_loc_to_mapped_locations(
+                &( gen_locs[i] ),
+                results,
+                loc
             );
-
-        search_results[i] = results;
     }
 
     return;
 }
 
-int
-find_start_of_pseudo_mapped_locations_for_strand(
-        mapped_locations* sorted_mapped_locs,
-        enum STRAND strand
+mapped_locations*
+expand_base_mapped_locations(
+        mapped_location* base_loc,
+        struct indexable_subtemplate* index_probe,
+        struct genome_data* genome
     )
 {
-    /* Optimization depends on pseudo chromosome being sorted to appear before
-     * all other chromosomes */
-    assert( PSEUDO_LOC_CHR_INDEX == 0 );
-
-    int start = -1; // Use -1 to signal no locations with given strand
-
-    int i;
-    /* Linear search - mapped locations are sorted by strand, then chr */
-    for( i = 0; i < sorted_mapped_locs->length; i++ )
+    mapped_locations* expanded_locs = NULL;
+    init_mapped_locations( &expanded_locs, index_probe );
+    
+    /* if base_loc is a pseudo location, expand it and add all of its
+     * potential mapped_location's */
+    if( base_loc->chr == PSEUDO_LOC_CHR_INDEX )
     {
-        mapped_location* curr_loc = sorted_mapped_locs->locations + i;
-
-        if( curr_loc->strnd == strand )
-        {
-            if( curr_loc->chr == PSEUDO_LOC_CHR_INDEX )
-            {
-                start = i;
-                break;
-            } else {
-                /* Since pseudo chromosomes are sorted to come before all other
-                 * chromosomes, if this first location with matching strand is
-                 * not a pseudo location, none of the following locations will
-                 * be either. */
-                break;
-            }
-        }
+        expand_pseudo_location_into_mapped_locations(
+                base_loc, expanded_locs, genome );
+    } else {
+        // add the mapped_location as-is
+        add_mapped_location( base_loc, expanded_locs );
     }
 
-    return start;
+    /* sort in order to use binary search later */
+    sort_mapped_locations_by_location( expanded_locs );
+
+    return expanded_locs;
 }
 
-/* TODO generic search, so we can use it for both the pseudo locations
- * and the regular locations */
 
-/*
- * Our criteria for matching are
- * 1) strand
- * 2) chromosome
- * 3) location
- */
-
-/* TODO this should consider strand, chr, and loc
- * can i drop in cmp_mapped_locations_by_location somehow?*/
-int
-search_for_matching_mapped_locations(
-        int base_pos,
-        int base_offset,
-        mapped_locations* match_candidates )
-{
-    /* Search for a location with a start equal to base_pos - base_offset
-     * (the true start of the base location ) */
-    int base_start = base_pos - base_offset;
-
-    /* Binary search */
-    int low = 0;
-    int high = match_candidates->length;
-    while( low < high ) {
-        int mid = low + ((high-low) / 2);
-
-        /* Compute the true start of the location currently being considered
-         * by the search */
-        int current_loc_start = match_candidates->locations[mid].loc 
-                              - match_candidates->probe->subseq_offset;
-
-        if( current_loc_start < base_start ) {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-
-    /* make sure the binary search is working */
-    assert( low <= high );
-    assert( low <= match_candidates->length );
-    assert( low >= 0 );
-
-    /* This is the "deferred detection of equality" variant of the binary
-     * search algorithm (http://en.wikipedia.org/wiki/Binary_search_algorithm).
-     *
-     * It has the useful property that if there are multiple matching keys, it
-     * returns the index of the first matching key in the region of matching
-     * keys. */
-
-    /* Check for a match */
-    int found_loc_start = match_candidates->locations[low].loc 
-                        - match_candidates->probe->subseq_offset;
-    if( (low == high) && found_loc_start == base_start )
-    {
-        /* the index of the matching location in match_candidates */
-        return low;
-    }
-
-    /* Otherwise, we did not find a perfect match. However, we now have a
-     * idea of the "closest" location in the match_candidates from the
-     * failed binary search.
-     *
-     * Starting with low, do a linear search until we get to the first value
-     * that is greater than the base_start (it could be within the range of
-     * base_start + max_reference_insert_len) */
-
-    int i;
-    for( i = low; i < match_candidates->length; i++ )
-    {
-        int current_loc_start = match_candidates->locations[low].loc 
-                              - match_candidates->probe->subseq_offset;
-
-        if( current_loc_start > base_start )
-        {
-            /* the index of the first "greater" location in match_candidates */
-            return i;
-        }
-    }
-
-    /* Otherwise, no potential matches were found for base. Return -1 to indicate
-     * no index of a potential match */
-    return -1;
-}
+/*******************************************************************************
+ * END Psuedo location expansion code
+ ******************************************************************************/
 
 void
 build_candidate_mapping_cigar_string_from_match(
@@ -610,489 +273,21 @@ build_candidate_mapping_from_match(
     add_candidate_mapping( mappings, &cm );
 }
 
-void
-condense_candidate_mapping_cigar_string(
-        candidate_mapping* cm )
-{
-    /* Merge the final U lengths into their adjacent match counterparts and
-     * remove the U ops from the cigar string */
-
-    /* TODO for now, this is hard-coded */
-    assert( cm->cigar_len == 5 );
-    assert( cm->cigar[1].op == 'U' && cm->cigar[3].op == 'U' );
-
-    /* TODO - remove all code related to 'U' - since we now examine all
-     * possibilities within the index probes as well, it is unnecessary and
-     * complicates things */
-    int first_match_len = cm->cigar[1].len;
-    int gap_len = cm->cigar[2].len;
-    int second_match_len = cm->cigar[3].len;
-
-    /* Clear the original cigar string array */
-    memset( cm->cigar, 0,
-            sizeof( struct CIGAR_ENTRY ) * MAX_CIGAR_STRING_ENTRIES );
-
-    /* Build the new, condensed cigar string array */
-    cm->cigar[0].op = 'M';
-    cm->cigar[0].len = first_match_len;
-
-    cm->cigar[1].op = 'N';
-    cm->cigar[1].len = gap_len;
-
-    cm->cigar[2].op = 'M';
-    cm->cigar[2].len = second_match_len;
-
-    cm->cigar_len = 3;
-
-    return;
-}
-
-void
-build_candidate_mappings_from_matches(
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        struct ml_matches* matches,
-        candidate_mappings* rst_mappings )
-{
-    int i;
-    for( i = 0; i < matches->length; i++ )
-    {
-        struct ml_match* match = matches->matches[i];
-
-        build_candidate_mapping_from_match(
-                match, rst_mappings, rst, genome );
-    }
-}
-
-void
-add_pseudo_loc_to_mapped_locations(
-        INDEX_LOC_TYPE* gen_loc,
-        mapped_locations* results,
-        mapped_location* loc
-    )
-{
-    mapped_location tmp_loc;
-    copy_mapped_location( &tmp_loc, loc );
-
-    tmp_loc.chr = gen_loc->chr;
-    tmp_loc.loc = gen_loc->loc;
-
-    add_mapped_location( &tmp_loc, results );
-
-    return;
-}
-
-void
-expand_pseudo_location_into_mapped_locations(
-        mapped_location* loc,
-        mapped_locations* results,
-        struct genome_data* genome
-    )
-{
-    assert( loc->chr == PSEUDO_LOC_CHR_INDEX );
-
-    struct pseudo_locations_t* ps_locs = genome->index->ps_locs;
-
-    int ps_loc_index = loc->loc;
-    struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
-
-    /* add every location to the results list */
-    INDEX_LOC_TYPE* gen_locs = ps_loc->locs;
-    int i;
-    for( i = 0; i < ps_loc->num; i++ )
-    {
-        add_pseudo_loc_to_mapped_locations(
-                &( gen_locs[i] ),
-                results,
-                loc
-            );
-    }
-
-    return;
-}
-
-mapped_locations*
-expand_base_mapped_locations(
-        mapped_location* base_loc,
-        struct indexable_subtemplate* index_probe,
-        struct genome_data* genome
-    )
-{
-    mapped_locations* expanded_locs = NULL;
-    init_mapped_locations( &expanded_locs, index_probe );
-    
-    /* if base_loc is a pseudo location, expand it and add all of its
-     * potential mapped_location's */
-    if( base_loc->chr == PSEUDO_LOC_CHR_INDEX )
-    {
-        expand_pseudo_location_into_mapped_locations(
-                base_loc, expanded_locs, genome );
-    } else {
-        // add the mapped_location as-is
-        add_mapped_location( base_loc, expanded_locs );
-    }
-
-    /* sort in order to use binary search later */
-    sort_mapped_locations_by_location( expanded_locs );
-
-    return expanded_locs;
-}
-
-void
-add_matches_from_pseudo_locations_to_stack(
-        mapped_locations* candidate_locs,
-        struct ml_match* match,
-        int prev_matched_location_start,
-        struct ml_match_stack* stack,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    /* THe following algorithm assumes the pseudo location chr is sorted to
-     * come before the rest of the chrs */
-    assert( PSEUDO_LOC_CHR_INDEX == 0 );
-
-    /* Get a reference to the base mapped location for the strand */
-    mapped_location* base = match->locations + 0;
-
-    /* Find the start of the set of pseudo mapped locations with the same
-     * strand as the location we are matching to */
-    int pslocs_start_in_sorted_mapped_locations =
-        find_start_of_pseudo_mapped_locations_for_strand( candidate_locs,
-                base->strnd );
-    
-    /* If there are no pseudo locations in the set of candidate locations for
-     * matching, nothing to do here. */
-    if( pslocs_start_in_sorted_mapped_locations < 0 )
-        return;
-
-    struct pseudo_locations_t *ps_locs = genome->index->ps_locs;
-
-    /* Iterate over the sets of pseudo locations */
-    int i;
-    for( i = pslocs_start_in_sorted_mapped_locations;
-         i < candidate_locs->length;
-         i++ )
-    {
-        mapped_location* candidate_loc = candidate_locs->locations + i;
-
-        /* Once we're in the right section of strand, the locations are sorted
-         * by chromosome. Since the pseudo chromosome is sorted to come before
-         * the rest of the chromosomes, we know that if the current location's
-         * chromosome is not the pseudo chromosome, there aren't any more
-         * pseudo locations and we are done. */
-        if( candidate_loc->chr > PSEUDO_LOC_CHR_INDEX )
-            break;
-
-        /* Check the cumulative penalty for the match. If it is less
-         * than the minimum, skip this match. All of the expanded pseudo
-         * locations will have the same penalty. */
-        float cum_penalty = match->cum_penalty + candidate_loc->penalty;
-        if( cum_penalty < mapping_params->recheck_min_match_penalty )
-            continue;
-
-        int ps_loc_index = candidate_loc->loc;
-        struct pseudo_location_t* ps_loc = ps_locs->locs + ps_loc_index;
-
-        /* Consider each of the pseudo locations. This is a linear search, but
-         * the pseudo locations are sorted by location so we could use a binary
-         * search to make it faster */
-        int j;
-        for( j = 0; j < ps_loc->num; j++ )
-        {
-            /* get the location */
-            INDEX_LOC_TYPE* iloc = ps_loc->locs + j;
-
-            /* check that the chromosome matches (strand already checked) */
-            if( iloc->chr != base->chr )
-                continue;
-
-            /* Get the gap between this candidate for the match and the rest of the
-             * partial match (depends on strand) */
-            int candidate_ref_gap;
-            if( base->strnd == FWD )
-            {
-                candidate_ref_gap = iloc->loc
-                    - candidate_locs->probe->subseq_offset
-                    - prev_matched_location_start;
-            } else {
-                candidate_ref_gap = iloc->loc
-                    + candidate_locs->probe->subseq_offset
-                    - prev_matched_location_start;
-            }
-
-            /* The gap between this location and the previous location must be
-             * greater than the previous location's subseq_length. This allows
-             * for overlapping index probes, with the restriction that the
-             * start locations must be strictly increasing from the 5' to
-             * 3' end of the read subtemplate. */
-            if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
-            {
-                continue;
-            }
-            else if( candidate_ref_gap <= max_reference_insert_len )
-            {
-                /* construct a mapped location from the INDEX_LOC_TYPE stored
-                 * by the pseudo location */
-                mapped_location* tmp_loc = malloc( sizeof( mapped_location ));
-                copy_mapped_location( tmp_loc, candidate_loc );
-                tmp_loc->chr = iloc->chr;
-                tmp_loc->loc = iloc->loc;
-
-                struct ml_match* new_match = copy_ml_match( match );
-                add_location_to_ml_match( tmp_loc, new_match,
-                        candidate_locs->probe->subseq_length,
-                        candidate_locs->probe->subseq_offset );
-                ml_match_stack_push( stack, new_match );
-                free( tmp_loc );
-            } else {
-                /* If gap between the current location and the previous
-                 * location in the match is greater than the maximum allowed
-                 * gap in the reference, we know that every subsequent location
-                 * also cannot match (because they are sorted). */
-                break;
-            }
-        }
-    }
-
-    return;
-}
-
-void
-add_matches_from_locations_to_stack(
-        mapped_locations* candidate_locs,
-        struct ml_match* match,
-        int prev_matched_location_start,
-        struct ml_match_stack* stack,
-        struct mapping_params* mapping_params )
-{
-    mapped_location* base = match->locations + 0;
-
-    /* try to continue building match with each location in the
-     * candidate_locs. Since each set of mapped_locations is sorted by start
-     * location, we can terminate as soon as matching criteria fails (every
-     * following attempt will also fail) */
-    int i;
-    for( i = 0; i < candidate_locs->length; i++ )
-    {
-        mapped_location* candidate_loc = candidate_locs->locations + i;
-
-        if( candidate_loc->strnd != base->strnd ||
-            candidate_loc->chr != base->chr )
-            continue;
-
-        /* Get the gap between this candidate for the match and the rest of the
-         * partial match (depends on strand) */
-        int candidate_ref_gap;
-        if( base->strnd == FWD )
-        {
-            candidate_ref_gap = candidate_loc->loc
-                - candidate_locs->probe->subseq_offset
-                - prev_matched_location_start;
-        } else {
-            candidate_ref_gap = prev_matched_location_start
-                - ( candidate_loc->loc + candidate_locs->probe->subseq_offset );
-        }
-
-        /* The gap between this location and the previous location must be
-         * greater than the previous location's subseq_length. This allows
-         * for overlapping index probes, with the restriction that the
-         * start locations must be strictly increasing from the 5' to
-         * 3' end of the read subtemplate. */
-        if( candidate_ref_gap < -match->subseq_lengths[match->matched-1] )
-        {
-            continue;
-        }
-        else if( candidate_ref_gap <= max_reference_insert_len )
-        {
-            /* check the cumulative penalty for the match. If it is less
-             * than the minimum, skip this match */
-            float cum_penalty = match->cum_penalty + candidate_loc->penalty;
-            if( cum_penalty < mapping_params->recheck_min_match_penalty ) {
-                continue;
-            }
-
-            /* build a new match with the current location, and push it onto
-             * the stack */
-            struct ml_match* new_match = copy_ml_match( match );
-
-            add_location_to_ml_match( candidate_loc, new_match,
-                    candidate_locs->probe->subseq_length,
-                    candidate_locs->probe->subseq_offset );
-            ml_match_stack_push( stack, new_match );
-        } else {
-            /* If gap between the current location and the previous
-             * location in the match is greater than the maximum allowed
-             * gap in the reference, we know that every subsequent location
-             * also cannot match (because they are sorted). */
-            break;
-        }
-    }
-
-    return;
-}
-
-void
-add_potential_matches_to_stack(
-        struct ml_match* match,
-        struct ml_match_stack* stack,
-        mapped_locations** search_results,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    /* The number of ists that have been match is also the index of the next
-     * ist to match */
-    int match_index = match->matched;
-    assert( match_index > 0 );
-    mapped_locations* candidate_locs = search_results[match_index];
-
-    /* Compute the true start (loc - subseq_offset) of the last mapped
-     * location in the match */
-    mapped_location* base = match->locations + 0;
-
-    int prev_matched_location_start;
-    if( base->strnd == FWD )
-    {
-        prev_matched_location_start = match->locations[match_index - 1].loc
-                                    - match->subseq_offsets[match_index - 1];
-    } else {
-        prev_matched_location_start = match->locations[match_index - 1].loc
-                                    + match->subseq_offsets[match_index - 1];
-    }
-
-    add_matches_from_pseudo_locations_to_stack(
-            candidate_locs,
-            match,
-            prev_matched_location_start,
-            stack,
-            genome,
-            mapping_params
-        );
-
-    add_matches_from_locations_to_stack(
-            candidate_locs,
-            match,
-            prev_matched_location_start,
-            stack,
-            mapping_params
-        );
-
-    return;
-}
-
-void
-find_matching_mapped_locations(
-        struct ml_match* base_match, 
-        struct ml_matches* matches,
-        mapped_locations** search_results,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    /* Initialize the stack of partially completed matches */
-    struct ml_match_stack* stack = NULL;
-    init_ml_match_stack( &stack );
-
-    /* Push the base_match on to set up the algorithm */
-    ml_match_stack_push( stack, base_match );
-
-    while( !ml_match_stack_is_empty(stack) )
-    {
-        /* pop a partially completed match object */
-        struct ml_match* curr_match = ml_match_stack_pop( stack );
-
-        /* if this is a completed, valid match object (i.e. it contains a
-         * matched mapped location from each indexable subtemplate ) */
-        if( curr_match->matched == curr_match->len )
-        {
-            /* then add it to the list of found matches */
-            copy_ml_match_into_matches( curr_match, matches );
-        } else {
-            /* if this match object is incomplete, build partial matches using
-             * the next set of indexable subtemplates, and add the new
-             * potential matches to the stack */
-            add_potential_matches_to_stack(
-                    curr_match,
-                    stack,
-                    search_results,
-                    genome,
-                    mapping_params
-                );
-        }
-
-        free_ml_match( curr_match );
-    }
-
-    free_ml_match_stack( stack );
-}
-
-void
-build_candidate_mappings_from_base_mapped_location(
-        mapped_location* base,
-        struct indexable_subtemplate* base_probe,
-
-        mapped_locations** search_results,
-        int search_results_length,
-
-        struct genome_data* genome,
-        struct read_subtemplate* rst,
-        candidate_mappings* rst_mappings,
-        
-        struct mapping_params* mapping_params )
-{
-    /* Initialize the match object for all matches from this base location */
-    struct ml_match* base_match = NULL;
-    init_ml_match( &base_match, search_results_length );
-    add_location_to_ml_match( base, base_match, base_probe->subseq_length,
-            base_probe->subseq_offset );
-
-    /* Initialize container for complete, valid matches to this base location */
-    struct ml_matches* matches = NULL;
-    init_ml_matches( &matches );
-
-    find_matching_mapped_locations(
-            base_match, 
-            matches,
-            search_results,
-            genome,
-            mapping_params );
-
-    build_candidate_mappings_from_matches(
-            genome,
-            rst,
-            matches,
-            rst_mappings
-        );
-    
-    /* cleanup memory */
-    free_ml_matches( matches );
-}
-
-void
-sort_search_results(
-        mapped_locations** search_results,
-        int search_results_length )
-{
-    int i;
-    for(i = 0; i < search_results_length; i++ )
-    {
-        sort_mapped_locations_by_location( search_results[i] );
-    }
-
-    return;
-}
-
 candidate_mappings*
 build_candidate_mappings_from_search_results(
         mapped_locations** search_results,
-        int search_results_length,
         struct read_subtemplate* rst,
         struct genome_data* genome,
         struct mapping_params* mapping_params )
 {
+    // silence compiler warning
+    assert( NULL != mapping_params );
+    
     candidate_mappings* mappings = NULL;
     init_candidate_mappings( &mappings );
 
     /* sort each mapped_locations in order to use optimized merge algorithm */
-    sort_search_results( search_results, search_results_length );
+    sort_search_results( search_results );
 
     /* Always use the mapped locations from the first indexable subtemplate as
      * the basis for building matches across the whole read subtemplate. We
@@ -1114,319 +309,45 @@ build_candidate_mappings_from_search_results(
         /* match across each of the expanded locations */
         for( j = 0; j < expanded_base_locs->length; j++ )
         {
-            mapped_location* match_base = expanded_base_locs->locations + j;
-
-            build_candidate_mappings_from_base_mapped_location( match_base,
-                    expanded_base_locs->probe, search_results,
-                    search_results_length, genome, rst, mappings,
-                    mapping_params);
+            struct ml_match* base_match = NULL;
+            init_ml_match( &base_match, 1 );
+            add_location_to_ml_match( expanded_base_locs->locations + j, 
+                                      base_match, 
+                                      expanded_base_locs->probe->subseq_length,
+                                      expanded_base_locs->probe->subseq_offset);
+            
+            build_candidate_mapping_from_match(
+                base_match, mappings, rst, genome );
         }
-
+        
         free_mapped_locations( expanded_base_locs );
     }
-
+    
     return mappings;
 }
 
-void
-free_search_results(
-        mapped_locations** search_results,
-        int search_results_length
-    )
-{
-    /* free each of the mapped_locations stored in the array */
-    int i;
-    for( i = 0; i < search_results_length; i++ )
-    {
-        free_mapped_locations( search_results[i] );
-    }
-
-    /* free the array of pointers */
-    free( search_results );
-
-    return;
-}
-
-int
-count_gaps_in_candidate_mapping(
-        candidate_mapping* cm )
-{
-    /* Count the number of gaps in a candidate mapping. Each gap is represented
-     * by the same sequence of characters in the cigar string -
-     * MUNUM. We can therefore count the number of M's - 1 to get the number of
-     * gaps. */
-    int num_m = 0;
-
-    int i;
-    for( i = 0; i < cm->cigar_len; i++ )
-    {
-        if( cm->cigar[i].op == 'M' )
-            num_m++;
-    }
-
-    assert( num_m > 0 );
-    return num_m - 1;
-}
-
-void
-build_gapped_candidate_mappings_for_candidate_mapping(
-        candidate_mapping* cm,
-        candidate_mappings* gapped_mappings,
-        struct read_subtemplate* rst,
-        struct genome_data* genome)
-{
-    /* Build the initial proposed gapped candidate mapping. */
-    candidate_mapping gapped_cm = *cm;
-
-    assert( gapped_cm.cigar_len == 5 );
-    assert( gapped_cm.cigar[1].op == 'U' && gapped_cm.cigar[3].op == 'U' );
-    gapped_cm.cigar[1].len = rst->length;
-    gapped_cm.cigar[3].len = 0;
-
-    /* Get the sequence that was actually mapped to compare to the genome */
-    char* mapped_seq = calloc( rst->length+1, sizeof(char) );
-    assert( mapped_seq != NULL );
-    struct penalty_array_t* penalty_array;
-
-    if( gapped_cm.rd_strnd == FWD ) {
-        memcpy( mapped_seq, rst->char_seq, sizeof(char)*rst->length );
-        penalty_array = rst->fwd_penalty_array;
-    } else {
-        rev_complement_read( rst->char_seq, mapped_seq, rst->length );
-        penalty_array = rst->fwd_penalty_array;
-    }
-
-    /* The full length of the fragment, including the gap */
-    int gapped_length = gapped_cm.mapped_length + gapped_cm.cigar[2].len;
-
-    /* Get a pointer to the genome sequence this read maps to. This is the
-     * whole genome sequence it covers, including the intron. */
-    char* genome_seq = find_seq_ptr( genome,
-            gapped_cm.chr,
-            gapped_cm.start_bp,
-            gapped_length
-        );
-
-    /* *
-     * Start by computing the penalty of a candidate mapping where the exon is
-     * rst->length bp's in the read.
-     * 
-     * This corresponds to 
-     * 
-     *          rst->length
-     *              |
-     *      -----------------
-     *      |  p1  |   e1   |    intron     |  p2  |
-     *      -------
-     *         |
-     *      indexed_seq_len
-     *
-     *  where e2 is not shown because it has zero length.
-     *
-     * */
-    float exon1_penalty = recheck_penalty(
-            genome_seq,
-            mapped_seq,
-            penalty_array->array,
-            gapped_cm.cigar[1].len
-        );
-
-    float exon2_penalty = 0;
-
-    /* Add the initial proposed candidate mapping */
-    /* TODO could optimize here by not adding anything below the minimum
-     * match penalty. could potentially optimize further by breaking once
-     * penalties start climbing again (assumes approximately normal
-     * distribution around the intron). */
-    gapped_cm.penalty = exon1_penalty + exon2_penalty;
-    add_candidate_mapping( gapped_mappings, &gapped_cm );
-
-    int i;
-    for( i = 1; i < rst->length; i++ )
-    {
-        gapped_cm.cigar[1].len -= 1;
-        gapped_cm.cigar[3].len += 1;
-
-        /* Compute the penalty of the shifted bps */
-
-        /* We are subtracting one base pair from the end of the first exon, and
-         * adding one to the start of the second exon */
-        float exon1_bp_penalty = recheck_penalty(
-                genome_seq + gapped_cm.cigar[1].len,
-                mapped_seq + gapped_cm.cigar[1].len,
-                penalty_array->array + gapped_cm.cigar[1].len,
-                1
-            );
-
-        float exon2_bp_penalty = recheck_penalty(
-                genome_seq + gapped_length - gapped_cm.cigar[3].len,
-                mapped_seq + rst->length - gapped_cm.cigar[3].len,
-                penalty_array->array + rst->length - gapped_cm.cigar[3].len,
-                1
-            );
-
-        exon1_penalty -= exon1_bp_penalty;
-        exon2_penalty += exon2_bp_penalty;
-
-        gapped_cm.penalty = exon1_penalty + exon2_penalty;
-        add_candidate_mapping( gapped_mappings, &gapped_cm );
-    }
-
-    free( mapped_seq );
-
-    return;
-}
-
-enum bool
-find_potential_gapped_candidate_mappings(
-        candidate_mapping* cm,
-        candidate_mappings* gapped_mappings,
-        struct read_subtemplate* rst,
-        struct indexable_subtemplates* ists,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    int num_gaps = count_gaps_in_candidate_mapping( cm );
-
-    /* If there is no gap in this candidate mapping, then it must not have
-     * spanned an intron. Skip it. */
-    if( num_gaps == 0 )
-        return false;
-
-    /* for now, only allow one gap (one intron in the read subtemplate) */
-    assert( num_gaps == 1 );
-    assert( ists->length == 2 );
-
-    /* Allocate memory to store the potential gapped candidate mappings */
-    candidate_mappings* potential_gapped_mappings;
-    init_candidate_mappings( &potential_gapped_mappings );
-
-    build_gapped_candidate_mappings_for_candidate_mapping(
-            cm,
-            potential_gapped_mappings,
-            rst,
-            genome
-        );
-
-    /* Only return gapped mappings that have a penalty over the minimum. The
-     * rechecked penalty will be at least the gapped mapping's penalty. */
-    float min_match_penalty = mapping_params->recheck_min_match_penalty;
-
-    int i;
-    for( i = 0; i < potential_gapped_mappings->length; i++ )
-    {
-        candidate_mapping* current_mapping
-            = potential_gapped_mappings->mappings + i;
-
-        if( current_mapping->penalty >= min_match_penalty )
-        {
-            condense_candidate_mapping_cigar_string( current_mapping );
-            add_candidate_mapping( gapped_mappings, current_mapping );
-        }
-    }
-
-    free_candidate_mappings( potential_gapped_mappings );
-
-    return true;
-}
-
-void
-build_gapped_candidate_mappings_for_read_subtemplate(
-        candidate_mappings* mappings,
-        candidate_mappings* gapped_mappings,
-        struct read_subtemplate* rst,
-        struct indexable_subtemplates* ists,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    int i;
-    for( i = 0; i < mappings->length; i++ )
-    {
-        candidate_mapping* cm = mappings->mappings + i;
-
-        enum bool mapping_was_gapped
-            = find_potential_gapped_candidate_mappings(
-                cm,
-                gapped_mappings,
-                rst,
-                ists,
-                genome,
-                mapping_params
-            );
-
-        if( !mapping_was_gapped )
-        {
-            /* Then this candidate mapping did not have a gap, and should be
-             * added to the set of mappings to return as-is */
-            add_candidate_mapping( gapped_mappings, cm );
-        }
-    }
-
-    return;
-}
 
 int
 find_candidate_mappings_for_read_subtemplate(
         struct read_subtemplate* rst,
-        candidate_mappings* final_mappings,
+        candidate_mappings** mappings,
         struct genome_data* genome,
         
         struct mapping_params* mapping_params
     )
 {
-    // build a set of indexable subtemplates from this read subtemplate
-    struct indexable_subtemplates* ists = 
-       build_indexable_subtemplates_from_read_subtemplate(
-           rst, genome->index, false );
-
-    /* if we couldn't build indexable sub templates, ie the read was too short, 
-       then don't try and map this read */
-    if( ists == NULL )
-    {
-        return CANT_BUILD_READ_SUBTEMPLATES;
-    }
+    mapped_locations **search_results;
+    int rv = search_index_for_read_subtemplate( 
+        rst, mapping_params, &search_results, genome);
+    if( rv != 0 ) return rv;
     
-    /* if the set of probe's is too low quality, don't try and map this read */
-    if( filter_indexable_subtemplates( ists, mapping_params, genome ) )
-    {
-        free_indexable_subtemplates( ists );
-        return CANT_BUILD_READ_SUBTEMPLATES;
-    }
-    
-    /* Stores the results of the index search for each indexable subtemplate */
-    int search_results_length = ists->length;
-    mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
-        search_results_length);
-
-    /* initialize search parameters for the index probes */
-    struct index_search_params* index_search_params
-        = init_index_search_params(ists, mapping_params);
-    
-    search_index_for_indexable_subtemplates(
-            ists,
-            search_results,
-            genome,
-            index_search_params
-        );
-    int i;
-    for( i=0; i < ists->length; i++) 
-    {
-        if(search_results[i]->length > MAX_NUM_CAND_MAPPINGS)
-        {
-            free( index_search_params );
-            free_search_results( search_results, search_results_length );
-            free_indexable_subtemplates( ists );
-            return TOO_MANY_CANDIDATE_MAPPINGS;
-        }
-    }
-        
-    candidate_mappings* mappings
-        = build_candidate_mappings_from_search_results( search_results,
-                search_results_length, rst, genome, mapping_params );
+    *mappings = build_candidate_mappings_from_search_results( 
+        search_results, rst, genome, mapping_params);
     
     /* Return the set of gapped mappings - if mappings were ungapped, they were
      * included in this set of candidate mappings as-is (so for an ungapped
      * assay, gapped_mappings and mappings are identical). */
+    /*
     build_gapped_candidate_mappings_for_read_subtemplate(
             mappings,
             final_mappings,
@@ -1437,13 +358,8 @@ find_candidate_mappings_for_read_subtemplate(
         );
 
     free_candidate_mappings( mappings );
+    */
         
-    /* NOTE search_results contains references to memory allocated in the
-     * indexable_subtemplates. search_results must be freed before ists */
-    free( index_search_params );
-    free_search_results( search_results, search_results_length );
-    free_indexable_subtemplates( ists );
-    
     return 0;
 }
 
@@ -1483,15 +399,15 @@ find_candidate_mappings_for_read(
         /* initialize the candidate mappings container for this read
          * subtemplate */
         candidate_mappings* rst_mappings = NULL;
-        init_candidate_mappings( &rst_mappings );
-
         rv = find_candidate_mappings_for_read_subtemplate(
                 rst,
-                rst_mappings,
+                &rst_mappings,
                 genome,
                 mapping_params
             );
-        if( rv != 0 ) return rv;
+        if( rv != 0 ) {
+            return rv;
+        }
         
         /* Update pos in READ_TYPE with the index of the underlying read
          * subtemplate for these candidate mappings */
@@ -1824,7 +740,7 @@ find_candidate_mappings( void* params )
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            
         }
-
+        
         mapped_read_t* mapped_read = 
             build_mapped_read_from_candidate_mappings(
                 mappings,
@@ -1863,8 +779,6 @@ find_candidate_mappings( void* params )
         free_candidate_mappings( mappings );
         free_read( r );
     }
-
-    /********* update the global error data *********/
     
     return NULL;
 }
@@ -1978,113 +892,6 @@ free_td_template( struct single_map_thread_data* td_template )
     free( (void*) td_template->mapped_cnt_lock );
 }
 
-void*
-update_error_data_from_index_search_results(
-    struct read_subtemplate* rst,
-    struct indexable_subtemplates *ists, 
-    mapped_locations** search_results, 
-    struct genome_data* genome, 
-    struct error_data_t* error_data)
-{
-    /* Update the error data record */
-    int i;
-    mapped_location curr_loc;
-    for( i = 0; i < ists->length; i++ ) 
-    {
-        /* if there aren't any results, there is nothing to do */
-        if (search_results[i]->length == 0) continue;
-        
-        struct indexable_subtemplate* ist = ists->container + i;
-        
-        double highest_penalty = -1e9;
-        mapped_location* best_mapped_location= NULL;
-        
-        int j;
-        for ( j = 0; j < search_results[i]->length; j++ ) 
-        {
-            /* Find the location for the full read corresponding to 
-               this mapped location, assuming that it is ungapped */
-            curr_loc = search_results[i]->locations[j];
-            
-            /* skip pseudo locations */
-            if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
-
-            int read_subtemplate_start = 
-                modify_mapped_read_location_for_index_probe_offset(
-                    curr_loc.loc, curr_loc.chr, curr_loc.strnd, 
-                    ist->subseq_offset, ist->subseq_length, rst->length,
-                    genome);
-            /* if we can't find a valid read location, then skip this*/
-            if( read_subtemplate_start < 0 ) continue;
-            
-            /* Find the genome sequence */
-            char* fwd_genome_seq = find_seq_ptr( 
-                genome, curr_loc.chr, read_subtemplate_start, rst->length);
-            char* genome_seq;
-            
-            struct penalty_t *penalty_array;
-            if( curr_loc.strnd == BKWD )
-            {
-                genome_seq = calloc( rst->length+1, sizeof(char) );
-                rev_complement_read(fwd_genome_seq, genome_seq, rst->length);
-                penalty_array = rst->rev_penalty_array->array;
-            } else {
-                genome_seq = fwd_genome_seq;
-                penalty_array = rst->fwd_penalty_array->array;
-            }
-            
-            /* find the penalty for the full sequence */
-            float curr_loc_penalty = recheck_penalty(
-                genome_seq, rst->char_seq, 
-                penalty_array, rst->length);
-            
-            /* if this is the best, then set it as such */
-            if( curr_loc_penalty > highest_penalty )
-            {
-                best_mapped_location = search_results[i]->locations + j;
-                highest_penalty = curr_loc_penalty;
-            }
-
-            /* cleanup memory */
-            if( curr_loc.strnd == BKWD )
-                free( genome_seq );
-        }
-        
-        char* error_str = rst->error_str + ist->subseq_offset;
-            
-        char* fwd_genome_seq = find_seq_ptr( 
-            genome, 
-            best_mapped_location->chr, 
-            best_mapped_location->loc,
-            ist->subseq_length
-            );
-        
-        char* genome_seq;
-        if( best_mapped_location->strnd == BKWD )
-        {
-            genome_seq = calloc( ist->subseq_length+1, sizeof(char) );
-            rev_complement_read(fwd_genome_seq, genome_seq, ist->subseq_length);
-        } else {
-            genome_seq = fwd_genome_seq;
-        }
-        
-        update_error_data( 
-            error_data, 
-            genome_seq, 
-            ist->char_seq, 
-            error_str, 
-            ist->subseq_length, 
-            rst->pos_in_template.pos,
-            best_mapped_location->strnd,
-            ist->subseq_offset );
-        
-        if( best_mapped_location->strnd == BKWD )
-            free(genome_seq);
-    }
-
-    return NULL;
-}
-
 void* 
 collect_error_data( void* params ) 
 {
@@ -2144,43 +951,19 @@ collect_error_data( void* params )
             // reference to current read subtemplate
             struct read_subtemplate* rst = r->subtemplates + i;
             
-            // build a set of indexable subtemplates from this read subtemplate
-            struct indexable_subtemplates* ists = 
-                build_indexable_subtemplates_from_read_subtemplate(
-                    rst, genome->index, true );
-            
-            // if we can't build indexable subtemplates (e.g. the index probe
-            // is too short ) then skip this read subtemplate
-            if( ists == NULL ) continue;
-
-            /* Stores the results of the index search for each indexable subtemplate */
-            int search_results_length = ists->length;
-            mapped_locations** search_results = malloc(sizeof(mapped_locations*)*
-                                                       search_results_length);
-
-            /* initialize search parameters for the index probes */
-            struct index_search_params* index_search_params
-                = init_index_search_params(ists, mapping_params);
-
-            search_index_for_indexable_subtemplates(
-                ists,
-                search_results,
-                genome,
-                index_search_params
-            );
+            mapped_locations** search_results;
+            search_index_for_read_subtemplate(
+                rst, mapping_params, &search_results, genome );
             
             update_error_data_from_index_search_results(
                 rst,
-                ists,
                 search_results,
                 genome,
                 scratch_error_data
             );
-
+            
             // cleanup
-            free( index_search_params );
-            free_search_results( search_results, search_results_length );
-            free_indexable_subtemplates( ists );
+            //free_search_results(search_results);
         }
         
         free_mapping_params( mapping_params );

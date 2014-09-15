@@ -13,6 +13,7 @@
 
 #include "read.h"
 #include "genome.h"
+#include "mapped_location.h"
 
 #define NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP 5000
 #define NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP 10
@@ -22,7 +23,6 @@ struct indexable_subtemplates; // fwd declaration (?)
 struct read_subtemplate;
 struct penalty_t;
 struct read;
-
 
 struct freqs_array {
     int max_qual_score;
@@ -280,5 +280,21 @@ void
 fprintf_error_data_record( 
     FILE* stream, struct error_data_record_t* data,
     int min_qual_score, int max_qual_score, int max_read_length );
+
+/*******************************************************************************
+ *
+ *
+ * Error data collection
+ *
+ *
+ ******************************************************************************/
+
+void*
+update_error_data_from_index_search_results(
+    struct read_subtemplate* rst,
+    mapped_locations** search_results, 
+    struct genome_data* genome, 
+    struct error_data_t* error_data);
+
 
 #endif
