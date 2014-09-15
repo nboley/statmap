@@ -2135,6 +2135,11 @@ collect_error_data( void* params )
                rdb, &r, td->max_readkey )  
          ) 
     {
+        if( rdb->readkey%1000 == 0 ) 
+        {
+            statmap_log(LOG_DEBUG, "Bootstrapped %i reads", rdb->readkey);
+        }
+        
         /* We dont memory lock mapped_cnt because it's read only and we dont 
            really care if it's wrong 
          */
