@@ -1106,7 +1106,12 @@ update_error_data(
     struct error_data_record_t* record = data->records[
         2*subtemplate_index + ((int)strand - 1)];
     record->num_unique_reads += 1;
-    
+    if( record->num_unique_reads%1000 == 0 ) 
+    {
+        statmap_log(LOG_DEBUG, 
+                    "Bootstrapped %i reads", record->num_unique_reads);
+    }
+           
     int i;    
     for( i = 0; i < read_length; i++ )
     {

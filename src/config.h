@@ -12,7 +12,7 @@
 
 /****** configuration options                   ******/
 
-#define MAX_SEARCH_TIME 1.0
+#define MAX_SEARCH_TIME 0.1
 #define MAX_NUM_CAND_MAPPINGS 500
 
 #define MAX_NUM_INDEX_PROBES 1
