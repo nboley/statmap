@@ -1208,8 +1208,13 @@ update_error_data_from_index_search_results(
     struct error_data_t* error_data)
 {
     /* Update the error data record */
+
+    /* find the best candidate mapping */
+    double highest_penalty = -1e9;
+    mapped_location* best_mapped_location;
+    struct indexable_subtemplate* best_ist = NULL;
+    
     int i;
-    mapped_location curr_loc;
     for( i = 0; NULL != search_results[i]; i++ ) 
     {
         /* if there aren't any results, there is nothing to do */
@@ -1217,61 +1222,66 @@ update_error_data_from_index_search_results(
         
         struct indexable_subtemplate* ist = search_results[i]->probe;
         
-        double highest_penalty = -1e9;
-        mapped_location* best_mapped_location= NULL;
-        
         int j;
         for ( j = 0; j < search_results[i]->length; j++ ) 
         {
             /* Find the location for the full read corresponding to 
                this mapped location, assuming that it is ungapped */
-            curr_loc = search_results[i]->locations[j];
+            mapped_location* curr_loc = &(search_results[i]->locations[j]);
             
             /* skip pseudo locations */
-            if(curr_loc.chr == PSEUDO_LOC_CHR_INDEX) continue;
+            if(curr_loc->chr == PSEUDO_LOC_CHR_INDEX) continue;
 
             candidate_mapping* curr_mapping = 
                 build_ungapped_candidate_mapping_from_mapped_location(
-                    &curr_loc, rst, ist, genome );
+                    curr_loc, rst, ist, genome );
             if( NULL == curr_mapping ) continue;
             
             /* if this is the best, then set it as such */
             if( curr_mapping->penalty > highest_penalty )
             {
-                best_mapped_location = &curr_loc;
+                best_mapped_location = search_results[i]->locations + j;
+                best_ist = ist;
+                highest_penalty = curr_mapping->penalty;
             }
         }
-        
-        char* error_str = rst->error_str + ist->subseq_offset;
+    }
+    
+    if( NULL == best_mapped_location ) {
+        return NULL;
+    }
+    
+    char* error_str = rst->error_str + best_ist->subseq_offset;
             
-        char* fwd_genome_seq = find_seq_ptr( 
-            genome, 
-            best_mapped_location->chr, 
-            best_mapped_location->loc,
-            ist->subseq_length
-            );
+    char* fwd_genome_seq = find_seq_ptr( 
+        genome, 
+        best_mapped_location->chr, 
+        best_mapped_location->loc,
+        best_ist->subseq_length
+        );
         
-        char* genome_seq;
-        if( best_mapped_location->strnd == BKWD )
-        {
-            genome_seq = calloc( ist->subseq_length+1, sizeof(char) );
-            rev_complement_read(fwd_genome_seq, genome_seq, ist->subseq_length);
-        } else {
-            genome_seq = fwd_genome_seq;
-        }
+    char* genome_seq;
+    if( best_mapped_location->strnd == BKWD )
+    {
+        genome_seq = calloc( best_ist->subseq_length+1, sizeof(char) );
+        rev_complement_read(fwd_genome_seq, genome_seq, best_ist->subseq_length);
+    } else {
+        genome_seq = fwd_genome_seq;
+    }
         
-        update_error_data( 
-            error_data, 
-            genome_seq, 
-            ist->char_seq, 
-            error_str, 
-            ist->subseq_length, 
-            rst->pos_in_template.pos,
-            best_mapped_location->strnd,
-            ist->subseq_offset );
+    update_error_data( 
+        error_data, 
+        genome_seq, 
+        best_ist->char_seq, 
+        error_str, 
+        best_ist->subseq_length, 
+        rst->pos_in_template.pos,
+        best_mapped_location->strnd,
+        best_ist->subseq_offset );
         
-        if( best_mapped_location->strnd == BKWD )
-            free(genome_seq);
+    if( best_mapped_location->strnd == BKWD )
+    {
+        free(genome_seq);
     }
 
     return NULL;
