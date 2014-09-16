@@ -465,7 +465,7 @@ scale_penalty( float penalty, // potential_match_stack* stack,
      * 
      */
     float scaled_penalty = penalty*(((double) max_num_levels)/(level+1));
-    scaled_penalty -= (max_num_levels - level);
+    scaled_penalty -= 2*(max_num_levels - level);
     return scaled_penalty;
     
     /*
@@ -484,8 +484,8 @@ cmp_pmatch_item( const potential_match* a,
                  const potential_match* b )
 {
     if( b->scaled_penalty > a->scaled_penalty)
-        return 1;
-    return -1;
+        return -1;
+    return 1;
 } 
 
 void
@@ -1408,7 +1408,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     int cntr;
     for(cntr = 0; pmatch_stack_length( stack ) > 0; cntr++ )
     {
-        if( cntr%25 == 0 )sort_pmatch_stack(stack);
+        if( (0 < cntr < 100 && cntr%25 == 0) 
+            || ( 100 <= cntr < 1000 &&  cntr%100 == 0 ) )
+        { sort_pmatch_stack(stack); }
         
         if( cntr%1000 == 0 )
         {
@@ -1421,6 +1423,13 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 results->length = 0;
                 rv = INDEX_SEARCH_TOOK_TOO_LONG_ERROR;
                 goto cleanup;            
+            }
+            
+            if( results->length > MAX_NUM_CAND_MAPPINGS ) 
+            {
+                rv = TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
+                results->length = 0;
+                goto cleanup;
             }
         }
         potential_match match = pop_pmatch( stack );
