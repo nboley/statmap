@@ -450,7 +450,7 @@ fprint_pmatch_stack( FILE* fp , potential_match_stack* s )
     fprintf( fp, "====END=====================================================\n");
 }
 
- float 
+float 
 scale_penalty( float penalty, // potential_match_stack* stack, 
                int level,
                int max_num_levels,
@@ -464,6 +464,11 @@ scale_penalty( float penalty, // potential_match_stack* stack,
      * assume that it has an expected penalty of negative the max top difference.
      * 
      */
+    float scaled_penalty = penalty*(((double) max_num_levels)/(level+1));
+    scaled_penalty -= (max_num_levels - level);
+    return scaled_penalty;
+    
+    /*
     double min_starting_penalty 
         = ( max_penalty_diff < -0.1) ? max_penalty_diff: min_penalty;
     
@@ -471,6 +476,38 @@ scale_penalty( float penalty, // potential_match_stack* stack,
     rv +=  penalty*(((double) max_num_levels)/(level+1));
 
     return rv;
+    */
+}
+
+int
+cmp_pmatch_item( const potential_match* a,
+                 const potential_match* b )
+{
+    if( b->scaled_penalty > a->scaled_penalty)
+        return 1;
+    return -1;
+} 
+
+void
+sort_pmatch_stack( potential_match_stack* stack )
+{
+    qsort ( 
+        stack->matches + stack->first_index,
+        pmatch_stack_length(stack), 
+        sizeof(potential_match), 
+        (int(*)( const void*, const void* ))cmp_pmatch_item
+    );
+    
+    return;
+}
+
+potential_match
+pop_pmatch( potential_match_stack* stack )
+{
+    /* TODO - lock access for thread safety */
+    assert( pmatch_stack_length( stack ) > 0 );
+    stack->last_index -= 1;
+    return *(stack->matches + stack->last_index);
 }
 
 size_t
@@ -479,7 +516,7 @@ pmatch_stack_length( potential_match_stack* pmatch )
     return (pmatch->last_index - pmatch->first_index);
 };
 
- potential_match_stack*
+potential_match_stack*
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND strnd,
             const int node_level, const int max_num_levels,
@@ -571,17 +608,8 @@ add_pmatch( potential_match_stack* stack,
     new_location->strnd = strnd;
     new_location->penalty = penalty;
     new_location->scaled_penalty = scaled_penalty;
-
+    
     return stack;
-}
-
-potential_match
-pop_pmatch( potential_match_stack* stack )
-{
-    /* TODO - lock access for thread safety */
-    assert( pmatch_stack_length( stack ) > 0 );
-    stack->last_index -= 1;
-    return *(stack->matches + stack->last_index);
 }
 
 /* FIXME - WHERE SHOULD THIS GO */
@@ -1380,6 +1408,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     int cntr;
     for(cntr = 0; pmatch_stack_length( stack ) > 0; cntr++ )
     {
+        if( cntr%25 == 0 )sort_pmatch_stack(stack);
+        
         if( cntr%1000 == 0 )
         {
             double elapsed;

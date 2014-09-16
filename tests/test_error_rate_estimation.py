@@ -22,7 +22,7 @@ def test_error_rate_estimation( ):
     
     rl = read_len = 100
     indexed_seq_len = 20
-    nsamples = 100
+    nsamples = 10000
     output_directory = "smo_test_error_rate_estimation"
     
     ###### Prepare the data for the test #######################################
