@@ -1211,7 +1211,7 @@ update_error_data_from_index_search_results(
 
     /* find the best candidate mapping */
     double highest_penalty = -1e9;
-    mapped_location* best_mapped_location;
+    mapped_location* best_mapped_location = NULL;
     struct indexable_subtemplate* best_ist = NULL;
     
     int i;
