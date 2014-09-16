@@ -261,8 +261,12 @@ build_candidate_mapping_from_match(
                 genome
             );
 
-    if( read_location < 0 ) // the read location was invalid; skip this matched set
+    // the read location was invalid; skip this matched set
+    if( read_location < 0 ) 
+    {
+        free(cm);
         return NULL;
+    }
     cm->start_bp = read_location;
     
     build_candidate_mapping_cigar_string_from_match( cm, match, rst );
@@ -336,7 +340,11 @@ build_candidate_mappings_from_search_results(
                                           expanded_locs->probe->subseq_offset);
                 candidate_mapping* mapping = 
                     build_candidate_mapping_from_match(match, rst, genome );
-                if( NULL != mapping )add_candidate_mapping(mappings, mapping);
+                if( NULL != mapping ) 
+                {
+                    add_candidate_mapping(mappings, mapping);
+                    free(mapping);
+                }
                 free_ml_match(match);
             }
         
@@ -987,8 +995,7 @@ collect_error_data( void* params )
                 scratch_error_data
             );
             
-            // cleanup
-            //free_search_results(search_results);
+            free_search_results(search_results);
         }
         
         free_mapping_params( mapping_params );

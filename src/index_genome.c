@@ -347,6 +347,7 @@ search_index_for_read_subtemplate(
         {
             free( index_search_params );
             free_search_results( *search_results );
+            
             return TOO_MANY_CANDIDATE_MAPPINGS;
         }
     }    

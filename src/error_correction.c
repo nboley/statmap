@@ -1244,6 +1244,8 @@ update_error_data_from_index_search_results(
                 best_ist = ist;
                 highest_penalty = curr_mapping->penalty;
             }
+
+            free( curr_mapping );
         }
     }
     

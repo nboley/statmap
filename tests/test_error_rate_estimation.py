@@ -22,7 +22,7 @@ def test_error_rate_estimation( ):
     
     rl = read_len = 100
     indexed_seq_len = 20
-    nsamples = 10000
+    nsamples = 100
     output_directory = "smo_test_error_rate_estimation"
     
     ###### Prepare the data for the test #######################################
@@ -40,8 +40,16 @@ def test_error_rate_estimation( ):
     reads = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
 
+    fragments = sample_uniformly_from_genome( 
+        r_genome, nsamples=nsamples, frag_len=rl )
     reads2 = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
+
+    new_genome = build_random_genome( [2000,2000], ["1","2"] )
+    fragments = sample_uniformly_from_genome( 
+        r_genome, nsamples=nsamples, frag_len=rl )
+    reads3 = build_reads_from_fragments( 
+        new_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
     
     def build_error_str(read):
         # return a complete shit read 10% of the time
@@ -71,6 +79,7 @@ def test_error_rate_estimation( ):
 
     mutated_reads = list( iter_mutated_reads( reads ) )
     mutated_reads += list(iter_mutated_reads(reads2, 0.01))
+    mutated_reads += list(iter_mutated_reads(reads3, 0.01))
     
     # build and write the reads    
     reads_of = open("tmp.fastq", "w")
