@@ -225,7 +225,7 @@ build_indexable_subtemplates_from_read_subtemplate(
     return ists;
 }
 
-void
+int
 search_index(
         struct genome_data* genome,
         struct indexable_subtemplate* ist,
@@ -262,7 +262,7 @@ search_index(
     if( fwd_seq == NULL )
     {
         // fprintf(stderr, "Could Not Translate: %s\n", st->char_seq);
-        return;
+        return -1;
     }
     assert( fwd_seq != NULL );
     
@@ -277,7 +277,7 @@ search_index(
     free( tmp_read );
     
     /* search the index */
-    find_matches_from_root(
+    int rv = find_matches_from_root(
             index, 
 
             search_params,
@@ -298,7 +298,7 @@ search_index(
     free( fwd_seq );
     free( bkwd_seq );
     
-    return;
+    return rv;
 };
 
 
@@ -320,7 +320,7 @@ search_index_for_read_subtemplate(
     /* if we couldn't build indexable sub templates, ie the read was too short, 
        then don't try and map this read */
     if( rst->ists == NULL ) {
-        return CANT_BUILD_READ_SUBTEMPLATES;
+        return CANT_BUILD_READ_SUBTEMPLATES_ERROR;
     }
         
     /* Stores the results of the index search for each indexable subtemplate */
@@ -332,28 +332,39 @@ search_index_for_read_subtemplate(
     struct index_search_params* index_search_params
         = init_index_search_params(rst->ists, mapping_params);
 
+    int num_valid_index_searches = 0;
     int i;
     for( i = 0; i < rst->ists->length; i++ )
     {
-        search_index(
+        int rv = search_index(
                 genome,
                 rst->ists->container + i,
                 index_search_params + i,
                 &((*search_results)[i]),
                 false
             );
-        
+        // if the index search returned an error, skip this index probe
+        if( rv != 0 )  
+            continue;
+
+        // if there are too many candidate mappings, skip this index probe
         if((*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)
-        {
-            free( index_search_params );
-            free_search_results( *search_results );
-            
-            return TOO_MANY_CANDIDATE_MAPPINGS;
-        }
+            continue;
+        
+        num_valid_index_searches++;
+
     }    
 
-    free( index_search_params );
-    
+    if(num_valid_index_searches < MIN_NUM_INDEX_PROBES)
+    {
+        free( index_search_params );
+        free_search_results( *search_results );
+        *search_results = NULL;
+        
+        return NOT_ENOUGH_VALID_INDEX_PROBES_ERROR;
+    }
+
+    free( index_search_params );    
     return 0;
 }
 

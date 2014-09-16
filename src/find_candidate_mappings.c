@@ -447,18 +447,20 @@ find_candidate_mappings_for_read(
              * of candidate mappings for this read */
             append_candidate_mappings( read_mappings, rst_mappings );
         }
-         
+        
         if( NULL != rst_mappings ) {
             free_candidate_mappings( rst_mappings );
         }
+        
+        if(rv != 0){ return rv; };
     }
     
     if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {
         free_candidate_mappings(read_mappings);
-        return TOO_MANY_CANDIDATE_MAPPINGS;
+        return TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
     }
 
-    return 0;
+    return rv;
 }
 
 void

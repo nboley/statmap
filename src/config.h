@@ -15,7 +15,10 @@
 #define MAX_SEARCH_TIME 0.1
 #define MAX_NUM_CAND_MAPPINGS 500
 
+// the maximum number of index probes to use for a read
 #define MAX_NUM_INDEX_PROBES 4
+// the number of index probes we need for a mapping to be valid
+#define MIN_NUM_INDEX_PROBES 1
 #define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
 
@@ -102,6 +105,7 @@
 #define CANT_BUILD_READ_SUBTEMPLATES_ERROR 1
 #define TOO_MANY_CANDIDATE_MAPPINGS_ERROR 2
 #define INDEX_SEARCH_TOOK_TOO_LONG_ERROR 3
+#define NOT_ENOUGH_VALID_INDEX_PROBES_ERROR 4
 
 /**** set global constantsa for maximum read length, etc.       ****/
 
