@@ -344,15 +344,17 @@ search_index_for_read_subtemplate(
                 false
             );
         // if the index search returned an error, skip this index probe
-        if( rv != 0 )  
-            continue;
-
         // if there are too many candidate mappings, skip this index probe
-        if((*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)
+        if( rv != 0 
+            || (*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)  
+        {
+            free((*search_results)[i]->locations);
+            (*search_results)[i]->locations = NULL;
+            (*search_results)[i]->length = 0;
+            (*search_results)[i]->allocated_length = 0;
             continue;
-        
+        }        
         num_valid_index_searches++;
-
     }    
 
     if(num_valid_index_searches < MIN_NUM_INDEX_PROBES)
