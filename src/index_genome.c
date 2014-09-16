@@ -1315,7 +1315,7 @@ add_sequence( struct genome_data* genome,
 }
 
 
-void 
+int 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 
@@ -1335,6 +1335,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               enum bool only_find_unique_sequences
     )
 {
+    // Initialize the return value to 0, for no error
+    int rv = 0;
+    
     const int num_letters = calc_num_letters( seq_length );
 
     /* Unpack the search parameters */
@@ -1361,10 +1364,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
     assert( err == 0 );
     
-    int cntr = 0;
-    while( pmatch_stack_length( stack ) > 0 )
+    int cntr;
+    for(cntr = 0; pmatch_stack_length( stack ) > 0; cntr++ )
     {
-        cntr += 1;
         if( cntr%1000 == 0 )
         {
             double elapsed;
@@ -1373,10 +1375,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
             if( elapsed > MAX_SEARCH_TIME )
             {
-                statmap_log( LOG_DEBUG, 
-                             "Terminating index search (%e sec elapsed)", 
-                             elapsed );
                 results->length = 0;
+                rv = INDEX_SEARCH_TOOK_TOO_LONG_ERROR;
                 goto cleanup;            
             }
         }
@@ -1629,11 +1629,11 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
 cleanup:
     free_pmatch_stack( stack );
-    return;
+    return rv;
 }
 
 
-extern void
+extern int
 find_matches_from_root(
         struct index_t* index,
 

@@ -252,7 +252,7 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
-extern void
+extern int
 find_matches_from_root(
         struct index_t* index,
 

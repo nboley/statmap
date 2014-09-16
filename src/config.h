@@ -26,7 +26,7 @@
 
 /* Mismatch rates for the estimated error model bootstrap */
 #define NUM_READS_TO_BOOTSTRAP 100000
-#define MAX_NUM_MM_RATE 0.10
+#define MAX_NUM_MM_RATE 0.20
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
@@ -99,8 +99,9 @@
 
 /**** eror codes       ****/
 
-#define CANT_BUILD_READ_SUBTEMPLATES 1
-#define TOO_MANY_CANDIDATE_MAPPINGS 2
+#define CANT_BUILD_READ_SUBTEMPLATES_ERROR 1
+#define TOO_MANY_CANDIDATE_MAPPINGS_ERROR 2
+#define INDEX_SEARCH_TOOK_TOO_LONG_ERROR 3
 
 /**** set global constantsa for maximum read length, etc.       ****/
 

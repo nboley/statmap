@@ -237,7 +237,8 @@ iterative_mapping( struct args_t* args,
         && args->assay_type == CHIP_SEQ
         && mpd_rds_db->fl_dist == NULL )
     {
-        statmap_log( LOG_FATAL, "Can not iteratively map single end chip-seq reads unless a FL dist is provided" );
+        statmap_log( LOG_FATAL, 
+            "Can not iteratively map single end chip-seq reads unless a FL dist is provided" );
         exit(-1);
     }
 
