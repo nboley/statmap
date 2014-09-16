@@ -429,23 +429,20 @@ find_candidate_mappings_for_read(
                 genome,
                 mapping_params
             );
-        if( rv != 0 ) {
-            if( NULL != rst_mappings )
-                free_candidate_mappings( rst_mappings );
-            
-            free_candidate_mappings( read_mappings );
-            return rv;
-        }
         
-        /* Update pos in READ_TYPE with the index of the underlying read
-         * subtemplate for these candidate mappings */
-        update_pos_in_template( rst_mappings, i );
+        if( rv == 0 ) {
+            /* Update pos in READ_TYPE with the index of the underlying read
+             * subtemplate for these candidate mappings */
+            update_pos_in_template( rst_mappings, i );
 
-        /* append the candidate mappings from this read subtemplate to the set
-         * of candidate mappings for this read */
-        append_candidate_mappings( read_mappings, rst_mappings );
-
-        free_candidate_mappings( rst_mappings );
+            /* append the candidate mappings from this read subtemplate to the set
+             * of candidate mappings for this read */
+            append_candidate_mappings( read_mappings, rst_mappings );
+        }
+         
+        if( NULL != rst_mappings ) {
+            free_candidate_mappings( rst_mappings );
+        }
     }
     
     if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {
