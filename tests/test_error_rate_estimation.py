@@ -21,7 +21,7 @@ def test_error_rate_estimation( ):
     error_char_mappings = dict(zip(error_chars, error_char_rates ))
     
     rl = read_len = 100
-    indexed_seq_len = 20
+    indexed_seq_len = 40
     nsamples = 10000
     output_directory = "smo_test_error_rate_estimation"
     
@@ -30,7 +30,7 @@ def test_error_rate_estimation( ):
     r_genome = build_random_genome( [2000,2000], ["1","2"] )
     genome_fnames = ( "tmp.genome.fa", )
     with open( genome_fnames[0], "w" ) as genome_of:
-        write_genome_to_fasta( r_genome, genome_of, 10 )
+        write_genome_to_fasta( r_genome, genome_of, 1 )
     
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in
@@ -38,16 +38,16 @@ def test_error_rate_estimation( ):
     fragments = sample_uniformly_from_genome( 
         r_genome, nsamples=nsamples, frag_len=rl )
     reads = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
+        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
 
     fragments = sample_uniformly_from_genome( 
         r_genome, nsamples=nsamples, frag_len=rl )
     reads2 = build_reads_from_fragments( 
-        r_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
+        r_genome, fragments, read_len=rl, rev_comp=False, paired_end=False )
 
     new_genome = build_random_genome( [2000,2000], ["1","2"] )
     fragments = sample_uniformly_from_genome( 
-        r_genome, nsamples=nsamples, frag_len=rl )
+        new_genome, nsamples=nsamples, frag_len=rl )
     reads3 = build_reads_from_fragments( 
         new_genome, fragments, read_len=rl, rev_comp=True, paired_end=False )
     
@@ -77,8 +77,8 @@ def test_error_rate_estimation( ):
             mutated_read = ''.join( mutated_read )
             yield ( mutated_read, error_str, read )
 
-    mutated_reads = list( iter_mutated_reads( reads ) )
-    mutated_reads += list(iter_mutated_reads(reads2, 0.01))
+    mutated_reads = list( iter_mutated_reads( reads, 0.10 ) )
+    mutated_reads += list(iter_mutated_reads(reads2, 0.10))
     mutated_reads += list(iter_mutated_reads(reads3, 0.01))
     
     # build and write the reads    

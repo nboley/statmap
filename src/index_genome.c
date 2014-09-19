@@ -288,8 +288,8 @@ search_index(
             /* length of the reads */
             subseq_length,
             
-            ist->fwd_penalties,
-            ist->rev_penalties,
+            ist->fwd_penalties.array,
+            ist->rev_penalties.array,
 
             only_find_unique_sequence
         );
@@ -464,11 +464,7 @@ scale_penalty( float penalty, // potential_match_stack* stack,
      * assume that it has an expected penalty of negative the max top difference.
      * 
      */
-    float scaled_penalty = penalty*(((double) max_num_levels)/(level+1));
-    scaled_penalty -= 2*(max_num_levels - level);
-    return scaled_penalty;
     
-    /*
     double min_starting_penalty 
         = ( max_penalty_diff < -0.1) ? max_penalty_diff: min_penalty;
     
@@ -476,6 +472,11 @@ scale_penalty( float penalty, // potential_match_stack* stack,
     rv +=  penalty*(((double) max_num_levels)/(level+1));
 
     return rv;
+
+    /*
+    float scaled_penalty = penalty*(((double) max_num_levels)/(level+1));
+    scaled_penalty -= 2*(max_num_levels - level);
+    return scaled_penalty;
     */
 }
 
@@ -1408,9 +1409,14 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     int cntr;
     for(cntr = 0; pmatch_stack_length( stack ) > 0; cntr++ )
     {
-        if( (0 < cntr < 100 && cntr%25 == 0) 
-            || ( 100 <= cntr < 1000 &&  cntr%100 == 0 ) )
-        { sort_pmatch_stack(stack); }
+        potential_match match = pop_pmatch( stack );
+        /* check to make sure that this branch is still valid */
+        /* avoid rounding errors with the small number - it is your fault
+           if you put in a negative number for the max penalty spread */
+        if( match.penalty < min_match_penalty )
+        {
+            continue;
+        }
         
         if( cntr%1000 == 0 )
         {
@@ -1432,7 +1438,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 goto cleanup;
             }
         }
-        potential_match match = pop_pmatch( stack );
 
         /* add the index offset so that this is a phsyical location */
         /* 
@@ -1462,17 +1467,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          * that means the index seed length is longer than the seq length. 
          * If this is the case, add every child below the current node as 
          * a match.
-         */
-           
-        /* check to make sure that this branch is still valid */
-        /* avoid rounding errors with the small number - it is your fault
-           if you put in a negative number for the max penalty spread */
-        if( max_penalty_spread > -0.01 &&
-            curr_penalty < min_match_penalty )
-        {
-            continue;
-        }
-        
+         */                 
         if( node_type == 's')
         {
             /* deal with static node */

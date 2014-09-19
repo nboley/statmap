@@ -312,14 +312,16 @@ init_indexable_subtemplate(
 
     (*ist)->char_seq = rst->char_seq + subseq_offset;
 
-    (*ist)->fwd_penalties = rst->fwd_penalty_array->array + subseq_offset;
+    (*ist)->fwd_penalties.length = subseq_length;
+    (*ist)->fwd_penalties.array = rst->fwd_penalty_array->array + subseq_offset;
 
     /* The reverse penalty array is built from the reverse complemented read
-     * sequence. Since subseq_offset is the distance of the offset from the 5'
+     * sequenc\e. Since subseq_offset is the distance of the offset from the 5'
      * start of the read, subseq_offset will actually be at the end of the
      * penalty array. The offset we want then is the length of the subsequence
      * plus the length of the offset subtracted from the total read length. */
-    (*ist)->rev_penalties = rst->rev_penalty_array->array
+    (*ist)->rev_penalties.length = subseq_length;
+    (*ist)->rev_penalties.array = rst->rev_penalty_array->array
         + ( rst->length - (subseq_offset + subseq_length));
 
     (*ist)->expected_value = expected_value_of_rst_subsequence(

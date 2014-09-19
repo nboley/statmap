@@ -133,8 +133,7 @@ struct mapping_params*
 init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct error_model_t* error_model
     );
 
 struct index_search_params*
@@ -153,8 +152,7 @@ free_mapping_params( struct mapping_params* p );
 
 
 int
-calc_effective_sequence_length( 
-    struct penalty_t* penalties, int penalties_len );
+calc_effective_sequence_length( struct penalty_array_t* penalties );
 
 /* determine whether reads are mappable */
 enum bool

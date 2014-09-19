@@ -8,7 +8,6 @@
 #include "quality.h"
 #include "error_correction.h"
 
-struct penalty_array_t; // fwd declaration (?)
 struct mapping_params; // fwd declaration (?)
 
 #define POS_SINGLE_END 0
@@ -99,8 +98,8 @@ struct indexable_subtemplate
 
     /* pointers into penalty_array_t->array */
     /* these have already accounted for the subseq_offset */
-    struct penalty_t* fwd_penalties;
-    struct penalty_t* rev_penalties;
+    struct penalty_array_t fwd_penalties;
+    struct penalty_array_t rev_penalties;
 
     /* expected value of this index probe */
     float expected_value;

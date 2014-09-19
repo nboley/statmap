@@ -1,4 +1,5 @@
 #include <R.h>
+#include "config.h"
 #include "log.h"
 
 #define R_HOME "/usr/lib/R/"
@@ -23,7 +24,7 @@ init_R( )
     int argc = sizeof(argv)/sizeof(argv[0]);
     
     Rf_initEmbeddedR(argc, argv);
-    
+
     return;
 }
 

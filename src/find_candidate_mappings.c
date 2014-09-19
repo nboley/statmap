@@ -698,7 +698,6 @@ find_candidate_mappings( void* params )
     struct error_model_t* error_model = td->error_model;
     
     struct mapping_metaparams* metaparams = td->metaparams;
-    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* END parameter 'recreation' */
 
@@ -742,8 +741,7 @@ find_candidate_mappings( void* params )
         }
 
         struct mapping_params* mapping_params
-            = init_mapping_params_for_read( r, metaparams, error_model, 
-                reads_min_match_penalty );
+            = init_mapping_params_for_read( r, metaparams, error_model );
         cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
         
         // Make sure this read has "enough" HQ bps before trying to map it
@@ -946,7 +944,6 @@ collect_error_data( void* params )
     struct error_data_t* error_data = td->error_data;
     
     struct mapping_metaparams* metaparams = td->metaparams;
-    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* END parameter 'recreation' */
 
@@ -975,10 +972,9 @@ collect_error_data( void* params )
            really care if it's wrong 
          */
         struct mapping_params* mapping_params
-            = init_mapping_params_for_read( r, metaparams, error_model, 
-                reads_min_match_penalty );
+            = init_mapping_params_for_read( r, metaparams, error_model );
         cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
-
+        
         int i;
         for( i = 0; i < r->num_subtemplates; i++ )
         {
@@ -1135,27 +1131,6 @@ find_all_candidate_mappings(
         // update the maximum allowable readkey
         // update this dynamically
         td_template.max_readkey += READS_STAT_UPDATE_STEP_SIZE;
-        
-        if( mapping_metaparams->error_model_type == ESTIMATED )
-        {
-            /* Compute the min match penalty for this block of reads that will
-             * map the desired percentage of reads given in metaparameters */
-            float reads_min_match_penalty
-                = compute_min_match_penalty_for_reads( 
-                    rdb, error_model, 
-                    MAX(0, td_template.max_readkey - rdb->readkey),
-                    mapping_metaparams->error_model_params[0] );
-
-            statmap_log( LOG_INFO,
-                "Computed min_match_penalty %f for reads [%i, %i]",
-                reads_min_match_penalty,
-                td_template.max_readkey - READS_STAT_UPDATE_STEP_SIZE,
-                td_template.max_readkey );
-
-            /* Save in the mapping metaparameters */
-            td_template.reads_min_match_penalty = reads_min_match_penalty;
-        }
-
         spawn_find_candidate_mappings_threads( &td_template );
         
         /* update the error model from the new error data */

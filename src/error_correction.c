@@ -306,48 +306,52 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
-get_mismatch_penalty( struct penalty_t* penalty_array )
+get_mismatch_probability( struct penalty_t* penalty_array )
 {
-    double mismatch_penalty = 0;
+    double match_penalty = -DBL_MAX;
 
     /* We can safely assume the penalty for a match (in log space) is > any
     penalty for a mismatch. */
     int i;
     for( i = 0; i < 4; i++ )
     {
-        mismatch_penalty = MIN( penalty_array->penalties[i], mismatch_penalty );
+        match_penalty = MAX( penalty_array->penalties[i], match_penalty );
     }
 
-    return mismatch_penalty;
+    return 1 - pow(10, match_penalty);
 }
 
 
-double
-calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
-                        float exp_miss_frac )
+double*
+calc_penalty_dist_moments( struct penalty_array_t* penalty_array, int num_moments)                           
 {
     /* Unused - assert added to prevent compiler warning (for now) */
-    assert( exp_miss_frac > 0 );
-
+    assert( num_moments == 2 );
+    
+    double *moments = calloc(sizeof(double), num_moments);
     double mean = 0;
     double var = 0;
     
     int i;
-    for( i = 0; i < penalties_len; i++ )
+    for( i = 0; i < penalty_array->length; i++ )
     {
         /* Use the penalty of a mismatch, which we get by taking the min over
          * the four penalty values (since penalties are negative, this will be
          * the "highest" penalty score. This is wrong when we move to using
          * actual by base mutation rates. */
-        double penalty = get_mismatch_penalty( penalties + i );
-        double mm_prb = pow( 10, penalty );
-        mean += mm_prb*penalty;
-        mean += (1-mm_prb)*log10((1-mm_prb));
+        double mm_prb = get_mismatch_probability( penalty_array->array  + i );
+        double mm_penalty = log10(mm_prb) - LOG10_3;
+        double match_penalty = log10(1-mm_prb);
+        mean += mm_prb*mm_penalty;
+        mean += (1-mm_prb)*match_penalty;
         
-        var += (1-mm_prb)*mm_prb*penalty*penalty;
+        var += mm_prb*(1-mm_prb)*(mm_penalty - match_penalty)*(mm_penalty - match_penalty);
     }
+
+    moments[0] = mean;
+    moments[1] = var;
     
-    return mean - 4*sqrt( var );
+    return moments;
 }
 
 /* Separate penalty mean calculation from below so we can log independently of
@@ -358,7 +362,7 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
     double mean = 0;
     int i;
     for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
+        double mm_prb = get_mismatch_probability( penalties + i );
         mean += mm_prb;
     }
 
@@ -368,27 +372,22 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
 }
 
 int
-calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
+calc_effective_sequence_length( struct penalty_array_t* penalties )
 {
     double mean = 0;
     int i;
-    for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
+    for( i = 0; i < penalties->length; i++ ) {
+        double mm_prb = get_mismatch_probability( penalties->array + i );
         mean += mm_prb;
     }
 
-    return penalties_len - (int)mean - 1;
+    return penalties->length - (int)mean - 1;
 }
 
 enum bool
-filter_penalty_array( 
-        struct penalty_t* penalties, int penalties_len,
-        double effective_genome_len
-    )
+filter_penalty_array( struct penalty_array_t* penalty_array, double effective_genome_len )
 {
-    int effective_seq_len = calc_effective_sequence_length(
-        penalties, penalties_len );
-
+    int effective_seq_len = calc_effective_sequence_length( penalty_array );
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
         /*
         statmap_log( LOG_DEBUG, "Filtering Read: %i %i - %e %e",
@@ -424,10 +423,8 @@ filter_read(
         log_penalties_mean( mapping_params->fwd_penalty_arrays[i]->array,
                 mapping_params->fwd_penalty_arrays[i]->length );
 
-        if( filter_penalty_array( 
-                mapping_params->fwd_penalty_arrays[i]->array, 
-                mapping_params->fwd_penalty_arrays[i]->length,
-                effective_genome_len) ) {
+        if( filter_penalty_array( mapping_params->fwd_penalty_arrays[i], effective_genome_len) )
+        {
             return true;
         }
     }
@@ -454,8 +451,7 @@ filter_indexable_subtemplates(
     {
         struct indexable_subtemplate* ist = ists->container + i;
 
-        if( filter_penalty_array( 
-                ist->fwd_penalties, ist->subseq_length, effective_genome_len ) )
+        if( filter_penalty_array(&(ist->fwd_penalties), effective_genome_len) )
         {
             return true;
         }
@@ -656,8 +652,7 @@ struct mapping_params*
 init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct error_model_t* error_model
     )
 {
     struct mapping_params* p = malloc(sizeof(struct mapping_params));
@@ -718,13 +713,33 @@ init_mapping_params_for_read(
        through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
+        
+        double mean = 0; 
+        double variance = 0; 
+        
+        for( i = 0; i < r->num_subtemplates; i++ )
+        {
+            double* fwd_moments = calc_penalty_dist_moments(
+                p->fwd_penalty_arrays[i], 2);
+            double* rev_moments = calc_penalty_dist_moments(
+                p->rev_penalty_arrays[i], 2);
+            
+            mean += MIN(fwd_moments[0], rev_moments[0]);
+            variance += MAX(fwd_moments[1], rev_moments[1]);
+            free(fwd_moments);
+            free(rev_moments);
+        }
 
-        p->recheck_min_match_penalty = reads_min_match_penalty;
-        p->recheck_max_penalty_spread
-            = -log10(1 - metaparams->error_model_params[0]);
+        double shape = mean*mean/variance;        
+        double scale = -variance/mean;
+        
+        // Allow for one additional high quality mismatch, for the continuity error
+        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, shape, scale, 1, 0);
+        p->recheck_min_match_penalty = min_match_prb;
+        p->recheck_max_penalty_spread = -log10(1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
+        //printf("%e:%e:%e\n", min_match_prb, mean, variance);
         assert( p->recheck_max_penalty_spread >= 0 );
-        //p->recheck_max_penalty_spread = 1.3;
-
+        
         if( _assay_type == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
@@ -771,14 +786,10 @@ init_index_search_params(
             
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
-
-            float scaling_factor 
-                = ist->expected_value / mapping_params->read_expected_value;
-            scaling_factor = ((double)ist->subseq_length )
-                /mapping_params->total_read_length;
-            min_match_penalty 
-                = scaling_factor * mapping_params->recheck_min_match_penalty;
-            //min_match_penalty = mapping_params->recheck_min_match_penalty;
+            
+            //float scaling_factor = ((double)ist->subseq_length )
+            //    /mapping_params->total_read_length;
+            min_match_penalty = mapping_params->recheck_min_match_penalty;
 
             #ifdef PROFILE_CANDIDATE_MAPPING
             statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);

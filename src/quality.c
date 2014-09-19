@@ -85,8 +85,6 @@ error_prb_for_mismatch( char ref, char obs )
     return -1;
 }
 
-#define LOG10_3 0.477121
-
 float
 error_prb_for_estimated_model(
         char ref,
@@ -116,7 +114,7 @@ error_prb_for_estimated_model(
         /* TODO we assume that any mismatch is equally likely (for now) */
         /* So p(match) + p(any mismatch) = 1. Dividing by 3 makes the whole
          * penalty distribution sum to 1, so we can sample from it. */
-        return log10(prb)-LOG10_3;   
+        return log10(prb) -LOG10_3;   
     assert( false );
 }
 

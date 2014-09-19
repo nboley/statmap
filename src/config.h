@@ -16,7 +16,7 @@
 #define MAX_NUM_CAND_MAPPINGS 500
 
 // the maximum number of index probes to use for a read
-#define MAX_NUM_INDEX_PROBES 4
+#define MAX_NUM_INDEX_PROBES 2
 // the number of index probes we need for a mapping to be valid
 #define MIN_NUM_INDEX_PROBES 1
 #define N_DEBUG
@@ -29,7 +29,7 @@
 
 /* Mismatch rates for the estimated error model bootstrap */
 #define NUM_READS_TO_BOOTSTRAP 100000
-#define MAX_NUM_MM_RATE 0.20
+#define MAX_NUM_MM_RATE 0.10
 #define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
@@ -289,6 +289,8 @@ enum input_file_type_t {
 };
 
 /*** Globally useful macros ***/
+#define LOG10_3 0.477121
+
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 

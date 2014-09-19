@@ -12,7 +12,7 @@
  */
 
 #include "dna_sequence.h"
-#include "read.h"
+//#include "read.h"
 
 struct read_subtemplate; // fwd declaration (?)
 

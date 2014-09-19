@@ -44,6 +44,7 @@
 /* Set "unset" defaults for these two global variables */
 int num_threads = -1;
 int max_reference_insert_len = -1;
+
 /* TODO check for conflicts with variable name before removing 
    leading underscore */
 enum assay_type_t _assay_type = UNKNOWN;
