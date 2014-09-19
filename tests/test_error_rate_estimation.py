@@ -20,8 +20,8 @@ def test_error_rate_estimation( ):
     """
     error_char_mappings = dict(zip(error_chars, error_char_rates ))
     
-    rl = read_len = 100
-    indexed_seq_len = 40
+    rl = read_len = 200
+    indexed_seq_len = 20
     nsamples = 10000
     output_directory = "smo_test_error_rate_estimation"
     

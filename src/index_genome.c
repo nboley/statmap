@@ -288,8 +288,8 @@ search_index(
             /* length of the reads */
             subseq_length,
             
-            ist->fwd_penalties.array,
-            ist->rev_penalties.array,
+            ist->fwd_penalty_array.array,
+            ist->rev_penalty_array.array,
 
             only_find_unique_sequence
         );

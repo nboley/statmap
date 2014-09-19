@@ -451,7 +451,7 @@ filter_indexable_subtemplates(
     {
         struct indexable_subtemplate* ist = ists->container + i;
 
-        if( filter_penalty_array(&(ist->fwd_penalties), effective_genome_len) )
+        if( filter_penalty_array(&(ist->fwd_penalty_array), effective_genome_len) )
         {
             return true;
         }
@@ -734,7 +734,7 @@ init_mapping_params_for_read(
         double scale = -variance/mean;
         
         // Allow for one additional high quality mismatch, for the continuity error
-        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, shape, scale, 1, 0);
+        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, shape, scale, 1, 0) - 2.1;
         p->recheck_min_match_penalty = min_match_prb;
         p->recheck_max_penalty_spread = -log10(1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
         //printf("%e:%e:%e\n", min_match_prb, mean, variance);
@@ -781,20 +781,33 @@ init_index_search_params(
                make the multiple index probe correction. This should actually be
                qbinom( 0.5, 20, min_match_rate**n ), but this is actually nearly
                linear over reasonable probe lengths */
-            min_match_penalty = -floor(max_mm_rate*ist->subseq_length);
-            max_penalty_spread = ceil(max_mm_spread*ist->subseq_length);
-            
+            double adj_p = exp(log(0.01)/ists->length);
+            min_match_penalty = -ceil(
+                qbinom(adj_p, ist->subseq_length, max_mm_rate, 0, 0));
+            max_penalty_spread = ceil(
+                qbinom(adj_p, ist->subseq_length, max_mm_spread, 0, 0));            
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
             
             //float scaling_factor = ((double)ist->subseq_length )
             //    /mapping_params->total_read_length;
-            min_match_penalty = mapping_params->recheck_min_match_penalty;
+            double* fwd_moments = calc_penalty_dist_moments(
+                &(ist->fwd_penalty_array), 2);
+            double* rev_moments = calc_penalty_dist_moments(
+                &(ist->rev_penalty_array), 2);
+            double mean = MIN(fwd_moments[0], rev_moments[0]);
+            double variance = MAX(fwd_moments[1], rev_moments[1]);
+            free(fwd_moments);
+            free(rev_moments);
 
-            #ifdef PROFILE_CANDIDATE_MAPPING
-            statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
-            #endif
-                
+            double shape = mean*mean/variance;        
+            double scale = -variance/mean;
+
+            // Adjust the p-value so that the mismatch rate is based 
+            // upon every search missing
+            double adj_p = exp(log(1-DEFAULT_ESTIMATED_ERROR_METAPARAMETER)/ists->length);
+            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0);
+            
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
 

@@ -98,8 +98,8 @@ struct indexable_subtemplate
 
     /* pointers into penalty_array_t->array */
     /* these have already accounted for the subseq_offset */
-    struct penalty_array_t fwd_penalties;
-    struct penalty_array_t rev_penalties;
+    struct penalty_array_t fwd_penalty_array;
+    struct penalty_array_t rev_penalty_array;
 
     /* expected value of this index probe */
     float expected_value;

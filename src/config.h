@@ -16,7 +16,7 @@
 #define MAX_NUM_CAND_MAPPINGS 500
 
 // the maximum number of index probes to use for a read
-#define MAX_NUM_INDEX_PROBES 2
+#define MAX_NUM_INDEX_PROBES 5
 // the number of index probes we need for a mapping to be valid
 #define MIN_NUM_INDEX_PROBES 1
 #define N_DEBUG
