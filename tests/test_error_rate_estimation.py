@@ -77,9 +77,9 @@ def test_error_rate_estimation( ):
             mutated_read = ''.join( mutated_read )
             yield ( mutated_read, error_str, read )
 
-    mutated_reads = list( iter_mutated_reads( reads, 0.10 ) )
+    mutated_reads = list(iter_mutated_reads(reads, 0.01 ))
     mutated_reads += list(iter_mutated_reads(reads2, 0.10))
-    mutated_reads += list(iter_mutated_reads(reads3, 0.01))
+    #mutated_reads += list(iter_mutated_reads(reads3, 0.01))
     
     # build and write the reads    
     reads_of = open("tmp.fastq", "w")

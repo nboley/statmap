@@ -260,7 +260,7 @@ build_candidate_mapping_from_match(
                 rst->length,
                 genome
             );
-
+    
     // the read location was invalid; skip this matched set
     if( read_location < 0 ) 
     {
@@ -293,7 +293,7 @@ build_ungapped_candidate_mapping_from_mapped_location(
 };
 
 candidate_mappings*
-build_candidate_mappings_from_search_results(
+build_candidate_mappings_from_search_results_OLD(
         mapped_locations** search_results,
         struct read_subtemplate* rst,
         struct genome_data* genome,
@@ -328,7 +328,7 @@ build_candidate_mappings_from_search_results(
              * the original location */
             mapped_locations* expanded_locs = expand_base_mapped_locations(
                 loc, locs->probe, genome );
-
+            
             /* match across each of the expanded locations */
             for( j = 0; j < expanded_locs->length; j++ )
             {
@@ -349,6 +349,64 @@ build_candidate_mappings_from_search_results(
             }
         
             free_mapped_locations( expanded_locs );
+        }
+    }
+
+    return mappings;
+}
+
+candidate_mappings*
+build_candidate_mappings_from_search_results(
+        mapped_locations** search_results,
+        struct read_subtemplate* rst,
+        struct genome_data* genome,
+        struct mapping_params* mapping_params )
+{
+    // silence compiler warning
+    assert( NULL != mapping_params );
+    
+    candidate_mappings* mappings = NULL;
+    init_candidate_mappings( &mappings );
+
+    /* sort each mapped_locations in order to use optimized merge algorithm */
+    sort_search_results( search_results );
+    
+    /* initiaize the current probe indices */
+    int num_probes;
+    for(num_probes = 0; search_results[index_probe_i] != NULL; num_probes++ );
+    int* probe_indices = calloc(sizeof(int), num_probes);
+    
+    while( true ) 
+    {
+        /*** increment the probe index ***/
+        /* find the probe location with the smallest start position */
+    }
+    int index_probe_i, i;
+    for( index_probe_i = 0; 
+         search_results[index_probe_i] != NULL; 
+         index_probe_i++ )
+    {
+        /* Always use the mapped locations from the first indexable subtemplate
+         * as the basis for building matches across the whole read subtemplate.
+         * We always build matches from 5' -> 3' */
+        mapped_locations* locs = search_results[index_probe_i];
+        
+        for( i = 0; i < locs->length; i++ )
+        {
+            mapped_location* loc = locs->locations + i;
+            struct ml_match* match = NULL;
+            init_ml_match( &match, 1 );
+            add_location_to_ml_match( loc, match, 
+                                      locs->probe->subseq_length,
+                                      locs->probe->subseq_offset);
+            candidate_mapping* mapping = 
+                build_candidate_mapping_from_match(match, rst, genome );
+            if( NULL != mapping ) 
+                {
+                    add_candidate_mapping(mappings, mapping);
+                    free(mapping);
+                }
+            free_ml_match(match);
         }
     }
 

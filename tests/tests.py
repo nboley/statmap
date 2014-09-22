@@ -1574,6 +1574,7 @@ def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
     #sys.exit(1)
+    """
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
@@ -1602,7 +1603,7 @@ def main( RUN_SLOW_TESTS ):
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
-
+    """
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
     print "Start test_more_than_two_indexable_subtemplates()"
@@ -1613,6 +1614,7 @@ def main( RUN_SLOW_TESTS ):
     test_multiple_indexable_subtemplates_for_repeat_sequences()
     print "Start test_multiple_indexable_subtemplates_for_diploid_mapping()"
     test_multiple_indexable_subtemplates_for_diploid_mapping()
+    return 
 
     if RUN_SLOW_TESTS:
         print "[SLOW] Starting test_lots_of_repeat_sequence_finding()"

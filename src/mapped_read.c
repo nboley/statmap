@@ -697,7 +697,8 @@ recheck_joined_candidate_mappings(
         struct read_subtemplate* rst
             = r->subtemplates + (*current_mapping)->pos_in_template;
 
-        (*current_mapping)->penalty = calc_candidate_mapping_penalty( *current_mapping, rst, genome );
+        (*current_mapping)->penalty = calc_candidate_mapping_penalty( 
+            *current_mapping, rst, genome );
         
         /* Add the log probability (equivalent to product) */
         rechecked_group_penalty += (*current_mapping)->penalty;
