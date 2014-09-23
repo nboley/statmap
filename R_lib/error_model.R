@@ -48,7 +48,7 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
         prbs = sapply( prbs, function(m)max( MIN.ERROR.PRB, m ) );
 
         # var(p) = np(1-p) => var(logit(p)) ~= n
-        weights = sqrt( cnts );
+        weights = log( cnts + 1 ); #sqrt( cnts );
         mo = smooth.spline( logit(prbs), w=weights );
         predict( mo )$y;
       };
@@ -60,7 +60,8 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
         
         if( do.plot ) {
           obs.log.prbs = log10((agg$mm+0.0001)/(agg$cnts+0.01))
-          plot( agg$pred, obs.log.prbs, xlab="Position in Read", ylab="log10 Predicted Mismatch Rate" );
+          plot( agg$pred, obs.log.prbs, 
+                xlab="Position in Read", ylab="log10 Predicted Mismatch Rate" );
           lines( agg$pred, log10(logistic(pred.smooth$pred.prb)), col='red' );
         }
 

@@ -734,9 +734,11 @@ init_mapping_params_for_read(
         double scale = -variance/mean;
         
         // Allow for one additional high quality mismatch, for the continuity error
-        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, shape, scale, 1, 0) - 2.1;
+        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, 
+                                       shape, scale, 1, 0) - 2.1;
         p->recheck_min_match_penalty = min_match_prb;
-        p->recheck_max_penalty_spread = -log10(1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
+        p->recheck_max_penalty_spread = -log10(
+            1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
         //printf("%e:%e:%e\n", min_match_prb, mean, variance);
         assert( p->recheck_max_penalty_spread >= 0 );
         
@@ -1139,10 +1141,12 @@ update_error_data(
         {
             // Add 1 because read positions are 1 based
             unsigned char error_char = (unsigned char) error_str[i];
-            record->base_type_mismatch_cnts[error_char][i+1+location_offset] += 1;
+            record->base_type_mismatch_cnts[
+                error_char][i+1+location_offset] += 1;
         }
         
-        record->base_type_cnts[(unsigned char) error_str[i]][i+1+location_offset] += 1;
+        record->base_type_cnts[
+            (unsigned char) error_str[i]][i+1+location_offset] += 1;
     }
     
     return;
@@ -1260,7 +1264,6 @@ update_error_data_from_index_search_results(
             candidate_mapping* curr_mapping = 
                 build_ungapped_candidate_mapping_from_mapped_location(
                     curr_loc, rst, ist, genome );
-            if( NULL == curr_mapping ) continue;
             
             /* if this is the best, then set it as such */
             if( curr_mapping->penalty >= lowest_penalty - 1e-6 )
@@ -1275,7 +1278,8 @@ update_error_data_from_index_search_results(
                     lowest_penalty = curr_mapping->penalty;
                     num_lowest_penalties = 1;
                 } 
-                /* if the penalties are the same, choose one randomly */
+                /* if the penalties are the same, choose one randomly using
+                   a resevoir sampling scheme (e.g. knuth)*/
                 else {
                     num_lowest_penalties += 1;
                     if(rand()%num_lowest_penalties == num_lowest_penalties - 1)

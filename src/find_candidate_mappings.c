@@ -50,7 +50,6 @@ add_pseudo_loc_to_mapped_locations(
 
     return;
 }
-
 void
 expand_pseudo_location_into_mapped_locations(
         mapped_location* loc,

@@ -20,9 +20,9 @@ class ErrorDataRecord( object ):
         self.min_qualscore = min_qualscore
         self.max_qualscore = max_qualscore
         
-        self.cnts_array_dim = (max_readlen, max_qualscore-min_qualscore+1)
-        self.cnts = numpy.zeros( self.cnts_array_dim )
-        self.mm_cnts = numpy.zeros( self.cnts_array_dim )
+        self.cnts_array_dim = (max_readlen, 1)
+        self.base_type_cnts = numpy.zeros( self.cnts_array_dim )
+        self.base_type_mm_cnts = numpy.zeros( self.cnts_array_dim )
         
         return
     

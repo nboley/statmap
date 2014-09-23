@@ -78,7 +78,7 @@ def test_error_rate_estimation( ):
             yield ( mutated_read, error_str, read )
 
     mutated_reads = list(iter_mutated_reads(reads, 0.01 ))
-    mutated_reads += list(iter_mutated_reads(reads2, 0.10))
+    mutated_reads += list(iter_mutated_reads(reads2, 0.01))
     #mutated_reads += list(iter_mutated_reads(reads3, 0.01))
     
     # build and write the reads    
@@ -94,7 +94,7 @@ def test_error_rate_estimation( ):
             indexed_seq_len, search_type='e', num_threads=-1 )
     
     ###### Make sure that the error data looks correct #########################
-    # records = load_error_data(os.path.join(output_directory, "error_stats.log"))
+    records = load_error_data(os.path.join(output_directory, "error_stats.log"))
     
     ###### Cleanup the created files ###########################################
     if CLEANUP:

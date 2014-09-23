@@ -141,8 +141,9 @@ build_indexable_subtemplate(
         }
     } else {
         if( choose_random_offset ) {
-            double rn = ((double) rand() / ((double) RAND_MAX));
-            subseq_offset = range_start + (int) (rn*(range_length - subseq_length));
+            subseq_offset = range_start + rand()%(
+                range_length - subseq_length + 1);
+            assert( subseq_offset >= range_start );
         } else {
             subseq_offset = find_optimal_subseq_offset(
                 rst,
