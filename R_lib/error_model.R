@@ -47,8 +47,9 @@ predict.freqs = function( mm.cnts, cnts, pos, qual, do.plot=FALSE ) {
         prbs = mm.cnts/(cnts + 1e-6);
         prbs = sapply( prbs, function(m)max( MIN.ERROR.PRB, m ) );
 
-        # var(p) = np(1-p) => var(logit(p)) ~= n
-        weights = log( cnts + 1 ); #sqrt( cnts );
+        # var(p) = n/(p(1-p)) => var(logit(p)) ~= n
+        # X = Bin(n,p)/n => np(1-p)/n**2 = p*(1-p)/n
+        weights = sqrt(cnts)*prbs*(1-prbs);
         mo = smooth.spline( logit(prbs), w=weights );
         predict( mo )$y;
       };
