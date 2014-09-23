@@ -34,17 +34,13 @@ modify_mapped_read_location_for_index_probe_offset(
     ) 
 {
     // Check for overflow error
-    if( read_location < 0 ) {
-        statmap_log( LOG_ERROR, "The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
-        return -1;
-    }
+    // The read locations was less than zero in 
+    // modify_mapped_read_location_for_index_probe_offset.
+    assert( read_location >= 0 );
     
     // Pseudo locations should already have been expanded
-    if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        statmap_log( LOG_ERROR, "Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
-        return -1;
-    }
-
+    assert( chr != PSEUDO_LOC_CHR_INDEX );
+    
     /* first deal with reads that map to the 5' genome */
     if( strnd == FWD )
     {

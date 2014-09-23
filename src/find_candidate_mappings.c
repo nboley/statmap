@@ -123,7 +123,7 @@ build_candidate_mapping_cigar_string_from_match(
     int cigar_index = 0;
 
     int i;
-    for( i = 0; i < match->len; i++ )
+    for( i = 0; i < match->matched; i++ )
     {
         /* If there is a gap in the reference, represent it with an N op. 
          * We check the value of i because obviously there cannot be an intron
@@ -136,11 +136,11 @@ build_candidate_mapping_cigar_string_from_match(
 
             if( cm->rd_strnd == FWD )
             {
-                ref_gap = (match->locations[i].loc - match->subseq_offsets[i])
-                        - (match->locations[i-1].loc - match->subseq_offsets[i-1]);
+                ref_gap = (match->locations[i].loc-match->subseq_offsets[i])
+                       - (match->locations[i-1].loc-match->subseq_offsets[i-1]);
             } else {
-                ref_gap = (match->locations[i-1].loc + match->subseq_offsets[i-1])
-                        - (match->locations[i].loc + match->subseq_offsets[i]);
+                ref_gap = (match->locations[i-1].loc+match->subseq_offsets[i-1])
+                        - (match->locations[i].loc+match->subseq_offsets[i]);
             }
 
             if( ref_gap > 0 )
@@ -203,7 +203,7 @@ compute_candidate_mapping_penalty_from_match(
     float cum_penalty = 0;
 
     int i;
-    for( i = 0; i < match->len; i++ ) {
+    for( i = 0; i < match->matched; i++ ) {
         /* the product of the marginal (log) probabilites */
         cum_penalty += match->locations[i].penalty;
     }
@@ -217,9 +217,6 @@ build_candidate_mapping_from_match(
         struct read_subtemplate* rst,
         struct genome_data* genome )
 {
-    /* Make sure this is a valid, completed match */
-    assert( match->len > 0 && match->matched == match->len );
-
     candidate_mapping* cm;
     cm = calloc( sizeof(candidate_mapping), 1 );
 
@@ -247,7 +244,7 @@ build_candidate_mapping_from_match(
         /* If this a reverse mapped read, then the start relative to the
          * forward strand is the *end* of the read in the 3' genome - so we
          * want to use the last mapped_location */
-        norm_start_loc_index = match->len - 1;
+        norm_start_loc_index = match->matched - 1;
     }
 
     int read_location
@@ -285,7 +282,7 @@ build_ungapped_candidate_mapping_from_mapped_location(
 {
     struct ml_match* match = NULL;
     init_ml_match( &match, 1 );
-    add_location_to_ml_match( ml, match, ist->subseq_length, ist->subseq_offset);
+    add_location_to_ml_match(ml, match, ist->subseq_length, ist->subseq_offset);
     candidate_mapping* mapping = build_candidate_mapping_from_match(
         match, rst, genome );
     free_ml_match(match);
@@ -355,6 +352,27 @@ build_candidate_mappings_from_search_results_OLD(
     return mappings;
 }
 
+int
+compare_index_probes(mapped_location* loc1, 
+                     int loc1_probe_offset,
+                     mapped_location* loc2,
+                     int loc2_probe_offset)
+{
+    if( loc1->strnd != loc2->strnd )
+        return loc1->strnd - loc2->strnd;
+    
+    if( loc1->chr != loc2->chr )
+        return loc1->chr - loc2->chr;
+    
+    assert( loc1->strnd == loc2->strnd );
+    if(loc1->strnd == FWD ) 
+    {
+        return loc1->loc - loc1_probe_offset - loc2->loc + loc2_probe_offset;
+    } else {
+        return loc1->loc + loc1_probe_offset - loc2->loc - loc2_probe_offset;
+    }
+}
+
 candidate_mappings*
 build_candidate_mappings_from_search_results(
         mapped_locations** search_results,
@@ -365,51 +383,117 @@ build_candidate_mappings_from_search_results(
     // silence compiler warning
     assert( NULL != mapping_params );
     
+    int rst_len = rst->length;
+    
     candidate_mappings* mappings = NULL;
     init_candidate_mappings( &mappings );
 
     /* sort each mapped_locations in order to use optimized merge algorithm */
     sort_search_results( search_results );
     
+    int i;
+    
     /* initiaize the current probe indices */
     int num_probes;
-    for(num_probes = 0; search_results[index_probe_i] != NULL; num_probes++ );
-    int* probe_indices = calloc(sizeof(int), num_probes);
+    for(num_probes = 0; search_results[num_probes] != NULL; num_probes++ );
     
-    while( true ) 
+    int* curr_loc_indices = calloc(sizeof(int), num_probes);
+    int* probe_offsets = calloc(sizeof(int), num_probes);
+    int* probe_lengths = calloc(sizeof(int), num_probes);
+    for(i = 0; i < num_probes; i++ ) {
+        curr_loc_indices[i] = 0;
+        probe_offsets[i] = search_results[i]->probe->subseq_offset;
+        probe_lengths[i] = search_results[i]->probe->subseq_length;
+    }
+
+    while( true )
     {
         /*** increment the probe index ***/
         /* find the probe location with the smallest start position */
-    }
-    int index_probe_i, i;
-    for( index_probe_i = 0; 
-         search_results[index_probe_i] != NULL; 
-         index_probe_i++ )
-    {
-        /* Always use the mapped locations from the first indexable subtemplate
-         * as the basis for building matches across the whole read subtemplate.
-         * We always build matches from 5' -> 3' */
-        mapped_locations* locs = search_results[index_probe_i];
-        
-        for( i = 0; i < locs->length; i++ )
-        {
-            mapped_location* loc = locs->locations + i;
-            struct ml_match* match = NULL;
-            init_ml_match( &match, 1 );
-            add_location_to_ml_match( loc, match, 
-                                      locs->probe->subseq_length,
-                                      locs->probe->subseq_offset);
-            candidate_mapping* mapping = 
-                build_candidate_mapping_from_match(match, rst, genome );
-            if( NULL != mapping ) 
-                {
-                    add_candidate_mapping(mappings, mapping);
-                    free(mapping);
-                }
-            free_ml_match(match);
+        int curr_probe_index = -1;
+        for( i = 0; i < num_probes; i++ ) {
+            /* skip probes that don't have any remaing mapped locations */
+            if( search_results[i]->length == curr_loc_indices[i] )
+                continue;
+            
+            if( curr_probe_index < 0
+                || 0 > compare_index_probes(
+                    search_results[curr_probe_index]->locations 
+                        + curr_loc_indices[curr_probe_index], 
+                    probe_offsets[curr_probe_index],
+                    search_results[i]->locations 
+                        + curr_loc_indices[i], 
+                    probe_offsets[i]))
+            { curr_probe_index = i; }
         }
-    }
+        
+        /* if no probes are left, then we are done */
+        if( curr_probe_index == -1 ) break;
+                                        
+        /* initialize the match structure, and add the first match, and 
+           increment the current match point */
+        struct ml_match* match = NULL;
+        init_ml_match( &match, num_probes );
+        add_location_to_ml_match(
+            search_results[curr_probe_index]->locations 
+                + curr_loc_indices[curr_probe_index], 
+            match, 
+            probe_lengths[curr_probe_index], 
+            probe_offsets[curr_probe_index]);
+        
+        /* find matchign probes */
+        for( i = 0; i < num_probes; i++ ) 
+        {
+            /* if this is the current index, then it's already been added 
+               to the match list */
+            if( i == curr_probe_index ) continue;
+            if( search_results[i]->length == curr_loc_indices[i] )
+                continue;
+            
+            /* this must be greater than or equal to the base, because 
+               of the previous step in which we chose the smallest */
+            assert(0 <= compare_index_probes(
+                       search_results[curr_probe_index]->locations 
+                           + curr_loc_indices[curr_probe_index], 
+                       probe_offsets[curr_probe_index],
+                       search_results[i]->locations 
+                           + curr_loc_indices[i], 
+                       probe_offsets[i] ) );
 
+            /* if this is a match, add it to the match lsit and 
+               then incremenet the pointer */
+            if(0 == compare_index_probes(
+                       search_results[curr_probe_index]->locations 
+                           + curr_loc_indices[curr_probe_index], 
+                       probe_offsets[curr_probe_index],
+                       search_results[i]->locations 
+                           + curr_loc_indices[i], 
+                       probe_offsets[i] ) )
+            {
+                add_location_to_ml_match(
+                    search_results[i]->locations 
+                        + curr_loc_indices[i], 
+                    match, 
+                    probe_lengths[i], 
+                    probe_offsets[i]);
+                curr_loc_indices[i] += 1;
+            }
+        }
+
+        /* increment the index for the base match */
+        curr_loc_indices[curr_probe_index] += 1;
+        
+        candidate_mapping* mapping = 
+            build_candidate_mapping_from_match(match, rst, genome );
+        if( NULL != mapping ) 
+        {
+            add_candidate_mapping(mappings, mapping);
+            free(mapping);
+        }
+        free_ml_match(match);
+        
+    }
+    
     return mappings;
 }
 
