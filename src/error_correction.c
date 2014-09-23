@@ -1264,6 +1264,7 @@ update_error_data_from_index_search_results(
             candidate_mapping* curr_mapping = 
                 build_ungapped_candidate_mapping_from_mapped_location(
                     curr_loc, rst, ist, genome );
+            if( NULL == curr_mapping) continue;
             
             /* if this is the best, then set it as such */
             if( curr_mapping->penalty >= lowest_penalty - 1e-6 )

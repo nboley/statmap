@@ -398,9 +398,9 @@ build_candidate_mappings_from_search_results(
     int* probe_offsets = calloc(sizeof(int), num_probes);
     int* probe_lengths = calloc(sizeof(int), num_probes);
     for(i = 0; i < num_probes; i++ ) {
-        curr_loc_indices[i] = 0;
         probe_offsets[i] = search_results[i]->probe->subseq_offset;
         probe_lengths[i] = search_results[i]->probe->subseq_length;
+        curr_loc_indices[i]=0; ;
     }
 
     while( true )
@@ -409,6 +409,12 @@ build_candidate_mappings_from_search_results(
         /* find the probe location with the smallest start position */
         int curr_probe_index = -1;
         for( i = 0; i < num_probes; i++ ) {
+            /*Move past pseudo chromosomes */
+            for(; curr_loc_indices[i] < search_results[i]->length
+                    && ( search_results[i]->locations[curr_loc_indices[i]].chr 
+                         == PSEUDO_LOC_CHR_INDEX );
+             curr_loc_indices[i]++ );
+            
             /* skip probes that don't have any remaing mapped locations */
             if( search_results[i]->length == curr_loc_indices[i] )
                 continue;
@@ -438,7 +444,7 @@ build_candidate_mappings_from_search_results(
             probe_lengths[curr_probe_index], 
             probe_offsets[curr_probe_index]);
         
-        /* find matchign probes */
+        /* find matching probes */
         for( i = 0; i < num_probes; i++ ) 
         {
             /* if this is the current index, then it's already been added 
@@ -473,7 +479,12 @@ build_candidate_mappings_from_search_results(
                     match, 
                     probe_lengths[i], 
                     probe_offsets[i]);
-                curr_loc_indices[i] += 1;
+                /*increment the probe ndex, moving past any pseudo chromosomes*/
+                for( curr_loc_indices[i] = curr_loc_indices[i] + 1;
+                     curr_loc_indices[i] < search_results[i]->length
+                       && (search_results[i]->locations[curr_loc_indices[i]].chr
+                           == PSEUDO_LOC_CHR_INDEX );
+                     curr_loc_indices[i]++ ); 
             }
         }
 
