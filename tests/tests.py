@@ -389,9 +389,14 @@ def build_reads_from_fragments(
     reads = []
     for chr, start, stop in fragments:
         if paired_end:
-            read_1 = genome[chr][start:(start+read_len)]
-            read_2 = genome[chr][(stop-read_len):stop]
-            read_2 = reverse_complement( read_2 )
+            if random.random() > 0.5 or not rev_comp:
+                read_1 = genome[chr][start:(start+read_len)]
+                read_2 = genome[chr][(stop-read_len):stop]
+                read_2 = reverse_complement( read_2 )
+            else:
+                read_1 = genome[chr][(stop-read_len):stop]
+                read_1 = reverse_complement( read_1 )
+                read_2 = genome[chr][start:(start+read_len)]
             reads.append( ( read_1, read_2 ) )
         else:
             if random.random() > 0.5 or not rev_comp:
@@ -448,19 +453,22 @@ def build_single_end_fastq_from_seqs( samples_iter, of=sys.stdout,
         of.write("+%s\n" % sample_num )
         of.write(error_str + "\n")
 
-def build_paired_end_fastq_from_mutated_reads( mut_reads_iter, of1, of2, num_untemplated_gs=0 ):
+def build_paired_end_fastq_from_mutated_reads( 
+        mut_reads_iter, of1, of2, num_untemplated_gs=0 ):
     for sample_num, (sample, error_str, true_seq) in enumerate( mut_reads_iter ):
         sample_1, sample_2 = sample
         error_str_1, error_str_2 = error_str
         # write the first pair of the read
         of1.write("@%s/1\n" % sample_num )
-        of1.write('g'*num_untemplated_gs + sample_1[:(len(sample_1)-num_untemplated_gs)] + "\n")
+        of1.write('g'*num_untemplated_gs 
+                  + sample_1[:(len(sample_1)-num_untemplated_gs)] + "\n")
         of1.write("+%s/1\n" % sample_num )
         of1.write(error_str_1 + "\n")
         
         # write the second pair of the read
         of2.write("@%s/2\n" % sample_num )
-        of2.write('g'*num_untemplated_gs + sample_2[:(len(sample_2)-num_untemplated_gs)] + "\n")
+        of2.write('g'*num_untemplated_gs 
+                  + sample_2[:(len(sample_2)-num_untemplated_gs)] + "\n")
         of2.write("+%s/2\n" % sample_num )
         of2.write(error_str_2 + "\n")
     return

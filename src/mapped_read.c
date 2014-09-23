@@ -865,10 +865,10 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
         }
 
         /* Make sure that the penalty isn't too low */
-        if( (*joined_mapping_penalties)[i] < min_match_penalty )
-        {
-            filter_current_group = true;
-        }
+        //if( (*joined_mapping_penalties)[i] < min_match_penalty )
+        //{
+        //    filter_current_group = true;
+        //}
 
         /* if either test failed, filter the current group */
         if( filter_current_group )

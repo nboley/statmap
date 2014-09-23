@@ -788,8 +788,9 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       mapping_params );
 
-    rd = build_mapped_read_from_joined_candidate_mappings( r->read_id,
-            joined_mappings, joined_mappings_len, joined_mapping_penalties );
+    rd = build_mapped_read_from_joined_candidate_mappings( 
+        r->read_id,
+        joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
 cleanup:
     free_candidate_mappings( assay_corrected_mappings );
