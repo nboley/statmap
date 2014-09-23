@@ -1234,9 +1234,10 @@ update_error_data_from_index_search_results(
     /* Update the error data record */
 
     /* find the best candidate mapping */
-    double highest_penalty = -1e9;
+    double lowest_penalty = -1e9;
     mapped_location* best_mapped_location = NULL;
     struct indexable_subtemplate* best_ist = NULL;
+    int num_lowest_penalties = 0;
     
     int i;
     for( i = 0; NULL != search_results[i]; i++ ) 
@@ -1262,11 +1263,28 @@ update_error_data_from_index_search_results(
             if( NULL == curr_mapping ) continue;
             
             /* if this is the best, then set it as such */
-            if( curr_mapping->penalty > highest_penalty )
+            if( curr_mapping->penalty >= lowest_penalty - 1e-6 )
             {
-                best_mapped_location = search_results[i]->locations + j;
-                best_ist = ist;
-                highest_penalty = curr_mapping->penalty;
+                /* If we don't have a valid match yet or the new penalty
+                   is strictly greater than then previous, then update */
+                if( best_ist == NULL || 
+                    curr_mapping->penalty - 1e-6 >= lowest_penalty )
+                {
+                    best_mapped_location = search_results[i]->locations + j;
+                    best_ist = ist;
+                    lowest_penalty = curr_mapping->penalty;
+                    num_lowest_penalties = 1;
+                } 
+                /* if the penalties are the same, choose one randomly */
+                else {
+                    num_lowest_penalties += 1;
+                    if(rand()%num_lowest_penalties == num_lowest_penalties - 1)
+                    {
+                        best_mapped_location = search_results[i]->locations + j;
+                        best_ist = ist;
+                    }
+                }
+                
             }
 
             free( curr_mapping );

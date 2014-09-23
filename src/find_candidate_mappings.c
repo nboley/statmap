@@ -383,8 +383,6 @@ build_candidate_mappings_from_search_results(
     // silence compiler warning
     assert( NULL != mapping_params );
     
-    int rst_len = rst->length;
-    
     candidate_mappings* mappings = NULL;
     init_candidate_mappings( &mappings );
 
@@ -1214,7 +1212,8 @@ bootstrap_estimated_error_model(
             rc = pthread_join(thread[t], &status);
             pthread_attr_destroy(attrs+t);
             if (rc) {
-                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
+                statmap_log( LOG_FATAL, 
+                             "Return code from pthread_join() is %d", rc );
             }
         }
     }
