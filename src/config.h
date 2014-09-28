@@ -115,7 +115,7 @@
 
 /**** determine how the letters are packed       ****/
 
-#define PSEUDO_LOC_MIN_SIZE 5000
+#define PSEUDO_LOC_MIN_SIZE 150
 
 typedef unsigned char LEVEL_TYPE;
 /* TODO this probably isn't big enough - max read len of 255? */

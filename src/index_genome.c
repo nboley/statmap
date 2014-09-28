@@ -27,7 +27,7 @@
 /* This must be added to all pointers */
 static size_t index_offset = 0;
 
-#define DONT_MMAP_INDEX
+#define MMAP_INDEX
 
 /******************************************************************************/
 /* Functions for finding seqeunces in thre tree                               */
@@ -998,8 +998,8 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
         if( num_letters - 1  == 0 )
         {
             /* 
-             * Add the sequence to the leaf - we just assume that it is a genome 
-             * location for now. After it's added. we check the bit to make sure 
+             * Add the sequence to the leaf - we just assume that it is a genome
+             * location for now. After it's added. we check the bit to make sure
              * and, if it's a pointer, we fix it.
              */
             locations_node** child_seqs  = 

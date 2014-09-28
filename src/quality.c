@@ -49,6 +49,35 @@ bp_code( const char letter )
         case 'T':
         case 't':
             return 3;
+        case 'N':
+        case 'n':
+            return -1;
+    }
+
+    statmap_log( LOG_FATAL, "Error converting '%c' in recheck", letter );
+    return -1;
+}
+
+int 
+rev_bp_code( const char letter )
+{
+    switch( letter )
+    {
+        case 'A':
+        case 'a':
+            return 3;
+        case 'C':
+        case 'c':
+            return 2;
+        case 'G':
+        case 'g':
+            return 1;
+        case 'T':
+        case 't':
+            return 0;
+        case 'N':
+        case 'n':
+            return -1;
     }
 
     statmap_log( LOG_FATAL, "Error converting '%c' in recheck", letter );
@@ -318,7 +347,7 @@ multiple_letter_penalty(
         /* 
          * if the penalty is > 0, then that indicates that it exceeded the
          * minimum at the (curr_penalty - 1)'th basepair in letter j. See
-         * the penalty function for details.
+          * the penalty function for details.
          */
         if( added_penalty > 0.5 )  {
             /* skip this sequence */
@@ -335,7 +364,6 @@ multiple_letter_penalty(
 float
 recheck_penalty(
         char* reference,
-        char* observed,
         /* Pointer into an array of penalty_t */
         struct penalty_t* pa,
         const int seq_length
@@ -346,15 +374,14 @@ recheck_penalty(
 
     for( i = 0; i < seq_length; i++ )
     {
-        char ref = toupper( reference[i] );
-        char obs = toupper( observed[i] );
-
+        int ref = bp_code(reference[i]);
+        
         /* if it's an N, put in a max penalty substitution */
-        if( ref == 'N' || obs == 'N' )
+        if( -1 == ref )
         {
             penalty += N_penalty;
         } else {
-            penalty += pa[i].penalties[bp_code(ref)];
+            penalty += pa[i].penalties[ref];
         }
     }
 

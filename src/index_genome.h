@@ -137,8 +137,8 @@ size_of_snode( );
  * potential matches.
  */
 
-#define STACK_GROWTH_FACTOR 100
-#define STACK_INITIAL_FIRST_INDEX 50
+#define STACK_GROWTH_FACTOR 1000
+#define STACK_INITIAL_FIRST_INDEX 500
 
 typedef struct {
     void* node;

@@ -553,76 +553,59 @@ calc_candidate_mapping_penalty(
     )
 {
     float rechecked_penalty = 0;
+    
+    int full_fragment_length = get_length_from_cigar_string( mapping );
+    char* genome_seq = find_seq_ptr( 
+        genome, mapping->chr, mapping->start_bp, full_fragment_length );
 
-    /* Get the entire region of the genome covered by this fragment */
-    int full_fragment_length = get_length_from_cigar_string( mapping);
-    char* genome_seq = find_seq_ptr( genome, mapping->chr, mapping->start_bp, 
-            full_fragment_length );
-    assert( genome_seq != NULL );
-
-    /* Build the sequence to compare and a pick a penalty array
-     * depending on strand */
-    char* mapped_seq = calloc( full_fragment_length+1, sizeof(char) );
-    assert( mapped_seq != NULL );
-
-    if( mapping->rd_strnd == FWD )
-    {
-        memcpy( mapped_seq, genome_seq, full_fragment_length );
-    } else {
-        rev_complement_read( genome_seq, mapped_seq, full_fragment_length );
-    }
-
-    /* loop over the entries in this candidate mapping's cigar string */
-    int ref_pos = 0;
-    // skip any initial soft clipping (currently not represented in the cigar string)
-    // TODO - use the cigar string?
-    int read_pos = mapping->trimmed_length; 
-
-    int i;
+    int i, cigar_index;
+    int read_pos = 0;
+    int genome_offset = 0; 
     for( i = 0; i < mapping->cigar_len; i++ )
     {
-        int cigar_index;
         if( mapping->rd_strnd == FWD ) {
             cigar_index = i;
         } else {
             cigar_index = mapping->cigar_len - i - 1;
         }
-
-        struct CIGAR_ENTRY entry = mapping->cigar[cigar_index];
-
-        if( entry.op == 'M' )
-        {
-            /* Since we actually reverse complement the full *genome*
-             * sequence in the recheck (to simplify the algorithm when rechecking
-             * gapped reads), the read is being compared to the sequence that it mapped
-             * to. Therefore, we only use the fwd penalty array. */
+        
+        struct CIGAR_ENTRY cigar_entry = mapping->cigar[cigar_index];        
+        if( cigar_entry.op == 'M' )
+        {    
+            struct penalty_t* pa;
+            if( mapping->rd_strnd == FWD )
+            {
+                //segment_ref_seq = genome_seq + read_pos;
+                pa = rst->fwd_penalty_array->array + read_pos;
+            } else {
+                //segment_ref_seq = 
+                //    genome_seq + full_fragment_length - read_pos - entry.len;
+                pa = rst->rev_penalty_array->array + read_pos;
+            }
             
             rechecked_penalty += recheck_penalty(
-                    mapped_seq + ref_pos,
-                    rst->char_seq + read_pos,
-                    rst->fwd_penalty_array->array + read_pos,
-                    entry.len
+                    genome_seq + read_pos,
+                    pa,
+                    cigar_entry.len
                 );
 
-            /* update both the ref and read position */
-            ref_pos += entry.len;
-            read_pos += entry.len;
-        } else if( entry.op == 'N' ) {
+            /* update the read position */
+            read_pos += cigar_entry.len;
+            genome_offset += cigar_entry.len;
+        } else if( cigar_entry.op == 'N' ) {
             /* just update the genome pointer to skip the intron */
-            ref_pos += entry.len;
-        } else if( entry.op == 'S' ) {
+            genome_offset += cigar_entry.len;
+        } else if( cigar_entry.op == 'S' ) {
             /* just update the read pointer to skip the soft clipped bases */
-            read_pos += entry.len;
+            read_pos += cigar_entry.len;
         } else {
-            statmap_log( LOG_FATAL, "Found unsupported CIGAR string op '%c'",  entry.op  );
+            statmap_log( LOG_FATAL, "Found unsupported CIGAR string op '%c'",  
+                         cigar_entry.op  );
             assert( false );
             exit(-1);
         }
     }
-
-    /* cleanup memory */
-    free( mapped_seq );
-
+    
     /* The rechecked penalty is the total penalty of any match (M) segments,
      * plus the marginal probability for any untemplated G's (which are soft
      * clipped, but recorded in mapping->num_untemplated_gs) */

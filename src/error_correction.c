@@ -1249,6 +1249,7 @@ update_error_data_from_index_search_results(
         /* if there aren't any results, there is nothing to do */
         if (search_results[i]->length == 0) continue;
         
+        
         struct indexable_subtemplate* ist = search_results[i]->probe;
         
         int j;
@@ -1260,23 +1261,40 @@ update_error_data_from_index_search_results(
             
             /* skip pseudo locations */
             if(curr_loc->chr == PSEUDO_LOC_CHR_INDEX) continue;
-
-            candidate_mapping* curr_mapping = 
-                build_ungapped_candidate_mapping_from_mapped_location(
-                    curr_loc, rst, ist, genome );
-            if( NULL == curr_mapping) continue;
+            
+            int read_location
+                = modify_mapped_read_location_for_index_probe_offset(
+                    curr_loc->loc, curr_loc->chr, curr_loc->strnd,
+                    ist->subseq_offset, ist->subseq_length,
+                    rst->length, genome );
+            if( 0 > read_location ) continue;
+            
+            char* genome_seq = find_seq_ptr( 
+                genome, curr_loc->chr, read_location, rst->length );
+            
+            struct penalty_t* pa;
+            if(curr_loc->strnd == FWD) {
+                pa = rst->fwd_penalty_array->array;
+            } else {
+                pa = rst->rev_penalty_array->array;
+            }
+            float penalty = recheck_penalty(
+                    genome_seq,
+                    pa,
+                    rst->length
+                );
             
             /* if this is the best, then set it as such */
-            if( curr_mapping->penalty >= lowest_penalty - 1e-6 )
+            if( penalty >= lowest_penalty - 1e-6 )
             {
                 /* If we don't have a valid match yet or the new penalty
                    is strictly greater than then previous, then update */
                 if( best_ist == NULL || 
-                    curr_mapping->penalty - 1e-6 >= lowest_penalty )
+                    penalty - 1e-6 >= lowest_penalty )
                 {
                     best_mapped_location = search_results[i]->locations + j;
                     best_ist = ist;
-                    lowest_penalty = curr_mapping->penalty;
+                    lowest_penalty = penalty;
                     num_lowest_penalties = 1;
                 } 
                 /* if the penalties are the same, choose one randomly using
@@ -1291,8 +1309,6 @@ update_error_data_from_index_search_results(
                 }
                 
             }
-
-            free( curr_mapping );
         }
     }
     

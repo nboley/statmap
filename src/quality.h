@@ -114,7 +114,6 @@ multiple_letter_penalty(
 float
 recheck_penalty(
         char* reference,
-        char* observed,
         /* Pointer into an array of penalty_t */
         struct penalty_t* pa,
         const int seq_length

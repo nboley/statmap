@@ -376,12 +376,8 @@ candidate_mappings*
 build_candidate_mappings_from_search_results(
         mapped_locations** search_results,
         struct read_subtemplate* rst,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
+        struct genome_data* genome )
 {
-    // silence compiler warning
-    assert( NULL != mapping_params );
-    
     candidate_mappings* mappings = NULL;
     init_candidate_mappings( &mappings );
 
@@ -523,7 +519,7 @@ find_candidate_mappings_for_read_subtemplate(
     if( rv != 0 ) return rv;
     
     *mappings = build_candidate_mappings_from_search_results( 
-        search_results, rst, genome, mapping_params);
+        search_results, rst, genome);
 
     free_search_results(search_results);
     /* Return the set of gapped mappings - if mappings were ungapped, they were
