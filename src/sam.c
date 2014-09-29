@@ -329,8 +329,8 @@ fprintf_sam_line_from_sublocations_group(
     */
     fprintf( sam_fp, "PQ:i:%u\t",
              (unsigned int) MIN(254, (-10*log10(1-seq_error))));
-    fprintf( sam_fp, "XQ:f:%f\t", seq_error);
-    fprintf( sam_fp, "XP:f:%f\n", cond_prob);
+    fprintf( sam_fp, "XQ:f:%e\t", seq_error);
+    fprintf( sam_fp, "XP:f:%e\n", cond_prob);
 
     return;
 }

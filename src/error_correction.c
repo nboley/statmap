@@ -323,7 +323,8 @@ get_mismatch_probability( struct penalty_t* penalty_array )
 
 
 double*
-calc_penalty_dist_moments( struct penalty_array_t* penalty_array, int num_moments)                           
+calc_penalty_dist_moments( 
+    struct penalty_array_t* penalty_array, int num_moments)
 {
     /* Unused - assert added to prevent compiler warning (for now) */
     assert( num_moments == 2 );
@@ -385,7 +386,8 @@ calc_effective_sequence_length( struct penalty_array_t* penalties )
 }
 
 enum bool
-filter_penalty_array( struct penalty_array_t* penalty_array, double effective_genome_len )
+filter_penalty_array( struct penalty_array_t* penalty_array, 
+                      double effective_genome_len )
 {
     int effective_seq_len = calc_effective_sequence_length( penalty_array );
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
@@ -709,8 +711,6 @@ init_mapping_params_for_read(
         p->recheck_min_match_penalty = max_num_mm;
         p->recheck_max_penalty_spread = max_mm_spread;
     } 
-    /* if the error model is estiamted, then just pass the meta params
-       through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
         
@@ -808,7 +808,7 @@ init_index_search_params(
             // Adjust the p-value so that the mismatch rate is based 
             // upon every search missing
             double adj_p = exp(log(1-DEFAULT_ESTIMATED_ERROR_METAPARAMETER)/ists->length);
-            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0);
+            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0) - 1e-3;
             
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    

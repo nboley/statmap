@@ -1427,12 +1427,15 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
         shutil.rmtree(output_directory)
 
 def test_multiple_indexable_subtemplates():
-    rls = [ 50, 75 ]
+    rls = [ 100, 200 ]
     for rl in rls:
-        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 )
+        #test_sequence_finding( read_len=rl, indexed_seq_len=20 )
+        #print "PASS: Multiple indexable subtemplates %i BP test." % rl
+        test_sequence_finding( rl, True, 20 )
         print "PASS: Multiple indexable subtemplates %i BP test." % rl
+        assert False
         # - 5 so the find_optimal_subseq_offset code should choose different offsets
-        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 - 5 )
+        test_sequence_finding( read_len=rl, indexed_seq_len=rl/2 )
         print "PASS: Multiple indexable subtemplates (multiple offsets) %i BP test." % rl
 
 def test_multiple_indexable_subtemplate_for_threep():
@@ -1582,6 +1585,7 @@ def main( RUN_SLOW_TESTS ):
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
     #sys.exit(1)
+    """
     print "Starting test_fivep_sequence_finding()"
     test_fivep_sequence_finding()
     print "Starting test_threep_sequence_finding()"
@@ -1610,9 +1614,12 @@ def main( RUN_SLOW_TESTS ):
     test_diploid_genome()
     print "Starting test_diploid_genome_with_multiple_chrs()"
     test_diploid_genome_with_multiple_chrs()
-
+    """
+    
     print "Start test_multiple_indexable_subtemplates()"
     test_multiple_indexable_subtemplates()
+    return
+
     print "Start test_more_than_two_indexable_subtemplates()"
     test_more_than_two_indexable_subtemplates()
     print "Start test_multiple_indexable_subtemplate_for_threep()"
