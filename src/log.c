@@ -161,17 +161,21 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     sprintf( log_line, "[%s] [%d] %-10s: %s\n", timestamp, thread_id,
              log_level_to_string(log_level), log_msg );
 
-    /* Print the message to the log file (and stderr if non-trivial) */
-    pthread_mutex_lock( &log_mutex );
-    fputs( log_line, log_fp );
-    if( log_level >= nontrivial_log_level )
+    /* Print the message to the log file, if one is open */
+    if( NULL != log_fp  )
+    {
+        /* acquire a mutex to make sure that the log isnt garbled */
+        pthread_mutex_lock( &log_mutex );
+        fputs( log_line, log_fp );
+        pthread_mutex_unlock( &log_mutex );
+        fflush( log_fp );
+    }
+    
+    /* Print to stderr if there is no log file or the message is non-trivial */
+    if( log_fp == NULL || log_level >= nontrivial_log_level )
     {
         fputs( log_line, stderr );
-    }
-    pthread_mutex_unlock( &log_mutex );
-    
-    /* flush the log buffer */
-    fflush( log_fp );
+    }    
     
     /* If this was a fatal log message, exit */
     if( log_level == LOG_FATAL )
