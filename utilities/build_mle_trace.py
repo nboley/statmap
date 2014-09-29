@@ -49,9 +49,9 @@ def main():
     statmap_o.normalize_traces( starting_trace )
     
     # determine the update functions
-    assert smo.config.contents.assay_type == CAGE
-    update_trace_exp_from_loc = statmap_o.update_CAGE_trace_expectation_from_location
-    update_mapped_rd_prbs = statmap_o.update_CAGE_mapped_read_prbs
+    #assert smo.config.contents.assay_type == CAGE
+    update_trace_exp_from_loc = statmap_o.update_chipseq_trace_expectation_from_location
+    update_mapped_rd_prbs = statmap_o.update_chipseq_mapped_read_prbs
     
     # update the mapping
     statmap_o.update_mapping(
