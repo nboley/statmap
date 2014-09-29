@@ -415,8 +415,10 @@ build_candidate_mappings_from_search_results(
             if( search_results[i]->length == curr_loc_indices[i] )
                 continue;
             
+            /* if we dont yet have a current probe or the current probe is 
+               larger than i, upadte the current probe index */
             if( curr_probe_index < 0
-                || 0 > compare_index_probes(
+                || 0 < compare_index_probes(
                     search_results[curr_probe_index]->locations 
                         + curr_loc_indices[curr_probe_index], 
                     probe_offsets[curr_probe_index],
@@ -451,7 +453,7 @@ build_candidate_mappings_from_search_results(
             
             /* this must be greater than or equal to the base, because 
                of the previous step in which we chose the smallest */
-            assert(0 <= compare_index_probes(
+            assert(0 >= compare_index_probes(
                        search_results[curr_probe_index]->locations 
                            + curr_loc_indices[curr_probe_index], 
                        probe_offsets[curr_probe_index],
