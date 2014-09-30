@@ -102,7 +102,6 @@ struct mapping_params {
     struct penalty_array_t** rev_penalty_arrays;
     
     int total_read_length;
-    float read_expected_value;
     
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;

@@ -689,17 +689,6 @@ init_mapping_params_for_read(
         total_read_len += r->subtemplates[i].length;
     }
     p->total_read_length = total_read_len;
-
-    /* compute the expected value over the read. We use this to determine the
-       scaling factor to get the min match penalty for an index probe from the
-       min match penalty for the entire read. */
-    p->read_expected_value = 0;
-    for( i = 0; i < r->num_subtemplates; i++ )
-    {
-        p->read_expected_value += expected_value_of_rst(
-            r->subtemplates + i,
-            p->fwd_penalty_arrays[i]);
-    }
     
     /* now, calculate the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {

@@ -100,9 +100,6 @@ struct indexable_subtemplate
     /* these have already accounted for the subseq_offset */
     struct penalty_array_t fwd_penalty_array;
     struct penalty_array_t rev_penalty_array;
-
-    /* expected value of this index probe */
-    float expected_value;
 };
 
 struct indexable_subtemplates

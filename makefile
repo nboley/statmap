@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
+CFLAGS=-O3 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
 	-Wunreachable-code -Wunused \
 	-I/usr/share/R/include
 RLIB=/usr/lib/R/lib/libR.so
@@ -30,13 +30,13 @@ statmap: $(src_objects)
 	$(CC) -o src/statmap \
 	$(src_objects) $(RLIB) \
 	$(CFLAGS) \
-	-lm -lpthread -L/usr/lib/R/lib -lR 
+	-lm -lpthread -lprofiler -L/usr/lib/R/lib -lR 
 	cp src/statmap ./bin/
 
 statmap.so : $(src_objects)
 	$(CC) $(CFLAGS) \
 	-fpic -shared -Wl,-soname,libstatmap.so.1 -o src/libstatmap.so \
-	-L/usr/lib/R/lib -lR \
+	-lprofiler -L/usr/lib/R/lib -lR \
 	$(wildcard src/*.c) $(RLIB)
 
 ### the 'utilities' subdirectory

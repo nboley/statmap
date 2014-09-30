@@ -892,16 +892,7 @@ find_candidate_mappings( void* params )
         struct mapping_params* mapping_params
             = init_mapping_params_for_read( r, metaparams, error_model );
         cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
-        
-        // Make sure this read has "enough" HQ bps before trying to map it
-        if( filter_read( r, mapping_params, genome ) )
-        {
-            add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
-            free_read( r );
-            free_mapping_params( mapping_params );
-            continue; // skip the unmappable read
-        }
-
+                
         /* Initialize container for candidate mappings for this read */
         candidate_mappings* mappings = NULL;
         init_candidate_mappings( &mappings );

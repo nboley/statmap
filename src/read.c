@@ -323,10 +323,6 @@ init_indexable_subtemplate(
     (*ist)->rev_penalty_array.length = subseq_length;
     (*ist)->rev_penalty_array.array = rst->rev_penalty_array->array
         + ( rst->length - (subseq_offset + subseq_length));
-
-    (*ist)->expected_value = expected_value_of_rst_subsequence(
-        rst->fwd_penalty_array,
-        subseq_offset, subseq_length);
 }
 
 void
