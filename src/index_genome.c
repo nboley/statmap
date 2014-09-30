@@ -1493,6 +1493,8 @@ add_sequence( struct genome_data* genome,
 
         /* Free the old sequences node */
         free_seqs( (sequences_node*) *node_ref );
+        *node_ref = new_node;
+        *node_type_ref = 's';
         
         /* Set the pointers to point to the newly created node */
         int i;
