@@ -539,11 +539,13 @@ add_pmatch( potential_match_stack* stack,
     /* if necessary, shift the stack forward */
     if( stack->first_index == 0 )
     {
+        int shift_size = stack->allocated_size;
+        
         /* if there isnt enough room for the shift, realloc */
-        if( pmatch_stack_length(stack) + STACK_INITIAL_FIRST_INDEX 
+        if( pmatch_stack_length(stack) + shift_size
                 >= stack->allocated_size )
         {
-            stack->allocated_size += STACK_GROWTH_FACTOR;
+            stack->allocated_size += shift_size;
             stack->matches = realloc( stack->matches, 
                                       sizeof(potential_match)*
                                       (stack->allocated_size) 
@@ -552,13 +554,13 @@ add_pmatch( potential_match_stack* stack,
         }
 
         /* move the stack forward */
-        memmove( stack->matches + STACK_INITIAL_FIRST_INDEX, /* dst */
+        memmove( stack->matches + shift_size, /* dst */
                  stack->matches /* src */, 
                  sizeof(potential_match)*pmatch_stack_length( stack  )  
         );
         
-        stack->first_index += STACK_INITIAL_FIRST_INDEX;
-        stack->last_index += STACK_INITIAL_FIRST_INDEX;
+        stack->first_index += shift_size;
+        stack->last_index += shift_size;
     }
 
     assert( pmatch_stack_length(stack) == 0
