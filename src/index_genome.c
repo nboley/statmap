@@ -1495,27 +1495,24 @@ add_sequence( struct genome_data* genome,
         free_seqs( (sequences_node*) *node_ref );
         
         /* Set the pointers to point to the newly created node */
-        *node_ref = new_node;
-        *node_type_ref = 's';
+        int i;
+        for(i=0; new_node[i].node_ref == NULL; i++);
+        node_ref = &(new_node[i].node_ref);
+        node_type_ref = &(new_node[i].type);
+        assert( NULL != *node_ref);
+
+        assert( *node_type_ref == 'l' || *node_type_ref == 'q' );
         
-        /* get the first child */
-        node_ref = &new_node[0].node_ref;
-        /* get the pointer to the first child's node type */
-        node_type_ref = &new_node[0].type;
         /* move to the next level */
         level += 1;
-        
-        if( *node_type_ref == 'q' )
+        if( level < num_levels ) 
         {
+            assert( *node_type_ref == 'q' );
             num_sequence_types = 
                 get_num_sequence_types( (sequences_node*) *node_ref );
         }
-
-    assert( *node_type_ref == 'l' 
-            || num_sequence_types < MAX_SEQ_NODE_ENTRIES );
-
-    } 
-    
+    }
+        
     return;
 }
 
