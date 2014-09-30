@@ -926,6 +926,166 @@ build_static_node_from_dynamic_node( dynamic_node* dnode,
 }
 
 void
+build_static_node_from_sequence_node(  sequences_node* qnode, 
+                                       static_node** snode,
+                                       const int num_levels,
+                                       LEVEL_TYPE level,
+                                       struct genome_data* genome )
+{
+    int i;
+    
+    init_static_node(snode);
+
+    /* 
+     * TODO - what the below says - for now we do it naively
+     * populate the children from the sequence node
+     *
+     * NOT ACTUALLY IMPLEMENTED - THIS IS A COMMENT FOR A TODO
+     * we could do this using the machinery that we've already developed, 
+     * but it will be much faster if we can just peak inside of the sequence 
+     * node, so that is what we do. Don't replicate this code for adding
+     * sequences to a dynamic node - call add_child_to_dynamic_node with
+     * find_child_index_in_dynamic_node
+     * END NOT ACTUALLY IMPLEMENTED
+     *
+     */
+    
+    /* the number of letters in each tailing sequence in seqs */
+    int num_letters = num_levels - level;
+
+    /* make sure it makes sense to convert the node - TODO better error check */
+    assert( get_num_sequence_types(qnode) > 1 );
+    
+    /* get the array of sequences form the (packed) sequences node */
+    LETTER_TYPE* sequences = get_sequences_array_start( qnode, num_letters );
+
+    /* loop through all of the children */
+    for( i = 0; i < get_num_sequence_types(qnode); i++ )
+    {
+        /* 
+         * Note that the sequences store all of the letters in the sequence 
+         * node in sequential order. Since we only care about the first letter
+         * in each sequence, we start i at 0 and take the i*num_letters letter
+         */
+        LETTER_TYPE bp = sequences[i*num_letters];
+
+        /* check to make sure this child exists - if it doesn't, create it*/
+        if( (*snode)[bp].node_ref == NULL ) 
+        {
+            add_child_to_static_node( *snode, bp );
+        }
+        
+        /**** Add the sequence to the leaf *********************************/
+        /* TODO - cleanup this code block */
+        /* If we are at a locations node, then the seq length is 0  */
+        if( num_letters - 1  == 0 )
+        {
+            /* 
+             * Add the sequence to the leaf - we just assume that it is a genome
+             * location for now. After it's added. we check the bit to make sure
+             * and, if it's a pointer, we fix it.
+             */
+            locations_node** child_seqs 
+                = (locations_node**) &((*snode)[bp].node_ref);
+            
+            /* 
+             * Now, check if there are multiple genome locations associated
+             * with this sequence.
+             */
+            locs_union loc = 
+                get_genome_locations_array_start( qnode, num_letters )[i];
+
+
+            if( !check_sequence_type_ptr(qnode, i) )
+            {
+                *child_seqs = add_location_to_locations_node(   
+                    *child_seqs, 
+                    loc.loc
+                );
+            } 
+            else 
+            /* Add all of the locs in the referenced array */
+            {
+                INDEX_LOC_TYPE* gen_locs 
+                    = get_overflow_genome_locations_array_start( 
+                        qnode,  num_letters )
+                    + loc.locs_array.locs_start;
+
+                int j;
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {
+                    *child_seqs = add_location_to_locations_node(   
+                        *child_seqs, 
+                        gen_locs[j]
+                    );
+                }
+            }
+        }
+        /* Otherwise, this is a sequence node */
+        else {
+            /* 
+             * Add the sequence to the leaf - we just assume that it is a genome 
+             * location for now. After it's added. we check the bit to make sure 
+             * and, if it's a pointer, we fix it.
+             */
+            sequences_node** child_seqs
+                = (sequences_node**) &((*snode)[bp].node_ref);
+            
+            /* 
+             * Now, check if there are multiple genome locations associated
+             * with this sequence.
+             */
+            locs_union loc = 
+                get_genome_locations_array_start( qnode, num_letters )[i];
+
+            /* 
+             * if the correct bit is set, then the genome location is a pointer.
+             */        
+            if( !check_sequence_type_ptr(qnode, i) )
+            {
+                *child_seqs = add_sequence_to_sequences_node(
+                    /* we pass NULL for the pseudo_locs, because we know that
+                       it is only used to add pseudo locations and, since we 
+                       are building a dynamic node from a sequences node, 
+                       anything that is already a pseudo loc wont change */
+                    genome,
+                    NULL,
+                    *child_seqs, 
+                    sequences + i*num_letters + 1, 
+                    num_letters-1, 
+                    loc.loc
+                );
+            } 
+            else 
+            /* Add all of the locs in the referenced array */
+            {
+                INDEX_LOC_TYPE* gen_locs 
+                    = get_overflow_genome_locations_array_start( qnode,  num_letters )
+                    + loc.locs_array.locs_start;
+
+                int j;
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {
+                    INDEX_LOC_TYPE loc = gen_locs[j];
+
+                    *child_seqs = add_sequence_to_sequences_node(   
+                        genome,
+                        NULL,
+                        *child_seqs, 
+                        sequences + i*num_letters + 1, 
+                        num_letters-1, 
+                        loc
+                    );
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+
+void
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
@@ -1322,8 +1482,8 @@ add_sequence( struct genome_data* genome,
         assert( 'q' == *node_type_ref );
         
         /* Make a dynamic node from *node_ref */
-        dynamic_node* new_node = NULL; 
-        build_dynamic_node_from_sequence_node( 
+        static_node* new_node = NULL; 
+        build_static_node_from_sequence_node( 
             (sequences_node*) *node_ref, 
             &new_node, 
             num_levels, 
@@ -1336,12 +1496,12 @@ add_sequence( struct genome_data* genome,
         
         /* Set the pointers to point to the newly created node */
         *node_ref = new_node;
-        *node_type_ref = 'd';
+        *node_type_ref = 's';
         
         /* get the first child */
-        node_ref = &get_dnode_children( new_node )[0].node_ref;
+        node_ref = &new_node[0].node_ref;
         /* get the pointer to the first child's node type */
-        node_type_ref = &get_dnode_children( new_node )[0].type;
+        node_type_ref = &new_node[0].type;
         /* move to the next level */
         level += 1;
         
