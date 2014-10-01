@@ -123,8 +123,9 @@ def map_with_statmap( genome_fnames, read_fnames, output_dir, indexed_seq_len,
         read_fname_str = "-1 " + read_fnames[0] + " -2 " + read_fnames[1]
     
     # build_index
-    call = "%s %i tmp.genome.fa.bin %s" % ( BUILD_INDEX_PATH, indexed_seq_len,
-            ' '.join(genome_fnames) )
+    call = "%s %i tmp.genome.fa.bin %s" % ( 
+        BUILD_INDEX_PATH, 4*(indexed_seq_len//4), ' '.join(genome_fnames) )
+            
 
     print >> stderr, "========", re.sub( "\s+", " ", call)
     ret_code = subprocess.call( call, shell=True, stdout=stdout, stderr=stderr )
@@ -486,12 +487,11 @@ def build_paired_end_fastq_from_seqs( sample_iter, of1, of2, num_untemplated_gs=
     return
 
 def mutate_reads( reads, error_strs ):
-    # set paired end vs single enmd read parameters
-    paired_end = (  isinstance( reads[0], tuple ) )
-    n_error_strs = 2 if paired_end else 1
-
     mutated_reads = []
     for read in reads:
+        paired_end = (  isinstance( read, tuple ) )
+        n_error_strs = 2 if paired_end else 1
+        
         read_error_str = random.sample( error_strs, n_error_strs )
 
         read_len = len( read[0] ) if paired_end else len(read)
@@ -634,10 +634,10 @@ def test_sequence_finding( read_len, rev_comp = False, indexed_seq_len=None,
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
     total_num_reads = count_lines_in_sam( sam_fp )
 
-    if len(fragments) > total_num_reads:
+    if nsamples > total_num_reads:
         missing_reads = set( xrange(nsamples) ).difference(
                 set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
-        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, nsamples )
         print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
         sys.exit(1)
 
@@ -781,10 +781,10 @@ def test_paired_end_reads( read_len ):
     # we divide by two to account for the double write
     total_num_reads = count_lines_in_sam(sam_fp) / 2
 
-    if len(fragments) != total_num_reads:
+    if nsamples != total_num_reads:
         missing_reads = set( xrange(nsamples) ).difference(
                 set( [ int(read[0][0]) for read in iter_sam_reads(sam_fp) ] ))
-        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, len(fragments) )
+        print "Mapping returned the wrong number of reads ( %i vs expected %i )." % ( total_num_reads, nsamples )
         print "Missing reads:", ','.join( [ str(read_id) for read_id in missing_reads ] )
         sys.exit(1)
         
@@ -865,9 +865,9 @@ def test_duplicated_reads( read_len, n_chrs, n_dups, gen_len, n_threads,
     sam_fp = open( "./%s/mapped_reads.sam"  % output_directory )
     total_num_reads = count_lines_in_sam(sam_fp)
 
-    if len(fragments)*n_dups != total_num_reads:
+    if n_reads*n_dups != total_num_reads:
         raise ValueError, "Mapping returned too few reads (%s/%s)" % \
-                (total_num_reads, len(fragments)*n_dups)
+                (total_num_reads, n_reads*n_dups)
     
     for reads_data, truth in izip( iter_sam_reads( sam_fp ), fragments ):
         # FIXME BUG - make sure that there arent false errors ( possible, but unlikely )
@@ -980,9 +980,9 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
     
     all_read_ids.sort( )
 
-    if len(fragments) != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
+    if num_samples != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
         print "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
-            % ( len(fragments), total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
+            % ( num_samples, total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
         sys.exit(1)
     
     # build a dictionary of mapped reads
@@ -1280,9 +1280,9 @@ def map_duplicated_diploid_genome( genome, genome_fnames, read_len, genome_len,
     # Since the paternal and maternal chrs of the reference genome are
     # identical, each read will be repeated n_dups times * 2, since there will
     # be a paternal and maternal copy for every sampled read
-    if len(fragments)*n_dups*2 != total_num_reads:
+    if nreads*n_dups*2 != total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
-                % ( len(fragments)*n_dups*2, total_num_reads )
+                % ( nreads*n_dups*2, total_num_reads )
 
     for mapped_reads, truth in izip( iter_sam_reads(sam_fp), fragments ):
 
@@ -1413,9 +1413,9 @@ def test_paired_end_diploid_repeat_sequence_finding( rl=20, n_dups=50 ):
     # also map an exponential number of times across each chromosome -
     # each first pair will map to all of the following second pairs for that
     # fragment, and so on.
-    if len(fragments)*(n_dups**2)*2 != total_num_reads:
+    if nsamples*(n_dups**2)*2 != total_num_reads:
         raise ValueError, "Mapping returned the wrong number of reads (expected %i, got %i)" \
-                % ( len(fragments)*(n_dups**2)*2, total_num_reads )
+                % ( nsamples*(n_dups**2)*2, total_num_reads )
 
     # Cleanup the created files
     if CLEANUP:
