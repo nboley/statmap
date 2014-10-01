@@ -1606,10 +1606,29 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                         penalties );
 
                 /* if this letter exceeds the max, continue */
-                if( penalty_addition > 0 ) {
-                    /* skip forward to the next possible letter */
-                    // int num_to_skip = ( 3 << ( LETTER_LENGTH - ((int) penalty_addition - 1 ) )
+                if( penalty_addition > 0.5 ) {
+                    /* FIXME - consider the performace implications of this */
+                    int break_index = (int) penalty_addition + 0.5;
+                    if( break_index == 1 ) {
+                        int masked_letter = letter&3;
+                        while( letter < ALPHABET_LENGTH && (letter&3) == masked_letter )
+                            letter++;
+                    }
+                    if( break_index == 2 ) {
+                        int masked_letter = letter&15;
+                        while( letter < ALPHABET_LENGTH && (letter&15) == masked_letter )
+                            letter++;
+                    }
+                    if( break_index == 3 ) {
+                        int masked_letter = letter&63;
+                        while( letter < ALPHABET_LENGTH && (letter&63) == masked_letter )
+                            letter++;
+                    }
                     continue;
+
+                    /* skip forward to the next possible letter */
+                    //int num_to_skip = ( 3 << ( LETTER_LENGTH - ((int)(penalty_addition + 0.5) - 1 ) )
+                    //continue;
                 }
                 /* otherwise, find the penalty on the child function */
                 else {

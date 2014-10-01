@@ -410,7 +410,7 @@ compute_penalty(
 {
     int i;
     float penalty = 0;
-
+     
     for( i = 0; i < LETTER_LEN; i++ )
     {
         /*
