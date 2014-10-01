@@ -330,15 +330,6 @@ aggregate_over_wiggles(
                 (int(*)( const void*, const void* ))cmp_wig_line_info
             );
     }
-
-    /* make sure all of the files are empty */
-    #ifndef NDEBUG
-    int k;
-    for( k = 0; k < num_wigs; k++ )
-    {
-        assert( NULL == lines[k].fp );
-    }
-    #endif
     
     return;
 }

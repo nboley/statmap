@@ -1,7 +1,5 @@
 /* Copyright (c) 2009-2012, Nathan Boley */
 
-#define NDEBUG
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>

@@ -2107,7 +2107,7 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     
     if(indexed_seq_len%LETTER_LEN != 0 )
     {
-        statmap_log( LOG_FATAL, "The indexed sequence length must be a multiple of %i" % LETTER_LEN );
+        statmap_log( LOG_FATAL, "The indexed sequence length must be a multiple of %i", LETTER_LEN );
         exit( 1 );
     }
     
