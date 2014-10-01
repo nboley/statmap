@@ -361,8 +361,6 @@ def write_genome_to_multiple_fastas( genome, file_prefix, num_repeats=1 ):
     return files_out
 
 def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
-    # store a list of the true fragments
-    truth = []
     # calculate the genome lengths sum, to make
     # sure that our samples are uniform in the 
     # chr length
@@ -377,16 +375,15 @@ def sample_uniformly_from_genome( genome, nsamples=100, frag_len=200 ):
         rnd_num = random.randint( 0, chr_lens_cdr[-1] - 1  )
         chr_index = chr_lens_cdr.searchsorted( rnd_num  ) - 1
         rnd_bp = random.randint( 0, chr_lens[chr_index] - frag_len - 1 )
-        truth.append(  ( chr_names[chr_index], rnd_bp, rnd_bp+frag_len ) )
+        yield ( chr_names[chr_index], rnd_bp, rnd_bp+frag_len )
     
-    return truth
+    return
 
 def reverse_complement( seq ):
     return seq.translate( rev_comp_table )[::-1]
 
 def build_reads_from_fragments(
     genome, fragments, read_len=35, rev_comp=True, paired_end=False ):
-    reads = []
     for chr, start, stop in fragments:
         if paired_end:
             if random.random() > 0.5 or not rev_comp:
@@ -397,16 +394,16 @@ def build_reads_from_fragments(
                 read_1 = genome[chr][(stop-read_len):stop]
                 read_1 = reverse_complement( read_1 )
                 read_2 = genome[chr][start:(start+read_len)]
-            reads.append( ( read_1, read_2 ) )
+            yield( read_1, read_2 )
         else:
             if random.random() > 0.5 or not rev_comp:
                 read = genome[chr][start:(start+read_len)]
             elif rev_comp:
                 read = genome[chr][(stop-read_len):(stop)]
                 read = reverse_complement( read )
-            
-            reads.append( read )
-    return reads
+            yield read
+    
+    return
 
 def build_single_end_fastq_from_mutated_reads( samples_iter, of=sys.stdout ):
     for sample_num, (sample, error_str, true_seq) in enumerate( samples_iter ):

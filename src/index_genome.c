@@ -1495,24 +1495,34 @@ add_sequence( struct genome_data* genome,
         free_seqs( (sequences_node*) *node_ref );
         *node_ref = new_node;
         *node_type_ref = 's';
-        
-        /* Set the pointers to point to the newly created node */
-        int i;
-        for(i=0; new_node[i].node_ref == NULL; i++);
-        node_ref = &(new_node[i].node_ref);
-        node_type_ref = &(new_node[i].type);
-        assert( NULL != *node_ref);
-
-        assert( *node_type_ref == 'l' || *node_type_ref == 'q' );
-        
-        /* move to the next level */
+        /* move to the next level. If there are no levels left, then
+           break. Otherwise, check to see if we need to convert more 
+           sequence nodes*/
         level += 1;
-        if( level < num_levels ) 
+        if( level == num_levels ) 
+            break;
+        
+        /* There can only ever be one sequence node that is overloaded, 
+           because we only find one sequence at a time. Find this node if it exists,
+           otherwise break.  */
+        int i;
+        /* set this to zero to break out of the loop if we don't find another 
+           overloaded node */
+        num_sequence_types = 0;
+        for(i=0; i < ALPHABET_LENGTH; i++)
         {
-            assert( *node_type_ref == 'q' );
-            num_sequence_types = 
-                get_num_sequence_types( (sequences_node*) *node_ref );
-        }
+            if( new_node[i].node_ref != NULL 
+                && MAX_SEQ_NODE_ENTRIES > get_num_sequence_types( 
+                    (sequences_node*) new_node[i].node_ref ) )
+            { 
+                node_ref = &(new_node[i].node_ref);
+                node_type_ref = &(new_node[i].type);
+                assert( *node_type_ref == 'q' );
+                num_sequence_types = 
+                    get_num_sequence_types( (sequences_node*) *node_ref );
+                break; 
+            }
+        }        
     }
         
     return;

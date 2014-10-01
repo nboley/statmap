@@ -1,5 +1,7 @@
 from tests import *
 
+from itertools import chain
+
 error_chars = '?adfh'
 error_char_rates = [0.65, 0.03, 0.02, 0.01, 0.00]
 
@@ -22,12 +24,12 @@ def test_error_rate_estimation(paired=False):
     
     rl = read_len = 200
     indexed_seq_len = 20
-    nsamples = 10000
+    nsamples = 100000
     output_directory = "smo_test_error_rate_estimation"
     
     ###### Prepare the data for the test #######################################
     # build a random genome
-    r_genome = build_random_genome( [2000,2000], ["1","2"] )
+    r_genome = build_random_genome( [200000,200000], ["1","2"] )
     genome_fnames = ( "tmp.genome.fa", )
     with open( genome_fnames[0], "w" ) as genome_of:
         write_genome_to_fasta( r_genome, genome_of, 1 )
@@ -45,7 +47,7 @@ def test_error_rate_estimation(paired=False):
     reads2 = build_reads_from_fragments( 
         r_genome, fragments, read_len=rl, rev_comp=True, paired_end=paired )
 
-    new_genome = build_random_genome( [2000,2000], ["1","2"] )
+    new_genome = build_random_genome( [200000,200000], ["1","2"] )
     fragments = sample_uniformly_from_genome( 
         new_genome, nsamples=nsamples, frag_len=rl )
     reads3 = build_reads_from_fragments( 
@@ -86,8 +88,9 @@ def test_error_rate_estimation(paired=False):
                            build_mutated_read(rd2, base_error_rate) )
                 
     
-    mutated_reads = list(iter_mutated_reads(reads, 0.01 ))
-    mutated_reads += list(iter_mutated_reads(reads2, 0.01))
+    mutated_reads = chain(
+        iter_mutated_reads(reads, 0.01 ),
+        iter_mutated_reads(reads2, 0.01) )
     #mutated_reads += list(iter_mutated_reads(reads3, 0.01))
     
     # build and write the reads    
