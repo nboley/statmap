@@ -2104,7 +2104,13 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     rv = fread( &indexed_seq_len, 1, 1, index_fp );
     assert( 1 == rv );
     assert( indexed_seq_len > 0 );
-
+    
+    if(indexed_seq_len%LETTER_LEN != 0 )
+    {
+        statmap_log( LOG_FATAL, "The indexed sequence length must be a multiple of %i" % LETTER_LEN );
+        exit( 1 );
+    }
+    
     /* allocate space for the index */
     *index = malloc( sizeof( struct index_t ) );
     

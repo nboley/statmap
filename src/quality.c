@@ -411,7 +411,6 @@ compute_penalty(
     int i;
     float penalty = 0;
     
-    assert(seq_length%LETTER_LEN == 0);
     for( i = 0; i < LETTER_LEN; i++ )
     {
         /*
