@@ -3,6 +3,8 @@
 #ifndef CONFIG
 #define CONFIG
 
+#define NDEBUG
+
 /****** version options                         *******/
 #define GENOME_FILE_FORMAT_VERSION   0
 
@@ -19,7 +21,6 @@
 #define MAX_NUM_INDEX_PROBES 5
 // the number of index probes we need for a mapping to be valid
 #define MIN_NUM_INDEX_PROBES 1
-#define N_DEBUG
 // #define PROFILE_CANDIDATE_MAPPING
 
 /* Try to map 99% of the input reads with the estimated error model */
