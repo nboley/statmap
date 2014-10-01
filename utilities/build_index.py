@@ -164,12 +164,12 @@ def build_diploid_map_data_from_group( group, map_data_t, genome ):
 
 def main():
     if len(sys.argv) < 4: usage()
-
-    # Initialize Statmap's logging infrastructure
-    init_logging()
-
+    
     # parse arguments
     indexed_seq_len = int( sys.argv[1] )
+    if indexed_seq_len%4 != 0:
+        raise ValueError, "The indexed sequence length must be a multiple of 4"
+
     output_fname = sys.argv[2]
     index_fname = output_fname + ".index"
 

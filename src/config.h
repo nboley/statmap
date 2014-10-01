@@ -4,7 +4,7 @@
 #define CONFIG
 
 /****** version options                         *******/
-#define GENOME_FILE_FORMAT_VERSION   0
+#define GENOME_FILE_FORMAT_VERSION   1
 
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
