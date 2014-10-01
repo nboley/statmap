@@ -124,7 +124,7 @@ def map_with_statmap( genome_fnames, read_fnames, output_dir, indexed_seq_len,
     
     # build_index
     call = "%s %i tmp.genome.fa.bin %s" % ( 
-        BUILD_INDEX_PATH, 4*(indexed_seq_len//4), ' '.join(genome_fnames) )
+        BUILD_INDEX_PATH, 4*int(indexed_seq_len//4), ' '.join(genome_fnames) )
             
 
     print >> stderr, "========", re.sub( "\s+", " ", call)
@@ -907,8 +907,7 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
-        assay=None, num_samples=0 ):
+def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, assay=None, num_samples=0 ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i" \
             % ( read_len, n_threads, nreads)
 
@@ -949,8 +948,8 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
 
     map_with_statmap( genome_fnames, read_fnames, output_directory,
                       indexed_seq_len = read_len - 2,
-                      num_threads=n_threads,
-                      assay=assay, num_samples=num_samples )
+                      num_threads=n_threads, 
+                      assay=assay, num_samples=nreads )
     
     ###### Test the sam file to make sure that each of the reads appears ############
     sam_fp = open( "./%s/mapped_reads.sam" % output_directory )
@@ -980,9 +979,9 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
     
     all_read_ids.sort( )
 
-    if num_samples != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
+    if nreads != total_num_reads + num_unmappable_reads + num_nonmapping_reads:
         print "Mapping returned too few reads %i/( %i + %i ). NOT { %s }" \
-            % ( num_samples, total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
+            % ( nreads, total_num_reads, num_unmappable_reads, ','.join( all_read_ids  ) )
         sys.exit(1)
     
     # build a dictionary of mapped reads
@@ -1047,7 +1046,7 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
         shutil.rmtree(output_directory)
 
 def test_mutated_read_finding( ):
-    rls = [ 50, 75  ]
+    rls = [ 48, 75  ]
     for rl in rls:
         test_dirty_reads( rl ) 
         print "PASS: Dirty Read (-30 penalty) Mapping %i BP Test. ( Statmap appears to be mapping fwd strand single reads with heavy errors correctly )" % rl
