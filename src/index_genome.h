@@ -206,7 +206,8 @@ add_child_to_dynamic_node(
 
  void add_child_to_static_node( 
     static_node* node,
-    LETTER_TYPE bp
+    LETTER_TYPE bp,
+    char child_node_type
 );
 
 void free_node( void* node, char node_type );

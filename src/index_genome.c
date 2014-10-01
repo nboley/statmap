@@ -794,15 +794,26 @@ add_child_to_dynamic_node(
 
  void add_child_to_static_node( 
     static_node* node,
-    LETTER_TYPE bp
+    LETTER_TYPE bp,
+    char child_node_type
 )
 {
     /* set the node type of the child */
-    node[bp].type = 'q';
+    node[bp].type = child_node_type;
+
     /* initialize the new child node */
-    sequences_node* new_node;
-    init_sequences_node( &new_node );
-    node[bp].node_ref = new_node;
+    if( child_node_type == 'q' ) 
+    {
+        sequences_node* new_node;
+        init_sequences_node( &new_node );
+        node[bp].node_ref = new_node;
+    } else {
+        assert( child_node_type == 'l' );
+        locations_node* new_node;
+        init_locations_node( &new_node );
+        node[bp].node_ref = new_node;
+    }
+    
 }
 
 
@@ -968,17 +979,24 @@ build_static_node_from_sequence_node(  sequences_node* qnode,
          * in each sequence, we start i at 0 and take the i*num_letters letter
          */
         LETTER_TYPE bp = sequences[i*num_letters];
-
+        
+        /* set the child node type. If we are at the botom of the tree it's a locations
+           node - otherwise it is a sequence node */
+        NODE_TYPE child_node_type = 'q';
+        if(num_letters == 1) {
+            child_node_type = 'l';
+        }
+        
         /* check to make sure this child exists - if it doesn't, create it*/
         if( (*snode)[bp].node_ref == NULL ) 
         {
-            add_child_to_static_node( *snode, bp );
+            add_child_to_static_node( *snode, bp, child_node_type );
         }
         
         /**** Add the sequence to the leaf *********************************/
-        /* TODO - cleanup this code block */
-        /* If we are at a locations node, then the seq length is 0  */
-        if( num_letters - 1  == 0 )
+        /* If there is only one letter in the seqeunce node, then we are
+           at the bottom of the tree and need to build a locations node */
+        if( 'l' == child_node_type )
         {
             /* 
              * Add the sequence to the leaf - we just assume that it is a genome
@@ -1030,6 +1048,7 @@ build_static_node_from_sequence_node(  sequences_node* qnode,
              */
             sequences_node** child_seqs
                 = (sequences_node**) &((*snode)[bp].node_ref);
+            assert( child_node_type == 'q' );
             
             /* 
              * Now, check if there are multiple genome locations associated
@@ -1310,124 +1329,57 @@ add_sequence( struct genome_data* genome,
     static_node* root = index->index;
 
     const int num_levels = calc_num_letters( seq_length );
-    LEVEL_TYPE level = 0;
+    LEVEL_TYPE level;
     /* 
      * store a pointer to the address that references curr_node. Since there is no
      * node pointing to root, it's initialized to NULL. This shouldn't matter because
      * it's purpose is to keep a record for node conversions, and root is always static
      * and thus never converted.
      */
-    void** node_ref = NULL;
-    NODE_TYPE* node_type_ref = NULL; 
 
-    void* curr_node = (void*) root;
-    char curr_node_type = 's';
+    void** node_ref = (void**) &root;
 
+    NODE_TYPE curr_node_type = 's';
+    NODE_TYPE* node_type_ref = &curr_node_type; 
+    
     /* traverse child nodes until we hit a leaf node */
-    while( level < num_levels )
+    for( level=0; 
+         *node_ref != NULL
+             && level < num_levels 
+             && *node_type_ref == 's'; 
+         level++ )
     {
         LETTER_TYPE bp = seq[level];
-        if( curr_node_type == 's' )
-        {
-            /* check to make sure this child exists - if it doesn't, create it*/
-            if( ((static_node*) curr_node)[bp].node_ref == NULL ) 
-            {
-              add_child_to_static_node( (static_node*) curr_node, bp );
-            }
-            
-            /* FIXME - but this is ok for now */
-            node_type_ref = &(((static_node*) curr_node)[bp].type);
-            curr_node_type = *node_type_ref;
-
-            node_ref = &(((static_node*) curr_node)[bp].node_ref);
-            curr_node = *node_ref;
-            
-            // debug
-            // printf("LeveL: %i\tStatic Node: %p %p\t%c\n", 
-            //       level, node_type_ref, node_ref, *node_type_ref);
-            
-        } else if( curr_node_type == 'd' )
-        {
-            int child_index = find_child_index_in_dynamic_node(
-                (dynamic_node*) *node_ref, bp);
-            /* 
-             * make sure that the child is of the correct type - child_index 
-             * might just be the insert location. If it is, it's the current 
-             * node. If not, we need to build the new node.
-             */
-            
-            int num_children = get_dnode_num_children( *node_ref );
-            dynamic_node_child* children = get_dnode_children( *node_ref );
-
-            /* if the node is incorrect, then insert the correct child */
-            if ( child_index == num_children
-                 || children[child_index].letter != bp )
-            {
-              *node_ref = add_child_to_dynamic_node( 
-                  *node_ref, bp, child_index, num_levels - level
-              );
-            }
-
-            assert( child_index < get_dnode_num_children(*node_ref) );
-            assert( child_index >= 0 );
-            
-            node_type_ref = 
-                &( get_dnode_children(*node_ref)[child_index].type);
-            curr_node_type = *node_type_ref;
-
-            node_ref = &( get_dnode_children(*node_ref)[child_index].node_ref );
-            curr_node = *node_ref;
-
-            // debug
-            // printf("LeveL: %i\tDynamic Node: %p %p\t%c\n", 
-            //       level, node_type_ref, node_ref, *node_type_ref);
-            
-
-        /* 
-         * If the node type is sequence or locations, then we have reached 
-         * the bottom of the tree 
-         */
-        } else { 
-            assert( curr_node_type == 'q' || curr_node_type == 'l' );
-            break;
-        } 
-        
-        /* move to the next level */
-        level++;
-
-        assert( curr_node_type == 's' 
-                || curr_node_type == 'q' 
-                || curr_node_type == 'd'
-                || curr_node_type == 'l' );
-
-        assert( *node_type_ref = curr_node_type );    
-        assert( *node_ref = curr_node );    
+        node_type_ref = &(((static_node*) *node_ref)[bp].type);
+        node_ref = &(((static_node*) *node_ref)[bp].node_ref);        
     }
+    
+    /* 
+     * Only location nodes dont store any sequence information 
+     * so, if we are at the bottom of the tree, this 
+     * must be a location node.
+     */
 
-    /* If we are at a level node */
-    if( curr_node_type == 'l' )
+    if( level == num_levels )
     {
-        // debug
-        // printf("LeveL: %i\tLocations Node: %p %p\t%c\n", 
-        //       level, node_type_ref, node_ref, *node_type_ref);
-        
-        /* 
-         * Location nodes dont store any sequence information 
-         * thus, if this is a location node we better be at the
-         * bottom level of the tree
-         */
-        assert( level == num_levels );
-        
+        /* check to make sure this child exists - if it doesn't, create it*/
+        if( *node_ref == NULL ) {
+            *node_type_ref = 'l';
+            init_locations_node(node_ref);
+        }
+        assert(*node_type_ref == 'l');
         *node_ref = add_location_to_locations_node( 
-            (locations_node*) curr_node, genome_loc );
-        
+            (locations_node*) *node_ref, genome_loc );
         return;
     }
 
-    /* make sure that we are at a sequence node */
+    /* if we're not at the bottom and this is not a static node, 
+       then we must be at a sequence node */
+    *node_type_ref = 'q';
+    if( *node_ref == NULL ) {
+        init_sequences_node(node_ref);
+    }
 
-    assert( curr_node_type == 'q' );
-    assert( *node_type_ref == 'q' );
     /* add the sequence to current node */
     *node_ref = add_sequence_to_sequences_node(   
         genome,
@@ -1437,7 +1389,9 @@ add_sequence( struct genome_data* genome,
         num_levels - level,
         genome_loc                  
     );
-
+    int num_sequence_types = 
+        get_num_sequence_types( (sequences_node*) *node_ref );
+    
     /* 
      * check if the current sequence node has too many entries. If it does, 
      * then convert it to a dynamic node. 
@@ -1465,19 +1419,12 @@ add_sequence( struct genome_data* genome,
      *
      */
 
-    int num_sequence_types = 
-        get_num_sequence_types( (sequences_node*) *node_ref );
 
     assert( num_sequence_types <= MAX_SEQ_NODE_ENTRIES );
-    
+        
     while( level < num_levels 
            && num_sequence_types == MAX_SEQ_NODE_ENTRIES )
     {
-        // debug
-        // printf("Level: %i\tSequences Node: %p %p\t%c\n", 
-        //       level, node_type_ref, node_ref, *node_type_ref);
-
-        
         /* Make sure the node is a sequence node */
         assert( 'q' == *node_type_ref );
         
@@ -1490,7 +1437,7 @@ add_sequence( struct genome_data* genome,
             level,
             genome
         );
-
+        
         /* Free the old sequences node */
         free_seqs( (sequences_node*) *node_ref );
         *node_ref = new_node;
@@ -1499,6 +1446,7 @@ add_sequence( struct genome_data* genome,
            break. Otherwise, check to see if we need to convert more 
            sequence nodes*/
         level += 1;
+        
         if( level == num_levels ) 
             break;
         
