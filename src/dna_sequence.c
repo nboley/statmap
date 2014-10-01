@@ -154,7 +154,7 @@ convert_packed_sequence( LETTER_TYPE* seq, char* new_seq, int seq_len )
     {
         /* TODO - MAKE Valgrind not complain */
         LETTER_TYPE letter = seq[(i/LETTER_LEN)];
-        int shift_amt = 2*(i%LETTER_LEN);        
+        int shift_amt = 6 - 2*(i%LETTER_LEN);        
         letter = (letter >> shift_amt);
         letter = letter&3;
         char bp = 0;
@@ -205,7 +205,7 @@ translate_seq(char* seq, int seq_len)
 
     /* Memory check */
     if( result == NULL ) {
-        statmap_log( LOG_FATAL, "Out of memory in translate_seq(). ( this is extremely unlikely unless there is a memory leak )" );
+        statmap_log( LOG_FATAL, "Out of memory in translate_seq(). ( there is probably a memory leak )" );
     }
 
     /*
@@ -266,7 +266,7 @@ translate_seq(char* seq, int seq_len)
              * see above for how we are dealing with phantom bits.
              * TODO optimize this with a macro TODO
              */
-            unsigned short bp_index = LETTER_LEN*index + (LETTER_LEN - 1 - bit_index);
+            unsigned short bp_index = LETTER_LEN*index + bit_index;
             if( bp_index >= seq_len ) {
                 bp = 'A'; 
             } else {
@@ -307,7 +307,7 @@ translate_seq(char* seq, int seq_len)
         /* set the current letter in the array */
         result[index] = current_letter;
     }
-
+    
     return result;
 }
 

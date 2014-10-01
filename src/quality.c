@@ -410,22 +410,24 @@ compute_penalty(
 {
     int i;
     float penalty = 0;
-     
+    
+    assert(seq_length%LETTER_LEN == 0);
     for( i = 0; i < LETTER_LEN; i++ )
     {
         /*
            make sure we haven't run off the string
            (happens if seq_length is not divisible by LETTER_LEN)
         */
-        if( LETTER_LEN*position + i >= seq_length )
-            break;
+        // assert(seq_length%LETTER_LEN == 0);
+        // if( LETTER_LEN*position + i >= seq_length )
+        //    break;
 
         /* 
            add penalty
            NOTE penalty_t float array and LETTER_TYPE must use same encoding
         */
-        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)];  
-
+        penalty += pa[LETTER_LEN*position+i].penalties[(ref >> 6)];
+        
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 
          * reason to continue. We return the current bp index as a hint for 
@@ -437,8 +439,8 @@ compute_penalty(
             return i+1;
         }
 
-        /* Shift the bits down to consider the next basepair */
-        ref = ref >> 2;
+        /* Shift the bits up to consider the next basepair */
+        ref = ref << 2;
     }
 
     return penalty;

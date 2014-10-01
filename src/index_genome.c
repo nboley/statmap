@@ -1476,7 +1476,6 @@ add_sequence( struct genome_data* genome,
     return;
 }
 
-
 int 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
@@ -1592,51 +1591,33 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         {
             /* deal with static node */
             /* TODO - optimize this case */
-            unsigned int letter;
+            int letter = 0;
             /* loop through each potential child */
             for( letter = 0; letter < ALPHABET_LENGTH; letter++ )
             {
+                /*
+                printf("%i\t", letter );
+                print_packed_sequence(&letter, 4);
+                print_bitmap(&letter, 8);
+                */
+                
                 /* if the child is null, keep going */
                 if( ((static_node*) node)[letter].node_ref == NULL )
                     continue;
-
+                                
                 /* this should be optimized out */
-                float penalty_addition = compute_penalty( letter, node_level,
-                        seq_length, min_match_penalty - curr_penalty,
-                        penalties );
-
-                /* if this letter exceeds the max, continue */
+                float penalty_addition = compute_penalty( 
+                    letter, node_level,
+                    seq_length, min_match_penalty - curr_penalty,
+                    penalties );
+                
                 if( penalty_addition > 0.5 ) {
-                    /* FIXME - consider the performace implications of this */
                     int break_index = (int) penalty_addition + 0.5;
-                    if( break_index == 1 ) {
-                        int masked_letter = letter&3;
-                        while( letter < ALPHABET_LENGTH && (letter&3) == masked_letter )
-                            letter++;
-                    }
-                    if( break_index == 2 ) {
-                        int masked_letter = letter&15;
-                        while( letter < ALPHABET_LENGTH && (letter&15) == masked_letter )
-                            letter++;
-                    }
-                    if( break_index == 3 ) {
-                        int masked_letter = letter&63;
-                        while( letter < ALPHABET_LENGTH && (letter&63) == masked_letter )
-                            letter++;
-                    }
+                    letter = letter + (1 << 2*(LETTER_LEN - break_index)) - 1;
                     continue;
-
-                    /* skip forward to the next possible letter */
-                    //int num_to_skip = ( 3 << ( LETTER_LENGTH - ((int)(penalty_addition + 0.5) - 1 ) )
-                    //continue;
                 }
                 /* otherwise, find the penalty on the child function */
                 else {
-                  /* // debugging code
-                    printf("Level: %i\t Node Type: %c\t Letter: %i\tPenalty: %e\n", 
-                           node_level, node_type, letter, curr_penalty + penalty_addition);
-                  */
-
                     /* add this potential match to the stack */
                     stack = add_pmatch( 
                         stack, 
@@ -1653,7 +1634,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         /* deal with dynamic nodes */
         else if( node_type == 'd')
         {
-            /* hopefully this will be optimized out */
+           /* hopefully this will be optimized out */
             int num_children = get_dnode_num_children( node );
             dynamic_node_child* children = get_dnode_children( node );
 
