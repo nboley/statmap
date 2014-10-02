@@ -792,7 +792,7 @@ add_child_to_dynamic_node(
     return node;
 }
 
- void add_child_to_static_node( 
+void add_child_to_static_node( 
     static_node* node,
     LETTER_TYPE bp,
     char child_node_type
@@ -814,6 +814,13 @@ add_child_to_dynamic_node(
         node[bp].node_ref = new_node;
     }
     
+    /* update the hints before this node, which poiunt to the
+       next non-empty slot */
+    int i;
+    for(i = bp-1; i > 0 && node[i].type == '\0'; i--)
+    {
+        node[i].node_ref = bp - i;
+    }
 }
 
 
@@ -823,6 +830,8 @@ void free_node( void* node, char node_type )
 {
     switch( node_type )
     {
+        case '\0':
+            break;
         case 's':
             tree_free( node );
             #ifdef PROFILE_MEMORY_USAGE
@@ -988,7 +997,7 @@ build_static_node_from_sequence_node(  sequences_node* qnode,
         }
         
         /* check to make sure this child exists - if it doesn't, create it*/
-        if( (*snode)[bp].node_ref == NULL ) 
+        if( (*snode)[bp].type == '\0' ) 
         {
             add_child_to_static_node( *snode, bp, child_node_type );
         }
@@ -1350,8 +1359,18 @@ add_sequence( struct genome_data* genome,
          level++ )
     {
         LETTER_TYPE bp = seq[level];
+        /* if thios child slot is empty, then create a new node and break */
+        if( ((static_node*) *node_ref)[bp].type == '\0' )
+        {
+            if( level+1 == num_levels ) {
+                add_child_to_static_node(*node_ref, bp, 'l');
+            } else {
+                add_child_to_static_node(*node_ref, bp, 'q');
+            }
+        }
+        /* move the pointer to the child node */
         node_type_ref = &(((static_node*) *node_ref)[bp].type);
-        node_ref = &(((static_node*) *node_ref)[bp].node_ref);        
+        node_ref = &(((static_node*) *node_ref)[bp].node_ref);
     }
     
     /* 
@@ -1359,14 +1378,8 @@ add_sequence( struct genome_data* genome,
      * so, if we are at the bottom of the tree, this 
      * must be a location node.
      */
-
     if( level == num_levels )
     {
-        /* check to make sure this child exists - if it doesn't, create it*/
-        if( *node_ref == NULL ) {
-            *node_type_ref = 'l';
-            init_locations_node(node_ref);
-        }
         assert(*node_type_ref == 'l');
         *node_ref = add_location_to_locations_node( 
             (locations_node*) *node_ref, genome_loc );
@@ -1375,11 +1388,8 @@ add_sequence( struct genome_data* genome,
 
     /* if we're not at the bottom and this is not a static node, 
        then we must be at a sequence node */
-    *node_type_ref = 'q';
-    if( *node_ref == NULL ) {
-        init_sequences_node(node_ref);
-    }
-
+    assert( *node_type_ref == 'q' );
+    
     /* add the sequence to current node */
     *node_ref = add_sequence_to_sequences_node(   
         genome,
@@ -1459,7 +1469,7 @@ add_sequence( struct genome_data* genome,
         num_sequence_types = 0;
         for(i=0; i < ALPHABET_LENGTH; i++)
         {
-            if( new_node[i].node_ref != NULL 
+            if( new_node[i].type != '\0'
                 && MAX_SEQ_NODE_ENTRIES > get_num_sequence_types( 
                     (sequences_node*) new_node[i].node_ref ) )
             { 
@@ -1602,9 +1612,12 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 */
                 
                 /* if the child is null, keep going */
-                if( ((static_node*) node)[letter].node_ref == NULL )
+                if( ((static_node*) node)[letter].type == '\0' )
+                {
+                    //printf("%i\n", (int) ((static_node*) node)[letter].node_ref);
                     continue;
-                                
+                }
+                
                 /* this should be optimized out */
                 float penalty_addition = compute_penalty( 
                     letter, node_level,
@@ -1851,7 +1864,7 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
     size_t size = 0;
     int i;
 
-    if( node == NULL )
+    if( node == NULL || type == '\0' )
         return 0;
     
     node += index_offset;
@@ -1882,6 +1895,8 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_dnode( node );
+    case '\0':
+        return 0;
     }
 
     statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
@@ -1892,7 +1907,7 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
 size_t
 calc_node_size( NODE_TYPE type, void* node  )
 {
-    if( node == NULL )
+    if( node == NULL || type == '\0')
         return 0;
     
     node += index_offset;
@@ -1909,6 +1924,8 @@ calc_node_size( NODE_TYPE type, void* node  )
         return size_of_snode();
     case 'd':
         return size_of_dnode( node );
+    case '\0':
+        return 0;
     }
 
     statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
@@ -1998,7 +2015,7 @@ add_ODI_stack_item( struct ODI_stack* stack,
      * It's possible for a root node to pass a NULL ptr ( indicating a 
      * non-existent child ). If this happens, do nothing.
      */
-    if( *node_ref == NULL ) return;
+    if( *node_ref == NULL || node_type == '\0' ) return;
 
     stack->size++;
     
