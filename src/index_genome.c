@@ -1614,7 +1614,13 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* if the child is null, keep going */
                 if( ((static_node*) node)[letter].type == '\0' )
                 {
-                    //printf("%i\n", (int) ((static_node*) node)[letter].node_ref);
+                    int next_node_hint = ((static_node*) node)[letter].node_ref;
+                    /* if the hint is 1, then move to the next letter */
+                    if( 1 == next_node_hint ) continue;
+                    /* if the hint is 0, then that means there are no nodes after this */
+                    if( 0 == next_node_hint ) break;
+                    /* if the hint is greater than 1, then we know that we can skip children */
+                    letter += (next_node_hint - 1);
                     continue;
                 }
                 
@@ -1743,7 +1749,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
         }
         /* deal with the sequence nodes */
-        else {
+        else if( node_type == 'q') 
+        {
             assert( node_type == 'q' );
             
             /* keep track of how many rsults we currently have */
