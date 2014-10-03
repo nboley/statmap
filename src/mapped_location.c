@@ -115,7 +115,7 @@ add_new_mapped_location( mapped_locations* results,
      */
     if( results->length == results->allocated_length )
     {
-        results->allocated_length += RESULTS_GROWTH_FACTOR;
+        results->allocated_length *= 2;
         results->locations = realloc(
             results->locations,
             results->allocated_length*sizeof(mapped_location)

@@ -550,7 +550,7 @@ add_pmatch( potential_match_stack* stack,
         clean_pmatch_stack(stack, min_match_penalty);
         int new_start = (PMATCH_STACK_SIZE - pmatch_stack_length(stack))/2;
         if( new_start < 5 )
-            return( -1 );
+            return PMATCH_STACK_OVERRUN;
         
         /* move the stack forward */
         memmove( stack->matches + new_start, /* dst */
@@ -1485,6 +1485,75 @@ add_sequence( struct genome_data* genome,
     return;
 }
 
+int
+search_static_node(
+    potential_match_stack* stack,
+    static_node* node, const int node_level, 
+    enum STRAND strnd, 
+    const int seq_length, const int num_letters,
+    struct penalty_t* penalties, const float curr_penalty, 
+    const float min_match_penalty, const float max_penalty_spread )
+{
+    /* deal with static node */
+    /* TODO - optimize this case */
+    int letter = 0;
+    static_node_child* curr_node = node + 0;
+    /* loop through each potential child - accounting is done inside
+       for performance reasons */
+    while( letter < ALPHABET_LENGTH )
+    {
+        /*
+          printf("%i\t", letter );
+          print_packed_sequence(&letter, 4);
+          print_bitmap(&letter, 8);
+        */
+                
+        /* if the child is null, keep going */
+        if( curr_node->type == '\0' )
+        {
+            /* if ther are no nodes left with children, we are done */
+            if( curr_node->next_child == 0 )
+                return 0;
+            
+            letter += curr_node->next_child;
+            curr_node += curr_node->next_child;
+        } else {
+            /* this should be optimized out */
+            float penalty_addition = compute_penalty( 
+                letter, node_level,
+                seq_length, min_match_penalty - curr_penalty,
+                penalties );
+
+            int break_index = (int) (penalty_addition + 0.5);
+            if( break_index >= 1 ) {
+                letter += (1 << 2*(LETTER_LEN - break_index));
+                curr_node = node + letter;
+            }
+            /* otherwise, find the penalty on the child function */
+            else {
+                /* add this potential match to the stack */
+                int add_pmatch_rv = add_pmatch( 
+                    stack, 
+                    ((static_node*) node)[letter].node_ref,
+                    ((static_node*) node)[letter].type,
+                    strnd,
+                    node_level+1, num_letters, 
+                    curr_penalty + penalty_addition, 
+                    min_match_penalty, max_penalty_spread
+                    );
+                /* if there is an error, we're done */
+                if( add_pmatch_rv != 0 ) 
+                {
+                    return add_pmatch_rv;
+                }
+                letter += 1;
+                curr_node += 1;
+            }
+        }
+    }
+    return 0;
+}
+
 int 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
@@ -1510,7 +1579,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
     /* initialize the stack */
     potential_match_stack stack;
-    int add_pmatch_rv = 0;
     init_pmatch_stack( &stack );
     /* this can never return an error because the stack is empty, so 
        ther is no need to check the return values */
@@ -1595,61 +1663,18 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          */                 
         if( node_type == 's')
         {
-            /* deal with static node */
-            /* TODO - optimize this case */
-            int letter = 0;
-            /* loop through each potential child */
-            for( letter = 0; letter < ALPHABET_LENGTH; letter++ )
+            rv = search_static_node(
+                &stack,
+                node, node_level, 
+                strnd, seq_length, num_letters,
+                penalties, curr_penalty, 
+                min_match_penalty, max_penalty_spread);
+            if( 0 != rv )
             {
-                /*
-                printf("%i\t", letter );
-                print_packed_sequence(&letter, 4);
-                print_bitmap(&letter, 8);
-                */
-                
-                /* if the child is null, keep going */
-                if( ((static_node*) node)[letter].type == '\0' )
-                {
-                    int next_node_hint = ((static_node*) node)[letter].next_child;
-                    /* if the hint is 1, then move to the next letter */
-                    if( 1 == next_node_hint ) continue;
-                    /* if the hint is 0, then that means there are no nodes after this */
-                    if( 0 == next_node_hint ) break;
-                    /* if the hint is greater than 1, then we know that we can skip children */
-                    letter += (next_node_hint - 1);
-                    continue;
-                }
-                
-                /* this should be optimized out */
-                float penalty_addition = compute_penalty( 
-                    letter, node_level,
-                    seq_length, min_match_penalty - curr_penalty,
-                    penalties );
-                
-                if( penalty_addition > 0.5 ) {
-                    int break_index = (int) penalty_addition + 0.5;
-                    letter = letter + (1 << 2*(LETTER_LEN - break_index)) - 1;
-                    continue;
-                }
-                /* otherwise, find the penalty on the child function */
-                else {
-                    /* add this potential match to the stack */
-                    add_pmatch_rv = add_pmatch( 
-                        &stack, 
-                        ((static_node*) node)[letter].node_ref,
-                        ((static_node*) node)[letter].type,
-                        strnd,
-                        node_level+1, num_letters, 
-                        curr_penalty + penalty_addition, 
-                        min_match_penalty, max_penalty_spread
-                    );
-                    if( add_pmatch_rv != 0 ) {
-                        rv = PMATCH_STACK_OVERRUN;
-                        results->length = 0;
-                        goto cleanup;
-                    }
-                }
+                results->length = 0;
+                goto cleanup;
             }
+
         }
         /* If this is a locations node */
         else if( node_type == 'l')
