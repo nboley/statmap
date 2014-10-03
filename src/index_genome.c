@@ -824,7 +824,7 @@ void add_child_to_static_node(
     int i;
     for(i = bp-1; i > 0 && node[i].type == '\0'; i--)
     {
-        node[i].node_ref = bp - i;
+        node[i].next_child = bp - i;
     }
 }
 
@@ -1619,7 +1619,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* if the child is null, keep going */
                 if( ((static_node*) node)[letter].type == '\0' )
                 {
-                    int next_node_hint = ((static_node*) node)[letter].node_ref;
+                    int next_node_hint = ((static_node*) node)[letter].next_child;
                     /* if the hint is 1, then move to the next letter */
                     if( 1 == next_node_hint ) continue;
                     /* if the hint is 0, then that means there are no nodes after this */

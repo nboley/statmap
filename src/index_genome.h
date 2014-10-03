@@ -61,7 +61,10 @@ typedef struct
     /* store the types of the nodes that children points to */ 
     NODE_TYPE type;
     /* pointer to the children array - the form is determined by node_type */
-    void* node_ref;
+    union {
+        void* node_ref;
+        size_t next_child;
+    };
 } static_node_child;
 
 /* static node in the tree */
