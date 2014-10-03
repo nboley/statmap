@@ -237,8 +237,7 @@ search_index(
         struct genome_data* genome,
         struct indexable_subtemplate* ist,
         struct index_search_params* search_params,
-        mapped_locations** results,
-        enum bool only_find_unique_sequence
+        mapped_locations** results
     )
 {
     // reference to index
@@ -296,9 +295,7 @@ search_index(
             subseq_length,
             
             ist->fwd_penalty_array.array,
-            ist->rev_penalty_array.array,
-
-            only_find_unique_sequence
+            ist->rev_penalty_array.array
         );
 
     /* Cleanup memory */
@@ -347,14 +344,17 @@ search_index_for_read_subtemplate(
                 genome,
                 rst->ists->container + i,
                 index_search_params + i,
-                &((*search_results)[i]),
-                false
+                &((*search_results)[i])
             );
         // if the index search returned an error, skip this index probe
         // if there are too many candidate mappings, skip this index probe
         if( rv != 0 
             || (*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)  
         {
+            if(rv == PMATCH_STACK_OVERRUN )
+            {
+                statmap_log( LOG_DEBUG, "Stack overrun error." );
+            }
             free((*search_results)[i]->locations);
             (*search_results)[i]->locations = NULL;
             (*search_results)[i]->length = 0;
@@ -419,20 +419,17 @@ tree_free( void* ptr )
 /******************************************************************************/
 
 void
-init_pmatch_stack( potential_match_stack** stack )
+init_pmatch_stack( potential_match_stack* stack )
 {
-    *stack = malloc( sizeof(potential_match_stack) );
-    (*stack)->first_index = STACK_INITIAL_FIRST_INDEX;
-    (*stack)->last_index = STACK_INITIAL_FIRST_INDEX;
-    (*stack)->allocated_size = STACK_GROWTH_FACTOR;
-    (*stack)->matches = malloc( STACK_GROWTH_FACTOR*sizeof(potential_match) );
+    stack->first_index = PMATCH_STACK_FIRST_INDEX;
+    stack->last_index = PMATCH_STACK_FIRST_INDEX;
+    stack->allocated_size = PMATCH_STACK_SIZE;
 }
 
 void
 free_pmatch_stack( potential_match_stack* stack )
 {
     free( stack->matches );
-    free(stack);
 }
 
 void
@@ -512,19 +509,34 @@ sort_pmatch_stack( potential_match_stack* stack )
 potential_match
 pop_pmatch( potential_match_stack* stack )
 {
-    /* TODO - lock access for thread safety */
     assert( pmatch_stack_length( stack ) > 0 );
     stack->last_index -= 1;
     return *(stack->matches + stack->last_index);
 }
 
-size_t
+int
 pmatch_stack_length( potential_match_stack* pmatch )
 {
-    return (pmatch->last_index - pmatch->first_index);
+    return pmatch->last_index - pmatch->first_index;
 };
 
-potential_match_stack*
+void
+clean_pmatch_stack(potential_match_stack* stack, float min_match_penalty)
+{
+    int new_index = stack->first_index;
+    int i;
+    /* remove all of the items less then the min match penalty */
+    for( i = stack->first_index; i < pmatch_stack_length(stack); i++ )
+    {
+        potential_match curr_item = stack->matches[i];
+        if( curr_item.penalty < min_match_penalty )
+            continue;
+        stack->matches[new_index] = curr_item;
+        new_index++;
+    }
+}
+
+int
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND strnd,
             const int node_level, const int max_num_levels,
@@ -533,42 +545,23 @@ add_pmatch( potential_match_stack* stack,
     /* if necessary, increase the available size */
     // Assert guaranteed by type definition
     // assert( pmatch_stack_length( stack ) >= 0 );
-    if( stack->last_index == stack->allocated_size )
+    if( stack->first_index == 0 || stack->last_index == stack->allocated_size )
     {
-        stack->allocated_size += STACK_GROWTH_FACTOR;
-        stack->matches = realloc( stack->matches, 
-                                  sizeof(potential_match)*
-                                  (stack->allocated_size) 
-        );
-    }
-
-    /* if necessary, shift the stack forward */
-    if( stack->first_index == 0 )
-    {
-        int shift_size = stack->allocated_size;
+        clean_pmatch_stack(stack, min_match_penalty);
+        int new_start = (PMATCH_STACK_SIZE - pmatch_stack_length(stack))/2;
+        if( new_start < 5 )
+            return( -1 );
         
-        /* if there isnt enough room for the shift, realloc */
-        if( pmatch_stack_length(stack) + shift_size
-                >= stack->allocated_size )
-        {
-            stack->allocated_size += shift_size;
-            stack->matches = realloc( stack->matches, 
-                                      sizeof(potential_match)*
-                                      (stack->allocated_size) 
-            );
-            assert( stack->matches != NULL );
-        }
-
         /* move the stack forward */
-        memmove( stack->matches + shift_size, /* dst */
-                 stack->matches /* src */, 
+        memmove( stack->matches + new_start, /* dst */
+                 stack->matches + stack->first_index /* src */, 
                  sizeof(potential_match)*pmatch_stack_length( stack  )  
         );
-        
-        stack->first_index += shift_size;
-        stack->last_index += shift_size;
-    }
+        stack->first_index = new_start;
+        stack->last_index = new_start + pmatch_stack_length(stack);
 
+    }
+    
     assert( pmatch_stack_length(stack) == 0
             || (stack->matches + stack->last_index - 1)->node_type == 'd' 
             || (stack->matches + stack->last_index - 1)->node_type == 's'
@@ -619,7 +612,7 @@ add_pmatch( potential_match_stack* stack,
     new_location->penalty = penalty;
     new_location->scaled_penalty = scaled_penalty;
     
-    return stack;
+    return 0;
 }
 
 /* FIXME - WHERE SHOULD THIS GO */
@@ -1503,13 +1496,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
               struct genome_data* genome,
 
               struct penalty_t* fwd_penalties,
-              struct penalty_t* rev_penalties,
-
-              /*
-                 we pass this flag all the way down to optimize the error data
-                 bootstrap by terminating early on multimappers
-               */
-              enum bool only_find_unique_sequences
+              struct penalty_t* rev_penalties
     )
 {
     // Initialize the return value to 0, for no error
@@ -1522,17 +1509,20 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     float max_penalty_spread = search_params->max_penalty_spread;
 
     /* initialize the stack */
-    potential_match_stack* stack;
+    potential_match_stack stack;
+    int add_pmatch_rv = 0;
     init_pmatch_stack( &stack );
-    stack = add_pmatch( stack, node, node_type, FWD,
-                        node_level, num_letters, 
-                        curr_penalty, 
-                        min_match_penalty, max_penalty_spread );
+    /* this can never return an error because the stack is empty, so 
+       ther is no need to check the return values */
+    add_pmatch( &stack, node, node_type, FWD,
+                node_level, num_letters, 
+                curr_penalty, 
+                min_match_penalty, max_penalty_spread );
 
-    stack = add_pmatch( stack, node, node_type, BKWD,
-                        node_level, num_letters, 
-                        curr_penalty, 
-                        min_match_penalty, max_penalty_spread );
+    add_pmatch( &stack, node, node_type, BKWD,
+                node_level, num_letters, 
+                curr_penalty, 
+                min_match_penalty, max_penalty_spread );
 
     // get current time
     struct timespec start;
@@ -1542,9 +1532,9 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     assert( err == 0 );
     
     int cntr;
-    for(cntr = 0; pmatch_stack_length( stack ) > 0; cntr++ )
+    for(cntr = 0; pmatch_stack_length( &stack ) > 0; cntr++ )
     {
-        potential_match match = pop_pmatch( stack );
+        potential_match match = pop_pmatch( &stack );
         /* check to make sure that this branch is still valid */
         /* avoid rounding errors with the small number - it is your fault
            if you put in a negative number for the max penalty spread */
@@ -1644,8 +1634,8 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 /* otherwise, find the penalty on the child function */
                 else {
                     /* add this potential match to the stack */
-                    stack = add_pmatch( 
-                        stack, 
+                    add_pmatch_rv = add_pmatch( 
+                        &stack, 
                         ((static_node*) node)[letter].node_ref,
                         ((static_node*) node)[letter].type,
                         strnd,
@@ -1653,83 +1643,14 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                         curr_penalty + penalty_addition, 
                         min_match_penalty, max_penalty_spread
                     );
+                    if( add_pmatch_rv != 0 ) {
+                        rv = PMATCH_STACK_OVERRUN;
+                        results->length = 0;
+                        goto cleanup;
+                    }
                 }
             }
         }
-        /* deal with dynamic nodes */
-        else if( node_type == 'd')
-        {
-           /* hopefully this will be optimized out */
-            int num_children = get_dnode_num_children( node );
-            dynamic_node_child* children = get_dnode_children( node );
-
-            int i;
-            /* loop through each potential child */
-            for( i = 0; i < num_children; i++ )
-            {
-                /* this should be optimized out */
-                LETTER_TYPE letter = children[i].letter;
-
-                float penalty_addition = compute_penalty( letter, node_level,
-                        seq_length, min_match_penalty - curr_penalty,
-                        penalties);
-
-                /* 
-                 * If compute_penalty returns a value >= 1
-                 * ( we say > 0.5 to deal with rounding errors )
-                 * then that means that the letter at the level returned,
-                 * minus 1 is the letter that exceeded the penalty. As
-                 * such, since the letters are in sorted order, we dont 
-                 * need to go back to penalty function. Rather, we can keep
-                 * skipping letters until the letter at the returned level
-                 * or any letter above that level changes. The code
-                 * below implements this optimiztion.
-                 */
-                if( penalty_addition > 0.5 ) {
-                    /* FIXME - consider the performace implications of this */
-                    int break_index = (int) penalty_addition + 0.5;
-                    if( break_index == 1 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&3) == 
-                               ((children[i+1].letter)&3)  )
-                        {
-                            i++;
-                        }
-                    } else if( break_index == 2 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&15) == 
-                               ((children[i+1].letter)&15)  )
-                        {
-                            i++;
-                        }
-                    } else if( break_index == 3 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&63) == 
-                               ((children[i+1].letter)&63)  )
-                        {
-                            i++;
-                        }
-                    } 
-
-                    continue;
-                }
-                /* otherwise, find the penalty on the child function */
-                else {
-                  /* debugging code
-                    printf("Level: %i\t Node Type: %c\t Letter: %i\tPenalty: %e\n", 
-                           node_level, node_type, letter, curr_penalty + penalty_addition);
-                  */
-                    stack = add_pmatch( stack, 
-                                children[i].node_ref,
-                                children[i].type,
-                                strnd,
-                                node_level+1, num_letters, 
-                                curr_penalty + penalty_addition,
-                                min_match_penalty, max_penalty_spread
-                    );
-                }
-            }
-        } 
         /* If this is a locations node */
         else if( node_type == 'l')
         {
@@ -1759,46 +1680,20 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         {
             assert( node_type == 'q' );
             
-            /* keep track of how many rsults we currently have */
-            int old_results_len = results->length;
-            
             /* debugging
             printf("Level: %i\t Node Type: %c\t\t\tPenalty: %e\n", 
                    node_level, node_type, curr_penalty );
             */
             float max_added_penalty = 
-            find_sequences_in_sequences_node( 
-                node, 
-                curr_penalty, min_match_penalty,
-                seq_length, num_letters, node_level, strnd,
-                results,
-                penalties,
-                genome
-            );            
-            
-            /* 
-               If we are only looking for unique sequences,
-               and we have already found some locations, then 
-               finding more locations implies that we have 
-               found some differing sequence ( because we know that
-               each node stores identical sequence ). This is not
-               to say that there are not non-identical sequence 
-               within results already, but adding any more will 
-               certainly be different. Thus, we set the results length
-               to 0 and continue. 
-             */
-            if( only_find_unique_sequences 
-                && old_results_len > 0 
-                && results->length > old_results_len )
-            {
-                /* we can set this to zero and not worry about
-                   a memory leak because the allocated length
-                   will still be non-zero, so we can clean this
-                   up properly */
-                results->length = 0;
-                goto cleanup;
-            }
-            
+                find_sequences_in_sequences_node( 
+                    node, 
+                    curr_penalty, min_match_penalty,
+                    seq_length, num_letters, node_level, strnd,
+                    results,
+                    penalties,
+                    genome
+                );            
+                        
             // DEBUG
             //fprintf( stderr, "max_added_penalty: %f\n", max_added_penalty);
 
@@ -1821,7 +1716,6 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     }
 
 cleanup:
-    free_pmatch_stack( stack );
     return rv;
 }
 
@@ -1839,9 +1733,7 @@ find_matches_from_root(
         const int read_len,
         
         struct penalty_t* fwd_penalties,
-        struct penalty_t* rev_penalties,
-
-        enum bool only_find_unique_sequences
+        struct penalty_t* rev_penalties
 )
 {
     assert( index->index_type == TREE );
@@ -1859,9 +1751,7 @@ find_matches_from_root(
                          genome,
                          
                          fwd_penalties,
-                         rev_penalties,
-
-                         only_find_unique_sequences ); 
+                         rev_penalties);
 }
 
 size_t

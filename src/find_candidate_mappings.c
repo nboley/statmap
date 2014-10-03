@@ -288,68 +288,6 @@ build_ungapped_candidate_mapping_from_mapped_location(
     return mapping;
 };
 
-candidate_mappings*
-build_candidate_mappings_from_search_results_OLD(
-        mapped_locations** search_results,
-        struct read_subtemplate* rst,
-        struct genome_data* genome,
-        struct mapping_params* mapping_params )
-{
-    // silence compiler warning
-    assert( NULL != mapping_params );
-    
-    candidate_mappings* mappings = NULL;
-    init_candidate_mappings( &mappings );
-
-    /* sort each mapped_locations in order to use optimized merge algorithm */
-    sort_search_results( search_results );
-    
-    /* consider each base location */
-    int index_probe_i, i, j;
-    for( index_probe_i = 0; 
-         search_results[index_probe_i] != NULL; 
-         index_probe_i++ )
-    {
-        /* Always use the mapped locations from the first indexable subtemplate
-         * as the basis for building matches across the whole read subtemplate.
-         * We always build matches from 5' -> 3' */
-        mapped_locations* locs = search_results[index_probe_i];
-        
-        for( i = 0; i < locs->length; i++ )
-        {
-            mapped_location* loc = locs->locations + i;
-
-            /* If the loc is a pseudo location, build a set of all its
-             * possible expansions to consider for matching. Otherwise, returns
-             * the original location */
-            mapped_locations* expanded_locs = expand_base_mapped_locations(
-                loc, locs->probe, genome );
-            
-            /* match across each of the expanded locations */
-            for( j = 0; j < expanded_locs->length; j++ )
-            {
-                struct ml_match* match = NULL;
-                init_ml_match( &match, 1 );
-                add_location_to_ml_match( expanded_locs->locations + j, 
-                                          match, 
-                                          expanded_locs->probe->subseq_length,
-                                          expanded_locs->probe->subseq_offset);
-                candidate_mapping* mapping = 
-                    build_candidate_mapping_from_match(match, rst, genome );
-                if( NULL != mapping ) 
-                {
-                    add_candidate_mapping(mappings, mapping);
-                    free(mapping);
-                }
-                free_ml_match(match);
-            }
-        
-            free_mapped_locations( expanded_locs );
-        }
-    }
-
-    return mappings;
-}
 
 int
 compare_index_probes(mapped_location* loc1, 

@@ -140,9 +140,6 @@ size_of_snode( );
  * potential matches.
  */
 
-#define STACK_GROWTH_FACTOR 1000
-#define STACK_INITIAL_FIRST_INDEX 500
-
 typedef struct {
     void* node;
     NODE_TYPE node_type;
@@ -152,24 +149,29 @@ typedef struct {
     enum STRAND strnd;
 } potential_match;
 
+// allocate 1 MB for the pmatch stack
+#define PMATCH_STACK_SIZE 20000
+#define PMATCH_STACK_FIRST_INDEX 10000
+
 typedef struct {
     size_t first_index; /* inclusive */
     size_t last_index;  /* exclusive */
     /* so if first = last index, then the stack is empty */
     size_t allocated_size;
-    potential_match* matches;
+    potential_match matches[PMATCH_STACK_SIZE];
 } potential_match_stack;
 
+
 void
-init_pmatch_stack( potential_match_stack** stack );
+init_pmatch_stack( potential_match_stack* stack );
 
 void
 free_pmatch_stack( potential_match_stack* stack );
 
-size_t
+int
 pmatch_stack_length( potential_match_stack* pmatch );
 
- potential_match_stack*
+int
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND stnd,
             const int node_level, const int max_num_levels,
@@ -269,9 +271,7 @@ find_matches_from_root(
         const int read_len,
         
         struct penalty_t* fwd_penalties,
-        struct penalty_t* rev_penalties,
-
-        enum bool only_find_unique_sequences );
+        struct penalty_t* rev_penalties );
 
 size_t
 size_of_snode( );

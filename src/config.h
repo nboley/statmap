@@ -107,6 +107,7 @@
 #define TOO_MANY_CANDIDATE_MAPPINGS_ERROR 2
 #define INDEX_SEARCH_TOOK_TOO_LONG_ERROR 3
 #define NOT_ENOUGH_VALID_INDEX_PROBES_ERROR 4
+#define PMATCH_STACK_OVERRUN 5
 
 /**** set global constantsa for maximum read length, etc.       ****/
 
