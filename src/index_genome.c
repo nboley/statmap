@@ -188,12 +188,10 @@ build_indexable_subtemplates_from_read_subtemplate(
     /* for now, try to build the maximum number of indexable subtemplates up to
      * a maximum */
     int num_partitions;
-    // If we are just collecting error data
     if( use_random_subtemplate_offset )
     {
-        num_partitions = 1;
-    }
-    else if( _assay_type == RNA_SEQ ) {
+        num_partitions = 10;
+    } else if( _assay_type == RNA_SEQ ) {
         /* for RNA-seq, always use two probes at either end of the read so we
          * can maximize the space for finding introns */
         num_partitions = 2;
@@ -201,15 +199,21 @@ build_indexable_subtemplates_from_read_subtemplate(
         num_partitions = MIN( indexable_length / subseq_length,
                               MAX_NUM_INDEX_PROBES );        
     }
-    int partition_len = floor((float)indexable_length / num_partitions);
     
     int i;
     for( i = 0; i < num_partitions; i++ )
     {
         struct indexable_subtemplate* ist = NULL;
 
-        int partition_start = softclip_len + i * partition_len;
+        int partition_start, partition_len;
+        if( use_random_subtemplate_offset ) {
+            partition_start = 0;
+            partition_len = indexable_length;
 
+        } else {
+            partition_len = floor((float)indexable_length / num_partitions);
+            partition_start = softclip_len + i * partition_len;
+        }
         /* partition the read into equal sized sections and try to find the
          * best subsequence within each section to use as an index probe */
         ist = build_indexable_subtemplate( 
