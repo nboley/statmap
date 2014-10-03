@@ -36,7 +36,7 @@ statmap: $(src_objects)
 statmap.so : $(src_objects)
 	$(CC) $(CFLAGS) \
 	-fpic -shared -Wl,-soname,libstatmap.so.1 -o src/libstatmap.so \
-	-lprofiler -L/usr/lib/R/lib -lR \
+	-lprofiler -ltcmalloc -L/usr/lib/R/lib -lR \
 	$(wildcard src/*.c) $(RLIB)
 
 ### the 'utilities' subdirectory
