@@ -142,7 +142,7 @@ build_indexable_subtemplate(
     } else {
         if( choose_random_offset ) {
             subseq_offset = range_start + rand()%(
-                range_length - subseq_length + 1);
+                range_length - subseq_length);
             assert( subseq_offset >= range_start );
         } else {
             subseq_offset = find_optimal_subseq_offset(
@@ -188,10 +188,7 @@ build_indexable_subtemplates_from_read_subtemplate(
     /* for now, try to build the maximum number of indexable subtemplates up to
      * a maximum */
     int num_partitions;
-    if( use_random_subtemplate_offset )
-    {
-        num_partitions = 10;
-    } else if( _assay_type == RNA_SEQ ) {
+    if( _assay_type == RNA_SEQ ) {
         /* for RNA-seq, always use two probes at either end of the read so we
          * can maximize the space for finding introns */
         num_partitions = 2;
