@@ -142,7 +142,7 @@ build_indexable_subtemplate(
     } else {
         if( choose_random_offset ) {
             subseq_offset = range_start + rand()%(
-                range_length - subseq_length);
+                range_length - subseq_length + 1);
             assert( subseq_offset >= range_start );
         } else {
             subseq_offset = find_optimal_subseq_offset(
@@ -810,7 +810,7 @@ void add_child_to_static_node(
     /* update the hints before this node, which poiunt to the
        next non-empty slot */
     int i;
-    for(i = bp-1; i > 0 && node[i].type == '\0'; i--)
+    for(i = bp-1; i >= 0 && node[i].type == '\0'; i--)
     {
         node[i].next_child = bp - i;
     }
