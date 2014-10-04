@@ -253,9 +253,9 @@ search_index(
 
     /* Store a copy of the read */
     /* This read has N's replaced with A's, and might be RC'd */
-    char* sub_read = calloc(subseq_length + 1, sizeof(char));
-    assert( sub_read != NULL );
-    /* note that the NULL ending is pre-set from the calloc */
+    char sub_read[MAX_READ_LEN];
+    sub_read[subseq_length] = '\0';
+
     memcpy( sub_read, ist->char_seq,
             sizeof(char)*(subseq_length) );
     replace_ns_inplace( sub_read, subseq_length );
@@ -266,21 +266,16 @@ search_index(
     fwd_seq = translate_seq( sub_read, subseq_length );
     /* If we couldnt translate it */
     if( fwd_seq == NULL )
-    {
-        // fprintf(stderr, "Could Not Translate: %s\n", st->char_seq);
         return -1;
-    }
-    assert( fwd_seq != NULL );
     
     /** Deal with the read on the opposite strand */
     LETTER_TYPE *bkwd_seq;
-    char* tmp_read = calloc(subseq_length + 1, sizeof(char));
+    char tmp_read[MAX_READ_LEN];
+    tmp_read[subseq_length] = '\0';
     rev_complement_read( sub_read, tmp_read, subseq_length );
-    free( sub_read );
     
     bkwd_seq = translate_seq( tmp_read, subseq_length );
     assert( bkwd_seq != NULL );
-    free( tmp_read );
     
     /* search the index */
     int rv = find_matches_from_root(
@@ -351,10 +346,9 @@ search_index_for_read_subtemplate(
         if( rv != 0 
             || (*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)  
         {
-            if(rv == PMATCH_STACK_OVERRUN )
-            {
-                statmap_log( LOG_DEBUG, "Stack overrun error." );
-            }
+            statmap_log( LOG_DEBUG, 
+                         "Could not search index for subtemplate %i - error code %i",
+                         i, rv);
             free((*search_results)[i]->locations);
             (*search_results)[i]->locations = NULL;
             (*search_results)[i]->length = 0;
