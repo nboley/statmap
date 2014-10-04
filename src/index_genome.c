@@ -421,8 +421,8 @@ tree_free( void* ptr )
 void
 init_pmatch_stack( potential_match_stack* stack )
 {
-    stack->first_index = PMATCH_STACK_FIRST_INDEX;
-    stack->last_index = PMATCH_STACK_FIRST_INDEX;
+    stack->first_index = 0;
+    stack->last_index = 0;
     stack->allocated_size = PMATCH_STACK_SIZE;
 }
 
@@ -545,21 +545,13 @@ add_pmatch( potential_match_stack* stack,
     /* if necessary, increase the available size */
     // Assert guaranteed by type definition
     // assert( pmatch_stack_length( stack ) >= 0 );
-    if( stack->first_index == 0 || stack->last_index == stack->allocated_size )
+    // if( stack->first_index == 0 || stack->last_index == stack->allocated_size )
+    if( stack->last_index == stack->allocated_size )
     {
         clean_pmatch_stack(stack, min_match_penalty);
-        int new_start = (PMATCH_STACK_SIZE - pmatch_stack_length(stack))/2;
-        if( new_start < 5 )
-            return PMATCH_STACK_OVERRUN;
-        
-        /* move the stack forward */
-        memmove( stack->matches + new_start, /* dst */
-                 stack->matches + stack->first_index /* src */, 
-                 sizeof(potential_match)*pmatch_stack_length( stack  )  
-        );
-        stack->first_index = new_start;
-        stack->last_index = new_start + pmatch_stack_length(stack);
-
+        stack->last_index = pmatch_stack_length(stack);
+        if( stack->allocated_size - stack->last_index < 5 )
+            return PMATCH_STACK_OVERRUN;        
     }
     
     assert( pmatch_stack_length(stack) == 0
@@ -575,42 +567,16 @@ add_pmatch( potential_match_stack* stack,
      * this to the top.
      */
 
-    potential_match* new_location = NULL;
-    float scaled_penalty;
-    scaled_penalty 
-        = scale_penalty( penalty, node_level, max_num_levels, 
-                         min_match_penalty, max_penalty_diff  );
+    potential_match* new_location = stack->matches + stack->last_index;
+    stack->last_index += 1;
 
-    /* if the stack is currently empty */
-    if( pmatch_stack_length(stack) == 0 )
-    {
-        new_location = stack->matches + stack->last_index;
-        stack->last_index += 1;
-    } else {
-        float top_scaled_penalty 
-            = (stack->matches + stack->last_index - 1)->scaled_penalty;
-                
-        if( scaled_penalty > top_scaled_penalty
-            && scaled_penalty > min_match_penalty     ) 
-        {
-            /* add this to the top */
-            new_location = stack->matches + stack->last_index;
-            stack->last_index += 1;
-        } else {
-            /* add to the bottom */
-            new_location = stack->matches + stack->first_index - 1;
-            stack->first_index -= 1;
-        }
-    }
-
-    assert( new_location != NULL );
     /* add the match to the set location */
     new_location->node = (void*) node;
     new_location->node_type = node_type;
     new_location->node_level = node_level;
     new_location->strnd = strnd;
     new_location->penalty = penalty;
-    new_location->scaled_penalty = scaled_penalty;
+    new_location->scaled_penalty = 0;
     
     return 0;
 }
