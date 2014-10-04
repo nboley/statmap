@@ -322,14 +322,15 @@ get_mismatch_probability( struct penalty_t* penalty_array )
 }
 
 
-double*
+void
 calc_penalty_dist_moments( 
-    struct penalty_array_t* penalty_array, int num_moments)
+    struct penalty_array_t* penalty_array, 
+    double *moments,
+    int num_moments)
 {
     /* Unused - assert added to prevent compiler warning (for now) */
     assert( num_moments == 2 );
     
-    double *moments = calloc(sizeof(double), num_moments);
     double mean = 0;
     double var = 0;
     
@@ -352,7 +353,7 @@ calc_penalty_dist_moments(
     moments[0] = mean;
     moments[1] = var;
     
-    return moments;
+    return;
 }
 
 /* Separate penalty mean calculation from below so we can log independently of
@@ -703,26 +704,23 @@ init_mapping_params_for_read(
     else {
         assert( metaparams->error_model_type == ESTIMATED );
         
-        double mean = 0; 
-        double variance = 0; 
-        
+        double mean=0;
+        double variance=0; 
         for( i = 0; i < r->num_subtemplates; i++ )
         {
-            double* fwd_moments = calc_penalty_dist_moments(
-                p->fwd_penalty_arrays[i], 2);
-            double* rev_moments = calc_penalty_dist_moments(
-                p->rev_penalty_arrays[i], 2);
+            double fwd_moments[2], rev_moments[2];
+            calc_penalty_dist_moments(p->fwd_penalty_arrays[i], fwd_moments, 2);
+            calc_penalty_dist_moments(p->rev_penalty_arrays[i], rev_moments, 2);
             
             mean += MIN(fwd_moments[0], rev_moments[0]);
             variance += MAX(fwd_moments[1], rev_moments[1]);
-            free(fwd_moments);
-            free(rev_moments);
         }
 
         double shape = mean*mean/variance;        
         double scale = -variance/mean;
         
-        // Allow for one additional high quality mismatch, for the continuity error
+        // Allow for one additional high quality mismatch, for the 
+        // continuity error
         double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, 
                                        shape, scale, 1, 0) - 2.1;
         p->recheck_min_match_penalty = min_match_prb;
@@ -748,7 +746,8 @@ init_index_search_params(
         struct indexable_subtemplates* ists,
         struct mapping_params* mapping_params )
 {
-    /* Allocate an array of index_search_params structs, one for each index probe */
+    /* Allocate an array of index_search_params structs, 
+       one for each index probe */
     struct index_search_params *isp
         = malloc(sizeof(struct index_search_params)*ists->length);
 
@@ -776,28 +775,26 @@ init_index_search_params(
             min_match_penalty = -ceil(
                 qbinom(adj_p, ist->subseq_length, max_mm_rate, 0, 0));
             max_penalty_spread = ceil(
-                qbinom(adj_p, ist->subseq_length, max_mm_spread, 0, 0));            
+                qbinom(adj_p, ist->subseq_length, max_mm_spread, 0, 0));
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
             
             //float scaling_factor = ((double)ist->subseq_length )
             //    /mapping_params->total_read_length;
-            double* fwd_moments = calc_penalty_dist_moments(
-                &(ist->fwd_penalty_array), 2);
-            double* rev_moments = calc_penalty_dist_moments(
-                &(ist->rev_penalty_array), 2);
+            double fwd_moments[2], rev_moments[2];
+            calc_penalty_dist_moments(&(ist->fwd_penalty_array), fwd_moments,2);
+            calc_penalty_dist_moments(&(ist->rev_penalty_array), rev_moments,2);
+            
             double mean = MIN(fwd_moments[0], rev_moments[0]);
             double variance = MAX(fwd_moments[1], rev_moments[1]);
-            free(fwd_moments);
-            free(rev_moments);
-
             double shape = mean*mean/variance;        
             double scale = -variance/mean;
 
             // Adjust the p-value so that the mismatch rate is based 
             // upon every search missing
-            double adj_p = exp(log(1-DEFAULT_ESTIMATED_ERROR_METAPARAMETER)/ists->length);
-            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0) - 1e-3;
+            double adj_p = exp(
+                log(1-DEFAULT_ESTIMATED_ERROR_METAPARAMETER)/ists->length);
+            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0) - 2.1;
             
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
