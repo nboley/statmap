@@ -110,7 +110,7 @@ struct ml_match {
 };
 
 void
-init_ml_match( struct ml_match** match, int match_len );
+init_ml_match( struct ml_match** mlm, int match_len );
 
 struct ml_match*
 copy_ml_match( struct ml_match* match );

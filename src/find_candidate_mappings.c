@@ -277,7 +277,7 @@ build_ungapped_candidate_mapping_from_mapped_location(
     struct indexable_subtemplate* ist,
     struct genome_data* genome) 
 {
-    struct ml_match* match = NULL;
+    struct ml_match* match;
     init_ml_match( &match, 1 );
     add_location_to_ml_match(ml, match, ist->subseq_length, ist->subseq_offset);
     int rv = build_candidate_mapping_from_match(
@@ -334,9 +334,16 @@ build_candidate_mappings_from_search_results(
         probe_lengths[i] = search_results[i]->probe->subseq_length;
         curr_loc_indices[i]=0; ;
     }
+    
+    struct ml_match* mlm;
+    init_ml_match( &mlm, MAX_NUM_INDEX_PROBES);
 
     while( true )
     {
+        /* reset the ml match - this is jsut to avoid unnecessary 
+           memory allocations */
+        reset_ml_match(mlm);
+
         /*** increment the probe index ***/
         /* find the probe location with the smallest start position */
         int curr_probe_index = -1;
@@ -369,12 +376,10 @@ build_candidate_mappings_from_search_results(
                                         
         /* initialize the match structure, and add the first match, and 
            increment the current match point */
-        struct ml_match* match = NULL;
-        init_ml_match( &match, num_probes );
         add_location_to_ml_match(
             search_results[curr_probe_index]->locations 
                 + curr_loc_indices[curr_probe_index], 
-            match, 
+            mlm, 
             probe_lengths[curr_probe_index], 
             probe_offsets[curr_probe_index]);
         
@@ -410,7 +415,7 @@ build_candidate_mappings_from_search_results(
                 add_location_to_ml_match(
                     search_results[i]->locations 
                         + curr_loc_indices[i], 
-                    match, 
+                    mlm, 
                     probe_lengths[i], 
                     probe_offsets[i]);
                 /*increment the probe ndex, moving past any pseudo chromosomes*/
@@ -427,13 +432,13 @@ build_candidate_mappings_from_search_results(
         
         candidate_mapping mapping;
         if( true == build_candidate_mapping_from_match(
-                &mapping, match, rst, genome )  ) 
+                &mapping, mlm, rst, genome )  ) 
         {
             add_candidate_mapping(mappings, &mapping);
-        }
-        free_ml_match(match);
-        
+        }        
     }
+    
+    free_ml_match(mlm);
     
     return 0;
 }
