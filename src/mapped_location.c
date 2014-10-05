@@ -295,7 +295,7 @@ void
 init_ml_match( struct ml_match** match, int match_len )
 {
     *match = malloc( sizeof( struct ml_match ));
-
+    
     /* Note - the length of the arrays will always be equal to the number of
      * indexable subtemplates, since we must be able to match across all of the
      * indexable subtemplates for a valid match. */

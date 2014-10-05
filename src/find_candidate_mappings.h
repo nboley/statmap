@@ -35,9 +35,10 @@ struct single_map_thread_data {
 void*
 find_candidate_mappings( void* params );
 
-candidate_mapping* 
+enum bool
 build_ungapped_candidate_mapping_from_mapped_location(
     mapped_location* ml, 
+    candidate_mapping* mapping,
     struct read_subtemplate* rst,
     struct indexable_subtemplate* ist,
     struct genome_data* genome

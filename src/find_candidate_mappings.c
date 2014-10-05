@@ -210,15 +210,13 @@ compute_candidate_mapping_penalty_from_match(
     return cum_penalty;
 }
 
-candidate_mapping*
+enum bool
 build_candidate_mapping_from_match(
-        struct ml_match* match,
-        struct read_subtemplate* rst,
-        struct genome_data* genome )
+    candidate_mapping* cm,
+    struct ml_match* match,
+    struct read_subtemplate* rst,
+    struct genome_data* genome )
 {
-    candidate_mapping* cm;
-    cm = calloc( sizeof(candidate_mapping), 1 );
-
     mapped_location* base = match->locations + 0;
     cm->chr = base->chr;
     cm->rd_strnd = base->strnd;
@@ -260,8 +258,7 @@ build_candidate_mapping_from_match(
     // the read location was invalid; skip this matched set
     if( read_location < 0 ) 
     {
-        free(cm);
-        return NULL;
+        return false;
     }
     cm->start_bp = read_location;
     
@@ -269,12 +266,13 @@ build_candidate_mapping_from_match(
 
     cm->penalty = calc_candidate_mapping_penalty( cm, rst, genome );
 
-    return cm;
+    return true;
 }
 
-candidate_mapping* 
+enum bool
 build_ungapped_candidate_mapping_from_mapped_location(
     mapped_location* ml, 
+    candidate_mapping* mapping,
     struct read_subtemplate* rst,
     struct indexable_subtemplate* ist,
     struct genome_data* genome) 
@@ -282,10 +280,10 @@ build_ungapped_candidate_mapping_from_mapped_location(
     struct ml_match* match = NULL;
     init_ml_match( &match, 1 );
     add_location_to_ml_match(ml, match, ist->subseq_length, ist->subseq_offset);
-    candidate_mapping* mapping = build_candidate_mapping_from_match(
-        match, rst, genome );
+    int rv = build_candidate_mapping_from_match(
+        mapping, match, rst, genome );
     free_ml_match(match);
-    return mapping;
+    return rv;
 };
 
 
@@ -427,12 +425,11 @@ build_candidate_mappings_from_search_results(
         /* increment the index for the base match */
         curr_loc_indices[curr_probe_index] += 1;
         
-        candidate_mapping* mapping = 
-            build_candidate_mapping_from_match(match, rst, genome );
-        if( NULL != mapping ) 
+        candidate_mapping mapping;
+        if( true == build_candidate_mapping_from_match(
+                &mapping, match, rst, genome )  ) 
         {
-            add_candidate_mapping(mappings, mapping);
-            free(mapping);
+            add_candidate_mapping(mappings, &mapping);
         }
         free_ml_match(match);
         
