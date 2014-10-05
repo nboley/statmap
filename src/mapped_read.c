@@ -359,27 +359,26 @@ free_mapped_read_index( mapped_read_index* index )
 
 void
 join_candidate_mappings_for_single_end( candidate_mappings* mappings, 
-                                        candidate_mapping*** joined_mappings, 
-                                        float** penalties,
+                                        candidate_mapping** joined_mappings, 
+                                        float* penalties,
                                         int* joined_mappings_len )
 {
     /* Allocate memory */
     /* For the single end case, there are N potential mappings. Allocate N*2
      * pointers for the NULL delimiters */
-    *joined_mappings = malloc( sizeof(candidate_mapping*) * mappings->length * 2 );
-    *penalties = malloc( sizeof(float) * mappings->length );
 
     int i;
+    assert( mappings->length < MAX_NUM_CAND_MAPPINGS );
     for( i = 0; i < mappings->length; i++ )
     {
         /* second to last pointer is the pointer to the current candidate
          * mapping */
-        (*joined_mappings)[(i+1)*2-2] = mappings->mappings + i;
+        joined_mappings[(i+1)*2-2] = mappings->mappings + i;
         /* last pointer is NULL pointer indicating the end of this set of
          * joined candidate mappings */
-        (*joined_mappings)[(i+1)*2-1] = NULL;
+        joined_mappings[(i+1)*2-1] = NULL;
 
-        (*penalties)[i] = mappings->mappings[i].penalty;
+        penalties[i] = mappings->mappings[i].penalty;
     }
 
     *joined_mappings_len = mappings->length;
@@ -390,8 +389,8 @@ join_candidate_mappings_for_single_end( candidate_mappings* mappings,
 void
 join_candidate_mappings_for_paired_end( candidate_mappings* mappings, 
                                         struct read* r,
-                                        candidate_mapping*** joined_mappings, 
-                                        float** penalties,
+                                        candidate_mapping** joined_mappings, 
+                                        float* penalties,
                                         int* joined_mappings_len )
 {
     int pair_1_start = 0;
@@ -424,13 +423,8 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
      * For each set of joined mappings, we need
      * to allocate 3 pointers - one for the first mapping, one for the second
      * mapping, and one for the NULL delimiter. */
-    const int allcd_step_size = 100;
-    int allcd_size = allcd_step_size;
-    *joined_mappings = malloc(
-            sizeof(candidate_mapping*) * (allcd_size*3));
-    *penalties = malloc( sizeof(float) * allcd_size );
-
-    int num_joined_mappings = 0;
+    
+    *joined_mappings_len = 0;
     for( i = pair_1_start; i < pair_2_start; i++ )
     {
         int j;
@@ -459,63 +453,41 @@ join_candidate_mappings_for_paired_end( candidate_mappings* mappings,
             if( frag_len > r->prior.max_fragment_length )
                 continue;
             
+            /* Update the array indices */
+            if( *joined_mappings_len > MAX_NUM_CAND_MAPPINGS )
+                return;
+            
             /* third to last pointer is 1st candidate mapping */
-            (*joined_mappings)[3*num_joined_mappings] = pair_1_mapping;
+            joined_mappings[3*(*joined_mappings_len)] = pair_1_mapping;
 
             /* second to last pointer is 2nd candidate mapping */
-            (*joined_mappings)[3*num_joined_mappings + 1] = pair_2_mapping;
+            joined_mappings[3*(*joined_mappings_len) + 1] = pair_2_mapping;
 
             /* last pointer is NULL pointer indicating the end of this set of
              * joined candidate mappings */
-            (*joined_mappings)[3*num_joined_mappings + 2] = NULL;
+            joined_mappings[3*(*joined_mappings_len) + 2] = NULL;
 
             /* add the penalty for this (joined) candidate mapping. Simply
              * add the penalties from both candidate mappings (since these are
              * log probabilities, adding is equivalent to the product of the
              * marginal probabilities) */
-            (*penalties)[num_joined_mappings]
+            penalties[*joined_mappings_len]
                 = pair_1_mapping->penalty
                 + pair_2_mapping->penalty;
 
-            /* After we've used this as an index, make it a count */
-            num_joined_mappings += 1;
-            
-            /* Update the array indices */
-            if( num_joined_mappings > MAX_NUM_CAND_MAPPINGS )
-                goto cleanup;
-
-            if( num_joined_mappings == allcd_size )
-            {
-                allcd_size += allcd_step_size;
-                *joined_mappings = realloc( 
-                    *joined_mappings, 
-                    sizeof(candidate_mapping*)*(allcd_size*3)
-                );
-                *penalties = realloc( *penalties, sizeof(float)*allcd_size );
-            }
+            /* increment the joined mappings count */
+            *joined_mappings_len += 1;
         }
     }
-
-cleanup:
     
-    /* recalim unused memory */
-    *joined_mappings = realloc( 
-        *joined_mappings, 
-        sizeof(candidate_mapping*)*(num_joined_mappings*3)
-    );
-    *penalties = realloc( *penalties, sizeof(float)*num_joined_mappings );
-
-
-    *joined_mappings_len = num_joined_mappings;
-
     return;
 }
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
                          struct read* r,
-                         candidate_mapping*** joined_mappings, 
-                         float** penalties,
+                         candidate_mapping** joined_mappings, 
+                         float* penalties,
                          int* joined_mappings_len )
 {
     /* joined_mappings is a list of pointers to candidate_mappings. Each
@@ -539,9 +511,11 @@ join_candidate_mappings( candidate_mappings* mappings,
                                                 penalties,
                                                 joined_mappings_len );
     } else {
-        statmap_log(LOG_FATAL, "Only 2 or less subtempaltes are currently supported in candidate read joining.");
+        statmap_log(
+            LOG_FATAL, 
+            "Only 2 or less subtemplates are currently supported.");
     }
-
+    
     return;
 }
 
@@ -701,13 +675,13 @@ recheck_joined_candidate_mappings(
 
 void
 advance_pointer_to_start_of_next_joined_candidate_mappings(
-        candidate_mapping*** current_mapping,
+        candidate_mapping** current_mapping,
         int current_set_index,
         int num_sets )
 {
     /* skip the rest of the candidate_mappings in the current group */
-    while( **current_mapping != NULL )
-        (*current_mapping)++;
+    while( *current_mapping != NULL )
+        current_mapping++;
 
     /* unless we know we're in the last set of joined candidate mappings,
      * move to the pointer to the start of the next set. This check avoids
@@ -716,8 +690,8 @@ advance_pointer_to_start_of_next_joined_candidate_mappings(
     {
         /* skip any NULL markers until we get to the start of the next set of
          * candidate_mappings */
-        while( **current_mapping == NULL )
-            (*current_mapping)++;
+        while( *current_mapping == NULL )
+            current_mapping++;
     }
 }
 
@@ -740,43 +714,28 @@ remove_candidate_mapping_group(
 
 void
 filter_joined_mapping_penalties( 
-    float** joined_mapping_penalties, int joined_mappings_len )
+    float* joined_mapping_penalties, int joined_mappings_len )
 {
-    /* Rewrite the penalties array with just the penalties from the filtered
-     * mappings */
+    /* Shift the joined penalties forward */
     int num_filtered_penalties = 0;
-
     int i;
     for( i = 0; i < joined_mappings_len; i++ )
     {
-        if( (*joined_mapping_penalties)[i] != 1 ) {
+        if( joined_mapping_penalties[i] != 1 )
+        {
+            joined_mapping_penalties[num_filtered_penalties] 
+                = joined_mapping_penalties[i];
             num_filtered_penalties++;
         }
     }
-
-    float* filtered_penalties = malloc( sizeof(float)*num_filtered_penalties );
-    int fp_index = 0;
-    for( i = 0; i < joined_mappings_len; i++ )
-    {
-        if( (*joined_mapping_penalties)[i] != 1 )
-        {
-            filtered_penalties[fp_index] = (*joined_mapping_penalties)[i];
-            fp_index++;
-        }
-    }
-
-    /* Free the original penalties array and replace it with a pointer to the
-     * new, filtered penalties array */
-    free( *joined_mapping_penalties );
-    *joined_mapping_penalties = filtered_penalties;
-
+    
     return;
 }
 
-void
-filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
-                                  float** joined_mapping_penalties,
-                                  int* joined_mappings_len,
+int
+filter_joined_candidate_mappings( candidate_mapping** joined_mappings, 
+                                  float* joined_mapping_penalties,
+                                  int joined_mappings_len,
                                   
                                   struct genome_data* genome,
                                   struct read* r,
@@ -793,36 +752,36 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     float max_penalty = -1e9; //min_match_penalty;
 
     /* Pointer to the start of the current set of joined candidate_mappings */
-    candidate_mapping** current_mapping = *joined_mappings;
+    candidate_mapping** current_mapping = joined_mappings + 0;
 
     int i;
     /* recheck the locations, updating joined_mapping_penalties, 
        and find the max penalty */
-    for( i = 0; i < *joined_mappings_len; i++ )
+    for( i = 0; i < joined_mappings_len; i++ )
     {
         recheck_joined_candidate_mappings( 
-            current_mapping, (*joined_mapping_penalties) + i,
+            current_mapping, joined_mapping_penalties + i,
             genome, r, fl_dist 
         );
 
         /* we may need to update the max penalty */
-        if( (*joined_mapping_penalties)[i] > max_penalty ) {
-            max_penalty = (*joined_mapping_penalties)[i];
+        if( joined_mapping_penalties[i] > max_penalty ) {
+            max_penalty = joined_mapping_penalties[i];
         }
 
         advance_pointer_to_start_of_next_joined_candidate_mappings(
-                &current_mapping, i, *joined_mappings_len );
+                current_mapping, i, joined_mappings_len );
     }
 
     /* Reset the pointer to the start of the joined mappings */
-    current_mapping = (*joined_mappings);
+    current_mapping = joined_mappings + 0;
 
     /* To filter mappings, we simply replace their pointers with NULL pointers
      * and update the joined_mappings_len appropriately */
-    int filtered_mappings_len = *joined_mappings_len;
+    int filtered_mappings_len = joined_mappings_len;
 
     // int i declared earlier
-    for( i = 0; i < *joined_mappings_len; i++ )
+    for( i = 0; i < joined_mappings_len; i++ )
     {
         enum bool filter_current_group = false;
 
@@ -840,7 +799,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
         /* I set the safe bit to 1e-6, which is correct for most floats */
         if( max_penalty_spread > 1e-6 )
         {
-            if( (*joined_mapping_penalties)[i] 
+            if( joined_mapping_penalties[i] 
                 < ( max_penalty - max_penalty_spread ) )
             {
                 filter_current_group = true;
@@ -860,27 +819,21 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
             /* Mark the invalid penalty with 1 - since the 
              * joined_mapping_penalties are log probabilities, any value > 0
              * is invalid. */
-            (*joined_mapping_penalties)[i] = 1;
+            joined_mapping_penalties[i] = 1;
             filtered_mappings_len -= 1;
         }
 
         advance_pointer_to_start_of_next_joined_candidate_mappings(
-                &current_mapping, i, *joined_mappings_len );
+                current_mapping, i, joined_mappings_len );
     }
 
+    if( filtered_mappings_len == 0 && joined_mappings_len > 0 )
+        return NO_UNFILTERED_CANDIDATE_MAPPINGS;
+    
     filter_joined_mapping_penalties( 
-        joined_mapping_penalties, *joined_mappings_len );
+        joined_mapping_penalties, joined_mappings_len );
 
-    if( filtered_mappings_len == 0 && *joined_mappings_len > 0 )
-    {
-        statmap_log( LOG_DEBUG, 
-                     "Filtered candidate mappings from %i to %i",
-                     *joined_mappings_len, filtered_mappings_len  );
-        
-    }
-    *joined_mappings_len = filtered_mappings_len;
-
-    return;
+    return 0;
 }
 
 size_t
@@ -1382,13 +1335,14 @@ add_read_to_mapped_reads_db(
 void
 add_unmappable_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db )
 {
     /* lock the mutex for the corresponding file pointer */
     pthread_mutex_lock( db->unmappable_mutex );
 
     /* just write out the read id on one line */
-    fprintf( db->unmappable_fp, "%d\n", r->read_id );
+    fprintf( db->unmappable_fp, "%d\t%i\n", r->read_id, error );
     db->num_unmappable_reads += 1;
 
     pthread_mutex_unlock( db->unmappable_mutex );
@@ -1397,13 +1351,14 @@ add_unmappable_read_to_mapped_reads_db(
 void
 add_nonmapping_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db )
 {
     /* lock the mutex for the corresponding file pointer */
     pthread_mutex_lock( db->nonmapping_mutex );
 
     /* just write out the read id on one line */
-    fprintf( db->nonmapping_fp, "%d\n", r->read_id );
+    fprintf( db->nonmapping_fp, "%d\t%i\n", r->read_id, error );
     db->num_nonmapping_reads += 1;
 
     pthread_mutex_unlock( db->nonmapping_mutex );

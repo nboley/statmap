@@ -379,21 +379,21 @@ fprintf_mapped_read( FILE* fp, mapped_read_t* r );
 
 void
 advance_pointer_to_start_of_next_joined_candidate_mappings(
-        candidate_mapping*** current_mapping,
+        candidate_mapping** current_mapping,
         int current_set_index,
         int num_sets );
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
                          struct read *r,
-                         candidate_mapping*** joined_mappings, 
-                         float** penalties,
+                         candidate_mapping** joined_mappings, 
+                         float* penalties,
                          int* joined_mappings_len );
 
-void
-filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
-                                  float** penalties,
-                                  int* joined_mappings_len,
+int
+filter_joined_candidate_mappings( candidate_mapping** joined_mappings, 
+                                  float* penalties,
+                                  int joined_mappings_len,
                                   
                                   struct genome_data* genome,
                                   struct read* r,
@@ -498,11 +498,13 @@ add_read_to_mapped_reads_db(
 void
 add_unmappable_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db );
 
 void
 add_nonmapping_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db );
 
 void
