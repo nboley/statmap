@@ -84,7 +84,7 @@ typedef struct {
 int
 get_length_from_cigar_string( candidate_mapping* mapping );
 
-#define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
+#define CANDIDATE_MAPPINGS_GROWTH_FACTOR 1000
 typedef struct {
     int allocated_length;
     int length;

@@ -15,7 +15,7 @@
 /****** configuration options                   ******/
 
 #define MAX_SEARCH_TIME 1.0
-#define MAX_NUM_CAND_MAPPINGS 500
+#define MAX_NUM_CAND_MAPPINGS 5000
 
 // the maximum number of index probes to use for a read
 #define MAX_NUM_INDEX_PROBES 5
@@ -108,6 +108,10 @@
 #define INDEX_SEARCH_TOOK_TOO_LONG_ERROR 3
 #define NOT_ENOUGH_VALID_INDEX_PROBES_ERROR 4
 #define PMATCH_STACK_OVERRUN 5
+#define NO_CANDIDATE_MAPPINGS 6
+#define NO_ASSAY_CORRECTED_CANDIDATE_MAPPINGS 7
+#define NO_JOINED_CANDIDATE_MAPPINGS 8
+#define NO_UNFILTERED_CANDIDATE_MAPPINGS 9
 
 /**** set global constantsa for maximum read length, etc.       ****/
 

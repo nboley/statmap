@@ -529,8 +529,8 @@ find_candidate_mappings_for_read(
              * subtemplate for these candidate mappings */
             update_pos_in_template( rst_mappings, i );
 
-            /* append the candidate mappings from this read subtemplate to the set
-             * of candidate mappings for this read */
+            /* append the candidate mappings from this read subtemplate to the 
+             * set of candidate mappings for this read */
             append_candidate_mappings( read_mappings, rst_mappings );
         }
         
@@ -661,7 +661,7 @@ make_cage_specific_corrections(
 void
 make_assay_specific_corrections(
         candidate_mappings* mappings,
-        candidate_mappings* assay_corrected_mappings,
+        candidate_mappings** assay_corrected_mappings,
         struct read* r,
         struct genome_data* genome
     )
@@ -669,24 +669,22 @@ make_assay_specific_corrections(
     /* Only handle CAGE (untemplated G's) for now */
     if( _assay_type == CAGE )
     {
-        make_cage_specific_corrections( mappings, assay_corrected_mappings, r,
-                genome );
+        init_candidate_mappings( assay_corrected_mappings );
+        make_cage_specific_corrections( 
+            mappings, *assay_corrected_mappings, r, genome );
     } else {
         /* Copy the original set of mappings to the corrected set (without
          * alteration, since this assay type does not require corrections) */
-
-        /* FIXME can just return pointer to original mappings, eliminating
-         * unnecessary memcpy. However, freeing the correct memory then becomes
-         * a bit tricky. Revisit. */
-        copy_candidate_mappings( assay_corrected_mappings, mappings );
+        *assay_corrected_mappings = mappings;
     }
         
     return;
 }
 
-mapped_read_t*
+int
 build_mapped_read_from_candidate_mappings(
         candidate_mappings* mappings,
+        mapped_read_t** rd,
         struct genome_data* genome,
         struct read* r,
         struct fragment_length_dist_t* fl_dist,
@@ -694,21 +692,26 @@ build_mapped_read_from_candidate_mappings(
         struct mapping_params* mapping_params
     )
 {            
+    int rv = 0;
     int joined_mappings_len = 0;
+    candidate_mappings* assay_corrected_mappings = NULL;
     candidate_mapping** joined_mappings = NULL;
     float* joined_mapping_penalties = NULL;
-    mapped_read_t* rd = NULL;
 
+    if( mappings->length == 0 ) {
+        rv = NO_CANDIDATE_MAPPINGS;
+        *rd = NULL;
+        goto cleanup;
+    }
+    
     /* Build additional candidate mappings to make corrections for known
      * problems in the assay (e.g. untemplated G's in CAGE).
      *
      * For now, we assume these corrections all take places on the level of
      * a read subtemplate / candidate mapping.
      * */
-    candidate_mappings* assay_corrected_mappings = NULL;
-    init_candidate_mappings( &assay_corrected_mappings );
     make_assay_specific_corrections( 
-        mappings, assay_corrected_mappings, r, genome );
+        mappings, &assay_corrected_mappings, r, genome );
     /* the original set of candidate mappings is freed in the calling fn */
     
     join_candidate_mappings( assay_corrected_mappings,
@@ -718,10 +721,14 @@ build_mapped_read_from_candidate_mappings(
                              &joined_mappings_len );
     
     if( joined_mappings_len > MAX_NUM_CAND_MAPPINGS ) {
-        statmap_log( LOG_DEBUG, 
-                     "Skipping read %i: too many candidate mappings ( %i )",
-                     r->read_id, joined_mappings_len  );
-        rd = NULL;
+        rv = TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
+        *rd = NULL;
+        goto cleanup;
+    }
+
+    if( joined_mappings_len == 0 ) {
+        rv = NO_JOINED_CANDIDATE_MAPPINGS;
+        *rd = NULL;
         goto cleanup;
     }
     
@@ -735,16 +742,27 @@ build_mapped_read_from_candidate_mappings(
                                               
                                       mapping_params );
 
-    rd = build_mapped_read_from_joined_candidate_mappings( 
+    if( joined_mappings_len == 0 ) {
+        rv = NO_UNFILTERED_CANDIDATE_MAPPINGS;
+        *rd = NULL;
+        goto cleanup;
+    }
+
+    *rd = build_mapped_read_from_joined_candidate_mappings( 
         r->read_id,
         joined_mappings, joined_mappings_len, joined_mapping_penalties );
     
 cleanup:
-    free_candidate_mappings( assay_corrected_mappings );
+    if( assay_corrected_mappings != NULL 
+        &&assay_corrected_mappings != mappings )
+    {
+        free_candidate_mappings( assay_corrected_mappings );
+    }
+    
     free( joined_mappings );
     free( joined_mapping_penalties );
     
-    return rd;
+    return rv;
 }
 
 static inline void
@@ -845,20 +863,26 @@ find_candidate_mappings( void* params )
         
         if( rv != 0 )
         {
+            statmap_log( 
+                LOG_DEBUG, 
+                "Skipping read %i: couldn't find candidate mappings (Error %i)",
+                r->read_id, rv  );
+            
             add_unmappable_read_to_mapped_reads_db( r, mpd_rds_db );
             free_read( r );
             free_mapping_params( mapping_params );
             continue; // skip the unmappable read            
         }
         
-        mapped_read_t* mapped_read = 
-            build_mapped_read_from_candidate_mappings(
-                mappings,
-                genome,
-                r,
-                mpd_rds_db->fl_dist,
-                mapping_params
-                );
+        mapped_read_t* mapped_read; 
+        rv = build_mapped_read_from_candidate_mappings(
+            mappings,
+            &mapped_read,
+            genome,
+            r,
+            mpd_rds_db->fl_dist,
+            mapping_params
+        );
             
         if( mapped_read != NULL )
         {
@@ -871,6 +895,11 @@ find_candidate_mappings( void* params )
             add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
             free_mapped_read( mapped_read );
         } else {
+            statmap_log( 
+                LOG_DEBUG, 
+                "Skipping read %i: couldn't join candidate mappings (Error %i)",
+                r->read_id, rv  );
+
             /* the read was declared mappable, but did not map */
             add_nonmapping_read_to_mapped_reads_db( r, mpd_rds_db );
         }

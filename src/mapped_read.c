@@ -790,7 +790,7 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     float max_penalty_spread = mapping_params->recheck_max_penalty_spread;
 
     /* Initialize the max penalty to the smallest allowable penalty */
-    float max_penalty = min_match_penalty;
+    float max_penalty = -1e9; //min_match_penalty;
 
     /* Pointer to the start of the current set of joined candidate_mappings */
     candidate_mapping** current_mapping = *joined_mappings;
@@ -871,6 +871,13 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
     filter_joined_mapping_penalties( 
         joined_mapping_penalties, *joined_mappings_len );
 
+    if( filtered_mappings_len == 0 && *joined_mappings_len > 0 )
+    {
+        statmap_log( LOG_DEBUG, 
+                     "Filtered candidate mappings from %i to %i",
+                     *joined_mappings_len, filtered_mappings_len  );
+        
+    }
     *joined_mappings_len = filtered_mappings_len;
 
     return;
@@ -1407,7 +1414,9 @@ rewind_mapped_reads_db( struct mapped_reads_db* rdb )
 {
     if( rdb->mode != 'r' )
     {
-        statmap_log( LOG_FATAL, "Can only rewind mapped reads db that is open for reading ( mode 'r' )." );
+        statmap_log( 
+            LOG_FATAL, 
+            "Can only rewind mapped reads db that is open for reading." );
         assert( false );
         exit( -1 );
     }
@@ -1427,7 +1436,9 @@ get_next_read_from_mapped_reads_db(
     /* Make sure the db is open for reading */
     if( rdb->mode != 'r' )
     {
-        statmap_log( LOG_FATAL, "Cannot get read from mapped reads db unless it is open for reading." );
+        statmap_log( 
+            LOG_FATAL, 
+            "Can only get read from mapped reads db that is open for reading.");
         assert( false );
         exit( -1 );
     }
@@ -1479,7 +1490,8 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
         float cond_prob = get_seq_error_from_mapped_read_location( loc );
 
         if( mapped_read_location_is_paired( loc) )
-            cond_prob *= get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) );
+            cond_prob *= get_fl_prb( 
+                fl_dist, get_fl_from_mapped_read_location( loc ) );
 
         prbs[i] = cond_prob;
         prb_sum += cond_prob;
@@ -1542,7 +1554,7 @@ update_traces_from_read_densities(
             MRL_START_POS_TYPE stop
                 = get_stop_from_mapped_read_location( rd_index->mappings + i );
 
-            float cond_prob = get_cond_prb( cond_prbs_db, rd_index->read_id, i );
+            float cond_prob = get_cond_prb(cond_prbs_db, rd_index->read_id, i);
             cond_prob_sum += cond_prob;
             
             assert( cond_prob >= -0.0001 );
@@ -1590,10 +1602,17 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     #ifdef MALLOC_READS_DB
     fseek( rdb->mapped_fp, 0, SEEK_SET );
 
-    statmap_log( LOG_NOTICE, "Allocating %zu bytes for the mapped reads db.", buf.st_size );
+    statmap_log( 
+        LOG_NOTICE, 
+        "Allocating %zu bytes for the mapped reads db.", 
+        buf.st_size );
+    
     rdb->mmapped_data = malloc( buf.st_size );
     if( NULL == rdb->mmapped_data ) {
-        statmap_log( LOG_FATAL, "Failed to allocate %zu bytes for the mapped reads.", (size_t) buf.st_size );
+        statmap_log( 
+            LOG_FATAL, 
+            "Failed to allocate %zu bytes for the mapped reads.", 
+            (size_t) buf.st_size );
     }
     
     fread( rdb->mmapped_data, buf.st_size, 1, rdb->mapped_fp );
@@ -1602,8 +1621,8 @@ mmap_mapped_reads_db( struct mapped_reads_db* rdb )
     /* mmap the file */
     rdb->mmapped_data
         = mmap( NULL, rdb->mmapped_data_size,  
-                PROT_READ|PROT_WRITE, 
-		MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
+                PROT_READ|PROT_WRITE,
+                MAP_POPULATE|MAP_SHARED, fdin, (off_t) 0 );
 
     if( rdb->mmapped_data == (void*) -1 ) {
         statmap_log( LOG_FATAL, "Can not mmap the fdescriptor '%i'", fdin );

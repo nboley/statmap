@@ -343,12 +343,12 @@ search_index_for_read_subtemplate(
             );
         // if the index search returned an error, skip this index probe
         // if there are too many candidate mappings, skip this index probe
-        if( rv != 0 
-            || (*search_results)[i]->length > MAX_NUM_CAND_MAPPINGS)  
+        if( rv != 0 )
         {
-            statmap_log( LOG_DEBUG, 
-                         "Could not search index for subtemplate %i - error code %i",
-                         i, rv);
+            statmap_log( 
+                LOG_DEBUG, 
+                "Could not search index for subtemplate %i - error code %i",
+                i, rv);
             free((*search_results)[i]->locations);
             (*search_results)[i]->locations = NULL;
             (*search_results)[i]->length = 0;
