@@ -907,7 +907,8 @@ def test_lots_of_repeat_sequence_finding( ):
 
 
 ### Test to make sure that duplicated reads are dealt with correctly ###
-def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, assay=None, num_samples=0 ):
+def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, 
+                      assay=None, num_samples=0 ):
     output_directory = "smo_test_dirty_reads_%i_%i_%i" \
             % ( read_len, n_threads, nreads)
 
@@ -948,7 +949,7 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, 
 
     map_with_statmap( genome_fnames, read_fnames, output_directory,
                       indexed_seq_len = read_len - 2,
-                      num_threads=n_threads, 
+                      num_threads=n_threads, mapping_metaparameter=0.25,
                       assay=assay, num_samples=nreads )
     
     ###### Test the sam file to make sure that each of the reads appears ############
@@ -994,6 +995,7 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, 
         ) ))
 
     if len( unmapped_reads ) != 0:
+        """
         for key, entry in enumerate(mutated_reads):
             print key, entry
         for key, read in [ ( key, mutated_reads[ int(key) ] ) for key in unmapped_reads ]:
@@ -1005,7 +1007,7 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False, 
             mut_seq = mutated_reads[int(key)][0]
             for bp1, bp2 in zip( genome_seq.upper(), mut_seq  ):
                 print bp1, bp2
-            
+        """    
         raise ValueError, " We are missing '%s' from the set of mappable reads. " % str( unmapped_reads )
 
     for mapped_reads in iter_sam_reads(sam_fp):
@@ -1479,7 +1481,7 @@ def sam_lines_match( line1, line2 ):
                 print "SEQ entries do not match"
                 return False
         elif i == 12 or i == 13: # XP or XQ fields # control for numeric representation
-            if float(f1.split(':')[-1]) != float(f2.split(':')[-1]):
+            if abs(float(f1.split(':')[-1]) - float(f2.split(':')[-1])) > 1e-4:
                 print "XP or XQ fields do not match"
                 return False
         else:

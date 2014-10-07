@@ -223,6 +223,9 @@ build_candidate_mapping_from_match(
 
     /* the length of the sequence that was mapped */
     cm->trimmed_length = softclip_len;
+    cm->pos_in_template = -1;
+    cm->trimmed_length = 0;
+    cm->num_untemplated_gs = 0;
     cm->mapped_length = rst->length - cm->trimmed_length;
 
     /* The first location in the match is the first location in the mapping,

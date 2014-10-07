@@ -583,8 +583,10 @@ calc_candidate_mapping_penalty(
     /* The rechecked penalty is the total penalty of any match (M) segments,
      * plus the marginal probability for any untemplated G's (which are soft
      * clipped, but recorded in mapping->num_untemplated_gs) */
-    return rechecked_penalty + 
+    float rv = rechecked_penalty + 
         (mapping->num_untemplated_gs*UNTEMPLATED_G_MARGINAL_LOG_PRB);
+    assert (rv > -50);
+    return rv;
 }
 
 int
@@ -1064,6 +1066,7 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
         /* Convert the sum of the log joined_mapping_penalties to a probability
          * in standard [0,1] probability space */
         prologue->seq_error = pow( 10, joined_mapping_penalties[i] );
+        assert(prologue->seq_error > -10);
         assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
 
         rd_ptr += sizeof( mapped_read_location_prologue );
