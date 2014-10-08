@@ -51,6 +51,7 @@ typedef struct __attribute__((__packed__)) {
 #else 
 typedef float ML_PRB_TYPE;
 #define ML_PRB_MIN FLT_MIN
+#define ML_PRB_MAX FLT_MAX
 #endif 
 
 static inline float 
@@ -208,7 +209,7 @@ typedef struct {
     //unsigned unused_bits    :0;
     /* For now, we assume that there is only 1 readid and therefore only
      * 1 corresponding seq_error */
-    ML_PRB_TYPE seq_error;      
+    ML_PRB_TYPE log_seq_error;      
 } mapped_read_location_prologue;
 
 // 6 bytes
@@ -305,11 +306,17 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
 /** SEQ_ERROR **/
 
 static inline ML_PRB_TYPE
-get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
+get_log_seq_error_from_mapped_read_location( const mapped_read_location* loc )
 {
     mapped_read_location_prologue* prologue
         = (mapped_read_location_prologue*) loc;
-    return (ML_PRB_TYPE) prologue->seq_error;
+    return (ML_PRB_TYPE) prologue->log_seq_error;
+}
+
+static inline ML_PRB_TYPE
+get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
+{
+    return pow(10, get_log_seq_error_from_mapped_read_location(loc));
 }
 
 static inline enum bool

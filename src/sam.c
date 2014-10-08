@@ -248,7 +248,7 @@ fprintf_sam_line_from_sublocations_group(
         = read->subtemplates + subtemplate_index;
 
     const int chr_index = location_prologue->chr;
-    const float seq_error = location_prologue->seq_error;
+    const float seq_error = location_prologue->log_seq_error;
     const int trimmed_length = location_prologue->trimmed_length;
 
     /* Offset +1 because Statmap's internal representation of genome locations
@@ -328,7 +328,7 @@ fprintf_sam_line_from_sublocations_group(
             given that it came from somewhere on the genome
     */
     fprintf( sam_fp, "PQ:i:%u\t",
-             (unsigned int) MIN(254, (-10*log10(1-seq_error))));
+             (unsigned int) MIN(254, (-10*seq_error)));
     fprintf( sam_fp, "XQ:f:%e\t", seq_error);
     fprintf( sam_fp, "XP:f:%e\n", cond_prob);
 

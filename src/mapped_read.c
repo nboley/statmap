@@ -585,7 +585,7 @@ calc_candidate_mapping_penalty(
      * clipped, but recorded in mapping->num_untemplated_gs) */
     float rv = rechecked_penalty + 
         (mapping->num_untemplated_gs*UNTEMPLATED_G_MARGINAL_LOG_PRB);
-    assert (rv > -50);
+    assert (rv > -500);
     return rv;
 }
 
@@ -751,7 +751,7 @@ filter_joined_candidate_mappings( candidate_mapping** joined_mappings,
     float max_penalty_spread = mapping_params->recheck_max_penalty_spread;
 
     /* Initialize the max penalty to the smallest allowable penalty */
-    float max_penalty = -1e9; //min_match_penalty;
+    float max_penalty = FLT_MIN_10_EXP; //min_match_penalty;
 
     /* Pointer to the start of the current set of joined candidate_mappings */
     candidate_mapping** current_mapping = joined_mappings + 0;
@@ -1065,9 +1065,7 @@ populate_mapped_read_locations_from_joined_candidate_mappings(
 
         /* Convert the sum of the log joined_mapping_penalties to a probability
          * in standard [0,1] probability space */
-        prologue->seq_error = pow( 10, joined_mapping_penalties[i] );
-        assert(prologue->seq_error > -10);
-        assert( prologue->seq_error >= 0 && prologue->seq_error <= 1 );
+        prologue->log_seq_error = joined_mapping_penalties[i];
 
         rd_ptr += sizeof( mapped_read_location_prologue );
 
@@ -1436,34 +1434,36 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     if( 0 == rd_index->num_mappings )
         return;
     
-    float *prbs = calloc( rd_index->num_mappings, sizeof(float) );
+    float *prbs = alloca( rd_index->num_mappings*sizeof(float) );
     
     /* prevent divide by zero */
-    double prb_sum = ML_PRB_MIN;
     MPD_RD_ID_T i;
+    ML_PRB_TYPE max_log_val = -ML_PRB_MAX;
     for( i = 0; i < rd_index->num_mappings; i++ )
     {
         mapped_read_location* loc = rd_index->mappings[i];
 
-        float cond_prob = get_seq_error_from_mapped_read_location( loc );
+        ML_PRB_TYPE log_error =get_log_seq_error_from_mapped_read_location(loc);
 
-        if( mapped_read_location_is_paired( loc) )
-            cond_prob *= get_fl_prb( 
-                fl_dist, get_fl_from_mapped_read_location( loc ) );
-
-        prbs[i] = cond_prob;
-        prb_sum += cond_prob;
+        if( mapped_read_location_is_paired(loc) )
+            log_error += log10(
+                get_fl_prb( fl_dist, get_fl_from_mapped_read_location( loc ) ));
+        prbs[i] = log_error;
+        max_log_val = MAX(log_error, max_log_val);
     }
-    assert( rd_index->num_mappings == 0 || prb_sum > ML_PRB_MIN );
-
+    int log_prb_offset = (int) max_log_val;
+    
+    ML_PRB_TYPE shifted_prb_sum = 0;
+    for( i = 0; i < rd_index->num_mappings; i++ )
+        shifted_prb_sum += pow(10, prbs[i]-log_prb_offset );
+    
     for( i = 0; i < rd_index->num_mappings; i++ )
     {
-        set_cond_prb( cond_prbs_db, rd_index->read_id, i, prbs[i]/prb_sum );
-        
-        assert( (prbs[i]/prb_sum < 1.001) && (prbs[i]/prb_sum) >= -0.001 );
+        ML_PRB_TYPE cond_prb = pow(10, prbs[i]-log_prb_offset)/shifted_prb_sum;
+        set_cond_prb( cond_prbs_db, rd_index->read_id, i, cond_prb);
+        assert( (cond_prb <= 1 + 1e-6) && (cond_prb) >= 0-1e-6 );
     }
     
-    free( prbs );
     free_mapped_read_index( rd_index );
     
     return;
