@@ -309,10 +309,7 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
     MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc );
     MRL_FL_TYPE fl = MAX( start, stop ) - MIN( start, stop );
-
-    assert( fl >= FRAGMENT_LENGTH_MIN );
-    assert( fl <= FRAGMENT_LENGTH_MAX );
-
+    
     return fl;
 }
 

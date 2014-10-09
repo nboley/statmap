@@ -5,7 +5,7 @@ CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
 	-I/usr/include/igraph
 
 RLIB=/usr/lib/R/lib/libR.so
-IGRAPHLIB=/srv/OLD_INSTALL/usr/lib/libigraph.so
+IGRAPHLIB=/usr/lib/x86_64-linux-gnu/libigraph.so
 
 src_objects := $(patsubst %.c,%.o,$(wildcard src/*.c))
 
