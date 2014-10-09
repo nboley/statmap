@@ -81,6 +81,13 @@ typedef struct {
 
 } candidate_mapping;
 
+struct joined_candidate_mappings {
+    candidate_mapping* m1;
+    candidate_mapping* m2;
+    int frag_len;
+    float log_penalty;
+};
+
 int
 get_length_from_cigar_string( candidate_mapping* mapping );
 

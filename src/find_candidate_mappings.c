@@ -269,6 +269,8 @@ build_candidate_mapping_from_match(
 
     cm->penalty = calc_candidate_mapping_penalty( cm, rst, genome );
 
+    cm->pos_in_template = rst->pos_in_template.pos;
+    
     return true;
 }
 
@@ -498,11 +500,24 @@ update_pos_in_template(
     }
 }
 
+int
+paired_cms_frag_len(candidate_mapping* pair_1_mapping, 
+                    candidate_mapping* pair_2_mapping)
+{
+    /* make sure this fragment length is allowed */
+    int frag_start = MIN( pair_1_mapping->start_bp, 
+                          pair_1_mapping->start_bp );
+    int frag_stop = MAX( 
+        pair_1_mapping->start_bp + pair_1_mapping->mapped_length, 
+        pair_2_mapping->start_bp + pair_2_mapping->mapped_length );
+    return frag_stop - frag_start;
+}
 /* returns 0 on success */
 int
 find_candidate_mappings_for_read(
         struct read* r,
-        candidate_mappings* read_mappings,
+        mapped_read_t** mapped_read,
+        
         struct genome_data* genome,
 
         struct error_model_t* error_model,
@@ -512,40 +527,111 @@ find_candidate_mappings_for_read(
 {
     assert( NULL != error_model );
     int rv = -1;
-    candidate_mappings rst_mappings;
+    /* make sure that the reads are either single ended or paired */
+    assert( r->num_subtemplates >= 1 && r->num_subtemplates <= 2 );
+    candidate_mappings* rst_mappings[2];
+    rst_mappings[0] = alloca(sizeof(candidate_mappings));
+    init_candidate_mappings(rst_mappings[0]);
+    rst_mappings[1] = alloca(sizeof(candidate_mappings));
+    init_candidate_mappings(rst_mappings[1]);
     
+    /* first find the candidate mappings for each read subtemplate */
     int i;
     for( i = 0; i < r->num_subtemplates; i++ )
     {
         // reference to current read subtemplate
         struct read_subtemplate* rst = r->subtemplates + i;
-
+        
         /* initialize the candidate mappings container for this read
          * subtemplate */
         rv = find_candidate_mappings_for_read_subtemplate(
                 rst,
-                &rst_mappings,
+                rst_mappings[i],
                 genome,
                 mapping_params
             );
-        
-        if( rv == 0 ) {
-            /* Update pos in READ_TYPE with the index of the underlying read
-             * subtemplate for these candidate mappings */
-            update_pos_in_template( &rst_mappings, i );
-
-            /* append the candidate mappings from this read subtemplate to the 
-             * set of candidate mappings for this read */
-            append_candidate_mappings( read_mappings, &rst_mappings );
-        }
-                
+                        
         if(rv != 0){ return rv; };
     }
     
-    if( read_mappings->length > MAX_NUM_CAND_MAPPINGS ) {
-        return TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
+    /* next pair them, making sure to keep track of the best match penalty */
+    int r1_i, r2_i, num_joined_cms;
+    float max_penalty = -FLT_MAX;
+    num_joined_cms = 0;
+    struct joined_candidate_mappings joined_cms[MAX_NUM_CAND_MAPPINGS+1];
+    for( r1_i = 0; r1_i < rst_mappings[0]->length; r1_i++ )
+    {
+        candidate_mapping* pair_1_mapping = &(rst_mappings[0]->mappings[r1_i]);        
+        /* if single end, then there is no need to find a pair, so continue */
+        if( r->num_subtemplates == 1 )
+        {
+            joined_cms[num_joined_cms] = (struct joined_candidate_mappings){
+                pair_1_mapping, NULL, -1, pair_1_mapping->penalty };
+
+            max_penalty = MAX(
+                joined_cms[num_joined_cms].log_penalty, max_penalty);
+            num_joined_cms += 1;
+            continue;
+        }
+        
+        for( r2_i = 0; r2_i < rst_mappings[1]->length; r2_i++ )
+        {
+            candidate_mapping* pair_2_mapping = &(
+                rst_mappings[1]->mappings[r2_i]);
+
+            /* If the chrs mismatch, since these are sorted we know there is no 
+             * need to continue. */
+            if( pair_2_mapping->chr > pair_1_mapping->chr )
+                break;
+
+            if( pair_2_mapping->chr < pair_1_mapping->chr )
+                continue;
+
+            assert( pair_1_mapping->chr == pair_2_mapping->chr );
+            
+            int frag_len = paired_cms_frag_len(pair_1_mapping, pair_2_mapping);
+            if( frag_len > r->prior.max_fragment_length )
+                continue;
+
+            float penalty = pair_1_mapping->penalty + pair_2_mapping->penalty;
+            /*if we already know that the penalty is too small, then skip this*/
+            if (penalty + mapping_params->recheck_max_penalty_spread 
+                    < max_penalty )
+                continue;
+            max_penalty = MAX(max_penalty, penalty);
+            
+            /* add the joined mapping */
+            joined_cms[num_joined_cms] = (struct joined_candidate_mappings){
+                pair_1_mapping, pair_2_mapping, frag_len, penalty };
+            num_joined_cms += 1;
+            
+            /* Update the array indices */
+            if( num_joined_cms > MAX_NUM_CAND_MAPPINGS )
+                return TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
+        }
     }
 
+    if( 0 == num_joined_cms ) 
+        return NO_JOINED_CANDIDATE_MAPPINGS;
+    
+    /* filter out matches that havea  penalty that is too small */
+    int new_first_index = 0;
+    for(i=0; i<num_joined_cms; i++)
+    {
+        if( max_penalty - mapping_params->recheck_max_penalty_spread 
+            < joined_cms[i].log_penalty )
+        {
+            joined_cms[new_first_index] = joined_cms[i];
+            new_first_index++;
+        }
+    }
+    num_joined_cms = new_first_index;
+    
+    /* finally, build a mpped read from these */
+    *mapped_read = 
+        build_mapped_read_from_joined_candidate_mappings( 
+            r->read_id, joined_cms, num_joined_cms);
+    
     return rv;
 }
 
@@ -675,6 +761,7 @@ make_assay_specific_corrections(
     return;
 }
 
+#if 0
 int
 build_mapped_read_from_candidate_mappings(
         candidate_mappings* mappings,
@@ -747,6 +834,7 @@ build_mapped_read_from_candidate_mappings(
     
     return rv;
 }
+#endif
 
 static inline void
 increment_counter_with_lock( unsigned int *counter, pthread_spinlock_t* lock )
@@ -820,13 +908,11 @@ find_candidate_mappings( void* params )
             = init_mapping_params_for_read( r, metaparams, error_model );
         cache_penalty_arrays_in_read_subtemplates(r, mapping_params);
         
-        /* Initialize container for candidate mappings for this read */
-        candidate_mappings mappings;
-        init_candidate_mappings( &mappings );
-        
+        /* Initialize container for candidate mappings for this read */        
+        mapped_read_t* mapped_read;
         int rv = find_candidate_mappings_for_read(
                     r,
-                    &mappings,
+                    &mapped_read,
                     genome,
                     error_model,
                     mapping_params
@@ -840,30 +926,15 @@ find_candidate_mappings( void* params )
             continue; // skip the unmappable read            
         }
         
-        mapped_read_t* mapped_read; 
-        rv = build_mapped_read_from_candidate_mappings(
-            &mappings,
-            &mapped_read,
-            genome,
-            r,
-            mpd_rds_db->fl_dist,
-            mapping_params
-        );
-            
-        if( mapped_read != NULL )
-        {
-            /* mapped count is the number of reads that successfully mapped
-             * (not the number of mappings) */
-            increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
+        assert( mapped_read != NULL );
+        /* mapped count is the number of reads that successfully mapped
+         * (not the number of mappings) */
+        increment_counter_with_lock( mapped_cnt, mapped_cnt_lock );
 
-            /* the read has at least one mapping - add it to the mapped
-             * reads database */
-            add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
-            free_mapped_read( mapped_read );
-        } else {
-            /* the read was declared mappable, but did not map */
-            add_nonmapping_read_to_mapped_reads_db( r, rv, mpd_rds_db );
-        }
+        /* the read has at least one mapping - add it to the mapped
+         * reads database */
+        add_read_to_mapped_reads_db( mpd_rds_db, mapped_read );
+        free_mapped_read( mapped_read );
         
         /* cleanup memory */
         free_mapping_params( mapping_params );

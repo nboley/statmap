@@ -108,9 +108,9 @@ code_bp( int code )
 float
 error_prb_for_mismatch( char ref, char obs )
 {
-    if( ref == obs )
+    if( obs == 'N' || ref == obs )
         return 0;
-    
+        
     return -1;
 }
 
@@ -125,6 +125,9 @@ error_prb_for_estimated_model(
         enum STRAND strand
     )
 {
+    if( obs == 'N' )
+        return N_penalty;
+
     struct freqs_array* freqs = ((struct freqs_array**)error_model->data)[
         read_subtemplate_index*2 + ((int)strand-1)];
     double prb = freqs->freqs[(unsigned char)error_score][pos];
@@ -161,7 +164,7 @@ error_prb(
     /* normalize to upper case */
     ref = toupper(ref);
     obs = toupper(obs);
-
+    
     /* normalize N's in the read sequence (ref) to A's
        (they will be properly considered in recheck_penalty).
        Otherwise, we cannot compute the correct probability distribution for
