@@ -53,10 +53,8 @@ wig_lines_max( const struct wig_line_info* lines, const int ub, const int num_wi
 }
 
 float 
-wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wigs  )
+wig_lines_sum( const struct wig_line_info* lines, const int ub  )
 {
-    assert( num_wigs > 0 );
-    
     float sum = 0;
     int i;
     for( i = 0; i <= ub; i++ )

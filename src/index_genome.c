@@ -285,9 +285,6 @@ search_index(
             *results,
 
             genome,
-
-            /* length of the reads */
-            subseq_length,
             
             ist->fwd_penalty_array.array,
             ist->rev_penalty_array.array
@@ -970,7 +967,7 @@ build_static_node_from_sequence_node(  sequences_node* qnode,
     assert( get_num_sequence_types(qnode) > 1 );
     
     /* get the array of sequences form the (packed) sequences node */
-    LETTER_TYPE* sequences = get_sequences_array_start( qnode, num_letters );
+    LETTER_TYPE* sequences = get_sequences_array_start( qnode );
 
     /* loop through all of the children */
     for( i = 0; i < get_num_sequence_types(qnode); i++ )
@@ -1138,7 +1135,7 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
     assert( get_num_sequence_types(qnode) > 1 );
 
     /* get the array of sequences form the (packed) sequences node */
-    LETTER_TYPE* sequences = get_sequences_array_start( qnode, num_letters );
+    LETTER_TYPE* sequences = get_sequences_array_start( qnode );
 
     /* loop through all of the children */
     for( i = 0; i < get_num_sequence_types(qnode); i++ )
@@ -1484,7 +1481,7 @@ search_static_node(
     potential_match_stack* stack,
     static_node* node, const int node_level, 
     enum STRAND strnd, 
-    const int seq_length, const int num_letters,
+    const int num_letters,
     struct penalty_t* penalties, const float curr_penalty, 
     const float min_match_penalty, const float max_penalty_spread )
 {
@@ -1515,7 +1512,7 @@ search_static_node(
             /* this should be optimized out */
             float penalty_addition = compute_penalty( 
                 letter, node_level,
-                seq_length, min_match_penalty - curr_penalty,
+                min_match_penalty - curr_penalty,
                 penalties );
 
             int break_index = (int) (penalty_addition + 0.5);
@@ -1660,7 +1657,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             rv = search_static_node(
                 &stack,
                 node, node_level, 
-                strnd, seq_length, num_letters,
+                strnd, num_letters,
                 penalties, curr_penalty, 
                 min_match_penalty, max_penalty_spread);
             if( 0 != rv )
@@ -1707,7 +1704,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
                 find_sequences_in_sequences_node( 
                     node, 
                     curr_penalty, min_match_penalty,
-                    seq_length, num_letters, node_level, strnd,
+                    num_letters, node_level, strnd,
                     results,
                     penalties,
                     genome
@@ -1747,16 +1744,12 @@ find_matches_from_root(
         mapped_locations* results,
 
         struct genome_data* genome,
-
-        /* the length of the two reads ( below ) */
-        const int read_len,
         
         struct penalty_t* fwd_penalties,
         struct penalty_t* rev_penalties
 )
 {
     assert( index->index_type == TREE );
-    assert( index->seq_length == read_len );
     static_node* root = index->index;
 
     return find_matches( (void*) root, 's', 0, 

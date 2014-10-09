@@ -20,7 +20,7 @@ float
 wig_lines_max( const struct wig_line_info* lines, const int ub, const int num_wigs  );
 
 float 
-wig_lines_sum( const struct wig_line_info* lines, const int ub, const int num_wigs  );
+wig_lines_sum( const struct wig_line_info* lines, const int ub  );
 
 extern void
 aggregate_over_wiggles(

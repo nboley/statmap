@@ -176,16 +176,9 @@ build_flag_for_sublocations_group(
 
 char*
 build_mate_info_for_sublocations_group(
-        mapped_read_sublocation* group,
         struct read* read,
-        int subtemplate_index,
         int pnext )
-{
-    /* FIXME - INCORRECT AND INCOMPLETE. */
-
-    assert( group != NULL );
-    assert( subtemplate_index >= 0 );
-    
+{    
     assert( read->num_subtemplates == 1 ||
             read->num_subtemplates == 2 );
 
@@ -301,7 +294,7 @@ fprintf_sam_line_from_sublocations_group(
     /* print the mate information */
     // TODO figure out pnext (not 0)
     char* mate_info = build_mate_info_for_sublocations_group(
-            group, read, subtemplate_index, 0 );
+            read, subtemplate_index );
     fprintf( sam_fp, "%s", mate_info );
     free( mate_info );
 
@@ -338,16 +331,11 @@ fprintf_sam_line_from_sublocations_group(
 void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
-    mapped_read_t* mpd_rd,
     mapped_read_index* mpd_rd_index,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
     struct read* r )
 {
-    /* FIXME unneeded, as we already built the index. Assert for now to get rid
-     * of warnings */
-    assert( mpd_rd != NULL );
-
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
@@ -497,7 +485,7 @@ write_mapped_reads_to_sam(
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
             
             fprintf_mapped_read_to_sam( 
-                sam_ofp, mapped_rd, mapped_rd_index,
+                sam_ofp, mapped_rd_index,
                 cond_prbs_db, genome, rd );
         }
         
