@@ -555,7 +555,7 @@ find_candidate_mappings_for_read(
     
     /* next pair them, making sure to keep track of the best match penalty */
     int r1_i, r2_i, num_joined_cms;
-    float max_penalty = -FLT_MAX;
+    float max_penalty = 2*mapping_params->recheck_min_match_penalty ;
     num_joined_cms = 0;
     struct joined_candidate_mappings joined_cms[MAX_NUM_CAND_MAPPINGS+1];
     for( r1_i = 0; r1_i < rst_mappings[0]->length; r1_i++ )
