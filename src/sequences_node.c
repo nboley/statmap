@@ -357,17 +357,9 @@ set_sequence_type_to_ptr( sequences_node* seqs, int index )
 }
 
 
- LETTER_TYPE* 
-get_sequences_array_start( const sequences_node* 
-                           const seqs, 
-                           const LEVEL_TYPE seq_num_letters )
+LETTER_TYPE* 
+get_sequences_array_start( const sequences_node* const seqs )
 {
-    /* 
-     * IT IS THE CALLERS RESPONSIBILITY TO ensure that seq_length
-     * is greater than 0. If it is not, the 
-     */
-    assert( seq_num_letters > 0 );
-    
     /*
      * if this was the pseudo struct, this would just be
      * return seqs->sequences;
@@ -401,7 +393,7 @@ get_genome_locations_array_start( const sequences_node* const seqs,
      */
     return (locs_union*) ( 
         /* start of the sequences array chunk */
-        (byte*) get_sequences_array_start( seqs, seq_num_letters )
+        (byte*) get_sequences_array_start( seqs )
         /* the length of sequences array */
         + seq_num_letters*sizeof(LETTER_TYPE)*get_num_sequence_types(seqs)
     );
@@ -511,7 +503,7 @@ find_insert_location( sequences_node* seqs,
                       LEVEL_TYPE seq_len )
 {
     /* find the start of the sequences array */
-    LETTER_TYPE* seqs_array = get_sequences_array_start( seqs,  seq_len );
+    LETTER_TYPE* seqs_array = get_sequences_array_start( seqs );
 
     /* determine if this sequence type already exists */
     /* 
@@ -617,8 +609,7 @@ add_new_sequence_to_sequences_node( sequences_node* seqs,
     loc_start->loc = loc;
     
     /* make space for the sequence, and initialize it */
-    LETTER_TYPE* seqs_start =
-        get_sequences_array_start( seqs, seq_len );
+    LETTER_TYPE* seqs_start = get_sequences_array_start( seqs );
     seqs_start += (seq_len*insert_loc);
 
     insert_memory( seqs, seqs_start, seq_len*sizeof(LETTER_TYPE), true );
@@ -921,18 +912,6 @@ add_sequence_to_sequences_node(
     } 
     else if( il.is_duplicate == true )
     {
-        /* debugging */
-        /* Make sure that the sequence actually is a duplicate */
-        /* That is, 
-           1) Make sure that the sequence at il is actually a duplicate. Test
-              via a simple mem compare 
-        */
-        assert( cmp_words( get_sequences_array_start( seqs,  num_letters )
-                           + il.location*num_letters, 
-                           new_seq, 
-                           num_letters ) == 0 
-        );
-        
         return add_duplicate_sequence_to_sequences_node( 
             genome, ps_locs, seqs, il.location, num_letters, loc 
         );
@@ -955,8 +934,6 @@ find_sequences_in_sequences_node(
         /* the maximum allowable penalty */
         float min_match_penalty,
 
-        /* the length of a full sequence */
-        const int seq_length,
         /* the total num of letters in a seq */
         const int num_letters,
         /* the current level in the tree */
@@ -988,9 +965,8 @@ find_sequences_in_sequences_node(
     NUM_SEQ_IN_SEQ_NODE_TYPE num_seqs = get_num_sequence_types( seqs );
 
     /* get the start of the sequences array */
-    LETTER_TYPE* seq_array_start = get_sequences_array_start( 
-        seqs, num_letters - node_level );
-
+    LETTER_TYPE* seq_array_start = get_sequences_array_start( seqs );
+    
     int i;
     for( i = 0; i < num_seqs; i++ )
     {
@@ -1002,7 +978,6 @@ find_sequences_in_sequences_node(
             /* the start of the current seq in the array */
             seq_array_start + i*(num_letters-node_level), 
             node_level, 
-            seq_length, 
             num_letters,
             min_match_penalty - curr_penalty,
             pa
@@ -1141,7 +1116,7 @@ print_sequences_node( sequences_node* seqs, int seq_length )
         int i, j;
 
         /* store the beginning of the current sequence that we are on */
-        LETTER_TYPE* curr_seq = get_sequences_array_start( seqs, seq_length );
+        LETTER_TYPE* curr_seq = get_sequences_array_start( seqs );
 
         /* get the genome locations for this sequence */
         locs_union* locs = 

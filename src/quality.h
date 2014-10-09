@@ -103,7 +103,7 @@ multiple_letter_penalty(
         const LETTER_TYPE* const reference,
 
         const int start_position,
-        const int seq_length,
+        
         const int num_letters,
         const float min_penalty,
 
@@ -131,8 +131,7 @@ compute_penalty(
         /* the position in the sequence - this should be
            zero indexed */
         const int position, 
-        /* the length of a full sequence */
-        const int seq_length,
+        
         /* the minimum allowable penalty */
         const float min_penalty,
 

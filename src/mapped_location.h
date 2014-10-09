@@ -116,6 +116,9 @@ struct ml_match*
 copy_ml_match( struct ml_match* match );
 
 void
+reset_ml_match( struct ml_match* mlm );
+
+void
 free_ml_match( struct ml_match* match );
 
 /* TODO - compute the ref gap inside this function? */

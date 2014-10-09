@@ -26,6 +26,7 @@
 #include "read.h"
 #include "mapped_read.h"
 #include "pseudo_location.h"
+#include "fragment_length.h"
 
 /*******************************************************************************
  *
@@ -520,12 +521,10 @@ find_candidate_mappings_for_read(
         
         struct genome_data* genome,
 
-        struct error_model_t* error_model,
-
-        struct mapping_params* mapping_params
+        struct mapping_params* mapping_params,
+        struct fragment_length_dist_t* fl_dist
     )
 {
-    assert( NULL != error_model );
     int rv = -1;
     /* make sure that the reads are either single ended or paired */
     assert( r->num_subtemplates >= 1 && r->num_subtemplates <= 2 );
@@ -556,7 +555,7 @@ find_candidate_mappings_for_read(
     
     /* next pair them, making sure to keep track of the best match penalty */
     int r1_i, r2_i, num_joined_cms;
-    float max_penalty = -FLT_MAX;
+    float max_penalty = 2*mapping_params->recheck_min_match_penalty ;
     num_joined_cms = 0;
     struct joined_candidate_mappings joined_cms[MAX_NUM_CAND_MAPPINGS+1];
     for( r1_i = 0; r1_i < rst_mappings[0]->length; r1_i++ )
@@ -593,7 +592,10 @@ find_candidate_mappings_for_read(
             if( frag_len > r->prior.max_fragment_length )
                 continue;
 
-            float penalty = pair_1_mapping->penalty + pair_2_mapping->penalty;
+            float fl_penalty = get_fl_log_prb( fl_dist, frag_len );
+            
+            float penalty = \
+                pair_1_mapping->penalty + pair_2_mapping->penalty + fl_penalty;
             /*if we already know that the penalty is too small, then skip this*/
             if (penalty + mapping_params->recheck_max_penalty_spread 
                     < max_penalty )
@@ -840,8 +842,8 @@ find_candidate_mappings( void* params )
                     r,
                     &mapped_read,
                     genome,
-                    error_model,
-                    mapping_params
+                    mapping_params,
+                    mpd_rds_db->fl_dist
             );
         
         if( rv != 0 )

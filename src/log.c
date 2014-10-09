@@ -139,7 +139,7 @@ statmap_log( enum LOG_LEVEL log_level, const char* format, ... )
     char timestamp[100];
     time_t rawtime = time( NULL );
     struct tm* timeinfo;
-    if( false && (time_t)-1 != rawtime ) {
+    if( (time_t)-1 != rawtime ) {
         timeinfo = localtime( &rawtime );
         strftime(timestamp, 100, "%Y-%m-%d %H:%M:%S", timeinfo );
     } else {

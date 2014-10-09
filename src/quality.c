@@ -331,7 +331,7 @@ multiple_letter_penalty(
         const LETTER_TYPE* const reference,
 
         const int start_position,
-        const int seq_length,
+        
         const int num_letters,
         const float min_penalty,
 
@@ -345,7 +345,7 @@ multiple_letter_penalty(
     {
         /* determine the penalty contribution from letter j in seq i */ 
         float added_penalty = compute_penalty( reference[j],
-                start_position + j, seq_length, min_penalty - cum_penalty, pa);
+                start_position + j, min_penalty - cum_penalty, pa);
         
         /* 
          * if the penalty is > 0, then that indicates that it exceeded the
@@ -402,8 +402,10 @@ compute_penalty(
         /* the position in the sequence - this should be
            zero indexed */
         const int position, 
+
         /* the length of a full sequence */
-        const int seq_length,
+        // const int seq_length - this is stoed in the penalty array
+
         /* the minimum allowable penalty */
         const float min_penalty,
 

@@ -266,9 +266,6 @@ find_matches_from_root(
         mapped_locations* results,
 
         struct genome_data* genome,
-
-        /* the length of the two reads ( below ) */
-        const int read_len,
         
         struct penalty_t* fwd_penalties,
         struct penalty_t* rev_penalties );
@@ -315,5 +312,3 @@ check_full_tree_penalty( char* genome_str,
 );
 
 #endif // INDEX_GENOME
-
-

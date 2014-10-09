@@ -235,8 +235,7 @@ check_sequence_type_ptr( const sequences_node* const seqs,
 set_sequence_type_to_ptr( sequences_node* seqs, int index );
 
 /*inline*/ LETTER_TYPE* 
-get_sequences_array_start( const sequences_node* const seqs, 
-                           LEVEL_TYPE seq_length );
+get_sequences_array_start( const sequences_node* const seqs );
 
 /*inline*/ locs_union* 
 get_genome_locations_array_start( const sequences_node* const seqs, 
@@ -285,9 +284,7 @@ find_sequences_in_sequences_node(
         float curr_penalty,
         /* the maximum allowable penalty */
         float min_match_penalty,
-
-        /* the length of a full sequence */
-        const int seq_length,
+        
         /* the total num of letters in a seq */
         const int num_letters,
         /* the current level in the tree */
