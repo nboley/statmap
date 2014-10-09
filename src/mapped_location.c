@@ -94,6 +94,7 @@ free_mapped_locations( mapped_locations* results )
         return;
     
     free( results->locations  );
+    //free_indexable_subtemplates( results->probe );
     free( results  );
     return;
 }
@@ -114,7 +115,7 @@ add_new_mapped_location( mapped_locations* results,
      */
     if( results->length == results->allocated_length )
     {
-        results->allocated_length += RESULTS_GROWTH_FACTOR;
+        results->allocated_length *= 2;
         results->locations = realloc(
             results->locations,
             results->allocated_length*sizeof(mapped_location)
@@ -132,7 +133,7 @@ add_new_mapped_location( mapped_locations* results,
     /* set the location */
     new_loc->chr = chr;
     new_loc->loc = loc;
-    assert( new_loc->loc >= 0 );
+    // assert( new_loc->loc >= 0 ); // always true
     
     /* set the read strand */
     new_loc->strnd = strnd;
@@ -254,32 +255,41 @@ print_mapped_locations( mapped_locations* results )
     return;
 }
 
+void
+sort_search_results(mapped_locations** search_results)        
+{
+    int i;
+    for(i = 0; search_results[i] != NULL; i++ )
+    {
+        sort_mapped_locations_by_location( search_results[i] );
+    }
+
+    return;
+}
+
+void
+free_search_results( mapped_locations** search_results )
+{
+    /* free each of the mapped_locations stored in the array */
+    int i;
+    for( i = 0; search_results[i] != NULL; i++ )
+    {
+        free_mapped_locations( search_results[i] );
+    }
+
+    /* free the array of pointers */
+    free( search_results );
+
+    return;
+}
+
 /*
  *  END Mapped Location
  *
  **************************************************************************/
 
+
 /***** ml_match *****/
-
-void
-init_ml_match( struct ml_match** match, int match_len )
-{
-    *match = malloc( sizeof( struct ml_match ));
-
-    /* Note - the length of the arrays will always be equal to the number of
-     * indexable subtemplates, since we must be able to match across all of the
-     * indexable subtemplates for a valid match. */
-    (*match)->len = match_len;
-    (*match)->matched = 0;
-
-    (*match)->locations = calloc( match_len, sizeof( mapped_location ));
-    (*match)->subseq_lengths = calloc( match_len, sizeof( int ));
-    (*match)->subseq_offsets = calloc( match_len, sizeof( int ));
-
-    (*match)->cum_penalty = 0;
-
-    return;
-}
 
 struct ml_match*
 copy_ml_match( struct ml_match* match )
@@ -301,6 +311,27 @@ copy_ml_match( struct ml_match* match )
     match_copy->cum_penalty = match->cum_penalty;
 
     return match_copy;
+}
+
+void
+init_ml_match( struct ml_match** mlm, int match_len )
+{
+    *mlm = calloc(1, sizeof(struct ml_match));
+    (*mlm)->len = match_len;
+    (*mlm)->matched = 0;
+
+    (*mlm)->locations = calloc( match_len, sizeof( mapped_location ));
+    (*mlm)->subseq_lengths = calloc( match_len, sizeof( int ));
+    (*mlm)->subseq_offsets = calloc( match_len, sizeof( int ));
+
+    (*mlm)->cum_penalty = 0;
+}
+
+void
+reset_ml_match( struct ml_match* mlm )
+{
+    mlm->matched = 0;
+    mlm->cum_penalty = 0;
 }
 
 void

@@ -17,12 +17,20 @@
     case where we need to read one more byte to set the EOF flag.
 
 Nathan:
+  get RNAseq working
+  
+  joining multiple probes is slow - change that to multiple single searchs followed by rechecks
+  
   implement provided error model
    - use the provided error estimates as the predictor
   use a dynamic step size
-     in find cand mappings, we now use global param to update read error models         
+     in find cand mappings, we now use global param to update read error models
 
   Take read pair into account in error model estimation
+  Take read direction into account in error model
+
+  Bootstrap samples until we've reached a given unique saturation
+  Figure out an automated way to find the saturation point
 
 -44) Clean up candidate_mapping struct.
      a) maybe get rid of RECHECK. Since reads are often longer than the index

@@ -6,8 +6,9 @@
 #include "config.h"
 #include "rawread.h"
 #include "quality.h"
+#include "error_correction.h"
 
-struct penalty_array_t; // fwd declaration (?)
+struct mapping_params; // fwd declaration (?)
 
 #define POS_SINGLE_END 0
 #define POS_PAIRED_END_1 0
@@ -28,8 +29,14 @@ struct pos_in_template {
 struct read_subtemplate {
     char* char_seq;
     char* error_str;
+    
+    struct penalty_array_t* fwd_penalty_array;
+    struct penalty_array_t* rev_penalty_array;
+    
     int length;
     struct pos_in_template pos_in_template;
+    
+    struct indexable_subtemplates* ists;
 };
 
 struct prior_read_information {
@@ -98,11 +105,8 @@ struct indexable_subtemplate
 
     /* pointers into penalty_array_t->array */
     /* these have already accounted for the subseq_offset */
-    struct penalty_t* fwd_penalties;
-    struct penalty_t* rev_penalties;
-
-    /* expected value of this index probe */
-    float expected_value;
+    struct penalty_array_t fwd_penalty_array;
+    struct penalty_array_t rev_penalty_array;
 };
 
 struct indexable_subtemplates
@@ -117,10 +121,7 @@ init_indexable_subtemplate(
         struct read_subtemplate* rst,
 
         int subseq_length,
-        int subseq_offset,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        int subseq_offset
     );
 
 void
@@ -142,6 +143,11 @@ void
 add_indexable_subtemplate_to_indexable_subtemplates(
         struct indexable_subtemplate* ist,
         struct indexable_subtemplates* ists
+    );
+
+void
+cache_penalty_arrays_in_read_subtemplates(
+    struct read* r, struct mapping_params* mapping_params 
     );
 
 #endif // READ_HEADER

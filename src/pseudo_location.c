@@ -256,8 +256,8 @@ load_pseudo_locations(
 {
     size_t size = 0;
     size_t rv = 0;
-    fread( &size, sizeof(size_t), 1, fp );
-    assert( rv == 0 );
+    rv = fread( &size, sizeof(size_t), 1, fp );
+    assert( rv == 1 );
     
     char* data = malloc( size  );
     assert( data != NULL );

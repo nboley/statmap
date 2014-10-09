@@ -5,13 +5,14 @@
 #include <math.h>
 #include <string.h>
 
+#include "error_correction.h"
+
 #include "config.h"
 #include "log.h"
 #include "rawread.h"
 #include "read.h"
 #include "quality.h"
 #include "genome.h"
-#include "error_correction.h"
 #include "find_candidate_mappings.h"
 #include "statmap.h"
 #include "util.h"
@@ -60,7 +61,7 @@ init_int_vector( int data_len, int* input_data )
 
 void
 build_vectors_from_error_data( 
-    struct error_data_t* data,
+    struct error_data_t* data, int record_index,
     SEXP** r_poss, SEXP** r_qual_scores,
     SEXP** r_mm_cnts, SEXP** r_cnts
 )
@@ -79,31 +80,27 @@ build_vectors_from_error_data(
     qual_scores = calloc( flat_vector_len, sizeof(double) );
     mm_cnts = calloc( flat_vector_len, sizeof(int) );
     cnts = calloc( flat_vector_len, sizeof(int) );
-
-    int record_index;
+    
     int pos, qual_score, flat_vec_pos;
-    for( record_index = 0; record_index < data->num_records; record_index++ )
+    flat_vec_pos = 0;
+    struct error_data_record_t* record = data->records[record_index];
+    for( pos = 0; pos < num_read_pos; pos++ )
     {
-        flat_vec_pos = 0;
-        struct error_data_record_t* record = data->records[record_index];
-        for( pos = 0; pos < num_read_pos; pos++ )
+        for( qual_score = 0;
+             qual_score < num_qual_scores; 
+             qual_score++ )
         {
-            for( qual_score = 0;
-                 qual_score < num_qual_scores; 
-                 qual_score++ )
-            {
-                poss[ flat_vec_pos ] = pos;
-                qual_scores[ flat_vec_pos ] = qual_score;
-                mm_cnts[ flat_vec_pos ] += 
-                    record->base_type_mismatch_cnts[qual_score][pos];
-                cnts[ flat_vec_pos ] +=
-                    record->base_type_cnts[qual_score][pos];
+            poss[ flat_vec_pos ] = pos;
+            qual_scores[ flat_vec_pos ] = qual_score;
+            mm_cnts[ flat_vec_pos ] += 
+                record->base_type_mismatch_cnts[qual_score][pos];
+            cnts[ flat_vec_pos ] +=
+                record->base_type_cnts[qual_score][pos];
             
-                flat_vec_pos += 1;
-            }
+            flat_vec_pos += 1;
         }
     }
-
+    
     *r_poss = init_double_vector( flat_vector_len, poss );
     *r_qual_scores = init_double_vector( flat_vector_len, qual_scores );
     *r_mm_cnts = init_int_vector( flat_vector_len, mm_cnts );
@@ -131,7 +128,8 @@ init_freqs_array_from_error_data( struct freqs_array** est_freqs,
     int i;
     for( i = 0; i <= error_data->max_qual_score; i++ )
     {
-        (*est_freqs)->freqs[i] = calloc( error_data->max_read_length+1, sizeof(double) );
+        (*est_freqs)->freqs[i] = calloc( 
+            error_data->max_read_length+1, sizeof(double) );
     }
     
     return;
@@ -189,15 +187,16 @@ predict_freqs( struct error_data_t* data, int record_index,
     SEXP *qual_scores = NULL;
 
     build_vectors_from_error_data( 
-        data, &poss, &qual_scores, &mm_cnts, &cnts
+        data, record_index, &poss, &qual_scores, &mm_cnts, &cnts
     );
     
     SEXP call;
     char plot_str[500];
-    sprintf( plot_str, "error_dist_BS%i_%i_%i", 
-             1,
+    sprintf( plot_str, "error_dist Rd Keys:%i-%i Strand:%i Rd Pair:%i", 
              data->records[record_index]->min_readkey, 
-             data->records[record_index]->max_readkey );
+             data->records[record_index]->max_readkey,
+             data->records[record_index]->strand, 
+             data->records[record_index]->read_subtemplate_index );
     
     call = lang6( install("predict_freqs"), 
                   *mm_cnts, *cnts, *poss, *qual_scores, 
@@ -253,16 +252,22 @@ update_estimated_error_model_from_error_data(
     struct error_data_t* data
 )
 {    
-    struct freqs_array* pred_freqs = error_model->data;
+    struct freqs_array** pred_freqs = error_model->data;
 
     if( pred_freqs == NULL )
     {
-        init_freqs_array_from_error_data( &pred_freqs, data );    
+        pred_freqs = calloc(sizeof(struct freqs_array*), data->num_records);
     }
     
-    predict_freqs( data, data->num_records-1, pred_freqs );
+    int i;
+    for(i = 0; i < data->num_records; i++) {
+        if( pred_freqs[i] == NULL ) {
+            init_freqs_array_from_error_data( &(pred_freqs[i]), data );
+        }
+        predict_freqs( data, i, pred_freqs[i] );
+    }
     error_model->data = pred_freqs;
-
+    
     return;
 }
 
@@ -295,7 +300,12 @@ void free_error_model( struct error_model_t* error_model )
 {
     if( error_model->error_model_type == ESTIMATED )
     {
-        free_freqs_array( error_model->data );
+        int i;
+        for( i = 0; i < MAX_NUM_RD_SUBTEMPLATES*2; i++ ) 
+        {
+            free_freqs_array( ((struct freqs_array**)error_model->data)[i] );
+        }
+        free( (struct freqs_array**)error_model->data );        
     }
 
     free( error_model );
@@ -303,48 +313,54 @@ void free_error_model( struct error_model_t* error_model )
 }
 
 double
-get_mismatch_penalty( struct penalty_t* penalty_array )
+get_mismatch_probability( struct penalty_t* penalty_array )
 {
-    double mismatch_penalty = 0;
+    double match_penalty = -DBL_MAX;
 
     /* We can safely assume the penalty for a match (in log space) is > any
     penalty for a mismatch. */
     int i;
     for( i = 0; i < 4; i++ )
     {
-        mismatch_penalty = MIN( penalty_array->penalties[i], mismatch_penalty );
+        match_penalty = MAX( penalty_array->penalties[i], match_penalty );
     }
 
-    return mismatch_penalty;
+    return 1 - pow(10, match_penalty);
 }
 
 
-double
-calc_min_match_penalty( struct penalty_t* penalties, int penalties_len, 
-                        float exp_miss_frac )
+void
+calc_penalty_dist_moments( 
+    struct penalty_array_t* penalty_array, 
+    double *moments,
+    int num_moments)
 {
     /* Unused - assert added to prevent compiler warning (for now) */
-    assert( exp_miss_frac > 0 );
-
+    assert( num_moments == 2 );
+    
     double mean = 0;
     double var = 0;
     
     int i;
-    for( i = 0; i < penalties_len; i++ )
+    for( i = 0; i < penalty_array->length; i++ )
     {
         /* Use the penalty of a mismatch, which we get by taking the min over
          * the four penalty values (since penalties are negative, this will be
          * the "highest" penalty score. This is wrong when we move to using
          * actual by base mutation rates. */
-        double penalty = get_mismatch_penalty( penalties + i );
-        double mm_prb = pow( 10, penalty );
-        mean += mm_prb*penalty;
-        mean += (1-mm_prb)*log10((1-mm_prb));
+        double mm_prb = get_mismatch_probability( penalty_array->array  + i );
+        double mm_penalty = log10(mm_prb) - LOG10_3;
+        double match_penalty = log10(1-mm_prb);
+        mean += mm_prb*mm_penalty;
+        mean += (1-mm_prb)*match_penalty;
         
-        var += (1-mm_prb)*mm_prb*penalty*penalty;
+        var += mm_prb*(1-mm_prb)*(mm_penalty - match_penalty)*(mm_penalty - match_penalty);
     }
+
+    moments[0] = mean;
+    moments[1] = var;
     
-    return mean - 4*sqrt( var );
+    return;
 }
 
 /* Separate penalty mean calculation from below so we can log independently of
@@ -355,33 +371,29 @@ log_penalties_mean( struct penalty_t* penalties, int penalties_len )
     double mean = 0;
     int i;
     for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
+        double mm_prb = get_mismatch_probability( penalties + i );
         mean += mm_prb;
     }
 }
 
 int
-calc_effective_sequence_length( struct penalty_t* penalties, int penalties_len )
+calc_effective_sequence_length( struct penalty_array_t* penalties )
 {
     double mean = 0;
     int i;
-    for( i = 0; i < penalties_len; i++ ) {
-        double mm_prb = pow( 10, get_mismatch_penalty( penalties + i ) );
+    for( i = 0; i < penalties->length; i++ ) {
+        double mm_prb = get_mismatch_probability( penalties->array + i );
         mean += mm_prb;
     }
 
-    return penalties_len - (int)mean - 1;
+    return penalties->length - (int)mean - 1;
 }
 
 enum bool
-filter_penalty_array( 
-        struct penalty_t* penalties, int penalties_len,
-        double effective_genome_len
-    )
+filter_penalty_array( struct penalty_array_t* penalty_array, 
+                      double effective_genome_len )
 {
-    int effective_seq_len = calc_effective_sequence_length(
-        penalties, penalties_len );
-
+    int effective_seq_len = calc_effective_sequence_length( penalty_array );
     if (pow(4, effective_seq_len)/2 <= effective_genome_len ) {
         /*
         statmap_log( LOG_DEBUG, "Filtering Read: %i %i - %e %e",
@@ -419,10 +431,8 @@ filter_read(
                 mapping_params->fwd_penalty_arrays[i]->length );
         #endif
 
-        if( filter_penalty_array( 
-                mapping_params->fwd_penalty_arrays[i]->array, 
-                mapping_params->fwd_penalty_arrays[i]->length,
-                effective_genome_len) ) {
+        if( filter_penalty_array( mapping_params->fwd_penalty_arrays[i], effective_genome_len) )
+        {
             return true;
         }
     }
@@ -449,8 +459,7 @@ filter_indexable_subtemplates(
     {
         struct indexable_subtemplate* ist = ists->container + i;
 
-        if( filter_penalty_array( 
-                ist->fwd_penalties, ist->subseq_length, effective_genome_len ) )
+        if( filter_penalty_array(&(ist->fwd_penalty_array), effective_genome_len) )
         {
             return true;
         }
@@ -578,9 +587,10 @@ compute_sampled_penalties_for_reads(
     int sample_prbs_index = 0;
 
     struct read* r;
-    while( EOF != get_next_read_from_rawread_db(
+    while( sample_prbs_index < num_sample_prbs
+           && EOF != get_next_read_from_rawread_db(
                rdb, &r, max_readkey )
-           && sample_prbs_index < num_sample_prbs )
+        )
     {
         struct penalty_array_t* penalty_arrays = malloc(
             sizeof(struct penalty_array_t) * r->num_subtemplates );
@@ -591,8 +601,7 @@ compute_sampled_penalties_for_reads(
                                  r->subtemplates + st_i,
                                  error_model );
         }
-        free_read( r );
-
+        
         int sample_i;
         for( sample_i = 0;
              sample_i < NUM_BASE_SAMPLES_FOR_MIN_PENALTY_COMP;
@@ -621,6 +630,7 @@ compute_sampled_penalties_for_reads(
             free_penalty_array( penalty_arrays + st_i );
         }
         free( penalty_arrays );
+        free_read( r );
     }
 
     restore_rawread_db_state( rdb, saved_state );
@@ -665,10 +675,9 @@ cleanup:
 
 struct mapping_params*
 init_mapping_params_for_read(
-    struct read* r,        
-    struct mapping_metaparams* metaparams,
-    struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct read* r,        
+        struct mapping_metaparams* metaparams,
+        struct error_model_t* error_model
     )
 {
     struct mapping_params* p = malloc(sizeof(struct mapping_params));
@@ -703,17 +712,6 @@ init_mapping_params_for_read(
         total_read_len += r->subtemplates[i].length;
     }
     p->total_read_length = total_read_len;
-
-    /* compute the expected value over the read. We use this to determine the
-       scaling factor to get the min match penalty for an index probe from the
-       min match penalty for the entire read. */
-    p->read_expected_value = 0;
-    for( i = 0; i < r->num_subtemplates; i++ )
-    {
-        p->read_expected_value += expected_value_of_rst(
-            r->subtemplates + i,
-            p->fwd_penalty_arrays[i]);
-    }
     
     /* now, calculate the model parameters */
     if( metaparams->error_model_type == MISMATCH ) {
@@ -725,24 +723,40 @@ init_mapping_params_for_read(
         p->recheck_min_match_penalty = max_num_mm;
         p->recheck_max_penalty_spread = max_mm_spread;
     } 
-    /* if the error model is estiamted, then just pass the meta params
-       through ( for now ) */
     else {
         assert( metaparams->error_model_type == ESTIMATED );
+        
+        double mean=0;
+        double variance=0; 
+        for( i = 0; i < r->num_subtemplates; i++ )
+        {
+            double fwd_moments[2], rev_moments[2];
+            calc_penalty_dist_moments(p->fwd_penalty_arrays[i], fwd_moments, 2);
+            calc_penalty_dist_moments(p->rev_penalty_arrays[i], rev_moments, 2);
+            
+            mean += MIN(fwd_moments[0], rev_moments[0]);
+            variance += MAX(fwd_moments[1], rev_moments[1]);
+        }
 
-        p->recheck_min_match_penalty = reads_min_match_penalty;
-        p->recheck_max_penalty_spread
-            = -log10(1 - metaparams->error_model_params[0]);
+        double shape = mean*mean/variance;        
+        double scale = -variance/mean;
+        
+        // Allow for one additional high quality mismatch, for the 
+        // continuity error
+        double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, 
+                                       shape, scale, 1, 0) - 2.1;
+        p->recheck_min_match_penalty = min_match_prb;
+        p->recheck_max_penalty_spread = -log10(
+            1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
+        //printf("%e:%e:%e\n", min_match_prb, mean, variance);
         assert( p->recheck_max_penalty_spread >= 0 );
-        //p->recheck_max_penalty_spread = 1.3;
-
+        
         if( _assay_type == CAGE )
         {
             /* FIXME - for now, increase the penalty so we can at least map perfect
              * reads with up to MAX_NUM_UNTEMPLATED_GS untemplated G's */
-            p->recheck_min_match_penalty = MAX(
-                p->recheck_min_match_penalty,
-                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB);
+            p->recheck_min_match_penalty += 
+                MAX_NUM_UNTEMPLATED_GS*UNTEMPLATED_G_MARGINAL_LOG_PRB;
         }
     }
 
@@ -754,7 +768,8 @@ init_index_search_params(
         struct indexable_subtemplates* ists,
         struct mapping_params* mapping_params )
 {
-    /* Allocate an array of index_search_params structs, one for each index probe */
+    /* Allocate an array of index_search_params structs, 
+       one for each index probe */
     struct index_search_params *isp
         = malloc(sizeof(struct index_search_params)*ists->length);
 
@@ -770,33 +785,39 @@ init_index_search_params(
         {
             /* The first metaparam is the expected rate of mapping (assuming 
             the read came from the genome) */
-            float expected_map_rate
+            float max_mm_rate
                 = mapping_params->metaparams->error_model_params[0];
+            float max_mm_spread
+                = mapping_params->metaparams->error_model_params[1];
 
-            min_match_penalty = -(expected_map_rate*ist->subseq_length);
-            /* Let mismatch spread be 1/2 the allowed mismatch rate (for now) */
-            max_penalty_spread = (expected_map_rate*0.5*ist->subseq_length);
-            
-            /* make the multiple index probe correction. This should actually be
+            /* TODO
+               make the multiple index probe correction. This should actually be
                qbinom( 0.5, 20, min_match_rate**n ), but this is actually nearly
                linear over reasonable probe lengths */
-            min_match_penalty = ceil(min_match_penalty*ists->length);
-            max_penalty_spread = floor(max_penalty_spread*ists->length);
+            double adj_p = exp(log(0.01)/ists->length);
+            min_match_penalty = -ceil(
+                qbinom(adj_p, ist->subseq_length, max_mm_rate, 0, 0));
+            max_penalty_spread = ceil(
+                qbinom(adj_p, ist->subseq_length, max_mm_spread, 0, 0));
         } else {
             assert( mapping_params->metaparams->error_model_type == ESTIMATED );
+            
+            //float scaling_factor = ((double)ist->subseq_length )
+            //    /mapping_params->total_read_length;
+            double fwd_moments[2], rev_moments[2];
+            calc_penalty_dist_moments(&(ist->fwd_penalty_array), fwd_moments,2);
+            calc_penalty_dist_moments(&(ist->rev_penalty_array), rev_moments,2);
+            
+            double mean = MIN(fwd_moments[0], rev_moments[0]);
+            double variance = MAX(fwd_moments[1], rev_moments[1]);
+            double shape = mean*mean/variance;        
+            double scale = -variance/mean;
 
-            float scaling_factor 
-                = ist->expected_value / mapping_params->read_expected_value;
-            scaling_factor = ((double)ist->subseq_length )
-                /mapping_params->total_read_length;
-            min_match_penalty 
-                = scaling_factor * mapping_params->sampled_penalties->read_subtemplate_penalty;
-            //min_match_penalty = mapping_params->recheck_min_match_penalty;
-
-            #ifdef PROFILE_CANDIDATE_MAPPING
-            statmap_log(LOG_DEBUG, "ist_min_match_penalty %f", min_match_penalty);
-            #endif
-                
+            // Adjust the p-value so that the mismatch rate is based 
+            // upon every search missing
+            double adj_p = exp(
+                log(1-DEFAULT_ESTIMATED_ERROR_METAPARAMETER)/ists->length);
+            min_match_penalty = -qgamma(adj_p, shape, scale, 0, 0) - 2.1;
             max_penalty_spread = mapping_params->recheck_max_penalty_spread;
         }    
 
@@ -847,8 +868,9 @@ init_error_data( struct error_data_t** data )
 {
     *data = calloc( sizeof(struct error_data_t), 1 );
 
-    (*data)->num_records = 0;
-    (*data)->records = NULL;
+    (*data)->num_records = MAX_NUM_RD_SUBTEMPLATES*2;
+    (*data)->records = calloc(
+        sizeof(struct error_data_t*), (*data)->num_records);
     
     (*data)->max_read_length = MAX_READ_LEN;
     (*data)->max_qual_score = MAX_QUAL_SCORE;
@@ -863,6 +885,23 @@ init_error_data( struct error_data_t** data )
     rc = pthread_mutex_init( (*data)->mutex, &mta );
 
     assert( rc == 0 );
+    
+    /* add a error data record for each strand, and for each possible 
+       read template */
+    int subtemplate_index, strand;
+    for( subtemplate_index= 0; 
+         subtemplate_index < MAX_NUM_RD_SUBTEMPLATES; 
+         subtemplate_index++ )
+    {
+        for( strand = 1; strand < 3; strand++ ) 
+        {
+            init_error_data_record( 
+                (*data)->records + 2*subtemplate_index + (strand-1),
+                subtemplate_index, (enum STRAND)strand,
+                (*data)->max_read_length, 
+                (*data)->max_qual_score );
+        }
+    }
     
     return;
 };
@@ -891,6 +930,7 @@ free_error_data( struct error_data_t* data )
     free( data );
 };
 
+/*
 void
 add_new_error_data_record( 
     struct error_data_t* data, int min_readkey, int max_readkey )
@@ -915,22 +955,22 @@ add_new_error_data_record(
     
     return;
 }
+*/
 
 void
-merge_in_error_data_record( struct error_data_t* data, int record_index,
-                            struct error_data_record_t* record )
+merge_in_error_data( struct error_data_t* data_to_update, 
+                     struct error_data_t* data )
 {
-    /* if the record index is < 0, use the last index */
-    if( record_index < 0 ) {
-        record_index = data->num_records - 1;
+    int i;
+    assert( data_to_update->num_records == data->num_records );
+    pthread_mutex_lock( data_to_update->mutex );
+    for( i = 0; i < data_to_update->num_records; i++ )
+    {
+        sum_error_data_records( 
+            data_to_update->records[i], 
+            data->records[i] );
     }
-    
-    assert( record_index < data->num_records && record_index >= 0 );
-    
-    
-    pthread_mutex_lock( data->mutex );
-    sum_error_data_records( data->records[record_index], record );
-    pthread_mutex_unlock( data->mutex );
+    pthread_mutex_unlock( data_to_update->mutex );
     
     return;
 }
@@ -1029,13 +1069,18 @@ void log_error_data( FILE* ofp, struct error_data_t* data )
  */
 void
 init_error_data_record( struct error_data_record_t** data, 
+                        int read_subtemplate_index, enum STRAND strand,
                         int max_read_len, int max_qual_score )
 {
     *data = malloc( sizeof(struct error_data_record_t) );
     
     (*data)->num_unique_reads = 0;
+    
     (*data)->max_read_length = max_read_len;
     (*data)->max_qual_score = max_qual_score;
+
+    (*data)->read_subtemplate_index = read_subtemplate_index;
+    (*data)->strand = strand;
 
     (*data)->min_readkey = -1;
     (*data)->max_readkey = -1;
@@ -1081,15 +1126,21 @@ free_error_data_record( struct error_data_record_t* data )
 }
 
 void
-update_error_data_record(
-    struct error_data_record_t* data,
+update_error_data(
+    struct error_data_t* data,
     char* genome_seq,
     char* read,
     char* error_str,
-    int read_length
+    int read_length,
+    int subtemplate_index,
+    enum STRAND strand,
+    int location_offset
 )
 {
-    data->num_unique_reads += 1;
+    /* find the correct error data record */
+    struct error_data_record_t* record = data->records[
+        2*subtemplate_index + ((int)strand - 1)];
+    record->num_unique_reads += 1;
     
     int i;    
     for( i = 0; i < read_length; i++ )
@@ -1098,10 +1149,12 @@ update_error_data_record(
         {
             // Add 1 because read positions are 1 based
             unsigned char error_char = (unsigned char) error_str[i];
-            data->base_type_mismatch_cnts[error_char][i+1] += 1;
+            record->base_type_mismatch_cnts[
+                error_char][i+1+location_offset] += 1;
         }
         
-        data->base_type_cnts[(unsigned char) error_str[i]][i+1] += 1;
+        record->base_type_cnts[
+            (unsigned char) error_str[i]][i+1+location_offset] += 1;
     }
     
     return;
@@ -1174,3 +1227,259 @@ fprintf_error_data_record(
     
     fprintf( stream, "\n" );
 }
+
+/*******************************************************************************
+ *
+ *
+ * Error data updating code
+ *
+ *
+ ******************************************************************************/
+
+void*
+update_error_data_from_index_search_results(
+    struct read_subtemplate* rst,
+    mapped_locations** search_results, 
+    struct genome_data* genome, 
+    struct error_data_t* error_data)
+{
+    /* Update the error data record */
+
+    /* find the best candidate mapping */
+    double lowest_penalty = -1e9;
+    mapped_location* best_mapped_location = NULL;
+    struct indexable_subtemplate* best_ist = NULL;
+    int num_lowest_penalties = 0;
+    
+    int i;
+    for( i = 0; NULL != search_results[i]; i++ ) 
+    {
+        /* if there aren't any results, there is nothing to do */
+        if (search_results[i]->length == 0) continue;
+        
+        
+        struct indexable_subtemplate* ist = search_results[i]->probe;
+        
+        int j;
+        for ( j = 0; j < search_results[i]->length; j++ ) 
+        {
+            /* Find the location for the full read corresponding to 
+               this mapped location, assuming that it is ungapped */
+            mapped_location* curr_loc = &(search_results[i]->locations[j]);
+            
+            /* skip pseudo locations */
+            if(curr_loc->chr == PSEUDO_LOC_CHR_INDEX) continue;
+            
+            int read_location
+                = modify_mapped_read_location_for_index_probe_offset(
+                    curr_loc->loc, curr_loc->chr, curr_loc->strnd,
+                    ist->subseq_offset, ist->subseq_length,
+                    rst->length, genome );
+            if( 0 > read_location ) continue;
+            
+            char* genome_seq = find_seq_ptr( 
+                genome, curr_loc->chr, read_location, rst->length );
+            
+            struct penalty_t* pa;
+            if(curr_loc->strnd == FWD) {
+                pa = rst->fwd_penalty_array->array;
+            } else {
+                pa = rst->rev_penalty_array->array;
+            }
+            float penalty = recheck_penalty(
+                    genome_seq,
+                    pa,
+                    rst->length
+                );
+            
+            /* if this is the best, then set it as such */
+            if( penalty >= lowest_penalty - 1e-6 )
+            {
+                /* If we don't have a valid match yet or the new penalty
+                   is strictly greater than then previous, then update */
+                if( best_ist == NULL || 
+                    penalty - 1e-6 >= lowest_penalty )
+                {
+                    best_mapped_location = search_results[i]->locations + j;
+                    best_ist = ist;
+                    lowest_penalty = penalty;
+                    num_lowest_penalties = 1;
+                } 
+                /* if the penalties are the same, choose one randomly using
+                   a resevoir sampling scheme (e.g. knuth)*/
+                else {
+                    num_lowest_penalties += 1;
+                    if(rand()%num_lowest_penalties == num_lowest_penalties - 1)
+                    {
+                        best_mapped_location = search_results[i]->locations + j;
+                        best_ist = ist;
+                    }
+                }
+                
+            }
+        }
+    }
+    
+    if( NULL == best_mapped_location ) {
+        return NULL;
+    }
+    
+    char* error_str = rst->error_str + best_ist->subseq_offset;
+            
+    char* fwd_genome_seq = find_seq_ptr( 
+        genome, 
+        best_mapped_location->chr, 
+        best_mapped_location->loc,
+        best_ist->subseq_length
+        );
+        
+    char* genome_seq;
+    if( best_mapped_location->strnd == BKWD )
+    {
+        genome_seq = calloc( best_ist->subseq_length+1, sizeof(char) );
+        rev_complement_read(fwd_genome_seq, genome_seq, best_ist->subseq_length);
+    } else {
+        genome_seq = fwd_genome_seq;
+    }
+        
+    update_error_data( 
+        error_data, 
+        genome_seq, 
+        best_ist->char_seq, 
+        error_str, 
+        best_ist->subseq_length, 
+        rst->pos_in_template.pos,
+        best_mapped_location->strnd,
+        best_ist->subseq_offset );
+        
+    if( best_mapped_location->strnd == BKWD )
+    {
+        free(genome_seq);
+    }
+
+    return NULL;
+}
+
+#ifdef INCREMENTLY_UPDATE_ERROR_MODEL
+
+/* 
+   Returns true if these candidate mappigns can be used to update the error 
+   data. Basically, we just test for uniqueness. 
+*/
+static inline enum bool
+can_be_used_to_update_error_data(
+    candidate_mappings* mappings,
+    struct genome_data* genome
+)
+{
+    /* skip empty mappings */
+    if( NULL == mappings )
+        return false;
+    
+    /*** we only want unique mappers for the error estiamte updates */        
+    // We allow lengths of 2 because we may have diploid locations
+    if( mappings->length < 1 || mappings->length > 2 ) {
+        return false;
+    }
+    
+    /* we know that the length is at least 1 from directly above */
+    assert( mappings->length >= 1 );
+    
+    candidate_mapping* loc = mappings->mappings + 0; 
+    int mapped_length = loc->mapped_length;
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        loc->chr, 
+        loc->start_bp, 
+        mapped_length
+    );
+        
+    /* 
+       if there are two mappings, make sure that they have the same 
+       genome sequence. They actually may not be mapping to the same, 
+       corresponding diploid locations, but as long as there isn't a second
+       competing sequence, we really don't care because the mutation rates 
+       should still be fine.
+    */
+    if( mappings->length > 1 )
+    {
+        /* this is guaranteed at the start of the function */
+        assert( mappings->length == 2 );
+
+        char* genome_seq_2 = find_seq_ptr( 
+            genome, 
+            mappings->mappings[1].chr, 
+            mappings->mappings[1].start_bp, 
+            mapped_length
+        );
+        
+        /* if the sequences aren't identical, then return */
+        if( 0 != strncmp( genome_seq, genome_seq_2, mapped_length ) )
+            return false;
+    }
+    
+    return true;
+}
+
+static inline void
+update_error_data_record_from_candidate_mappings(
+    struct genome_data* genome,
+    candidate_mappings* mappings,
+    struct read_subtemplate* rst,
+    struct error_data_record_t* error_data_record
+)
+{
+    if( !can_be_used_to_update_error_data( mappings, genome ) )
+        return;
+    
+    /* we need at least one valid mapping */
+    if( mappings->length == 0 )
+        return;
+    
+    // use the index with the lowest penalty to update the error structure
+    candidate_mapping* cm = mappings->mappings + 0;
+    int i;
+    for( i = 1; i < mappings->length; i++ ) {
+        if( mappings->mappings[i].penalty > cm->penalty )
+            cm = mappings->mappings + i;
+    }
+    
+    // Ignore reads that are reverse complemented - we need to fix this
+    if(cm->rd_strnd == BKWD) return; // XXX TODO
+
+    int mapped_length = cm->mapped_length;
+    
+    char* genome_seq = find_seq_ptr( 
+        genome, 
+        cm->chr, 
+        cm->start_bp,
+        mapped_length
+    );            
+        
+    /* get the read sequence - rev complement if on reverse strand */
+    char* read_seq;
+    if( cm->rd_strnd == BKWD )
+    {
+        read_seq = calloc( mapped_length + 1, sizeof(char) );
+        rev_complement_read( rst->char_seq + cm->trimmed_length,
+                read_seq, mapped_length );
+    } else {
+        read_seq = rst->char_seq + cm->trimmed_length;
+    }
+    
+    /* Is this correct for rev comp? */
+    char* error_str = rst->error_str + cm->trimmed_length;
+
+    /* the offset is always 0 because this is a candidate mapping */
+    update_error_data_record( 
+        error_data_record, genome_seq, read_seq, error_str, mapped_length, 0 );
+    
+    /* free memory if we allocated it */
+    if( cm->rd_strnd == BKWD )
+        free( read_seq );
+    
+    return;
+}
+
+#endif

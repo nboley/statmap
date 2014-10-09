@@ -5,7 +5,7 @@ CFLAGS=-O0 -g -msse2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 \
 	-I/usr/include/igraph
 
 RLIB=/usr/lib/R/lib/libR.so
-IGRAPHLIB=/usr/lib/libigraph.so
+IGRAPHLIB=/srv/OLD_INSTALL/usr/lib/libigraph.so
 
 src_objects := $(patsubst %.c,%.o,$(wildcard src/*.c))
 
@@ -35,15 +35,15 @@ statmap: $(src_objects)
 	$(CC) -o src/statmap \
 	$(src_objects) $(RLIB) $(IGRAPHLIB) \
 	$(CFLAGS) \
-	-lm -lpthread \
-	-L/usr/lib/R/lib -lR \
+	-lm -lpthread -lprofiler -L/usr/lib/R/lib -lR \
 	-L/usr/local/lib -ligraph
+
 	cp src/statmap ./bin/
 
 statmap.so : $(src_objects)
 	$(CC) $(CFLAGS) \
 	-fpic -shared -Wl,-soname,libstatmap.so.1 -o src/libstatmap.so \
-	-L/usr/lib/R/lib -lR \
+	-lprofiler -ltcmalloc -L/usr/lib/R/lib -lR \
 	-L/usr/local/lib -ligraph \
 	$(wildcard src/*.c) $(RLIB) $(IGRAPHLIB)
 

@@ -34,17 +34,13 @@ modify_mapped_read_location_for_index_probe_offset(
     ) 
 {
     // Check for overflow error
-    if( read_location < 0 ) {
-        statmap_log( LOG_ERROR, "The read locations was less than zero in modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
-        return -1;
-    }
+    // The read locations was less than zero in 
+    // modify_mapped_read_location_for_index_probe_offset.
+    assert( read_location >= 0 );
     
     // Pseudo locations should already have been expanded
-    if( chr == PSEUDO_LOC_CHR_INDEX ) {
-        statmap_log( LOG_ERROR, "Pseudo locs should NEVER be passed to modify_mapped_read_location_for_index_probe_offset. THIS SHOULD NEVER HAPPEN, PLEASE REPORT THIS BUG." );
-        return -1;
-    }
-
+    assert( chr != PSEUDO_LOC_CHR_INDEX );
+    
     /* first deal with reads that map to the 5' genome */
     if( strnd == FWD )
     {
@@ -215,13 +211,10 @@ get_length_from_cigar_string( candidate_mapping* mapping )
  *
  *********************************************************************************/
 void
-init_candidate_mappings( candidate_mappings** mappings )
+init_candidate_mappings( candidate_mappings* mappings )
 {
-    *mappings = malloc( sizeof(candidate_mappings) );
-    (*mappings)->mappings =
-        malloc(CAND_MAPPING_RESULTS_GROWTH_FACTOR*sizeof(candidate_mapping));
-    (*mappings)->length = 0;
-    (*mappings)->allocated_length = CAND_MAPPING_RESULTS_GROWTH_FACTOR;
+    mappings->length = 0;
+    mappings->allocated_length = MAX_NUM_CAND_MAPPINGS;
     return;
 }
 
@@ -237,20 +230,14 @@ copy_candidate_mappings(
     dst->length = src->length;
     dst->allocated_length = src->allocated_length;
 
-    /* Allocate new memory equivalent to the amount allocated in the original
-     * struct. We need to realloc since dst has been initialized and already
-     * has memory allocated for mappings. */
-    dst->mappings = realloc( dst->mappings,
-            dst->allocated_length * sizeof(candidate_mapping) );
-    assert( dst->mappings != NULL );
-
     /* Copy the candidate mappings */
-    memcpy( dst->mappings, src->mappings, src->length * sizeof(candidate_mapping) );
+    memcpy( dst->mappings, src->mappings, 
+            src->length*sizeof(candidate_mapping) );
 
     return;
 }
 
-void
+int
 add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     )
 {
@@ -260,16 +247,7 @@ add_candidate_mapping( candidate_mappings* mappings,
      */
     if( mappings->length == mappings->allocated_length )
     {
-        mappings->allocated_length += CAND_MAPPING_RESULTS_GROWTH_FACTOR;
-        mappings->mappings = realloc(
-            mappings->mappings,
-            mappings->allocated_length*sizeof(candidate_mapping)
-        );
-        
-        if( mappings->mappings == NULL )
-        {
-            statmap_log( LOG_FATAL, "Failed realloc in add_candidate_mapping" );
-        }
+        return TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
     }
 
     /* add the new results to the end of the results set */
@@ -277,7 +255,7 @@ add_candidate_mapping( candidate_mappings* mappings,
     (mappings->mappings)[mappings->length] = (*mapping);
     mappings->length++;
     
-    return;
+    return 0;
 }
 
 void

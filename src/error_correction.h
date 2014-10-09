@@ -19,6 +19,11 @@
 #define NUM_READ_SAMPLES_FOR_MIN_PENALTY_COMP 10
 #define ROUND_ERROR 1e-6
 
+struct indexable_subtemplates; // fwd declaration (?)
+struct read_subtemplate;
+struct penalty_t;
+struct read;
+
 struct freqs_array {
     int max_qual_score;
     int max_position;
@@ -96,9 +101,6 @@ struct mapping_params {
     struct penalty_array_t** rev_penalty_arrays;
     
     int total_read_length;
-    float read_expected_value;
-
-    struct sampled_penalties_t* sampled_penalties;
     
     float recheck_min_match_penalty;
     float recheck_max_penalty_spread;
@@ -129,8 +131,7 @@ struct mapping_params*
 init_mapping_params_for_read(
         struct read* r,        
         struct mapping_metaparams* metaparams,
-        struct error_model_t* error_model,
-        float reads_min_match_penalty
+        struct error_model_t* error_model
     );
 
 struct index_search_params*
@@ -149,8 +150,7 @@ free_mapping_params( struct mapping_params* p );
 
 
 int
-calc_effective_sequence_length( 
-    struct penalty_t* penalties, int penalties_len );
+calc_effective_sequence_length( struct penalty_array_t* penalties );
 
 /* determine whether reads are mappable */
 enum bool
@@ -181,6 +181,9 @@ struct error_data_record_t {
     int max_read_length;
     int max_qual_score;
 
+    int read_subtemplate_index;
+    int strand;
+    
     /* the readkey range that this record covers */
     int min_readkey;
     int max_readkey;
@@ -223,8 +226,8 @@ add_new_error_data_record(
  *
  */
 void
-merge_in_error_data_record( struct error_data_t* data, int record_index,
-                            struct error_data_record_t* record );
+merge_in_error_data( struct error_data_t* data_to_update, 
+                     struct error_data_t* data );
 
 void
 find_length_and_qual_score_limits( struct error_data_t* data,
@@ -245,18 +248,22 @@ void log_error_data( FILE* ofp, struct error_data_t* data );
 
 void
 init_error_data_record( struct error_data_record_t** data, 
+                        int read_subtemplate_index, enum STRAND strand,
                         int max_read_len, int max_qual_score );
 
 void
 free_error_data_record( struct error_data_record_t* data );
 
 void
-update_error_data_record(
-    struct error_data_record_t* data,
+update_error_data(
+    struct error_data_t* data,
     char* genome_seq,
-    char* read,
+    char* read_seq,
     char* error_str,
-    int read_length
+    int read_length,
+    int subtemplate_index,
+    enum STRAND strand,
+    int location_offset
 );
 
 void
@@ -269,5 +276,21 @@ void
 fprintf_error_data_record( 
     FILE* stream, struct error_data_record_t* data,
     int min_qual_score, int max_qual_score, int max_read_length );
+
+/*******************************************************************************
+ *
+ *
+ * Error data collection
+ *
+ *
+ ******************************************************************************/
+
+void*
+update_error_data_from_index_search_results(
+    struct read_subtemplate* rst,
+    mapped_locations** search_results, 
+    struct genome_data* genome, 
+    struct error_data_t* error_data);
+
 
 #endif

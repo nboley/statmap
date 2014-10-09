@@ -21,6 +21,14 @@ struct genome_data;
 struct rawread_db_t;
 struct cond_prbs_db_t;
 
+float
+calc_candidate_mapping_penalty(
+        candidate_mapping* mapping,
+        struct read_subtemplate* rst,
+        struct genome_data* genome
+    );
+
+
 /*************************************************************************
  *
  *  Mapped Reads
@@ -43,6 +51,7 @@ typedef struct __attribute__((__packed__)) {
 #else 
 typedef float ML_PRB_TYPE;
 #define ML_PRB_MIN FLT_MIN
+#define ML_PRB_MAX FLT_MAX
 #endif 
 
 static inline float 
@@ -200,7 +209,7 @@ typedef struct {
     //unsigned unused_bits    :0;
     /* For now, we assume that there is only 1 readid and therefore only
      * 1 corresponding seq_error */
-    ML_PRB_TYPE seq_error;      
+    ML_PRB_TYPE log_seq_error;      
 } mapped_read_location_prologue;
 
 // 6 bytes
@@ -276,7 +285,6 @@ get_start_from_mapped_read_location( const mapped_read_location* loc )
 
     MRL_START_POS_TYPE start = first_subloc->start_pos;
 
-    assert( start >= LOCATION_MIN );
     assert( start <= LOCATION_MAX );
 
     return start;
@@ -289,8 +297,7 @@ get_stop_from_mapped_read_location( const mapped_read_location* loc )
         = get_start_of_sublocations_in_mapped_read_location( loc );
 
     MRL_STOP_POS_TYPE stop = get_stop_for_sublocations_group( sl_start );
-
-    assert( stop >= LOCATION_MIN );
+    
     assert( stop <= LOCATION_MAX );
 
     return stop;
@@ -301,7 +308,6 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
 {
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
     MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc );
-
     MRL_FL_TYPE fl = MAX( start, stop ) - MIN( start, stop );
 
     assert( fl >= FRAGMENT_LENGTH_MIN );
@@ -313,11 +319,17 @@ get_fl_from_mapped_read_location( const mapped_read_location* loc )
 /** SEQ_ERROR **/
 
 static inline ML_PRB_TYPE
-get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
+get_log_seq_error_from_mapped_read_location( const mapped_read_location* loc )
 {
     mapped_read_location_prologue* prologue
         = (mapped_read_location_prologue*) loc;
-    return (ML_PRB_TYPE) prologue->seq_error;
+    return (ML_PRB_TYPE) prologue->log_seq_error;
+}
+
+static inline ML_PRB_TYPE
+get_seq_error_from_mapped_read_location( const mapped_read_location* loc )
+{
+    return pow(10, get_log_seq_error_from_mapped_read_location(loc));
 }
 
 static inline enum bool
@@ -387,25 +399,23 @@ fprintf_mapped_read( FILE* fp, mapped_read_t* r );
 
 void
 advance_pointer_to_start_of_next_joined_candidate_mappings(
-        candidate_mapping*** current_mapping,
+        candidate_mapping** current_mapping,
         int current_set_index,
         int num_sets );
 
 void
 join_candidate_mappings( candidate_mappings* mappings, 
                          struct read *r,
-                         candidate_mapping*** joined_mappings, 
-                         float** penalties,
-                         int* joined_mappings_len
-                        );
-void
-filter_joined_candidate_mappings( candidate_mapping*** joined_mappings, 
-                                  float** penalties,
-                                  int* joined_mappings_len,
-                                  
+                         candidate_mapping** joined_mappings, 
+                         float* penalties,
+                         int* joined_mappings_len );
+
+int
+filter_joined_candidate_mappings( candidate_mapping** joined_mappings, 
+                                  float* penalties,
+                                  int joined_mappings_len,
                                   struct genome_data* genome,
                                   struct read* r,
-                                  struct error_model_t* error_model,
                                   struct fragment_length_dist_t* fl_dist,
 
                                   struct mapping_params* mapping_params
@@ -414,9 +424,8 @@ filter_joined_candidate_mappings( candidate_mapping*** joined_mappings,
 mapped_read_t*
 build_mapped_read_from_joined_candidate_mappings(
         MPD_RD_ID_T read_id,
-        candidate_mapping** joined_mappings,
-        int joined_mappings_len,
-        float* penalties );
+        struct joined_candidate_mappings* joined_mappings,
+        int joined_mappings_len );
 
 size_t 
 write_mapped_read_to_file( mapped_read_t* read, FILE* of  );
@@ -506,11 +515,13 @@ add_read_to_mapped_reads_db(
 void
 add_unmappable_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db );
 
 void
 add_nonmapping_read_to_mapped_reads_db(
         struct read* r,
+        int error,
         struct mapped_reads_db* db );
 
 void

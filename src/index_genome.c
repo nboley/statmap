@@ -19,6 +19,7 @@
 #include "pseudo_location.h"
 #include "diploid_map_data.h"
 #include "error_correction.h"
+#include "mapped_location.h"
 
 #include "log.h"
 
@@ -26,7 +27,350 @@
 /* This must be added to all pointers */
 static size_t index_offset = 0;
 
-#define DONT_MMAP_INDEX
+#define MMAP_INDEX
+
+/******************************************************************************/
+/* Functions for finding seqeunces in thre tree                               */
+/******************************************************************************/
+
+float
+subseq_penalty(
+        struct read_subtemplate* rst,
+        int subseq_offset,
+        int subseq_length,
+        struct penalty_array_t* penalties
+    )
+{
+    assert( subseq_offset + subseq_length <= rst->length );
+
+    float penalty = 0;
+    /* loop over subsequence */
+    int pos;
+    for( pos = subseq_offset;
+         pos < subseq_offset + subseq_length; 
+         pos++ )
+    {
+        int bp = rst->char_seq[pos];
+
+        if( bp == 'N' || bp == 'n' )
+        {
+            penalty += N_penalty;
+        } else {
+            /* take the match penalty for this bp - assuming we can find
+             * a perfect match to a given subsequence in the genome, which
+             * match would then have the best penalty (considering what we know
+             * about error rates in positions, for the error scores, etc. from
+             * the error model)? */
+            penalty += penalties->array[pos].penalties[bp_code(bp)];
+        }
+   }
+
+    return penalty;
+}
+
+int
+find_optimal_subseq_offset( 
+    struct read_subtemplate* rst,
+    
+    int subseq_len,
+
+    /* define region of underlying read to search for optimal subsequences */
+    int region_start,
+    int region_length
+) {
+    /* Make sure the search region makes sense */
+    assert( region_start >= 0 && region_start <= (rst->length - subseq_len) );
+    assert( region_length <= rst->length );
+    assert( (region_start + region_length - subseq_len) >= 0 );
+    
+    /*
+       error_prb returns the inverse log probability of error:
+       log10(1 - P(error)) for matches
+    */
+    int optimal_offset = region_start;
+    float max_so_far = -FLT_MAX;
+        
+    int i;
+    /* each possible start bp in the subsequence */
+    for( i = region_start;
+         i < (region_start + region_length - subseq_len);
+         i++ )
+    {
+        float ss_pen = subseq_penalty(rst, i, subseq_len, rst->fwd_penalty_array);
+        if( ss_pen > max_so_far ) {
+            max_so_far = ss_pen;
+            optimal_offset = i;
+        }
+    }
+
+    /* Return the offset of the optimal index probe from the start of the read
+     * subtemplate */
+    return optimal_offset;
+};
+
+struct indexable_subtemplate*
+build_indexable_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        
+        // area of the read subtemplate to take an indexable subtemplate from
+        int range_start,
+        int range_length,
+        
+        enum bool choose_random_offset
+    )
+{
+    int subseq_length = index->seq_length;
+
+    /* Our strategy for choosing indexable subtemplates depends on the type of
+     * assay. For gapped assays (RNA_SEQ), we wish to maximize the distance
+     * between probes in order to optimize intron finding. For ungapped assays,
+     * we want to use the highest quality subsequence in the read for the index
+     * search. */
+    int subseq_offset = 0;
+
+    if( _assay_type == RNA_SEQ ) // Gapped assay
+    {
+        /* FIXME soft clipping for gapped assays? */
+        if( range_start == 0 ) {
+            /* subseq_offset = softclip_len ? will that mess up the matching
+             * code later? */
+            subseq_offset = 0;
+        } else {
+            subseq_offset = range_start + range_length - subseq_length;
+        }
+    } else {
+        if( choose_random_offset ) {
+            subseq_offset = range_start + rand()%(
+                range_length - subseq_length + 1);
+            assert( subseq_offset >= range_start );
+        } else {
+            subseq_offset = find_optimal_subseq_offset(
+                rst,
+                subseq_length,
+                range_start,
+                range_length
+            );
+        }
+    }
+
+    assert( subseq_offset >= 0 );
+    struct indexable_subtemplate* ist = NULL;
+    init_indexable_subtemplate( &ist, rst, subseq_length, subseq_offset);
+    
+    return ist;
+}
+
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        enum bool use_random_subtemplate_offset
+    )
+{
+    int subseq_length = index->seq_length;
+    
+    /* Make sure we the read is long enough for us to build index probes
+     * (considering any softclipped bases from the start of the rst) */
+    int indexable_length = rst->length - softclip_len;
+    if( indexable_length < subseq_length )
+    {
+        statmap_log( LOG_WARNING,
+                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
+                softclip_len
+            );
+        return NULL;
+    }
+
+   struct indexable_subtemplates* ists = NULL;
+   init_indexable_subtemplates( &ists );
+
+    /* for now, try to build the maximum number of indexable subtemplates up to
+     * a maximum */
+    int num_partitions;
+    if( _assay_type == RNA_SEQ ) {
+        /* for RNA-seq, always use two probes at either end of the read so we
+         * can maximize the space for finding introns */
+        num_partitions = 2;
+    } else {
+        num_partitions = MIN( indexable_length / subseq_length,
+                              MAX_NUM_INDEX_PROBES );        
+    }
+    
+    int i;
+    for( i = 0; i < num_partitions; i++ )
+    {
+        struct indexable_subtemplate* ist = NULL;
+
+        int partition_start, partition_len;
+        if( use_random_subtemplate_offset ) {
+            partition_start = 0;
+            partition_len = indexable_length;
+
+        } else {
+            partition_len = floor((float)indexable_length / num_partitions);
+            partition_start = softclip_len + i * partition_len;
+        }
+        /* partition the read into equal sized sections and try to find the
+         * best subsequence within each section to use as an index probe */
+        ist = build_indexable_subtemplate( 
+            rst, index,
+            partition_start, partition_len,
+            use_random_subtemplate_offset );
+
+        if( ist == NULL ) {
+            free_indexable_subtemplates( ists );
+            return NULL;
+        }
+
+       // copy indexable subtemplate into set of indexable subtemplates
+       add_indexable_subtemplate_to_indexable_subtemplates( ist, ists );
+       // free working copy
+       free_indexable_subtemplate( ist );
+    }
+    
+    return ists;
+}
+
+int
+search_index(
+        struct genome_data* genome,
+        struct indexable_subtemplate* ist,
+        struct index_search_params* search_params,
+        mapped_locations** results
+    )
+{
+    // reference to index
+    struct index_t* index = genome->index;
+
+    int subseq_length = index->seq_length;
+    
+    /* prepare the results container */
+    init_mapped_locations( results, ist );
+    
+    /* Build bitpacked copies of the fwd and rev strand versions of this
+     * indexable subtemplate */
+
+    /* Store a copy of the read */
+    /* This read has N's replaced with A's, and might be RC'd */
+    char sub_read[MAX_READ_LEN];
+    sub_read[subseq_length] = '\0';
+
+    memcpy( sub_read, ist->char_seq,
+            sizeof(char)*(subseq_length) );
+    replace_ns_inplace( sub_read, subseq_length );
+
+    /** Deal with the read on the fwd strand */
+    /* Store the translated sequences here */
+    LETTER_TYPE *fwd_seq;
+    fwd_seq = translate_seq( sub_read, subseq_length );
+    /* If we couldnt translate it */
+    if( fwd_seq == NULL )
+        return -1;
+    
+    /** Deal with the read on the opposite strand */
+    LETTER_TYPE *bkwd_seq;
+    char tmp_read[MAX_READ_LEN];
+    tmp_read[subseq_length] = '\0';
+    rev_complement_read( sub_read, tmp_read, subseq_length );
+    
+    bkwd_seq = translate_seq( tmp_read, subseq_length );
+    assert( bkwd_seq != NULL );
+    
+    /* search the index */
+    int rv = find_matches_from_root(
+            index, 
+
+            search_params,
+            *results,
+
+            genome,
+
+            /* length of the reads */
+            subseq_length,
+            
+            ist->fwd_penalty_array.array,
+            ist->rev_penalty_array.array
+        );
+
+    /* Cleanup memory */
+    free( fwd_seq );
+    free( bkwd_seq );
+    
+    return rv;
+};
+
+
+int
+search_index_for_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct mapping_params* mapping_params,
+        
+        mapped_locations*** search_results,
+
+        struct genome_data* genome,
+        enum bool use_random_subtemplate_offset
+    )
+{
+    // build a set of indexable subtemplates from this read subtemplate
+    rst->ists = build_indexable_subtemplates_from_read_subtemplate(
+        rst, genome->index, use_random_subtemplate_offset );
+
+    /* if we couldn't build indexable sub templates, ie the read was too short, 
+       then don't try and map this read */
+    if( rst->ists == NULL ) {
+        return CANT_BUILD_READ_SUBTEMPLATES_ERROR;
+    }
+        
+    /* Stores the results of the index search for each indexable subtemplate */
+    int search_results_length = rst->ists->length;
+    *search_results = calloc(sizeof(mapped_locations*),search_results_length+1);
+        
+
+    /* initialize search parameters for the index probes */
+    struct index_search_params* index_search_params
+        = init_index_search_params(rst->ists, mapping_params);
+
+    int num_valid_index_searches = 0;
+    int i;
+    for( i = 0; i < rst->ists->length; i++ )
+    {
+        int rv = search_index(
+                genome,
+                rst->ists->container + i,
+                index_search_params + i,
+                &((*search_results)[i])
+            );
+        // if the index search returned an error, skip this index probe
+        // if there are too many candidate mappings, skip this index probe
+        if( rv != 0 )
+        {
+            statmap_log( 
+                LOG_DEBUG, 
+                "Could not search index for subtemplate %i - error code %i",
+                i, rv);
+            free((*search_results)[i]->locations);
+            (*search_results)[i]->locations = NULL;
+            (*search_results)[i]->length = 0;
+            (*search_results)[i]->allocated_length = 0;
+            continue;
+        }        
+        num_valid_index_searches++;
+    }    
+
+    if(num_valid_index_searches < MIN_NUM_INDEX_PROBES)
+    {
+        free( index_search_params );
+        free_search_results( *search_results );
+        *search_results = NULL;
+        
+        return NOT_ENOUGH_VALID_INDEX_PROBES_ERROR;
+    }
+
+    free( index_search_params );    
+    return 0;
+}
+
 
 /******************************************************************************/
 /* Memory function for  building the index      */
@@ -69,20 +413,17 @@ tree_free( void* ptr )
 /******************************************************************************/
 
 void
-init_pmatch_stack( potential_match_stack** stack )
+init_pmatch_stack( potential_match_stack* stack )
 {
-    *stack = malloc( sizeof(potential_match_stack) );
-    (*stack)->first_index = STACK_INITIAL_FIRST_INDEX;
-    (*stack)->last_index = STACK_INITIAL_FIRST_INDEX;
-    (*stack)->allocated_size = STACK_GROWTH_FACTOR;
-    (*stack)->matches = malloc( STACK_GROWTH_FACTOR*sizeof(potential_match) );
+    stack->first_index = PMATCH_STACK_FIRST_INDEX;
+    stack->last_index = PMATCH_STACK_FIRST_INDEX;
+    stack->allocated_size = PMATCH_STACK_SIZE;
 }
 
 void
 free_pmatch_stack( potential_match_stack* stack )
 {
     free( stack->matches );
-    free(stack);
 }
 
 void
@@ -107,7 +448,7 @@ fprint_pmatch_stack( FILE* fp , potential_match_stack* s )
     fprintf( fp, "====END=====================================================\n");
 }
 
- float 
+float 
 scale_penalty( float penalty, // potential_match_stack* stack, 
                int level,
                int max_num_levels,
@@ -121,6 +462,7 @@ scale_penalty( float penalty, // potential_match_stack* stack,
      * assume that it has an expected penalty of negative the max top difference.
      * 
      */
+    
     double min_starting_penalty 
         = ( max_penalty_diff < -0.1) ? max_penalty_diff: min_penalty;
     
@@ -128,15 +470,67 @@ scale_penalty( float penalty, // potential_match_stack* stack,
     rv +=  penalty*(((double) max_num_levels)/(level+1));
 
     return rv;
+
+    /*
+    float scaled_penalty = penalty*(((double) max_num_levels)/(level+1));
+    scaled_penalty -= 2*(max_num_levels - level);
+    return scaled_penalty;
+    */
 }
 
-size_t
+int
+cmp_pmatch_item( const potential_match* a,
+                 const potential_match* b )
+{
+    if( b->scaled_penalty > a->scaled_penalty)
+        return -1;
+    return 1;
+} 
+
+void
+sort_pmatch_stack( potential_match_stack* stack )
+{
+    qsort ( 
+        stack->matches + stack->first_index,
+        pmatch_stack_length(stack), 
+        sizeof(potential_match), 
+        (int(*)( const void*, const void* ))cmp_pmatch_item
+    );
+    
+    return;
+}
+
+potential_match
+pop_pmatch( potential_match_stack* stack )
+{
+    assert( pmatch_stack_length( stack ) > 0 );
+    stack->last_index -= 1;
+    return *(stack->matches + stack->last_index);
+}
+
+int
 pmatch_stack_length( potential_match_stack* pmatch )
 {
-    return (pmatch->last_index - pmatch->first_index);
+    return pmatch->last_index - pmatch->first_index;
 };
 
- potential_match_stack*
+void
+clean_pmatch_stack(potential_match_stack* stack, float min_match_penalty)
+{
+    int new_index = stack->first_index;
+    int i;
+    /* remove all of the items less then the min match penalty */
+    for( i = stack->first_index; i < pmatch_stack_length(stack); i++ )
+    {
+        potential_match curr_item = stack->matches[i];
+        if( curr_item.penalty < min_match_penalty )
+            continue;
+        stack->matches[new_index] = curr_item;
+        new_index++;
+    }
+}
+
+int
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND strnd,
             const int node_level, const int max_num_levels,
@@ -145,40 +539,23 @@ add_pmatch( potential_match_stack* stack,
     /* if necessary, increase the available size */
     // Assert guaranteed by type definition
     // assert( pmatch_stack_length( stack ) >= 0 );
-    if( stack->last_index == stack->allocated_size )
+    if( stack->first_index == 0 || stack->last_index == stack->allocated_size )
     {
-        stack->allocated_size += STACK_GROWTH_FACTOR;
-        stack->matches = realloc( stack->matches, 
-                                  sizeof(potential_match)*
-                                  (stack->allocated_size) 
-        );
-    }
-
-    /* if necessary, shift the stack forward */
-    if( stack->first_index == 0 )
-    {
-        /* if there isnt enough room for the shift, realloc */
-        if( pmatch_stack_length(stack) + STACK_INITIAL_FIRST_INDEX 
-                >= stack->allocated_size )
-        {
-            stack->allocated_size += STACK_GROWTH_FACTOR;
-            stack->matches = realloc( stack->matches, 
-                                      sizeof(potential_match)*
-                                      (stack->allocated_size) 
-            );
-            assert( stack->matches != NULL );
-        }
-
+        clean_pmatch_stack(stack, min_match_penalty);
+        int new_start = (PMATCH_STACK_SIZE - pmatch_stack_length(stack))/2;
+        if( new_start < 5 )
+            return PMATCH_STACK_OVERRUN;
+        
         /* move the stack forward */
-        memmove( stack->matches + STACK_INITIAL_FIRST_INDEX, /* dst */
-                 stack->matches /* src */, 
+        memmove( stack->matches + new_start, /* dst */
+                 stack->matches + stack->first_index /* src */, 
                  sizeof(potential_match)*pmatch_stack_length( stack  )  
         );
-        
-        stack->first_index += STACK_INITIAL_FIRST_INDEX;
-        stack->last_index += STACK_INITIAL_FIRST_INDEX;
-    }
+        stack->first_index = new_start;
+        stack->last_index = new_start + pmatch_stack_length(stack);
 
+    }
+    
     assert( pmatch_stack_length(stack) == 0
             || (stack->matches + stack->last_index - 1)->node_type == 'd' 
             || (stack->matches + stack->last_index - 1)->node_type == 's'
@@ -228,17 +605,8 @@ add_pmatch( potential_match_stack* stack,
     new_location->strnd = strnd;
     new_location->penalty = penalty;
     new_location->scaled_penalty = scaled_penalty;
-
-    return stack;
-}
-
-potential_match
-pop_pmatch( potential_match_stack* stack )
-{
-    /* TODO - lock access for thread safety */
-    assert( pmatch_stack_length( stack ) > 0 );
-    stack->last_index -= 1;
-    return *(stack->matches + stack->last_index);
+    
+    return 0;
 }
 
 /* FIXME - WHERE SHOULD THIS GO */
@@ -417,17 +785,35 @@ add_child_to_dynamic_node(
     return node;
 }
 
- void add_child_to_static_node( 
+void add_child_to_static_node( 
     static_node* node,
-    LETTER_TYPE bp
+    LETTER_TYPE bp,
+    char child_node_type
 )
 {
     /* set the node type of the child */
-    node[bp].type = 'q';
+    node[bp].type = child_node_type;
+
     /* initialize the new child node */
-    sequences_node* new_node;
-    init_sequences_node( &new_node );
-    node[bp].node_ref = new_node;
+    if( child_node_type == 'q' ) 
+    {
+        sequences_node* new_node;
+        init_sequences_node( &new_node );
+        node[bp].node_ref = new_node;
+    } else {
+        assert( child_node_type == 'l' );
+        locations_node* new_node;
+        init_locations_node( &new_node );
+        node[bp].node_ref = new_node;
+    }
+    
+    /* update the hints before this node, which poiunt to the
+       next non-empty slot */
+    int i;
+    for(i = bp-1; i >= 0 && node[i].type == '\0'; i--)
+    {
+        node[i].next_child = bp - i;
+    }
 }
 
 
@@ -437,6 +823,8 @@ void free_node( void* node, char node_type )
 {
     switch( node_type )
     {
+        case '\0':
+            break;
         case 's':
             tree_free( node );
             #ifdef PROFILE_MEMORY_USAGE
@@ -551,6 +939,174 @@ build_static_node_from_dynamic_node( dynamic_node* dnode,
 }
 
 void
+build_static_node_from_sequence_node(  sequences_node* qnode, 
+                                       static_node** snode,
+                                       const int num_levels,
+                                       LEVEL_TYPE level,
+                                       struct genome_data* genome )
+{
+    int i;
+    
+    init_static_node(snode);
+
+    /* 
+     * TODO - what the below says - for now we do it naively
+     * populate the children from the sequence node
+     *
+     * NOT ACTUALLY IMPLEMENTED - THIS IS A COMMENT FOR A TODO
+     * we could do this using the machinery that we've already developed, 
+     * but it will be much faster if we can just peak inside of the sequence 
+     * node, so that is what we do. Don't replicate this code for adding
+     * sequences to a dynamic node - call add_child_to_dynamic_node with
+     * find_child_index_in_dynamic_node
+     * END NOT ACTUALLY IMPLEMENTED
+     *
+     */
+    
+    /* the number of letters in each tailing sequence in seqs */
+    int num_letters = num_levels - level;
+
+    /* make sure it makes sense to convert the node - TODO better error check */
+    assert( get_num_sequence_types(qnode) > 1 );
+    
+    /* get the array of sequences form the (packed) sequences node */
+    LETTER_TYPE* sequences = get_sequences_array_start( qnode, num_letters );
+
+    /* loop through all of the children */
+    for( i = 0; i < get_num_sequence_types(qnode); i++ )
+    {
+        /* 
+         * Note that the sequences store all of the letters in the sequence 
+         * node in sequential order. Since we only care about the first letter
+         * in each sequence, we start i at 0 and take the i*num_letters letter
+         */
+        LETTER_TYPE bp = sequences[i*num_letters];
+        
+        /* set the child node type. If we are at the botom of the tree it's a locations
+           node - otherwise it is a sequence node */
+        NODE_TYPE child_node_type = 'q';
+        if(num_letters == 1) {
+            child_node_type = 'l';
+        }
+        
+        /* check to make sure this child exists - if it doesn't, create it*/
+        if( (*snode)[bp].type == '\0' ) 
+        {
+            add_child_to_static_node( *snode, bp, child_node_type );
+        }
+        
+        /**** Add the sequence to the leaf *********************************/
+        /* If there is only one letter in the seqeunce node, then we are
+           at the bottom of the tree and need to build a locations node */
+        if( 'l' == child_node_type )
+        {
+            /* 
+             * Add the sequence to the leaf - we just assume that it is a genome
+             * location for now. After it's added. we check the bit to make sure
+             * and, if it's a pointer, we fix it.
+             */
+            locations_node** child_seqs 
+                = (locations_node**) &((*snode)[bp].node_ref);
+            
+            /* 
+             * Now, check if there are multiple genome locations associated
+             * with this sequence.
+             */
+            locs_union loc = 
+                get_genome_locations_array_start( qnode, num_letters )[i];
+
+
+            if( !check_sequence_type_ptr(qnode, i) )
+            {
+                *child_seqs = add_location_to_locations_node(   
+                    *child_seqs, 
+                    loc.loc
+                );
+            } 
+            else 
+            /* Add all of the locs in the referenced array */
+            {
+                INDEX_LOC_TYPE* gen_locs 
+                    = get_overflow_genome_locations_array_start( 
+                        qnode,  num_letters )
+                    + loc.locs_array.locs_start;
+
+                int j;
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {
+                    *child_seqs = add_location_to_locations_node(   
+                        *child_seqs, 
+                        gen_locs[j]
+                    );
+                }
+            }
+        }
+        /* Otherwise, this is a sequence node */
+        else {
+            /* 
+             * Add the sequence to the leaf - we just assume that it is a genome 
+             * location for now. After it's added. we check the bit to make sure 
+             * and, if it's a pointer, we fix it.
+             */
+            sequences_node** child_seqs
+                = (sequences_node**) &((*snode)[bp].node_ref);
+            assert( child_node_type == 'q' );
+            
+            /* 
+             * Now, check if there are multiple genome locations associated
+             * with this sequence.
+             */
+            locs_union loc = 
+                get_genome_locations_array_start( qnode, num_letters )[i];
+
+            /* 
+             * if the correct bit is set, then the genome location is a pointer.
+             */        
+            if( !check_sequence_type_ptr(qnode, i) )
+            {
+                *child_seqs = add_sequence_to_sequences_node(
+                    /* we pass NULL for the pseudo_locs, because we know that
+                       it is only used to add pseudo locations and, since we 
+                       are building a dynamic node from a sequences node, 
+                       anything that is already a pseudo loc wont change */
+                    genome,
+                    NULL,
+                    *child_seqs, 
+                    sequences + i*num_letters + 1, 
+                    num_letters-1, 
+                    loc.loc
+                );
+            } 
+            else 
+            /* Add all of the locs in the referenced array */
+            {
+                INDEX_LOC_TYPE* gen_locs 
+                    = get_overflow_genome_locations_array_start( qnode,  num_letters )
+                    + loc.locs_array.locs_start;
+
+                int j;
+                for(j = 0; j < loc.locs_array.locs_size; j++ )
+                {
+                    INDEX_LOC_TYPE loc = gen_locs[j];
+
+                    *child_seqs = add_sequence_to_sequences_node(   
+                        genome,
+                        NULL,
+                        *child_seqs, 
+                        sequences + i*num_letters + 1, 
+                        num_letters-1, 
+                        loc
+                    );
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+
+void
 build_dynamic_node_from_sequence_node(  sequences_node* qnode, 
                                         dynamic_node** dnode,
                                         const int num_levels,
@@ -625,8 +1181,8 @@ build_dynamic_node_from_sequence_node(  sequences_node* qnode,
         if( num_letters - 1  == 0 )
         {
             /* 
-             * Add the sequence to the leaf - we just assume that it is a genome 
-             * location for now. After it's added. we check the bit to make sure 
+             * Add the sequence to the leaf - we just assume that it is a genome
+             * location for now. After it's added. we check the bit to make sure
              * and, if it's a pointer, we fix it.
              */
             locations_node** child_seqs  = 
@@ -775,124 +1331,58 @@ add_sequence( struct genome_data* genome,
     static_node* root = index->index;
 
     const int num_levels = calc_num_letters( seq_length );
-    LEVEL_TYPE level = 0;
+    LEVEL_TYPE level;
     /* 
      * store a pointer to the address that references curr_node. Since there is no
      * node pointing to root, it's initialized to NULL. This shouldn't matter because
      * it's purpose is to keep a record for node conversions, and root is always static
      * and thus never converted.
      */
-    void** node_ref = NULL;
-    NODE_TYPE* node_type_ref = NULL; 
 
-    void* curr_node = (void*) root;
-    char curr_node_type = 's';
+    void** node_ref = (void**) &root;
 
+    NODE_TYPE curr_node_type = 's';
+    NODE_TYPE* node_type_ref = &curr_node_type; 
+    
     /* traverse child nodes until we hit a leaf node */
-    while( level < num_levels )
+    for( level=0; 
+         *node_ref != NULL
+             && level < num_levels 
+             && *node_type_ref == 's'; 
+         level++ )
     {
         LETTER_TYPE bp = seq[level];
-        if( curr_node_type == 's' )
+        /* if thios child slot is empty, then create a new node and break */
+        if( ((static_node*) *node_ref)[bp].type == '\0' )
         {
-            /* check to make sure this child exists - if it doesn't, create it*/
-            if( ((static_node*) curr_node)[bp].node_ref == NULL ) 
-            {
-              add_child_to_static_node( (static_node*) curr_node, bp );
+            if( level+1 == num_levels ) {
+                add_child_to_static_node(*node_ref, bp, 'l');
+            } else {
+                add_child_to_static_node(*node_ref, bp, 'q');
             }
-            
-            /* FIXME - but this is ok for now */
-            node_type_ref = &(((static_node*) curr_node)[bp].type);
-            curr_node_type = *node_type_ref;
-
-            node_ref = &(((static_node*) curr_node)[bp].node_ref);
-            curr_node = *node_ref;
-            
-            // debug
-            // printf("LeveL: %i\tStatic Node: %p %p\t%c\n", 
-            //       level, node_type_ref, node_ref, *node_type_ref);
-            
-        } else if( curr_node_type == 'd' )
-        {
-            int child_index = find_child_index_in_dynamic_node(
-                (dynamic_node*) *node_ref, bp);
-            /* 
-             * make sure that the child is of the correct type - child_index 
-             * might just be the insert location. If it is, it's the current 
-             * node. If not, we need to build the new node.
-             */
-            
-            int num_children = get_dnode_num_children( *node_ref );
-            dynamic_node_child* children = get_dnode_children( *node_ref );
-
-            /* if the node is incorrect, then insert the correct child */
-            if ( child_index == num_children
-                 || children[child_index].letter != bp )
-            {
-              *node_ref = add_child_to_dynamic_node( 
-                  *node_ref, bp, child_index, num_levels - level
-              );
-            }
-
-            assert( child_index < get_dnode_num_children(*node_ref) );
-            assert( child_index >= 0 );
-            
-            node_type_ref = 
-                &( get_dnode_children(*node_ref)[child_index].type);
-            curr_node_type = *node_type_ref;
-
-            node_ref = &( get_dnode_children(*node_ref)[child_index].node_ref );
-            curr_node = *node_ref;
-
-            // debug
-            // printf("LeveL: %i\tDynamic Node: %p %p\t%c\n", 
-            //       level, node_type_ref, node_ref, *node_type_ref);
-            
-
-        /* 
-         * If the node type is sequence or locations, then we have reached 
-         * the bottom of the tree 
-         */
-        } else { 
-            assert( curr_node_type == 'q' || curr_node_type == 'l' );
-            break;
-        } 
-        
-        /* move to the next level */
-        level++;
-
-        assert( curr_node_type == 's' 
-                || curr_node_type == 'q' 
-                || curr_node_type == 'd'
-                || curr_node_type == 'l' );
-
-        assert( *node_type_ref = curr_node_type );    
-        assert( *node_ref = curr_node );    
+        }
+        /* move the pointer to the child node */
+        node_type_ref = &(((static_node*) *node_ref)[bp].type);
+        node_ref = &(((static_node*) *node_ref)[bp].node_ref);
     }
-
-    /* If we are at a level node */
-    if( curr_node_type == 'l' )
+    
+    /* 
+     * Only location nodes dont store any sequence information 
+     * so, if we are at the bottom of the tree, this 
+     * must be a location node.
+     */
+    if( level == num_levels )
     {
-        // debug
-        // printf("LeveL: %i\tLocations Node: %p %p\t%c\n", 
-        //       level, node_type_ref, node_ref, *node_type_ref);
-        
-        /* 
-         * Location nodes dont store any sequence information 
-         * thus, if this is a location node we better be at the
-         * bottom level of the tree
-         */
-        assert( level == num_levels );
-        
+        assert(*node_type_ref == 'l');
         *node_ref = add_location_to_locations_node( 
-            (locations_node*) curr_node, genome_loc );
-        
+            (locations_node*) *node_ref, genome_loc );
         return;
     }
 
-    /* make sure that we are at a sequence node */
-
-    assert( curr_node_type == 'q' );
+    /* if we're not at the bottom and this is not a static node, 
+       then we must be at a sequence node */
     assert( *node_type_ref == 'q' );
+    
     /* add the sequence to current node */
     *node_ref = add_sequence_to_sequences_node(   
         genome,
@@ -902,7 +1392,9 @@ add_sequence( struct genome_data* genome,
         num_levels - level,
         genome_loc                  
     );
-
+    int num_sequence_types = 
+        get_num_sequence_types( (sequences_node*) *node_ref );
+    
     /* 
      * check if the current sequence node has too many entries. If it does, 
      * then convert it to a dynamic node. 
@@ -930,62 +1422,133 @@ add_sequence( struct genome_data* genome,
      *
      */
 
-    int num_sequence_types = 
-        get_num_sequence_types( (sequences_node*) *node_ref );
 
     assert( num_sequence_types <= MAX_SEQ_NODE_ENTRIES );
-    
+        
     while( level < num_levels 
            && num_sequence_types == MAX_SEQ_NODE_ENTRIES )
     {
-        // debug
-        // printf("Level: %i\tSequences Node: %p %p\t%c\n", 
-        //       level, node_type_ref, node_ref, *node_type_ref);
-
-        
         /* Make sure the node is a sequence node */
         assert( 'q' == *node_type_ref );
         
         /* Make a dynamic node from *node_ref */
-        dynamic_node* new_node = NULL; 
-        build_dynamic_node_from_sequence_node( 
+        static_node* new_node = NULL; 
+        build_static_node_from_sequence_node( 
             (sequences_node*) *node_ref, 
             &new_node, 
             num_levels, 
             level,
             genome
         );
-
+        
         /* Free the old sequences node */
         free_seqs( (sequences_node*) *node_ref );
-        
-        /* Set the pointers to point to the newly created node */
         *node_ref = new_node;
-        *node_type_ref = 'd';
-        
-        /* get the first child */
-        node_ref = &get_dnode_children( new_node )[0].node_ref;
-        /* get the pointer to the first child's node type */
-        node_type_ref = &get_dnode_children( new_node )[0].type;
-        /* move to the next level */
+        *node_type_ref = 's';
+        /* move to the next level. If there are no levels left, then
+           break. Otherwise, check to see if we need to convert more 
+           sequence nodes*/
         level += 1;
         
-        if( *node_type_ref == 'q' )
+        if( level == num_levels ) 
+            break;
+        
+        /* There can only ever be one sequence node that is overloaded, 
+           because we only find one sequence at a time. Find this node if it exists,
+           otherwise break.  */
+        int i;
+        /* set this to zero to break out of the loop if we don't find another 
+           overloaded node */
+        num_sequence_types = 0;
+        for(i=0; i < ALPHABET_LENGTH; i++)
         {
-            num_sequence_types = 
-                get_num_sequence_types( (sequences_node*) *node_ref );
-        }
-
-    assert( *node_type_ref == 'l' 
-            || num_sequence_types < MAX_SEQ_NODE_ENTRIES );
-
-    } 
-    
+            if( new_node[i].type != '\0'
+                && MAX_SEQ_NODE_ENTRIES > get_num_sequence_types( 
+                    (sequences_node*) new_node[i].node_ref ) )
+            { 
+                node_ref = &(new_node[i].node_ref);
+                node_type_ref = &(new_node[i].type);
+                assert( *node_type_ref == 'q' );
+                num_sequence_types = 
+                    get_num_sequence_types( (sequences_node*) *node_ref );
+                break; 
+            }
+        }        
+    }
+        
     return;
 }
 
+int
+search_static_node(
+    potential_match_stack* stack,
+    static_node* node, const int node_level, 
+    enum STRAND strnd, 
+    const int seq_length, const int num_letters,
+    struct penalty_t* penalties, const float curr_penalty, 
+    const float min_match_penalty, const float max_penalty_spread )
+{
+    /* deal with static node */
+    /* TODO - optimize this case */
+    int letter = 0;
+    static_node_child* curr_node = node + 0;
+    /* loop through each potential child - accounting is done inside
+       for performance reasons */
+    while( letter < ALPHABET_LENGTH )
+    {
+        /*
+          printf("%i\t", letter );
+          print_packed_sequence(&letter, 4);
+          print_bitmap(&letter, 8);
+        */
+                
+        /* if the child is null, keep going */
+        if( curr_node->type == '\0' )
+        {
+            /* if ther are no nodes left with children, we are done */
+            if( curr_node->next_child == 0 )
+                return 0;
+            
+            letter += curr_node->next_child;
+            curr_node += curr_node->next_child;
+        } else {
+            /* this should be optimized out */
+            float penalty_addition = compute_penalty( 
+                letter, node_level,
+                seq_length, min_match_penalty - curr_penalty,
+                penalties );
 
-void 
+            int break_index = (int) (penalty_addition + 0.5);
+            if( break_index >= 1 ) {
+                letter += (1 << 2*(LETTER_LEN - break_index));
+                curr_node = node + letter;
+            }
+            /* otherwise, find the penalty on the child function */
+            else {
+                /* add this potential match to the stack */
+                int add_pmatch_rv = add_pmatch( 
+                    stack, 
+                    ((static_node*) node)[letter].node_ref,
+                    ((static_node*) node)[letter].type,
+                    strnd,
+                    node_level+1, num_letters, 
+                    curr_penalty + penalty_addition, 
+                    min_match_penalty, max_penalty_spread
+                    );
+                /* if there is an error, we're done */
+                if( add_pmatch_rv != 0 ) 
+                {
+                    return add_pmatch_rv;
+                }
+                letter += 1;
+                curr_node += 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int 
 find_matches( void* node, NODE_TYPE node_type, int node_level, 
               const int seq_length,
               float curr_penalty, 
@@ -995,21 +1558,13 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
               struct genome_data* genome,
 
-              /* fwd stranded data  */
-              LETTER_TYPE* fwd_seq, 
-              /* rev stranded data */
-              LETTER_TYPE* rev_seq, 
-
               struct penalty_t* fwd_penalties,
-              struct penalty_t* rev_penalties,
-
-              /*
-                 we pass this flag all the way down to optimize the error data
-                 bootstrap by terminating early on multimappers
-               */
-              enum bool only_find_unique_sequences
+              struct penalty_t* rev_penalties
     )
 {
+    // Initialize the return value to 0, for no error
+    int rv = 0;
+    
     const int num_letters = calc_num_letters( seq_length );
 
     /* Unpack the search parameters */
@@ -1017,27 +1572,39 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     float max_penalty_spread = search_params->max_penalty_spread;
 
     /* initialize the stack */
-    potential_match_stack* stack;
+    potential_match_stack stack;
     init_pmatch_stack( &stack );
-    stack = add_pmatch( stack, node, node_type, FWD,
-                        node_level, num_letters, 
-                        curr_penalty, 
-                        min_match_penalty, max_penalty_spread );
+    /* this can never return an error because the stack is empty, so 
+       ther is no need to check the return values */
+    add_pmatch( &stack, node, node_type, FWD,
+                node_level, num_letters, 
+                curr_penalty, 
+                min_match_penalty, max_penalty_spread );
 
-    stack = add_pmatch( stack, node, node_type, BKWD,
-                        node_level, num_letters, 
-                        curr_penalty, 
-                        min_match_penalty, max_penalty_spread );
+    add_pmatch( &stack, node, node_type, BKWD,
+                node_level, num_letters, 
+                curr_penalty, 
+                min_match_penalty, max_penalty_spread );
 
     // get current time
     struct timespec start;
     struct timespec stop;
     int err;
     err = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-    int cntr = 0;
-    while( pmatch_stack_length( stack ) > 0 )
+    assert( err == 0 );
+    
+    int cntr;
+    for(cntr = 0; pmatch_stack_length( &stack ) > 0; cntr++ )
     {
-        cntr += 1;
+        potential_match match = pop_pmatch( &stack );
+        /* check to make sure that this branch is still valid */
+        /* avoid rounding errors with the small number - it is your fault
+           if you put in a negative number for the max penalty spread */
+        if( match.penalty < min_match_penalty )
+        {
+            continue;
+        }
+        
         if( cntr%1000 == 0 )
         {
             double elapsed;
@@ -1046,14 +1613,18 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
             elapsed += (stop.tv_nsec - start.tv_nsec) / 1000000000.0;
             if( elapsed > MAX_SEARCH_TIME )
             {
-                statmap_log( LOG_DEBUG, 
-                             "Terminating index search (%e sec elapsed)", 
-                             elapsed );
                 results->length = 0;
+                rv = INDEX_SEARCH_TOOK_TOO_LONG_ERROR;
                 goto cleanup;            
             }
+            
+            if( results->length > MAX_NUM_CAND_MAPPINGS ) 
+            {
+                rv = TOO_MANY_CANDIDATE_MAPPINGS_ERROR;
+                results->length = 0;
+                goto cleanup;
+            }
         }
-        potential_match match = pop_pmatch( stack );
 
         /* add the index offset so that this is a phsyical location */
         /* 
@@ -1070,13 +1641,10 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
         enum STRAND strnd = match.strnd;
         
         /* select sequence and penalty_array depending on fwd/bkwd strand */
-        LETTER_TYPE* seq;
         struct penalty_t* penalties;
         if( strnd == FWD ) {
-            seq = fwd_seq;
             penalties = fwd_penalties;
         } else {
-            seq = rev_seq;
             penalties = rev_penalties;
         }
 
@@ -1086,134 +1654,22 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
          * that means the index seed length is longer than the seq length. 
          * If this is the case, add every child below the current node as 
          * a match.
-         */
-           
-        /* check to make sure that this branch is still valid */
-        /* avoid rounding errors with the small number - it is your fault
-           if you put in a negative number for the max penalty spread */
-        if( max_penalty_spread > -0.01 &&
-            curr_penalty < min_match_penalty )
-        {
-            continue;
-        }
-        
+         */                 
         if( node_type == 's')
         {
-            /* deal with static node */
-            /* TODO - optimize this case */
-            unsigned int letter;
-            /* loop through each potential child */
-            for( letter = 0; letter < ALPHABET_LENGTH; letter++ )
+            rv = search_static_node(
+                &stack,
+                node, node_level, 
+                strnd, seq_length, num_letters,
+                penalties, curr_penalty, 
+                min_match_penalty, max_penalty_spread);
+            if( 0 != rv )
             {
-                /* if the child is null, keep going */
-                if( ((static_node*) node)[letter].node_ref == NULL )
-                    continue;
-
-                /* this should be optimized out */
-                float penalty_addition = compute_penalty( letter, node_level,
-                        seq_length, min_match_penalty - curr_penalty,
-                        penalties );
-
-                /* if this letter exceeds the max, continue */
-                if( penalty_addition > 0 ) {
-                    /* skip forward to the next possible letter */
-                    // int num_to_skip = ( 3 << ( LETTER_LENGTH - ((int) penalty_addition - 1 ) )
-                    continue;
-                }
-                /* otherwise, find the penalty on the child function */
-                else {
-                  /* // debugging code
-                    printf("Level: %i\t Node Type: %c\t Letter: %i\tPenalty: %e\n", 
-                           node_level, node_type, letter, curr_penalty + penalty_addition);
-                  */
-
-                    /* add this potential match to the stack */
-                    stack = add_pmatch( 
-                        stack, 
-                        ((static_node*) node)[letter].node_ref,
-                        ((static_node*) node)[letter].type,
-                        strnd,
-                        node_level+1, num_letters, 
-                        curr_penalty + penalty_addition, 
-                        min_match_penalty, max_penalty_spread
-                    );
-                }
+                results->length = 0;
+                goto cleanup;
             }
+
         }
-        /* deal with dynamic nodes */
-        else if( node_type == 'd')
-        {
-            /* hopefully this will be optimized out */
-            int num_children = get_dnode_num_children( node );
-            dynamic_node_child* children = get_dnode_children( node );
-
-            int i;
-            /* loop through each potential child */
-            for( i = 0; i < num_children; i++ )
-            {
-                /* this should be optimized out */
-                LETTER_TYPE letter = children[i].letter;
-
-                float penalty_addition = compute_penalty( letter, node_level,
-                        seq_length, min_match_penalty - curr_penalty,
-                        penalties);
-
-                /* 
-                 * If compute_penalty returns a value >= 1
-                 * ( we say > 0.5 to deal with rounding errors )
-                 * then that means that the letter at the level returned,
-                 * minus 1 is the letter that exceeded the penalty. As
-                 * such, since the letters are in sorted order, we dont 
-                 * need to go back to penalty function. Rather, we can keep
-                 * skipping letters until the letter at the returned level
-                 * or any letter above that level changes. The code
-                 * below implements this optimiztion.
-                 */
-                if( penalty_addition > 0.5 ) {
-                    /* FIXME - consider the performace implications of this */
-                    int break_index = (int) penalty_addition + 0.5;
-                    if( break_index == 1 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&3) == 
-                               ((children[i+1].letter)&3)  )
-                        {
-                            i++;
-                        }
-                    } else if( break_index == 2 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&15) == 
-                               ((children[i+1].letter)&15)  )
-                        {
-                            i++;
-                        }
-                    } else if( break_index == 3 ) {
-                        while( i + 1 < num_children &&
-                               ((children[i].letter)&63) == 
-                               ((children[i+1].letter)&63)  )
-                        {
-                            i++;
-                        }
-                    } 
-
-                    continue;
-                }
-                /* otherwise, find the penalty on the child function */
-                else {
-                  /* debugging code
-                    printf("Level: %i\t Node Type: %c\t Letter: %i\tPenalty: %e\n", 
-                           node_level, node_type, letter, curr_penalty + penalty_addition);
-                  */
-                    stack = add_pmatch( stack, 
-                                children[i].node_ref,
-                                children[i].type,
-                                strnd,
-                                node_level+1, num_letters, 
-                                curr_penalty + penalty_addition,
-                                min_match_penalty, max_penalty_spread
-                    );
-                }
-            }
-        } 
         /* If this is a locations node */
         else if( node_type == 'l')
         {
@@ -1239,49 +1695,24 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
 
         }
         /* deal with the sequence nodes */
-        else {
+        else if( node_type == 'q') 
+        {
             assert( node_type == 'q' );
-            
-            /* keep track of how many rsults we currently have */
-            int old_results_len = results->length;
             
             /* debugging
             printf("Level: %i\t Node Type: %c\t\t\tPenalty: %e\n", 
                    node_level, node_type, curr_penalty );
             */
             float max_added_penalty = 
-            find_sequences_in_sequences_node( 
-                node, 
-                curr_penalty, min_match_penalty,
-                seq, seq_length, num_letters, node_level, strnd,
-                results,
-                penalties,
-                genome
-            );            
-            
-            /* 
-               If we are only looking for unique sequences,
-               and we have already found some locations, then 
-               finding more locations implies that we have 
-               found some differing sequence ( because we know that
-               each node stores identical sequence ). This is not
-               to say that there are not non-identical sequence 
-               within results already, but adding any more will 
-               certainly be different. Thus, we set the results length
-               to 0 and continue. 
-             */
-            if( only_find_unique_sequences 
-                && old_results_len > 0 
-                && results->length > old_results_len )
-            {
-                /* we can set this to zero and not worry about
-                   a memory leak because the allocated length
-                   will still be non-zero, so we can clean this
-                   up properly */
-                results->length = 0;
-                goto cleanup;
-            }
-            
+                find_sequences_in_sequences_node( 
+                    node, 
+                    curr_penalty, min_match_penalty,
+                    seq_length, num_letters, node_level, strnd,
+                    results,
+                    penalties,
+                    genome
+                );            
+                        
             // DEBUG
             //fprintf( stderr, "max_added_penalty: %f\n", max_added_penalty);
 
@@ -1304,12 +1735,11 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     }
 
 cleanup:
-    free_pmatch_stack( stack );
-    return;
+    return rv;
 }
 
 
-extern void
+extern int
 find_matches_from_root(
         struct index_t* index,
 
@@ -1320,16 +1750,9 @@ find_matches_from_root(
 
         /* the length of the two reads ( below ) */
         const int read_len,
-
-        /* the fwd stranded data */
-        LETTER_TYPE* fwd_seq, 
-        /* the bkwd stranded data */
-        LETTER_TYPE* rev_seq, 
-
+        
         struct penalty_t* fwd_penalties,
-        struct penalty_t* rev_penalties,
-
-        enum bool only_find_unique_sequences
+        struct penalty_t* rev_penalties
 )
 {
     assert( index->index_type == TREE );
@@ -1345,14 +1768,9 @@ find_matches_from_root(
                          results,
 
                          genome,
-
-                         fwd_seq,
-                         rev_seq,
-
+                         
                          fwd_penalties,
-                         rev_penalties,
-
-                         only_find_unique_sequences ); 
+                         rev_penalties);
 }
 
 size_t
@@ -1368,7 +1786,7 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
     size_t size = 0;
     int i;
 
-    if( node == NULL )
+    if( node == NULL || type == '\0' )
         return 0;
     
     node += index_offset;
@@ -1399,6 +1817,8 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
             );
         }
         return size + size_of_dnode( node );
+    case '\0':
+        return 0;
     }
 
     statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
@@ -1409,7 +1829,7 @@ calc_node_and_children_size( NODE_TYPE type, void* node  )
 size_t
 calc_node_size( NODE_TYPE type, void* node  )
 {
-    if( node == NULL )
+    if( node == NULL || type == '\0')
         return 0;
     
     node += index_offset;
@@ -1426,6 +1846,8 @@ calc_node_size( NODE_TYPE type, void* node  )
         return size_of_snode();
     case 'd':
         return size_of_dnode( node );
+    case '\0':
+        return 0;
     }
 
     statmap_log( LOG_FATAL, "Unrecognized Node Type: '%c'",  type );
@@ -1515,7 +1937,7 @@ add_ODI_stack_item( struct ODI_stack* stack,
      * It's possible for a root node to pass a NULL ptr ( indicating a 
      * non-existent child ). If this happens, do nothing.
      */
-    if( *node_ref == NULL ) return;
+    if( *node_ref == NULL || node_type == '\0' ) return;
 
     stack->size++;
     
@@ -1623,7 +2045,13 @@ load_ondisk_index( char* index_fname, struct index_t** index )
     rv = fread( &indexed_seq_len, 1, 1, index_fp );
     assert( 1 == rv );
     assert( indexed_seq_len > 0 );
-
+    
+    if(indexed_seq_len%LETTER_LEN != 0 )
+    {
+        statmap_log( LOG_FATAL, "The indexed sequence length must be a multiple of %i", LETTER_LEN );
+        exit( 1 );
+    }
+    
     /* allocate space for the index */
     *index = malloc( sizeof( struct index_t ) );
     
@@ -1912,7 +2340,3 @@ print_memory_usage_stats()
     return;
 }
 #endif
-
-
-
-

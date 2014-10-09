@@ -12,7 +12,7 @@
  */
 
 #include "dna_sequence.h"
-#include "read.h"
+//#include "read.h"
 
 struct read_subtemplate; // fwd declaration (?)
 
@@ -33,7 +33,9 @@ error_prb(
     char obs,
     char error_score,
     int pos,
-    struct error_model_t* error_model
+    struct error_model_t* error_model,
+    int read_subtemplate_index,
+    enum STRAND strand
 );
 
 /* 
@@ -112,7 +114,6 @@ multiple_letter_penalty(
 float
 recheck_penalty(
         char* reference,
-        char* observed,
         /* Pointer into an array of penalty_t */
         struct penalty_t* pa,
         const int seq_length

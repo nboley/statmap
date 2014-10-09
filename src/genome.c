@@ -266,11 +266,6 @@ load_genome_from_disk( struct genome_data** gen, char* fname )
 
     struct genome_header header;
     read_reference_data_header_from_disk( &header, genome_fp );
-
-    #ifdef DEBUG
-    statmap_log( LOG_DEBUG, "HEADER DATA: %zu %zu %zu",
-            header.size, header.genome_offset, header.pseudo_locs_offset );
-    #endif
     
     *gen = malloc( sizeof( struct genome_data ) );
     
@@ -803,6 +798,8 @@ index_diploid_chrs(
             loc.chr = maternal_chr_index;
         }
         else {
+            // silence the compiler
+            start_pos = -1;
             statmap_log( LOG_FATAL,
                     "Impossible sequence segment : %i, %i, %i",
                     segments[i].paternal_start_pos,

@@ -3,20 +3,24 @@
 #ifndef CONFIG
 #define CONFIG
 
+#define DEBUG
+
 /****** version options                         *******/
-#define GENOME_FILE_FORMAT_VERSION   0
+#define GENOME_FILE_FORMAT_VERSION   1
 
 /****** verbosity options                       ******/
 /* how often we print out the mapping status */
-#define MAPPING_STATUS_GRANULARITY 50000
+#define MAPPING_STATUS_GRANULARITY 10000
 
 /****** configuration options                   ******/
 
 #define MAX_SEARCH_TIME 1.0
 #define MAX_NUM_CAND_MAPPINGS 5000
 
-#define ONLY_USE_1_READ_SUBTEMPLATE
-#define N_DEBUG
+// the maximum number of index probes to use for a read
+#define MAX_NUM_INDEX_PROBES 5
+// the number of index probes we need for a mapping to be valid
+#define MIN_NUM_INDEX_PROBES 1
 // #define PROFILE_CANDIDATE_MAPPING
 
 /* Try to map 99% of the input reads with the estimated error model */
@@ -27,7 +31,7 @@
 /* Mismatch rates for the estimated error model bootstrap */
 #define NUM_READS_TO_BOOTSTRAP 100000
 #define MAX_NUM_MM_RATE 0.10
-#define MAX_NUM_MM_SPREAD_RATE 0.09
+#define MAX_NUM_MM_SPREAD_RATE 0.001
 
 #define HIGH_QUALITY_BP_ERROR_PRB 1e-2
 
@@ -97,6 +101,17 @@
 #define ERROR_STATS_LOG "error_stats.log"
 #define BOOTSTRAP_ERROR_STATS_LOG "bootstrap_error_stats.log"
 
+/**** eror codes       ****/
+
+#define CANT_BUILD_READ_SUBTEMPLATES_ERROR 1
+#define TOO_MANY_CANDIDATE_MAPPINGS_ERROR 2
+#define INDEX_SEARCH_TOOK_TOO_LONG_ERROR 3
+#define NOT_ENOUGH_VALID_INDEX_PROBES_ERROR 4
+#define PMATCH_STACK_OVERRUN 5
+#define NO_CANDIDATE_MAPPINGS 6
+#define NO_ASSAY_CORRECTED_CANDIDATE_MAPPINGS 7
+#define NO_JOINED_CANDIDATE_MAPPINGS 8
+#define NO_UNFILTERED_CANDIDATE_MAPPINGS 9
 
 /**** set global constantsa for maximum read length, etc.       ****/
 
@@ -106,7 +121,7 @@
 
 /**** determine how the letters are packed       ****/
 
-#define PSEUDO_LOC_MIN_SIZE 50
+#define PSEUDO_LOC_MIN_SIZE 150
 
 typedef unsigned char LEVEL_TYPE;
 /* TODO this probably isn't big enough - max read len of 255? */
@@ -175,6 +190,7 @@ enum STRAND {
  *  should never happen, but it's included for consistency 
  */
 
+#define MAX_NUM_RD_SUBTEMPLATES 2
 enum READ_END {
     // UNKNOWN = 0,
     NORMAL = 1,
@@ -279,8 +295,26 @@ enum input_file_type_t {
 };
 
 /*** Globally useful macros ***/
+#define LOG10_3 0.477121
+
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
+typedef struct {
+    unsigned int chr; // TODO use MRL_CHR_TYPE, etc. ?
+    unsigned int loc; // maybe put some unified types in config.h?
+    enum STRAND strnd;
+    float penalty;
+} mapped_location;
+
+typedef struct {
+    /* An array of mapped locations */
+    mapped_location* locations;
+    int length;
+    int allocated_length;
+
+    struct indexable_subtemplate* probe;
+} mapped_locations;
 
 
 #endif

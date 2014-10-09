@@ -50,6 +50,9 @@ free_read_subtemplate( struct read_subtemplate* st )
 
     /* Don't free the read subtemplate itself - it is allocated as part of a
      * contiguous array. */
+    if( st->ists != NULL )
+        free_indexable_subtemplates(st->ists);
+    
     return;
 }
 
@@ -100,6 +103,8 @@ add_subtemplate_to_read(
     /* initialize pos_in_template struct */
     rst->pos_in_template.pos = pos_in_template;
     rst->pos_in_template.number_of_reads_in_template = num_reads_in_template;
+    
+    rst->ists = NULL;
 }
 
 void
@@ -348,10 +353,7 @@ init_indexable_subtemplate(
         struct read_subtemplate* rst,
 
         int subseq_length,
-        int subseq_offset,
-
-        struct penalty_array_t* fwd_penalty_array,
-        struct penalty_array_t* rev_penalty_array
+        int subseq_offset
     )
 {
     *ist = malloc( sizeof( struct indexable_subtemplate ) );
@@ -361,18 +363,17 @@ init_indexable_subtemplate(
 
     (*ist)->char_seq = rst->char_seq + subseq_offset;
 
-    (*ist)->fwd_penalties = fwd_penalty_array->array + subseq_offset;
+    (*ist)->fwd_penalty_array.length = subseq_length;
+    (*ist)->fwd_penalty_array.array = rst->fwd_penalty_array->array + subseq_offset;
 
     /* The reverse penalty array is built from the reverse complemented read
-     * sequence. Since subseq_offset is the distance of the offset from the 5'
+     * sequenc\e. Since subseq_offset is the distance of the offset from the 5'
      * start of the read, subseq_offset will actually be at the end of the
      * penalty array. The offset we want then is the length of the subsequence
      * plus the length of the offset subtracted from the total read length. */
-    (*ist)->rev_penalties = rev_penalty_array->array
+    (*ist)->rev_penalty_array.length = subseq_length;
+    (*ist)->rev_penalty_array.array = rst->rev_penalty_array->array
         + ( rst->length - (subseq_offset + subseq_length));
-
-    (*ist)->expected_value = expected_value_of_rst_subsequence(fwd_penalty_array,
-        subseq_offset, subseq_length);
 }
 
 void
@@ -422,4 +423,17 @@ add_indexable_subtemplate_to_indexable_subtemplates(
             sizeof( struct indexable_subtemplate ) * ists->length );
 
     ists->container[ists->length-1] = *ist;
+}
+
+void
+cache_penalty_arrays_in_read_subtemplates(
+    struct read* r, struct mapping_params* mapping_params )
+{
+    assert( r->num_subtemplates == mapping_params->num_penalty_arrays );
+    int i;
+    for( i = 0; i < r->num_subtemplates; i++ ) {
+        r->subtemplates[i].fwd_penalty_array = mapping_params->fwd_penalty_arrays[i];
+        r->subtemplates[i].rev_penalty_array = mapping_params->rev_penalty_arrays[i];
+    }
+    return;
 }

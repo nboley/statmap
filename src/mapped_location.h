@@ -26,22 +26,6 @@
  *
  */
 
-typedef struct {
-    unsigned int chr; // TODO use MRL_CHR_TYPE, etc. ?
-    unsigned int loc; // maybe put some unified types in config.h?
-    enum STRAND strnd;
-    float penalty;
-} mapped_location;
-
-typedef struct {
-    /* An array of mapped locations */
-    mapped_location* locations;
-    int length;
-    int allocated_length;
-
-    struct indexable_subtemplate* probe;
-} mapped_locations;
-
 int
 cmp_mapped_locations_by_location( const mapped_location* loc1, 
                                   const mapped_location* loc2 );
@@ -55,6 +39,12 @@ sort_mapped_locations_by_location( mapped_locations* results );
 
 void 
 sort_mapped_locations_by_penalty( mapped_locations* results );
+
+void
+sort_search_results( mapped_locations** search_results );        
+
+void
+free_search_results( mapped_locations** search_results );
 
 /* Deal with mapped locations arrays */
 
@@ -120,7 +110,7 @@ struct ml_match {
 };
 
 void
-init_ml_match( struct ml_match** match, int match_len );
+init_ml_match( struct ml_match** mlm, int match_len );
 
 struct ml_match*
 copy_ml_match( struct ml_match* match );

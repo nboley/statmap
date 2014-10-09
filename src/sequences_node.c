@@ -900,6 +900,8 @@ add_sequence_to_sequences_node(
     LEVEL_TYPE num_letters,
     INDEX_LOC_TYPE loc )
 {
+    assert(num_letters > 0);
+    
     /* find the location in the seqs node that the new sequence should go */
     insert_location il = 
         find_insert_location( seqs, new_seq, num_letters );
@@ -953,8 +955,6 @@ find_sequences_in_sequences_node(
         /* the maximum allowable penalty */
         float min_match_penalty,
 
-        /* the seq of interest */
-        const LETTER_TYPE* const seq,
         /* the length of a full sequence */
         const int seq_length,
         /* the total num of letters in a seq */

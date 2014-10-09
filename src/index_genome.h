@@ -14,6 +14,23 @@
 #include "mapped_location.h"
 #include "error_correction.h"
 
+struct indexable_subtemplates*
+build_indexable_subtemplates_from_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct index_t* index,
+        enum bool use_random_subtemplate_offset
+    );
+
+int
+search_index_for_read_subtemplate(
+        struct read_subtemplate* rst,
+        struct mapping_params* mapping_params,
+        
+        mapped_locations*** search_results,
+
+        struct genome_data* genome,
+        enum bool use_random_subtemplate_offset);
+
 /* a hash to store chromosome name */
 char* chr_names[CHR_NUM_MAX+1];
 
@@ -44,7 +61,10 @@ typedef struct
     /* store the types of the nodes that children points to */ 
     NODE_TYPE type;
     /* pointer to the children array - the form is determined by node_type */
-    void* node_ref;
+    union {
+        void* node_ref;
+        size_t next_child;
+    };
 } static_node_child;
 
 /* static node in the tree */
@@ -120,9 +140,6 @@ size_of_snode( );
  * potential matches.
  */
 
-#define STACK_GROWTH_FACTOR 100
-#define STACK_INITIAL_FIRST_INDEX 50
-
 typedef struct {
     void* node;
     NODE_TYPE node_type;
@@ -132,24 +149,29 @@ typedef struct {
     enum STRAND strnd;
 } potential_match;
 
+// allocate 1 MB for the pmatch stack
+#define PMATCH_STACK_SIZE 20000
+#define PMATCH_STACK_FIRST_INDEX 10000
+
 typedef struct {
     size_t first_index; /* inclusive */
     size_t last_index;  /* exclusive */
     /* so if first = last index, then the stack is empty */
     size_t allocated_size;
-    potential_match* matches;
+    potential_match matches[PMATCH_STACK_SIZE];
 } potential_match_stack;
 
+
 void
-init_pmatch_stack( potential_match_stack** stack );
+init_pmatch_stack( potential_match_stack* stack );
 
 void
 free_pmatch_stack( potential_match_stack* stack );
 
-size_t
+int
 pmatch_stack_length( potential_match_stack* pmatch );
 
- potential_match_stack*
+int
 add_pmatch( potential_match_stack* stack, 
             const void* node, const NODE_TYPE node_type, const enum STRAND stnd,
             const int node_level, const int max_num_levels,
@@ -189,7 +211,8 @@ add_child_to_dynamic_node(
 
  void add_child_to_static_node( 
     static_node* node,
-    LETTER_TYPE bp
+    LETTER_TYPE bp,
+    char child_node_type
 );
 
 void free_node( void* node, char node_type );
@@ -235,7 +258,7 @@ extern void
 naive_add_genome_from_fasta_file( 
     char* filename, int seq_length, static_node* root, int add_junctions );
 
-extern void
+extern int
 find_matches_from_root(
         struct index_t* index,
 
@@ -246,16 +269,9 @@ find_matches_from_root(
 
         /* the length of the two reads ( below ) */
         const int read_len,
-
-        /* the fwd stranded data */
-        LETTER_TYPE* fwd_seq, 
-        /* the bkwd stranded data */
-        LETTER_TYPE* rev_seq, 
-
+        
         struct penalty_t* fwd_penalties,
-        struct penalty_t* rev_penalties,
-
-        enum bool only_find_unique_sequences );
+        struct penalty_t* rev_penalties );
 
 size_t
 size_of_snode( );

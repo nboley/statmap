@@ -431,7 +431,8 @@ def rnaseq_test(search_type, dirty=False, genome_len=1000, frag_len=100,
 
     # Map the data with Statmap
     map_with_statmap(genome_fnames, read_fnames, output_directory,
-            indexed_seq_len=indexed_seq_len, assay='r', search_type=search_type)
+                     indexed_seq_len=indexed_seq_len, assay='r', 
+                     search_type=search_type, mapping_metaparameter=0.2)
 
     check_statmap_output( output_directory, genome, transcriptome, introns,
             fragments, read_len, indexed_seq_len )
@@ -442,18 +443,18 @@ def run_tests():
     # Perfect reads with both error models
     rnaseq_test('m',
         msg="rnaseq_test for perfect reads with mismatch error model")
-    rnaseq_test('e',
-        msg="rnaseq_test for perfect reads with estimated error model")
+    #rnaseq_test('e',
+    #    msg="rnaseq_test for perfect reads with estimated error model")
 
     # Mutated read with both error models
     rnaseq_test('m', dirty=True,
         msg="rnaseq_test for mutated reads with mismatch error model")
-    rnaseq_test('e', dirty=True,
-        msg="rnaseq_test for mutated reads with estimated error model")
+    #rnaseq_test('e', dirty=True,
+    #    msg="rnaseq_test for mutated reads with estimated error model")
 
     # test the error model with lots of reads
-    rnaseq_test('e', dirty=True, genome_len=100000, n_reads=100000,
-        msg="rnaseq_test lots of mutated reads")
+    #rnaseq_test('e', dirty=True, genome_len=100000, n_reads=100000,
+    #    msg="rnaseq_test lots of mutated reads")
 
 if __name__ == "__main__":
     run_tests()

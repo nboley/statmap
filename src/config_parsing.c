@@ -852,8 +852,9 @@ fscanf_name_or_null( FILE* arg_fp, const char* header, char** value )
     char tmp_value[500];
 
     // scan for the value
-    fscanf( arg_fp, format_string, &tmp_value );
-
+    int rv = fscanf( arg_fp, format_string, &tmp_value );
+    if( rv != 1 )statmap_log(LOG_FATAL, "'%s' not parsed", header);
+    
     // if the value is equal to NULL, then set *value= NULL
     // this indicates there was no argument in the initial
     // argument list
@@ -911,26 +912,34 @@ read_config_file_fname_from_disk( char* fname, struct args_t** args  )
 
     fscanf_name_or_null( 
         arg_fp, "sam_output_fname", &((*args)->sam_output_fname) );
+
+    if( 1 != fscanf( arg_fp, "mapping_metaparameter:\t%f\n",
+                     &((*args)->mapping_metaparameter) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'mapping_metaparameter'" ); }
+
+    if( 1 != fscanf( arg_fp, "num_starting_locations:\t%i\n", 
+                     &((*args)->num_starting_locations) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'num_starting_locations'" ); }
     
-    fscanf( arg_fp, "mapping_metaparameter:\t%f\n",
-            &((*args)->mapping_metaparameter) );
+    if( 1 != fscanf( arg_fp, "num_threads:\t%i\n", 
+                     &((*args)->num_threads) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'num_threads'" ); }
 
-    fscanf( arg_fp, "num_starting_locations:\t%i\n", 
-            &((*args)->num_starting_locations) );
-    
-    fscanf( arg_fp, "num_threads:\t%i\n", 
-            &((*args)->num_threads) );
+    if( 1 != fscanf( arg_fp, "error_model_type:\t%u\n",
+                     &((*args)->error_model_type) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'error_model_type'" ); }
 
-    fscanf( arg_fp, "error_model_type:\t%u\n",
-            &((*args)->error_model_type) );
+    if( 1 != fscanf( arg_fp, "input_file_type:\t%u\n", 
+                     &( (*args)->input_file_type) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'input_file_type'" ); }
 
-    fscanf( arg_fp, "input_file_type:\t%u\n", 
-            &( (*args)->input_file_type) );
-    fscanf( arg_fp, "assay_type:\t%u\n", 
-            &( (*args)->assay_type) );
+    if( 1 != fscanf( arg_fp, "assay_type:\t%u\n", 
+                     &( (*args)->assay_type) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'assay_type'" ); }
 
-    fscanf( arg_fp, "max_reference_insert_len:\t%i\n",
-            &( (*args)->max_reference_insert_len ) );
+    if( 1 != fscanf( arg_fp, "max_reference_insert_len:\t%i\n",
+                     &( (*args)->max_reference_insert_len ) ) )
+    { statmap_log( LOG_FATAL, "Could not parse 'max_reference_insert_len'" ); }
 
     fclose( arg_fp  );
 

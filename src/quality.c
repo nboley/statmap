@@ -49,6 +49,35 @@ bp_code( const char letter )
         case 'T':
         case 't':
             return 3;
+        case 'N':
+        case 'n':
+            return -1;
+    }
+
+    statmap_log( LOG_FATAL, "Error converting '%c' in recheck", letter );
+    return -1;
+}
+
+int 
+rev_bp_code( const char letter )
+{
+    switch( letter )
+    {
+        case 'A':
+        case 'a':
+            return 3;
+        case 'C':
+        case 'c':
+            return 2;
+        case 'G':
+        case 'g':
+            return 1;
+        case 'T':
+        case 't':
+            return 0;
+        case 'N':
+        case 'n':
+            return -1;
     }
 
     statmap_log( LOG_FATAL, "Error converting '%c' in recheck", letter );
@@ -79,13 +108,11 @@ code_bp( int code )
 float
 error_prb_for_mismatch( char ref, char obs )
 {
-    if( ref == obs )
+    if( obs == 'N' || ref == obs )
         return 0;
-    
+        
     return -1;
 }
-
-#define LOG10_3 0.477121
 
 float
 error_prb_for_estimated_model(
@@ -93,10 +120,16 @@ error_prb_for_estimated_model(
         char obs,
         char error_score,
         int pos,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        int read_subtemplate_index,
+        enum STRAND strand
     )
 {
-    struct freqs_array* freqs = error_model->data;
+    if( obs == 'N' )
+        return N_penalty;
+
+    struct freqs_array* freqs = ((struct freqs_array**)error_model->data)[
+        read_subtemplate_index*2 + ((int)strand-1)];
     double prb = freqs->freqs[(unsigned char)error_score][pos];
 
     /* Fudge factor - don't take the log of 0 */
@@ -113,7 +146,7 @@ error_prb_for_estimated_model(
         /* TODO we assume that any mismatch is equally likely (for now) */
         /* So p(match) + p(any mismatch) = 1. Dividing by 3 makes the whole
          * penalty distribution sum to 1, so we can sample from it. */
-        return log10(prb)-LOG10_3;   
+        return log10(prb) -LOG10_3;   
     assert( false );
 }
 
@@ -123,13 +156,15 @@ error_prb(
         char obs,
         char error_score,
         int pos,
-        struct error_model_t* error_model
+        struct error_model_t* error_model,
+        int read_subtemplate_index,
+        enum STRAND strand
     )
 {
     /* normalize to upper case */
     ref = toupper(ref);
     obs = toupper(obs);
-
+    
     /* normalize N's in the read sequence (ref) to A's
        (they will be properly considered in recheck_penalty).
        Otherwise, we cannot compute the correct probability distribution for
@@ -145,7 +180,8 @@ error_prb(
         return 0;
     case ESTIMATED:
         return error_prb_for_estimated_model( 
-            ref, obs, error_score, pos, error_model );
+            ref, obs, error_score, pos, 
+            error_model, read_subtemplate_index, strand );
     default:
         assert( false );
     }
@@ -207,7 +243,9 @@ build_penalty_array(
                         code_bp(bp),
                         rst->error_str[pos],
                         pos,
-                        error_model
+                        error_model,
+                        rst->pos_in_template.pos,
+                        FWD
                     );
         }
     }
@@ -238,8 +276,10 @@ build_reverse_penalty_array(
                     rev_seq[pos],
                     code_bp(bp),
                     rst->error_str[ rst->length - pos - 1 ],
-                    pos,
-                    error_model
+                    rst->length - pos - 1,
+                    error_model,
+                    rst->pos_in_template.pos,
+                    BKWD
                 );
         }
     }
@@ -310,7 +350,7 @@ multiple_letter_penalty(
         /* 
          * if the penalty is > 0, then that indicates that it exceeded the
          * minimum at the (curr_penalty - 1)'th basepair in letter j. See
-         * the penalty function for details.
+          * the penalty function for details.
          */
         if( added_penalty > 0.5 )  {
             /* skip this sequence */
@@ -327,7 +367,6 @@ multiple_letter_penalty(
 float
 recheck_penalty(
         char* reference,
-        char* observed,
         /* Pointer into an array of penalty_t */
         struct penalty_t* pa,
         const int seq_length
@@ -338,15 +377,14 @@ recheck_penalty(
 
     for( i = 0; i < seq_length; i++ )
     {
-        char ref = toupper( reference[i] );
-        char obs = toupper( observed[i] );
-
+        int ref = bp_code(reference[i]);
+        
         /* if it's an N, put in a max penalty substitution */
-        if( ref == 'N' || obs == 'N' )
+        if( -1 == ref )
         {
             penalty += N_penalty;
         } else {
-            penalty += pa[i].penalties[bp_code(ref)];
+            penalty += pa[i].penalties[ref];
         }
     }
 
@@ -375,22 +413,23 @@ compute_penalty(
 {
     int i;
     float penalty = 0;
-
+    
     for( i = 0; i < LETTER_LEN; i++ )
     {
         /*
            make sure we haven't run off the string
            (happens if seq_length is not divisible by LETTER_LEN)
         */
-        if( LETTER_LEN*position + i >= seq_length )
-            break;
+        // assert(seq_length%LETTER_LEN == 0);
+        // if( LETTER_LEN*position + i >= seq_length )
+        //    break;
 
         /* 
            add penalty
            NOTE penalty_t float array and LETTER_TYPE must use same encoding
         */
-        penalty += pa[LETTER_LEN*position+i].penalties[(ref&3)];  
-
+        penalty += pa[LETTER_LEN*position+i].penalties[(ref >> 6)];
+        
         /* 
          * If we have surpassed the minimum allowed penalty, there is no 
          * reason to continue. We return the current bp index as a hint for 
@@ -402,8 +441,8 @@ compute_penalty(
             return i+1;
         }
 
-        /* Shift the bits down to consider the next basepair */
-        ref = ref >> 2;
+        /* Shift the bits up to consider the next basepair */
+        ref = ref << 2;
     }
 
     return penalty;

@@ -81,18 +81,24 @@ typedef struct {
 
 } candidate_mapping;
 
+struct joined_candidate_mappings {
+    candidate_mapping* m1;
+    candidate_mapping* m2;
+    int frag_len;
+    float log_penalty;
+};
+
 int
 get_length_from_cigar_string( candidate_mapping* mapping );
 
-#define CANDIDATE_MAPPINGS_GROWTH_FACTOR 10
 typedef struct {
     int allocated_length;
     int length;
-    candidate_mapping* mappings;
+    candidate_mapping mappings[MAX_NUM_CAND_MAPPINGS];
 } candidate_mappings;
 
 void
-init_candidate_mappings( candidate_mappings** mappings );
+init_candidate_mappings( candidate_mappings* mappings );
 
 void
 copy_candidate_mappings(
@@ -101,13 +107,9 @@ copy_candidate_mappings(
     );
 
 /* add a copy of a candidate mapping */
-void
+int
 add_candidate_mapping( candidate_mappings* mappings,
                        candidate_mapping* mapping     );
-
-void
-free_candidate_mappings( candidate_mappings* mappings );
-
 
 void
 print_candidate_mapping( candidate_mapping* mapping );
