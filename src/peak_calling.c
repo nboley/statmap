@@ -130,6 +130,8 @@ double calc_pvalue( double cnt )
         statmap_log( LOG_ERROR, "Illegal value '%i' encountered", (int) cnt );
         assert( false );
     }
+    // silence the compiler
+    return(-1);
 }
 
 double subtract_from_1( double cnt )
