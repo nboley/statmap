@@ -628,6 +628,9 @@ find_candidate_mappings_for_read(
         }
     }
     num_joined_cms = new_first_index;
+
+    if( 0 == num_joined_cms ) 
+        return NO_UNFILTERED_CANDIDATE_MAPPINGS;
     
     /* finally, build a mpped read from these */
     *mapped_read = 
@@ -797,7 +800,6 @@ find_candidate_mappings( void* params )
     struct mapped_reads_db* mpd_rds_db = td->mpd_rds_db;
     
     struct mapping_metaparams* metaparams = td->metaparams;
-    float reads_min_match_penalty = td->reads_min_match_penalty;
     
     /* Store observed error data from the current thread's 
        execution in scratch */

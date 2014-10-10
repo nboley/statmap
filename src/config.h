@@ -3,7 +3,7 @@
 #ifndef CONFIG
 #define CONFIG
 
-#define DEBUG
+#define NDEBUG
 
 /****** version options                         *******/
 #define GENOME_FILE_FORMAT_VERSION   1

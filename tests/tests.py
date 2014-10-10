@@ -396,6 +396,13 @@ def build_reads_from_fragments(
                 read_1 = reverse_complement( read_1 )
                 read_2 = genome[chr][start:(start+read_len)]
             yield( read_1, read_2 )
+        else:
+            if random.random() > 0.5 or not rev_comp:
+                read = genome[chr][start:(start+read_len)]
+            elif rev_comp:
+                read = genome[chr][(stop-read_len):(stop)]
+                read = reverse_complement( read )
+            yield read
     
     return
 
@@ -715,9 +722,10 @@ def test_build_index():
 
 def test_iterative_mapping():
     """Run Statmap on some basic data and do iterative mapping just to see if it works"""
+    # TODO why is this so slow?
     rls = [ 25, ]
     for rl in rls:
-        test_dirty_reads( rl, nreads=10000, assay='a', num_samples=10 ) # CAGE
+        test_dirty_reads( rl, assay='a', num_samples=1 ) # CAGE
         print "PASS: Iterative mapping code (%i BP reads) is at least running..." \
                 % rl
 
@@ -1571,9 +1579,6 @@ def test_overlapping_index_probes():
     pass
 
 def main( RUN_SLOW_TESTS ):
-    #print "Starting test_iterative_mapping()"
-    #test_iterative_mapping()
-    #sys.exit(1)
     #print "Starting test_untemplated_g_finding()"
     #test_untemplated_g_finding()
     #sys.exit(1)
