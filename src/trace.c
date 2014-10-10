@@ -235,7 +235,8 @@ init_full_trace(
         struct genome_data* genome,
         struct trace_t** traces,
         int num_tracks,
-        char** track_names
+        char** track_names,
+        int bin_size
     )
 {
     /* Builds the trace metadata with init_trace */
@@ -250,9 +251,9 @@ init_full_trace(
             /* HACK: don't add a segment for the pseudo chromosome */
             if( (*traces)->chr_lengths[j] > 0 )
             {
+                int trace_length = 1 + (*traces)->chr_lengths[j]/bin_size;
                 add_trace_segment_to_trace_segments(
-                    &((*traces)->segments[i][j]),
-                    i, j, 0, (*traces)->chr_lengths[j] );
+                    &((*traces)->segments[i][j]), i, j, 0, bin_size );
                 assert( (*traces)->segments[i][j].num_segments == 1 );
             }
         }
@@ -850,8 +851,9 @@ load_trace_segment_from_stream(
 
     /* add the trace segment to set of segments */
     struct trace_segment_t *new_segment
-        = add_trace_segment_to_trace_segments(tsegs, real_track_id, real_chr_id, 
-            real_start, length);
+        = add_trace_segment_to_trace_segments(
+            tsegs, real_track_id, real_chr_id, real_start, length);
+            
     /* load the data for this trace segment */
     rv = fread(new_segment->data, sizeof(TRACE_TYPE), new_segment->length, is);
     assert( rv == new_segment->length );
@@ -1289,7 +1291,7 @@ build_segmented_trace(
 {
     /* Initialize a full trace that we will use to determine the segments */
     struct trace_t* full_trace = NULL;
-    init_full_trace( genome, &full_trace, num_tracks, track_names );
+    init_full_trace( genome, &full_trace, num_tracks, track_names, 1 );
     reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
     update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, full_trace,
         update_trace_expectation_from_location );

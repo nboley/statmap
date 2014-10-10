@@ -231,178 +231,61 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     return;
 }
 
+void 
+update_trace(
+    struct mapped_reads_db* mpd_rdb, 
+    struct cond_prbs_db_t* cond_prbs_db,
+    struct trace_t* trace,
+    int bin_size)
+{
+    mapped_read_t* r;
+    int read_num = 0;
+    rewind_mapped_reads_db(mpd_rdb);
+    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &r ) )     
+    {
+        read_num++;
+        mapped_read_index* rd_index = build_mapped_read_index( r );
+        /* Update the trace from this mapping */        
+        MPD_RD_ID_T j;
+        for( j = 0; j < rd_index->num_mappings; j++ ) {
+            float cond_prob = get_cond_prb(
+                cond_prbs_db, rd_index->read_id, j );
+            MRL_CHR_TYPE chrm = 
+                get_chr_from_mapped_read_location(rd_index->mappings[j]);
+            MRL_START_POS_TYPE start = 
+                get_start_from_mapped_read_location(rd_index->mappings[j]);
+            MRL_STOP_POS_TYPE stop = 
+                get_stop_from_mapped_read_location(rd_index->mappings[j]);
+            
+            update_trace_segments_from_mapped_read_array(
+                trace->segments[0] + chrm, NULL, 
+                cond_prob, start/bin_size, stop/bin_size+1 );
+        }
+            
+        free_mapped_read_index( rd_index );
+    }
+    
+    return;
+}
+
 void
 iterative_mapping( struct args_t* args, 
                    struct genome_data* genome, 
-                   struct mapped_reads_db* mpd_rds_db )
+                   struct mapped_reads_db* mpd_rdb )
 {   
     if( args->num_starting_locations > 0 && args->assay_type == UNKNOWN ) {
         statmap_log( LOG_FATAL, "Cannot iteratively map data with unknown assay type" );
     }
 
-    if( NULL != args->unpaired_reads_fnames 
-        && args->assay_type == CHIP_SEQ
-        && mpd_rds_db->fl_dist == NULL )
-    {
-        statmap_log( LOG_FATAL, 
-            "Can not iteratively map single end chip-seq reads unless a FL dist is provided" );
-        exit(-1);
-    }
+    struct trace_t* trace = NULL;
+    char* track_name = "fwd";
+    init_full_trace( genome, &trace, 1, &track_name, 100 );
 
-    /* Do the iterative mapping */
-    generic_update_mapping( mpd_rds_db,
-                            genome, 
-                            args->assay_type,
-                            args->num_starting_locations, 
-                            MAX_PRB_CHANGE_FOR_CONVERGENCE );
+    struct cond_prbs_db_t* cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
+    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
 
-    return;
-}
-
-void
-map_generic_data(  struct args_t* args )
-{
-    struct genome_data* genome;
-    
-    /* store clock times - useful for benchmarking */
-    struct timeval start, stop;    
-    
-    /* load the genome */
-    load_genome( &genome, args );
-    
-    gettimeofday( &stop, NULL );
-    statmap_log( LOG_INFO, "Loaded Genome in %.2lf seconds",
-            (float)(stop.tv_sec - start.tv_sec) + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
-        
-    /***** END Genome processing */
-    
-    struct mapped_reads_db* mpd_rds_db;    
-    map_marginal( args, genome, args->rdb, &mpd_rds_db, false );
-    
-    /* Free the genome index */
-    /* we may need the memory later */
-    statmap_log( LOG_NOTICE, "Freeing index" );
-    free_ondisk_index( genome->index );
-    genome->index = NULL;
-    
-    /* iterative mapping */
-    iterative_mapping( args, genome, mpd_rds_db );
-
-    /*
-    if( args->frag_len_fp != NULL ) {
-        init_fl_dist_from_file( &(mpd_rds_db->fl_dist), args->frag_len_fp );
-    } else {
-        build_fl_dist( args, mpd_rds_db );
-    }
-    */
-    
-    close_mapped_reads_db( &mpd_rds_db );
-    
-    free_genome( genome );
-
-    return;
-}
-
-void
-map_chipseq_data(  struct args_t* args )
-{
-    struct genome_data* genome;
-
-    /* store clock times - useful for benchmarking */
-    struct timeval start, stop;    
-    
-    /* load the genome */
-    load_genome( &genome, args );
-    gettimeofday( &stop, NULL );
-    
-    statmap_log( LOG_INFO, "Indexed Genome in %.2lf seconds",
-            (float)(stop.tv_sec - start.tv_sec) + 
-                 ((float)(stop.tv_usec - start.tv_usec))/1000000
-        );
-        
-    /***** END Genome processing */
-    
-    /* map the real ( IP ) data */
-    statmap_log(LOG_NOTICE, "Mapping the real (IP) data");
-    struct mapped_reads_db* chip_mpd_rds_db = NULL;
-    map_marginal( args, genome, args->rdb, &chip_mpd_rds_db, false );
-
-    /* 
-       this is a bit hacky - for single end chipseq we need to 
-       do a bit of work in advance to speed up the fragment 
-       coverage smoothing. We do that in the next line.
-    */
-    if( args->unpaired_reads_fnames != NULL )
-        build_chipseq_bs_density( chip_mpd_rds_db->fl_dist );
-
-    struct mapped_reads_db* NC_mpd_rds_db = NULL;
-    if ( args->NC_rdb != NULL )
-    {        
-        statmap_log(LOG_NOTICE, "Mapping the NC data");
-        map_marginal( args, genome, args->NC_rdb, &NC_mpd_rds_db, true );
-        
-        /* 
-           this is a bit messy - for single end chipseq we need to 
-           do a bit of work in advance to speed up the fragment 
-           coverage smoothing. We do that in the next line.
-        */
-        if( args->unpaired_reads_fnames != NULL )
-            build_chipseq_bs_density( NC_mpd_rds_db->fl_dist );
-    }
-
-    /* Free the genome index (we may need the memory later) */
-    free_ondisk_index( genome->index );
-    
-    /* if there is no negative control, we use the same iterative 
-       scheme as the generic version. iterative_mapping takes care of 
-       everything ( output, iterative, etc. ). We dont touch peak calling - 
-       ( we dont really know how to do it well inside our probability model
-         without a NC because of chromatin solubility, etc., so we leave that
-         people that have taken the time to build effective heiristics. ie. 
-         peak callers.  )
-    */
-    if( NULL == args->NC_rdb )
-    {
-        iterative_mapping( args, genome, chip_mpd_rds_db );
-    } 
-    /* if there is a NC, we can do something simple. For each 
-       sample that we take from the mapping distribution, we use the 
-       machinery to build a marginal read density. Then, we update the 
-       read mapping locations for the NC control from the marginal density, 
-       and build a NC marginal density. Of course, the marginal density is 
-       precisely the expectation of the binding site density distribution,
-       so calling peaks ( basepair per basepair ) corresponds to testing the
-       hypothesis that the binding site in the IP sample is greater than 
-       the negative control. 
-    */
-    else {
-        /* open the file to store the meta info, and print out the header */
-        FILE* s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
-        fprintf( s_mi, "sample_number,log_lhd\n" );
-        
-        int i;
-        for( i = 0; i < args->num_starting_locations; i++ )
-        {
-            take_chipseq_sample_wnc(
-                chip_mpd_rds_db, NC_mpd_rds_db,
-                genome, 
-                s_mi,  // meta info file pointer
-                i, // sample index
-                MAX_PRB_CHANGE_FOR_CONVERGENCE, 
-                true // use a random starting location
-            );
-        }
-    
-        fclose( s_mi );
-    }
-    
-    goto cleanup;
-
-cleanup:    
-    close_mapped_reads_db( &chip_mpd_rds_db );
-    close_mapped_reads_db( &NC_mpd_rds_db );
-
-    free_genome( genome );
+    update_trace( mpd_rdb, cond_prbs_db, trace, 100 );
     
     return;
 }
@@ -412,7 +295,9 @@ main( int argc, char** argv )
 {
     /* Seed the random number generator */
     srand ( time(NULL) );
-
+    /* store clock times - useful for benchmarking */
+    struct timeval start, stop;    
+    
     /* Turn on attribute handling.
        Manual recommends "set at the beginning of main and never touch again":
        http://igraph.sourceforge.net/doc/html/ch12s02.html */
@@ -447,20 +332,38 @@ main( int argc, char** argv )
         load_statmap_source( statmap_base_dir );
     }
 
-    if( args.assay_type == CHIP_SEQ )
-    {
-        map_chipseq_data( &args );
-    } else {
-        map_generic_data( &args );
-    }
-
+    struct genome_data* genome;
+        
+    /* load the genome */
+    load_genome( &genome, &args );
+    gettimeofday( &stop, NULL );
+    statmap_log( LOG_INFO, "Loaded Genome in %.2lf seconds",
+            (float)(stop.tv_sec - start.tv_sec) 
+                 + ((float)(stop.tv_usec - start.tv_usec))/1000000 );
+        
+    /***** END Genome processing */
+    
+    struct mapped_reads_db* mpd_rds_db;    
+    map_marginal( &args, genome, args.rdb, &mpd_rds_db, false );
+    
+    /* Free the genome index */
+    /* we may need the memory later */
+    free_ondisk_index( genome->index );
+    genome->index = NULL;
+    
+    /* iterative mapping */
+    statmap_log( LOG_NOTICE, "Starting iterative mapping" );
+    iterative_mapping( &args, genome, mpd_rds_db );
+    
     goto cleanup;
     
 cleanup:
     free( abs_path );
 
-    close_rawread_db( args.rdb );
-    
+    close_mapped_reads_db( &mpd_rds_db );
+    close_rawread_db( args.rdb );    
+    free_genome( genome );
+
     if( args.NC_rdb != NULL )
         close_rawread_db( args.NC_rdb );
     
@@ -473,8 +376,8 @@ cleanup:
     free( args.output_directory );
     
     /* finish the R interpreter */
-    end_R();
     statmap_log( LOG_NOTICE, "Shutting down R interpreter." );
+    end_R();
 
     finish_logging();
 

@@ -66,7 +66,8 @@ init_full_trace(
         struct genome_data* genome,
         struct trace_t** traces,
         int num_tracks,
-        char** track_names
+        char** track_names,
+        int bin_size
     );
 
 void
