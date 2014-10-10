@@ -16,6 +16,7 @@
 
 #define MAX_SEARCH_TIME 1.0
 #define MAX_NUM_CAND_MAPPINGS 5000
+#define MAX_NUM_MAPPED_READS 5000
 
 // the maximum number of index probes to use for a read
 #define MAX_NUM_INDEX_PROBES 5

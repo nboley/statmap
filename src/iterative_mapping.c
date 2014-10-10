@@ -154,8 +154,8 @@ bootstrap_traces_from_mapped_reads(
 
         mapped_read_t* rd = (mapped_read_t*) read_start;
 
-        mapped_read_index* rd_index = NULL;
-        init_mapped_read_index( &rd_index, rd );
+        mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+        init_mapped_read_index( rd_index, rd );
 
         if( i > 0 && i%1000000 == 0 )
         {
@@ -266,8 +266,8 @@ update_traces_from_mapped_reads_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-        mapped_read_index* rd_index = NULL;
-        init_mapped_read_index( &rd_index, r );
+        mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+        init_mapped_read_index( rd_index, r );
 
         /* Update the trace from this mapping */        
         MPD_RD_ID_T j;
@@ -310,8 +310,8 @@ update_traces_from_mapped_reads(
         {
             read_num++;
             
-            mapped_read_index* rd_index = NULL;
-            init_mapped_read_index( &rd_index, r );
+            mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+            init_mapped_read_index( rd_index, r );
 
             /* Update the trace from this mapping */        
             MPD_RD_ID_T j;
@@ -695,8 +695,8 @@ build_random_starting_trace(
         /* update the read conditional probabilities from the trace */
         update_mapped_read_prbs( cond_prbs_db, traces, r );        
 
-        mapped_read_index* rd_index = NULL;
-        init_mapped_read_index( &rd_index, r );
+        mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+        init_mapped_read_index( rd_index, r );
         
         if( rd_index->num_mappings > 0 )
         {
@@ -1049,9 +1049,9 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
-    mapped_read_index* rd_index;
+    mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
     /* FIXME cast away const? */
-    init_mapped_read_index( &rd_index, (mapped_read_t*) r );
+    init_mapped_read_index( rd_index, (mapped_read_t*) r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
@@ -1293,9 +1293,9 @@ update_CAGE_mapped_read_prbs(
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
-    mapped_read_index* rd_index;
+    mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
     /* FIXME cast away const? */
-    init_mapped_read_index( &rd_index, (mapped_read_t*) r );
+    init_mapped_read_index( rd_index, (mapped_read_t*) r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );

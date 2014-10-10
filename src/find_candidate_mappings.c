@@ -332,9 +332,9 @@ build_candidate_mappings_from_search_results(
     int num_probes;
     for(num_probes = 0; search_results[num_probes] != NULL; num_probes++ );
     
-    int* curr_loc_indices = calloc(sizeof(int), num_probes);
-    int* probe_offsets = calloc(sizeof(int), num_probes);
-    int* probe_lengths = calloc(sizeof(int), num_probes);
+    int* curr_loc_indices = alloca(sizeof(int)*num_probes);
+    int* probe_offsets = alloca(sizeof(int)*num_probes);
+    int* probe_lengths = alloca(sizeof(int)*num_probes);
     for(i = 0; i < num_probes; i++ ) {
         probe_offsets[i] = search_results[i]->probe->subseq_offset;
         probe_lengths[i] = search_results[i]->probe->subseq_length;

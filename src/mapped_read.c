@@ -267,37 +267,25 @@ get_read_id_from_mapped_read( mapped_read_t* rd )
  *
  */
 
-void
-index_mapped_read( mapped_read_t* rd,
-                   mapped_read_index* index )
+enum bool
+index_mapped_read( mapped_read_t* rd, mapped_read_index* index )
 {
-    const int REALLOC_BLOCK_SIZE = 1000;
-
     /* initialize array of pointers to mapped_read_location's */
-    int num_allocated_locations = REALLOC_BLOCK_SIZE;
-    index->mappings = malloc( num_allocated_locations *
-                              sizeof(mapped_read_location*) );
-
-    int num_mapped_locations = 0;
-
+    int num_allocated_locations = MAX_NUM_MAPPED_READS;
+    
     /* Locate the start of the mapped read locations in this mapped read. */
     char* loc_ptr = skip_read_id_nodes_in_mapped_read( (char*) rd );
 
     /* index and count the mapped_read_location(s) */
-    while(true)
+    int num_mapped_locations;
+    for(num_mapped_locations = 0; ; num_mapped_locations++)
     {
+        /* if we are out of memory, exit */
+        if( num_mapped_locations == num_allocated_locations )
+            return false;
+        
         /* Note - this assumes there is at least one mapped_read_location for
-         * this mapped_read_t */
-
-        /* resize index */
-        if( num_mapped_locations + 1 == num_allocated_locations )
-        {
-            num_allocated_locations += REALLOC_BLOCK_SIZE;
-            index->mappings = realloc( index->mappings,
-                                       num_allocated_locations*
-                                       sizeof(mapped_read_location*));
-        }
-
+         * this mapped_read_t */        
         index->mappings[num_mapped_locations] = (mapped_read_location*) loc_ptr;
         num_mapped_locations += 1;
 
@@ -307,53 +295,41 @@ index_mapped_read( mapped_read_t* rd,
 
         /* if this was the last mapped_read_location, we're done counting */
         if( !( prologue->are_more ) )
-        {
             break;
-        }
-
+        
         /* move rd_ptr to the start of the next mapped_read_location */
         loc_ptr = skip_mapped_read_location_in_mapped_read_locations( loc_ptr );
     }
-
-    /* reclaim any wasted memory */
-    index->mappings = realloc( index->mappings,
-                               num_mapped_locations*
-                               sizeof(mapped_read_location*) );
-
+    
     /* save number of mapped locations */
     index->num_mappings = num_mapped_locations;
 
-    return;
+    return true;
 }
 
-void
-init_mapped_read_index( mapped_read_index** index,
+enum bool
+init_mapped_read_index( mapped_read_index* index,
                         mapped_read_t* rd )
 {
-    *index = malloc( sizeof( mapped_read_index ));
-
-    (*index)->rd = rd;
-    (*index)->read_id = get_read_id_from_mapped_read( rd );
-    (*index)->num_mappings = 0;
-    (*index)->mappings = NULL;
+    index->rd = rd;
+    index->read_id = get_read_id_from_mapped_read( rd );
+    index->num_mappings = 0;
 
     /* Index the locations in this mapped read */
-    index_mapped_read( rd, *index );
-
-    return;
+    return index_mapped_read( rd, index );
 }
 
+/*
+  This is a no-op, but in the future I want to allow for 
+  mapped read indices to be able to be dynamically resized
+  if there are too many mapped locations, so I want to keep 
+  these calls in. 
+ */
 void
 free_mapped_read_index( mapped_read_index* index )
 {
     if( index == NULL ) return;
-
-    if( index->mappings != NULL ) {
-        free( index->mappings );
-    }
-
-    free( index );
-
+    
     return;
 }
 
@@ -1242,8 +1218,9 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
     
     /* build an index for this mapped_read */
-    mapped_read_index* rd_index = NULL;
-    init_mapped_read_index( &rd_index, rd );
+    //XXX
+    mapped_read_index* rd_index = calloc(1, sizeof(mapped_read_index));
+    init_mapped_read_index( rd_index, rd );
 
     if( 0 == rd_index->num_mappings )
         return;
@@ -1311,8 +1288,8 @@ update_traces_from_read_densities(
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-        mapped_read_index* rd_index;
-        init_mapped_read_index( &rd_index, r );
+        mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+        init_mapped_read_index( rd_index, r );
 
         /* Update the trace from this mapping */
         MPD_RD_ID_T i;
@@ -1578,8 +1555,8 @@ init_cond_prbs_db_from_mpd_rdb(
     rewind_mapped_reads_db( mpd_rdb );
     while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
     {
-        mapped_read_index* rd_index;
-        init_mapped_read_index( &rd_index, mapped_rd );
+        mapped_read_index* rd_index = alloca(sizeof(mapped_read_index));
+        init_mapped_read_index( rd_index, mapped_rd );
 
         (*cond_prbs_db)->cond_read_prbs[rd_index->read_id] 
             = calloc( rd_index->num_mappings, sizeof( ML_PRB_TYPE  )  );

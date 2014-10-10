@@ -424,12 +424,12 @@ typedef struct {
     mapped_read_t* rd;
     MPD_RD_ID_T read_id;
     MPD_RD_ID_T num_mappings;
-    mapped_read_location** mappings;
+    mapped_read_location* mappings[MAX_NUM_MAPPED_READS];
 } mapped_read_index;
 
-void
-init_mapped_read_index( mapped_read_index** index,
-                        mapped_read_t* rd );
+enum bool
+init_mapped_read_index( mapped_read_index* index, mapped_read_t* rd );
+                        
 
 void
 free_mapped_read_index( mapped_read_index* index );
