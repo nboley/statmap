@@ -459,11 +459,12 @@ write_mapped_reads_to_sam(
     /* since the rawread db has every read, we should be guaranteed of having a 
        match at this point */
     
-    mapped_read_index* mapped_rd_index = alloca(sizeof(mapped_read_index));
+    
     while( rd != NULL
            && mapped_rd != NULL ) 
     {
-        init_mapped_read_index( mapped_rd_index, mapped_rd );
+        mapped_read_index* mapped_rd_index;
+        init_mapped_read_index( &mapped_rd_index, mapped_rd );
 
         if( rd->read_id != mapped_rd_index->read_id )
         {
@@ -487,7 +488,9 @@ write_mapped_reads_to_sam(
                 sam_ofp, mapped_rd_index,
                 cond_prbs_db, genome, rd );
         }
-                
+        
+        free_mapped_read_index( mapped_rd_index );
+        
         /* Free the read */
         free_read( rd );
 
@@ -514,7 +517,6 @@ write_mapped_reads_to_sam(
     goto cleanup;
 
 cleanup:
-    free_mapped_read_index( mapped_rd_index );
 
     /* Free the read */
     if( rd != NULL )

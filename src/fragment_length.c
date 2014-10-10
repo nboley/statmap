@@ -115,28 +115,28 @@ build_fl_dist_from_filename( struct fragment_length_dist_t** fl_dist, char* file
 int 
 get_frag_len( mapped_read_t* rd )
 {
-    mapped_read_index rd_index;
+    mapped_read_index* rd_index;
     init_mapped_read_index( &rd_index, rd );
 
     /* If there are not mapped locations, ther is no frag len */
-    if( rd_index.num_mappings == 0 )
+    if( rd_index->num_mappings == 0 )
         return -1;
     
     /* if the reads aren't paired, we can't infer the frag len */
     enum bool reads_are_paired 
-        = mapped_read_location_is_paired( rd_index.mappings + 0 );
+        = mapped_read_location_is_paired( rd_index->mappings + 0 );
     if( !reads_are_paired )
         return -1;
     
     /* initialize the fraglen to the fraglen of the first mapped location */
     int frag_len = 1 +
-        get_stop_from_mapped_read_location( rd_index.mappings + 0 ) -
-        get_start_from_mapped_read_location( rd_index.mappings + 0 );
+        get_stop_from_mapped_read_location( rd_index->mappings + 0 ) -
+        get_start_from_mapped_read_location( rd_index->mappings + 0 );
     
     MPD_RD_ID_T i;
-    for( i = 1; i < rd_index.num_mappings; i++ )
+    for( i = 1; i < rd_index->num_mappings; i++ )
     {
-        mapped_read_location* current_loc = rd_index.mappings[i];
+        mapped_read_location* current_loc = rd_index->mappings[i];
 
         /* reads should never be a mixture of paired and unpaired reads 
          XXX IS THIS ACTUALLY TRUE? WE COULD JUST CONTINUE... */
@@ -151,7 +151,7 @@ get_frag_len( mapped_read_t* rd )
             return -1;
     }
 
-    free_mapped_read_index( &rd_index );
+    free_mapped_read_index( rd_index );
 
     return frag_len;
 }
