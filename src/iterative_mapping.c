@@ -1026,6 +1026,6 @@ build_posterior_db( struct genome_data* genome,
         }
     }
     
-    close_traces(traces);
+    //close_traces(traces);
     return cond_prbs_db;
 }
