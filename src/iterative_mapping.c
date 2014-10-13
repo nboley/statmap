@@ -36,118 +36,6 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
-/*
- * This is technically a non-parametric bootstrap
- * but since the reads are conditionally independent 
- * with multinomial reads densities, this is identical
- * to the parametric bootstrap without needing a bisection
- * step. The algorithm is
- * Repeat the following n_read times
- *     1) Choose a random read uniformily
- *     2) Choose a random location, weighted by it's probability
- *     3) update the trace
- */
-void
-bootstrap_traces_from_mapped_reads( 
-    struct mapped_reads_db* reads_db,
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct trace_t* traces,
-    void (* const update_trace_expectation_from_location)(
-        const struct trace_t* const traces, 
-        const mapped_read_location* const loc,
-        float cond_prob
-    )
-)
-{        
-    global_fl_dist = reads_db->fl_dist;
-    
-    /* First, zero the trace to be summed into */
-    zero_traces( traces );
-    
-    if( RAND_MAX < reads_db->num_mapped_reads )
-    {
-        statmap_log( LOG_ERROR, "cannot bootstrap random reads - number of reads exceeds RAND_MAX. ( This needs to be fixed. PLEASE file a bug report about this ) " );
-        return;
-    }
-
-    int num_error_reads = 0;
-    
-    /* Update the trace from reads chosen randomly, with replacement */
-    MPD_RD_ID_T i;
-    for( i = 0; i < reads_db->num_mapped_reads; i++ )
-    {
-        MPD_RD_ID_T read_index = rand()%(reads_db->num_mapped_reads);
-        assert( read_index < reads_db->num_mapped_reads );
-        char* read_start = reads_db->index[ read_index ].ptr;
-
-        mapped_read_t* rd = (mapped_read_t*) read_start;
-        mapped_read_index* rd_index = build_mapped_read_index( rd );
-
-        if( i > 0 && i%1000000 == 0 )
-        {
-            statmap_log( LOG_NOTICE, "Read %i reads in bootstrap",  i  );
-        }
-
-        /* If there are no mappings, then this is pointless */
-        if( rd_index->num_mappings > 0 )
-        {
-            /* Choose a random location, proportional to the normalized probabilities */
-            MPD_RD_ID_T j = 0;
-            /* if there is exactly 1 mapping, then the randomness is pointless */
-            if( rd_index->num_mappings > 1 )
-            {
-                float random_num = (float)rand()/(float)RAND_MAX;
-                double cum_dist = 0;
-                for( j = 0; j < rd_index->num_mappings; j++ ) 
-                {
-                    cum_dist += get_cond_prb(
-                            cond_prbs_db, rd_index->read_id, j );
-                    if( random_num <= cum_dist )
-                        break;
-                }
-
-                /* 
-                 * rounding error makes it possible for j == r.num_mappings. If this is 
-                 * the case, then make sure the differnece isn't too big, and then chnage 
-                 * it. We could save a few cycles by taking this into account earlier, but
-                 * for now we're going to leave the sanity check.
-                 */
-                assert( j <= rd_index->num_mappings );
-                if( j == rd_index->num_mappings )
-                {
-                    j = rd_index->num_mappings - 1;
-                    if( cum_dist < 0.999 )
-                    {
-                        /* BUG BUG BUG - I dont think that this should ever happen */
-                        num_error_reads += 1;
-                        // fprintf( stderr, "%e\t%li\t%i\n", cum_dist, r.read_id, get_start_from_mapped_read_location( r.locations + j ) );
-                        // fprintf( stderr, "ERROR      : There is a serious error in the bs code. It appears as if the read cond probs dont sum to 1 - contuining but PLEASE file a bug report.\n");
-                        continue;
-                    }
-                }
-            }
-                        
-            /* Add this location to the trace, with prb 1 */
-            update_trace_expectation_from_location( traces,
-                                                    rd_index->mappings[j],
-                                                    1.0 );
-        }
-
-        free_mapped_read_index( rd_index );
-    }
-    
-    if( num_error_reads > 0 )
-    {
-        statmap_log( LOG_ERROR,
-                "%i reads ( out of %u ) had errors in which the cum dist didnt add up to 1.",
-                num_error_reads,
-                reads_db->num_mapped_reads
-            );
-    }
-    
-    return;
-}
-
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
  * designed to be called from a thread.
@@ -311,14 +199,11 @@ struct update_mapped_reads_param {
     
     /* 
      * we lock the read index, so that threads grab the next available read
-     * I like this better than a block of reads approach, because it ensures that 
+     * I like this better than a block of reads approach, because it ensures 
      * any io is sequential. Of course, this is at the cost of some lock 
      * contention, but that should be minor, espcially if ( the mmapped ) rdb
      * can't fully fit into memory.
      */
-    pthread_spinlock_t* curr_read_index_spinlock;
-    MPD_RD_ID_T* curr_read_index;
-    
     struct mapped_reads_db* reads_db;
     struct cond_prbs_db_t* cond_prbs_db;
     
@@ -439,7 +324,8 @@ update_mapped_reads_from_trace(
                                  (void *)(tds + t) 
                 ); 
             if (rc) {
-                statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
+                statmap_log( LOG_FATAL, 
+                             "Return code from pthread_create() is %d", rc );
             }
         }
 
@@ -449,7 +335,8 @@ update_mapped_reads_from_trace(
             pthread_attr_destroy( attrs + t );
             
             if (rc) {
-                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
+                statmap_log( LOG_FATAL, 
+                             "Return code from pthread_join() is %d", rc );
             }
         }
         
@@ -583,189 +470,10 @@ update_mapping(
     return 0;
 }
 
-void
-build_random_starting_trace( 
-    struct trace_t* traces, 
-    struct genome_data* genome,
-
-    struct mapped_reads_db* rdb,
-    struct cond_prbs_db_t* cond_prbs_db,
-
-    void (* const update_trace_expectation_from_location)(
-        const struct trace_t* const traces, 
-        const mapped_read_location* const loc,
-        const float cond_prob),
-
-    struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
-                                           const struct trace_t* const traces, 
-                                           const mapped_read_t* const r  )
-    )
-{
-    global_fl_dist = rdb->fl_dist;
-    global_genome = genome;
-    
-    /* int traces to a low consant. This should heavily favor prior reads. */
-    set_trace_to_uniform( traces, EXPLORATION_PRIOR );
-
-    rewind_mapped_reads_db( rdb );
-    mapped_read_t* r;
-
-    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) ) 
-    {        
-        /* reset the read cond prbs under a uniform prior */
-        reset_read_cond_probs( cond_prbs_db, r, rdb );
-        
-        /* update the read conditional probabilities from the trace */
-        update_mapped_read_prbs( cond_prbs_db, traces, r );        
-
-        mapped_read_index* rd_index = build_mapped_read_index( r );
-        
-        if( rd_index->num_mappings > 0 )
-        {
-            /* Choose a random loc, proportional to the normalized probabilities */
-            int j = 0;
-            /* if there is exactly 1 mapping, then the randomness is pointless */
-            if( rd_index->num_mappings > 1 )
-            {
-                float random_num = (float)rand()/(float)RAND_MAX;
-                double cum_dist = 0;
-                for( j = 0; j < rd_index->num_mappings; j++ ) 
-                {
-                    cum_dist += get_cond_prb(
-                            cond_prbs_db, rd_index->read_id, j );
-                    if( random_num <= cum_dist )
-                        break;
-                }
-
-                /* 
-                 * rounding error makes it possible for j == r.num_mappings. If this is 
-                 * the case, then make sure the differnece isn't too big, and then chnage 
-                 * it. We could save a few cycles by taking this into account earlier, but
-                 * for now we're going to leave the sanity check.
-                 */
-                assert( j <= rd_index->num_mappings );
-                if( j == rd_index->num_mappings )
-                {
-                    // printf( "WARNING - rounding error! %e\n", cum_dist );
-                    j = rd_index->num_mappings - 1;
-                    assert( cum_dist > 0.999 );
-                }
-            }
-                        
-            /* Add this location to the trace, with prb 1 */
-            update_trace_expectation_from_location(
-                    traces, rd_index->mappings[j], 1.0 );
-        }
-
-        free_mapped_read_index( rd_index );
-    }
-    
-    return;
-}
-
 /*
  * END Chr Trace Code
  *
  *****************************************************************************/
-
-
-/******************************************************************************
- *
- * High-Level Functions 
- *
- *****************************************************************************/
-
-int 
-sample_random_trace(
-    struct mapped_reads_db* rdb, 
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct genome_data* genome,
-
-    int num_tracks,
-    char** track_names,
-
-    int sample_index,
-    
-    // (starting) sample meta info
-    FILE* ss_mi,
-    FILE* s_mi,
-
-    int max_num_iterations,
-    float max_prb_change_for_convergence,
-    float min_lhd_ratio_change_for_convergence,
-
-    void (* const update_trace_expectation_from_location)(
-        const struct trace_t* const traces, 
-        const mapped_read_location* const loc,
-        const float cond_prob
-    ),
-    
-    struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
-                                           const struct trace_t* const traces, 
-                                           const mapped_read_t* const r  )
-    )
-{
-    statmap_log( LOG_INFO, "Starting sample %i", sample_index+1 );
-
-    struct trace_t* sample_trace
-        = build_segmented_trace( genome, num_tracks, track_names, rdb,
-            cond_prbs_db, update_trace_expectation_from_location );
-    //init_full_trace( genome, &sample_trace, num_tracks, track_names );
-
-    build_random_starting_trace( 
-        sample_trace, genome, rdb, cond_prbs_db,
-        update_trace_expectation_from_location,
-        update_mapped_read_prbs
-     );
-
-    if( SAVE_STARTING_SAMPLES )
-    {
-        char buffer[100];
-        sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, sample_index+1 );
-            
-        write_trace_to_file( sample_trace, buffer );
-
-        double log_lhd = calc_log_lhd( 
-            rdb, cond_prbs_db, sample_trace, update_mapped_read_prbs );
-        fprintf( ss_mi, "%i,%e\n", sample_index+1, log_lhd );
-        fflush( ss_mi );
-    }
-        
-    /* maximize the likelihood */
-    update_mapping( 
-        rdb, cond_prbs_db, sample_trace, max_num_iterations,
-        max_prb_change_for_convergence,
-        min_lhd_ratio_change_for_convergence, 
-        update_trace_expectation_from_location,
-        update_mapped_read_prbs
-    );
-
-    if( SAVE_SAMPLES )
-    {
-        char buffer[100];
-        sprintf( buffer, "%ssample%i.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
-
-        write_trace_to_file( sample_trace, buffer );
-            
-        double log_lhd = calc_log_lhd( 
-            rdb, cond_prbs_db, sample_trace, update_mapped_read_prbs );
-        fprintf( s_mi, "%i,%e\n", sample_index+1, log_lhd );
-        fflush( s_mi );
-    }
-        
-    close_traces( sample_trace );
-    
-    return 0;
-}
-
-/*
- *
- * END High-Level Functions 
- *
- ******************************************************************************/
-
 
 /*****************************************************************************
  * 
@@ -781,11 +489,10 @@ update_chipseq_trace_expectation_from_location(
 )
 {
     const MRL_CHR_TYPE chr_index = get_chr_from_mapped_read_location( loc  );
-    const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc  );
+    const MRL_START_POS_TYPE start = get_start_from_mapped_read_location( loc );
     const MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location( loc  );
 
-    enum bool is_paired 
-        = mapped_read_location_is_paired( loc );
+    assert( mapped_read_location_is_paired( loc ) );
     enum bool first_read_is_rev_comp
         = first_read_in_mapped_read_location_is_rev_comp( loc );
     
@@ -796,33 +503,24 @@ update_chipseq_trace_expectation_from_location(
     assert( chr_index < traces->num_chrs );
     assert( traces->chr_lengths[chr_index] >= stop );
 
-    /* update the trace */
-    /* If the reads are paired */
-    if( is_paired )
+    const float scale = (1.0/(stop-start));
+
+    int track_index;
+    if( first_read_is_rev_comp )
     {
-        const float scale = (1.0/(stop-start));
-
-        int track_index;
-        if( first_read_is_rev_comp )
-        {
-            track_index = 1;
-        } else {
-            track_index = 0;
-        }
-
-        /* get the set of trace_segments to update */
-        struct trace_segments_t* trace_segments
-            = &(traces->segments[track_index][chr_index]);
-        
-        float scale_factor = scale*cond_prob;
-        update_trace_segments_from_uniform_kernel(trace_segments, scale_factor,
-            start, stop);
-    } 
-    /* If the read is *not* paired */
-    else {
-        statmap_log(LOG_FATAL, "Single end chipseq is not supported");
+        track_index = 1;
+    } else {
+        track_index = 0;
     }
 
+    /* get the set of trace_segments to update */
+    struct trace_segments_t* trace_segments
+        = &(traces->segments[track_index][chr_index]);
+        
+    float scale_factor = scale*cond_prob;
+    update_trace_segments_from_uniform_kernel(
+        trace_segments, scale_factor, start, stop);
+    
     return;
 }
 
@@ -859,41 +557,22 @@ update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
         MRL_STOP_POS_TYPE stop =
             get_stop_from_mapped_read_location( current_loc );
 
-        enum bool is_paired 
-            = mapped_read_location_is_paired( current_loc );
-        /* unused since we've temporarily removed single ended chipseq */
-        #if 0
-        enum bool first_read_is_rev_comp
-            = first_read_in_mapped_read_location_is_rev_comp( current_loc );
-        #endif
-
-        /* XXX for now, assuming segments correspond across tracks */
-
-        /* If the reads are paired */
-        if( is_paired )
-        {
-            window_density += accumulate_from_traces(traces, chr_index, start, 
-                stop);
-
-            /* 
-             * This is the probability of observing the seqeunce given that it came from 
-             * location i, assuming the chip traces have been normalized to 0. 
-             */
-            float fl_prb = get_fl_prb( 
-                global_fl_dist, 
-                get_fl_from_mapped_read_location( current_loc ) 
-            );
-            
-            window_density *= fl_prb;
-        } 
-        /* If the read is *not* paired */
-        else {
-            statmap_log(LOG_FATAL, "Single end chipseq is not supported");
-        }
+        assert( mapped_read_location_is_paired( current_loc ) );
         
-        new_prbs[i] = 
-            get_seq_error_from_mapped_read_location( current_loc )*
-            window_density;
+        window_density += accumulate_from_traces(
+            traces, chr_index, start, stop);
+            
+        /* 
+         * This is the probability of observing the seqeunce given that it came from 
+         * location i, assuming the chip traces have been normalized to 0. 
+         */
+        window_density *= get_fl_prb( 
+            global_fl_dist, 
+            get_fl_from_mapped_read_location( current_loc ) );
+        
+        new_prbs[i] = get_seq_error_from_mapped_read_location(
+                current_loc )*window_density;
+            
         prb_sum += new_prbs[i];        
         error_prb_sum += get_seq_error_from_mapped_read_location( current_loc );
     }    
@@ -1138,379 +817,6 @@ update_CAGE_mapped_read_prbs(
  *
  */
 
-
-int
-update_chipseq_mapping_wnc(  
-    int sample_index,
-    
-    struct mapped_reads_db* ip_rdb, 
-    struct cond_prbs_db_t* ip_cond_prbs_db,
-    struct trace_t** ip_trace,
-    
-    struct mapped_reads_db* nc_rdb,
-    struct cond_prbs_db_t* nc_cond_prbs_db,
-    struct trace_t** nc_trace,
-    
-    struct genome_data* genome,
-
-    float max_prb_change_for_convergence,
-    /* true if we should use a random start - otherwise, we use uniform */
-    enum bool random_start )
-{
-    struct timeval start, stop;
-    
-    int error = 0;
-    
-    /* BUG!!! */
-    /* Set the global fl dist - we should probably be passing this in through
-       the call chain via a void ptr, but thats a lot of work with very little
-       benefit ( except some cleanliness of course )
-     */
-    global_fl_dist = ip_rdb->fl_dist;
-    global_genome = genome;
-
-    /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( ip_rdb, ip_cond_prbs_db );
-    reset_all_read_cond_probs( nc_rdb, nc_cond_prbs_db );
-            
-    /* iteratively map from a uniform prior */
-    gettimeofday( &start, NULL );
-    statmap_log( LOG_NOTICE, "Starting iterative mapping." );
-    
-    /* initialize the trace that we will store the expectation in */
-    /* it has dimension 2 - for the negative and positive stranded reads */
-    char* ip_track_names[2] = {"IP_fwd_strand", "IP_bkwd_strand"};
-    //init_full_trace( genome, ip_trace, 2, ip_track_names );
-    char* nc_track_names[2] = {"NC_fwd_strand", "NC_bkwd_strand"};
-    //init_full_trace( genome, nc_trace, 2, nc_track_names );
-
-    /* try building segmented traces heres */
-    *ip_trace = build_segmented_trace( genome, 2, ip_track_names, ip_rdb,
-        ip_cond_prbs_db, update_chipseq_trace_expectation_from_location );
-    *nc_trace = build_segmented_trace( genome, 2, nc_track_names, nc_rdb,
-        nc_cond_prbs_db, update_chipseq_trace_expectation_from_location );
-
-    if( false == random_start )
-    {
-        set_trace_to_uniform( *ip_trace, 1 );
-    } else {
-        build_random_starting_trace( 
-            *ip_trace, genome, 
-            ip_rdb, ip_cond_prbs_db,
-            update_chipseq_trace_expectation_from_location,
-            update_chipseq_mapped_read_prbs
-        );
-
-        if( SAVE_STARTING_SAMPLES )
-        {
-            char buffer[100];
-            sprintf( buffer, "%ssample%i.bin.trace", STARTING_SAMPLES_PATH, sample_index+1 );
-            
-            write_trace_to_file( *ip_trace, buffer );
-        }
-    }
-    
-    /* reset the read cond prbs under a uniform prior */
-    reset_all_read_cond_probs( ip_rdb, ip_cond_prbs_db );
-    
-    /* update the 'real' IP data */
-    error = update_mapping (
-        ip_rdb, 
-        ip_cond_prbs_db,
-        *ip_trace,
-        MAX_NUM_EM_ITERATIONS,
-        max_prb_change_for_convergence,
-        CHIPSEQ_LHD_RATIO_STOP_VALUE,
-        update_chipseq_trace_expectation_from_location,
-        update_chipseq_mapped_read_prbs
-    );
-
-    if( 0 != error ) {
-        statmap_log( LOG_FATAL, "Unrecognized error code %i from update_mapping", error );
-    }
-    
-    gettimeofday( &stop, NULL );
-    long seconds  = stop.tv_sec  - start.tv_sec;
-    long useconds = stop.tv_usec - start.tv_usec;
-    
-    statmap_log( LOG_INFO, "Maximized LHD in %.5f seconds",
-            ((float)seconds) + ((float)useconds)/1000000 );
-    
-    /* update the NC data based upon the IP data's NC */
-    normalize_traces( *ip_trace );
-    
-    update_mapped_reads_from_trace(
-            nc_rdb, nc_cond_prbs_db,
-            *ip_trace, update_chipseq_mapped_read_prbs
-        );
-
-    /* update the NC reads from the ip marginal density */
-    update_traces_from_mapped_reads( 
-        nc_rdb, nc_cond_prbs_db, *nc_trace, 
-        update_chipseq_trace_expectation_from_location
-    );
-
-    /* we need to do this because I renormalized the read sensity, 
-       and it screws up the wiggle printing. Kind of a hack... */
-    update_traces_from_mapped_reads( 
-        ip_rdb, ip_cond_prbs_db, *ip_trace, 
-        update_chipseq_trace_expectation_from_location
-    );
-    
-    /* 
-       now we have two traces - one is the NC and one is the IP. They are 
-       mapped from the same marginal read density, so we should be able
-       to call peaks on them individually 
-    */
-    goto cleanup;
-    
-cleanup:
-    
-    return 0;    
-}
-
-void
-take_chipseq_sample_wnc(
-    struct mapped_reads_db* chip_mpd_rds_db, 
-    struct mapped_reads_db* NC_mpd_rds_db,
-    struct genome_data* genome,
-    
-    FILE* meta_info_fp,
-    int sample_index,
-    
-    float max_prb_change_for_convergence,
-    /* true if we should use a random start - otherwise, we use uniform */
-    enum bool random_start )
-
-{
-    global_fl_dist = chip_mpd_rds_db->fl_dist;
-    assert( global_fl_dist != NULL );
-
-    /* traces and track names to store the 2 marginal densities */
-    struct trace_t* ip_trace;
-    struct trace_t* nc_trace;
-
-    struct cond_prbs_db_t* chip_cond_prbs_db;
-    init_cond_prbs_db_from_mpd_rdb( &chip_cond_prbs_db, chip_mpd_rds_db );
-    
-    struct cond_prbs_db_t* NC_cond_prbs_db;
-    init_cond_prbs_db_from_mpd_rdb( &NC_cond_prbs_db, NC_mpd_rds_db );
-    
-    /* jointly update the mappings */
-    update_chipseq_mapping_wnc(  sample_index,
-                                 chip_mpd_rds_db, chip_cond_prbs_db, &ip_trace,
-                                 NC_mpd_rds_db, NC_cond_prbs_db, &nc_trace,
-                                 genome, 
-                                 max_prb_change_for_convergence,
-                                 random_start ); 
-           
-    /* write the joint mappings to a single wiggle */
-    /* we use a trick - writing wiggles appends to the file. So we just
-       call the writing code with the same filename, and let it append 
-       automatically 
-    */
-    if( SAVE_SAMPLES )
-    {
-        char wig_fname[100];
-        sprintf( wig_fname, "%ssample%i.ip.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_trace_to_file( ip_trace, wig_fname );
-                
-        sprintf( wig_fname, "%ssample%i.nc.bin.trace", RELAXED_SAMPLES_PATH, sample_index+1 );
-        write_trace_to_file( nc_trace, wig_fname );
-
-        /* write the lhd to the meta info folder */
-        double log_lhd = calc_log_lhd( 
-            chip_mpd_rds_db, chip_cond_prbs_db, 
-            ip_trace, update_chipseq_mapped_read_prbs );
-        fprintf( meta_info_fp, "%i,%e\n", sample_index+1, log_lhd );
-        fflush( meta_info_fp );
-    }
-            
-    if( NUM_BOOTSTRAP_SAMPLES > 0 )
-    {
-        char buffer[200];
-        sprintf( buffer, "%ssample%i",
-                 BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1 );
-        safe_mkdir( buffer );
-
-        int j;
-        for( j = 0; j < NUM_BOOTSTRAP_SAMPLES; j++ )
-        {                
-            if( j % (NUM_BOOTSTRAP_SAMPLES/10) == 0 )
-                fprintf( stderr, " %.1f%%...", (100.0*j)/NUM_BOOTSTRAP_SAMPLES );
-
-            /* actually perform the bootstrap */
-            bootstrap_traces_from_mapped_reads( 
-                chip_mpd_rds_db, chip_cond_prbs_db, ip_trace, 
-                update_chipseq_trace_expectation_from_location );
-                    
-            /* actually perform the bootstrap */
-            bootstrap_traces_from_mapped_reads( 
-                NC_mpd_rds_db, NC_cond_prbs_db, nc_trace,
-                update_chipseq_trace_expectation_from_location );
-                    
-            if( SAVE_BOOTSTRAP_SAMPLES )
-            {
-                /* write out the IP */
-                sprintf( buffer, "%ssample%i/bssample%i.ip.bin.trace", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
-
-                write_trace_to_file( ip_trace, buffer );
-
-                /* write out the NC */
-                sprintf( buffer, "%ssample%i/bssample%i.nc.bin.trace", 
-                         BOOTSTRAP_SAMPLES_ALL_PATH, sample_index+1, j+1 );
-
-                write_trace_to_file( nc_trace, buffer );                        
-            }    
-        }
-        fprintf( stderr, " 100%%\n" );
-                
-        close_traces( ip_trace );
-        close_traces( nc_trace );
-    }     
-    
-    free_cond_prbs_db( chip_cond_prbs_db );
-    free_cond_prbs_db( NC_cond_prbs_db );
-    
-    return;
-}
-
-int
-take_chipseq_sample( 
-    struct mapped_reads_db* rdb, 
-    struct genome_data* genome,
-    
-    int sample_index,
-    
-    FILE* ss_mi,
-    FILE* s_mi,
-    
-    int max_num_iterations,
-    float max_prb_change_for_convergence
-) {
-    int trace_size = 2;
-
-    char** track_names = NULL;
-    track_names = malloc( trace_size*sizeof(char*) );
-    track_names[0] = "fwd_strnd_read_density"; 
-    track_names[1] = "rev_strnd_read_density";
-
-    struct cond_prbs_db_t* cond_prbs_db;
-    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, rdb );
-
-    sample_random_trace(
-        rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
-        ss_mi, s_mi, 
-        max_num_iterations, 
-        max_prb_change_for_convergence,
-        CHIPSEQ_LHD_RATIO_STOP_VALUE,
-        update_chipseq_trace_expectation_from_location,
-        update_chipseq_mapped_read_prbs
-    );
-    
-    free( track_names );
-    free_cond_prbs_db( cond_prbs_db );
-
-    return 0;
-}
-
-int
-take_cage_sample( 
-    struct mapped_reads_db* rdb, 
-    struct genome_data* genome,
-    
-    int sample_index,
-    
-    FILE* ss_mi,
-    FILE* s_mi,
-    
-    int max_num_iterations,
-    double max_prb_change_for_convergence
-) {
-    int trace_size = 2;
-
-    char** track_names = NULL;
-    track_names = malloc( trace_size*sizeof(char*) );
-    track_names[0] = "fwd_strnd_read_density"; 
-    track_names[1] = "rev_strnd_read_density";
-
-    struct cond_prbs_db_t* cond_prbs_db;
-    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, rdb );
-
-    sample_random_trace(
-        rdb, cond_prbs_db, genome, trace_size, track_names, sample_index,
-        ss_mi, s_mi, 
-        max_num_iterations, 
-        max_prb_change_for_convergence,
-        CAGE_LHD_RATIO_STOP_VALUE,
-        update_CAGE_trace_expectation_from_location,
-        update_CAGE_mapped_read_prbs
-    );
-
-    free( track_names );
-    free_cond_prbs_db( cond_prbs_db );
-    
-    return 0;
-}
-
-
-int
-generic_update_mapping(  struct mapped_reads_db* rdb, 
-                         struct genome_data* genome,
-                         enum assay_type_t assay_type,
-                         int num_samples,
-                         float max_prb_change_for_convergence)
-{
-    /* Set the global fl dist */
-    global_fl_dist = rdb->fl_dist;
-    global_genome = genome;
-
-    /* Store meta information about the samples and starting samples */
-    FILE* ss_mi = NULL;
-    FILE* s_mi = NULL;
-    
-    /* Create the meta data csv's */
-    if( SAVE_STARTING_SAMPLES )
-    {
-        ss_mi = fopen(STARTING_SAMPLES_META_INFO_FNAME, "w");
-        fprintf( ss_mi, "sample_number,log_lhd\n" );
-    }
-
-    s_mi = fopen(RELAXED_SAMPLES_META_INFO_FNAME, "w");
-    fprintf( s_mi, "sample_number,log_lhd\n" );
-    
-    /* build bootstrap samples. Then take the max and min. */
-    int i;
-    for( i = 0; i < num_samples; i++ )
-    {
-        if( assay_type == CAGE )
-        {
-            take_cage_sample(
-                rdb, genome,
-                i, ss_mi, s_mi,
-                MAX_NUM_EM_ITERATIONS,
-                max_prb_change_for_convergence
-             );
-        } else if ( assay_type == CHIP_SEQ ) {
-             take_chipseq_sample(
-                rdb, genome,
-                i, ss_mi, s_mi,
-                MAX_NUM_EM_ITERATIONS,
-                max_prb_change_for_convergence
-             );
-        }
-    }
-    
-    /* Create the meta data csv's */
-    if( SAVE_STARTING_SAMPLES )
-        fclose(ss_mi);
-
-    fclose(s_mi);
-
-    return 0;    
-}
-
 void
 update_cond_prbs_from_trace_and_assay_type(  
     struct mapped_reads_db* rdb, 
@@ -1539,16 +845,8 @@ update_cond_prbs_from_trace_and_assay_type(
     // case STRANDED_RNASEQ:
 
     default:
-        statmap_log( LOG_FATAL, "Unrecognized assay type in iterative mapping." );
-        assert(false);
-        exit(-1);
-    }
-    
-    if( NULL == update_reads )
-    {
-        statmap_log( LOG_ERROR, "Unrecognized assay type (%i). Did you mix statmap versions?",  assay_type );
-        exit(1);
-
+        statmap_log(LOG_FATAL, "Unrecognized assay type in iterative mapping.");
+        abort();
     }
     
     /* BUG!!! */

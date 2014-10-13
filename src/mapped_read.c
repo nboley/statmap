@@ -1125,7 +1125,6 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     
     float *prbs = alloca( rd_index->num_mappings*sizeof(float) );
     
-    /* prevent divide by zero */
     MPD_RD_ID_T i;
     ML_PRB_TYPE max_log_val = -ML_PRB_MAX;
     for( i = 0; i < rd_index->num_mappings; i++ )
@@ -1140,15 +1139,14 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
         prbs[i] = log_error;
         max_log_val = MAX(log_error, max_log_val);
     }
-    int log_prb_offset = (int) max_log_val;
     
     ML_PRB_TYPE shifted_prb_sum = 0;
     for( i = 0; i < rd_index->num_mappings; i++ )
-        shifted_prb_sum += pow(10, prbs[i]-log_prb_offset );
+        shifted_prb_sum += pow(10, prbs[i]-max_log_val );
     
     for( i = 0; i < rd_index->num_mappings; i++ )
     {
-        ML_PRB_TYPE cond_prb = pow(10, prbs[i]-log_prb_offset)/shifted_prb_sum;
+        ML_PRB_TYPE cond_prb = pow(10, prbs[i]-max_log_val)/shifted_prb_sum;
         set_cond_prb( cond_prbs_db, rd_index->read_id, i, cond_prb);
         assert( (cond_prb <= 1 + 1e-6) && (cond_prb) >= 0-1e-6 );
     }

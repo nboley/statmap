@@ -33,7 +33,16 @@ def test_error_rate_estimation(paired=False):
     genome_fnames = ( "tmp.genome.fa", )
     with open( genome_fnames[0], "w" ) as genome_of:
         write_genome_to_fasta( r_genome, genome_of, 1 )
-    
+
+        mut_genome = {}
+        for key, val in r_genome.iteritems():
+            mut_genome[key + ".mut"] = bytearray(val)
+            for i in random.sample( 
+                xrange(len(val)), 1000 ):
+                mut_genome[key + ".mut"][i] = random.choice( 'ACGT' )
+
+        write_genome_to_fasta(mut_genome, genome_of, 1)
+
     # sample uniformly from the genome. This gives us the sequences
     # that we need to map. Note that we dont RC them, so every read should be in
     # the 5' direction

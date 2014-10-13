@@ -253,7 +253,7 @@ init_full_trace(
             {
                 int trace_length = 1 + (*traces)->chr_lengths[j]/bin_size;
                 add_trace_segment_to_trace_segments(
-                    &((*traces)->segments[i][j]), i, j, 0, bin_size );
+                    &((*traces)->segments[i][j]), i, j, 0, trace_length );
                 assert( (*traces)->segments[i][j].num_segments == 1 );
             }
         }
