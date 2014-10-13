@@ -211,7 +211,7 @@ struct update_mapped_reads_param {
     struct update_mapped_read_rv_t 
         (* update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
                                      const struct trace_t* const traces, 
-                                     const mapped_read_t* const r  );
+                                     mapped_read_t* r  );
     
 };
 
@@ -228,7 +228,7 @@ update_mapped_reads_from_trace_worker( void* params )
     struct update_mapped_read_rv_t 
         (* update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
                                      const struct trace_t* const traces, 
-                                     const mapped_read_t* const r  )
+                                     mapped_read_t* r  )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
 
@@ -273,12 +273,9 @@ update_mapped_reads_from_trace(
     struct update_mapped_read_rv_t 
         (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
                                            const struct trace_t* const traces, 
-                                           const mapped_read_t* const r  )
+                                           mapped_read_t* r  )
     )
 {    
-    /* store the toal accumulated error */
-    struct update_mapped_read_rv_t rv = { 0, 0.0 };
-    
     /* reset the cursor */
     rewind_mapped_reads_db( reads_db );
 
@@ -344,15 +341,16 @@ update_mapped_reads_from_trace(
         /* Aggregate over the max in the error difference */
         for( t=0; t < num_threads; t++ )
         {
-            rv.log_lhd += tds[t].rv.log_lhd;
-            rv.max_change = MAX( tds[t].rv.max_change, rv.max_change );
+            params.rv.log_lhd += tds[t].rv.log_lhd;
+            params.rv.max_change = MAX( 
+                tds[t].rv.max_change, params.rv.max_change );
         }
         
         free( tds );
         free( attrs );
     }
     
-    return rv;
+    return params.rv;
 }
 
 double
@@ -363,7 +361,7 @@ calc_log_lhd(
     struct update_mapped_read_rv_t 
         (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
                                            const struct trace_t* const traces, 
-                                           const mapped_read_t* const r  )
+                                           mapped_read_t* r  )
     )
 {    
     struct update_mapped_read_rv_t rv;
@@ -390,7 +388,7 @@ update_mapping(
     struct update_mapped_read_rv_t 
         (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
                                            const struct trace_t* const traces, 
-                                           const mapped_read_t* const r  )
+                                           mapped_read_t* r  )
     )
 {
     /* make sure the mapped reads are open for reading */
@@ -525,9 +523,9 @@ update_chipseq_trace_expectation_from_location(
 }
 
 struct update_mapped_read_rv_t 
-update_chipseq_mapped_read_prbs(     struct cond_prbs_db_t* cond_prbs_db,
-                                     const struct trace_t* const traces, 
-                                     const mapped_read_t* const r  )
+update_chipseq_mapped_read_prbs( struct cond_prbs_db_t* cond_prbs_db,
+                                 const struct trace_t* const traces, 
+                                 mapped_read_t* r  )
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
@@ -696,11 +694,11 @@ void update_CAGE_trace_expectation_from_location(
 }
 
 /* Returns the probability of observing the read, conditional on the trace */
-inline struct update_mapped_read_rv_t 
+struct update_mapped_read_rv_t 
 update_CAGE_mapped_read_prbs( 
     struct cond_prbs_db_t* cond_prbs_db,
     const struct trace_t* const traces, 
-    const mapped_read_t* const r  )
+    mapped_read_t* r  )
 {
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
@@ -811,34 +809,191 @@ update_CAGE_mapped_read_prbs(
  *
  ******************************************************************************/
 
+void update_ATACSeq_trace_expectation_from_location(
+    const struct trace_t* const traces, 
+    const mapped_read_location* const loc,
+    float cond_prob
+)
+{
+    MRL_CHR_TYPE chrm = 
+        get_chr_from_mapped_read_location(loc);
+    MRL_START_POS_TYPE start = get_start_from_mapped_read_location(loc) + 4;
+    MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location(loc) - 5;
+    
+    update_trace_segments_from_uniform_kernel(
+        traces->segments[0] + chrm, cond_prob, start-100, start+100 );
+    
+    update_trace_segments_from_uniform_kernel(
+        traces->segments[0] + chrm, cond_prob, stop-100, stop+100 );
+    
+    return;
+}
+
+struct update_mapped_read_rv_t 
+update_ATACSeq_mapped_read_prbs(
+    struct cond_prbs_db_t* cond_prbs_db, 
+    const struct trace_t* const trace,
+    mapped_read_t* r )
+{
+    struct update_mapped_read_rv_t rv = {0.0, 0.0};
+    mapped_read_index* rd_index = build_mapped_read_index( r );
+    
+    /* store the log sequencing errors, and then maximum log sequencing
+       error. We need the errors to normalize, and then max log errors
+       to center the results so that we can avoid rounding errors */
+    double* log_seq_errors = alloca(sizeof(double)*rd_index->num_mappings);
+    double max_log_val = -ML_PRB_MAX;
+    
+    /* store the local read density for each mapping, to properly
+       re-weight the sum */
+    double* local_read_sum = alloca(sizeof(double)*rd_index->num_mappings);
+    
+    /* Update the trace from this mapping */        
+    MPD_RD_ID_T i;
+    for( i = 0; i < rd_index->num_mappings; i++ ) {
+        mapped_read_location* loc = rd_index->mappings[i];
+
+        ML_PRB_TYPE log_error =get_log_seq_error_from_mapped_read_location(loc);
+
+        log_seq_errors[i] = log_error;
+        max_log_val = MAX(log_error, max_log_val);
+
+        int start = get_start_from_mapped_read_location(rd_index->mappings[i]);
+        local_read_sum[i] = accumulate_from_trace(
+            trace,
+            0,
+            get_chr_from_mapped_read_location(rd_index->mappings[i]),
+            start,
+            get_stop_from_mapped_read_location(rd_index->mappings[i])
+        );
+    }
+
+    double shifted_prb_sum = 0;
+    for( i = 0; i < rd_index->num_mappings; i++ )
+    {
+        double unnormalized_prb = local_read_sum[i]*pow(
+            10, log_seq_errors[i]-max_log_val );
+        local_read_sum[i] = unnormalized_prb;
+        shifted_prb_sum += unnormalized_prb;
+    }
+    
+    for( i = 0; i < rd_index->num_mappings; i++ )
+    {
+        ML_PRB_TYPE old_cond_prb = get_cond_prb( 
+            cond_prbs_db, rd_index->read_id, i);
+        ML_PRB_TYPE cond_prb = local_read_sum[i]/shifted_prb_sum;
+        rv.max_change = MAX(rv.max_change, fabs(old_cond_prb - cond_prb));
+        set_cond_prb( cond_prbs_db, rd_index->read_id, i, cond_prb);
+        assert( (cond_prb <= 1 + 1e-6) && (cond_prb) >= 0-1e-6 );
+    }
+            
+    free_mapped_read_index( rd_index );
+    return rv;
+}
+
+
 /******************************************************************************
  *
  * Entry point(s) into the iterative mapping code
  *
  */
 
-void
-update_cond_prbs_from_trace_and_assay_type(  
-    struct mapped_reads_db* rdb, 
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct trace_t* traces,
-    struct genome_data* genome,
-    enum assay_type_t assay_type
-)
+#if 0
+struct trace_t*
+build_segmented_trace(
+        struct genome_data* genome,
+        int num_tracks,
+        char** track_names,
+        struct mapped_reads_db* mpd_rdb,
+        struct cond_prbs_db_t* cond_prbs_db,
+        void (* const update_trace_expectation_from_location)(
+            const struct trace_t* const traces, 
+            const mapped_read_location* const loc,
+            const float cond_prob )    )
 {
+    /* Initialize a full trace that we will use to determine the segments */
+    struct trace_t* full_trace = NULL;
+    init_full_trace( genome, &full_trace, num_tracks, track_names, 1 );
+    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
+    update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, full_trace,
+        update_trace_expectation_from_location );
+
+    /* build list of segments from the full trace */
+    struct segments_list *segments_list
+        = build_trace_segments_list( full_trace );
+
+    // DEBUG
+    log_segments_list( segments_list );
+
+    /* build the segmented trace graph and log it for debugging */
+    build_segmented_trace_graph( segments_list, mpd_rdb );
+
+    /* Initialize the segmented trace */
+    struct trace_t* segmented_trace = NULL;
+    init_trace( genome, &segmented_trace, num_tracks, track_names );
+
+    /* Add the segments as specified by the segment list
+       NOTE: this assumes segments in the segment list are sorted by start
+       (they are naturally sorted with out current segment finding algo). */
+    int i;
+    for( i = 0; i < segments_list->length; i++ )
+    {
+        struct segment *s = segments_list->segments + i;
+
+        /* get the list of segments to add to */
+        struct trace_segments_t* update_segments
+            = &(segmented_trace->segments[s->track_index][s->chr_index]);
+
+        add_trace_segment_to_trace_segments( update_segments,
+            s->track_index, s->chr_index, s->start, (s->stop - s->start) );
+    }
+
+    close_traces( full_trace );
+    free_segments_list( segments_list );    
+
+    return segmented_trace;
+}
+#endif
+
+/*
+ * 
+ * END Mapped Short Reads Fns
+ *
+ *****************************************************************************/
+
+struct cond_prbs_db_t*
+build_posterior_db( struct genome_data* genome, 
+                    struct mapped_reads_db* mpd_rdb,
+                    enum assay_type_t assay_type )
+{   
+    void (*update_traces_from_mapped_location)(
+        const struct trace_t* const traces, 
+        const mapped_read_location* const loc,
+        const float prb ) = NULL;
+
     struct update_mapped_read_rv_t 
         (*update_reads)( struct cond_prbs_db_t* cond_prbs_db, 
                          const struct trace_t* const traces, 
-                         const mapped_read_t* const r  )
+                         mapped_read_t* r  )
         = NULL;
 
     switch( assay_type )
     {
+    case ATACSeq:
+        update_traces_from_mapped_location 
+            = update_ATACSeq_trace_expectation_from_location;
+        update_reads = update_ATACSeq_mapped_read_prbs;
+        break;
+
     case CAGE:
+        update_traces_from_mapped_location 
+            = update_CAGE_trace_expectation_from_location;
         update_reads = update_CAGE_mapped_read_prbs;
         break;
     
     case CHIP_SEQ:
+        update_traces_from_mapped_location 
+            = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
         break;    
 
@@ -848,26 +1003,29 @@ update_cond_prbs_from_trace_and_assay_type(
         statmap_log(LOG_FATAL, "Unrecognized assay type in iterative mapping.");
         abort();
     }
-    
-    /* BUG!!! */
-    /* Set the global fl dist */
-    global_fl_dist = rdb->fl_dist;
-    global_genome = genome;
 
-    update_mapped_reads_from_trace(
-        rdb, cond_prbs_db, traces, update_reads
-    );
-    
-    goto cleanup;
+    struct trace_t* traces = NULL;
+    char* track_name = "fwd";
+    init_full_trace( genome, &traces, 1, &track_name, 1 );
 
-cleanup:
+    struct cond_prbs_db_t* cond_prbs_db;
+    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
+    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
+
+    struct update_mapped_read_rv_t rv;
+    int i;
+    rv.max_change = 1;
+    for(i = 0; rv.max_change > 1e-5; i++) 
+    {
+        update_traces_from_mapped_reads( 
+            mpd_rdb, cond_prbs_db, traces, update_traces_from_mapped_location );
+        rv = update_mapped_reads_from_trace(
+            mpd_rdb, cond_prbs_db, traces, update_reads );
+        if(i%1000 == 0) {
+            statmap_log(LOG_NOTICE, "%i - Update size: %e", i, rv.max_change );
+        }
+    }
     
-    return;        
+    close_traces(traces);
+    return cond_prbs_db;
 }
-
-
-/*
- * 
- * END Mapped Short Reads Fns
- *
- *****************************************************************************/

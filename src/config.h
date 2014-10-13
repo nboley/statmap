@@ -167,7 +167,8 @@ enum assay_type_t {
     // UNKNOWN = 0,
     CAGE = 1,
     CHIP_SEQ = 2,
-    RNA_SEQ = 3
+    RNA_SEQ = 3,
+    ATACSeq = 4
 };
 
 /* 

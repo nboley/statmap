@@ -326,7 +326,7 @@ parse_opt( int key, char *arg, struct argp_state *state )
         case 'a':
             switch( arg[0] )
             {
-                case 'a':
+                case 'g':
                     args->assay_type = CAGE;
                     break;
                 case 'i':
@@ -335,10 +335,14 @@ parse_opt( int key, char *arg, struct argp_state *state )
                 case 'r':
                     args->assay_type = RNA_SEQ;
                     break;
+                case 'a':
+                    args->assay_type = ATACSeq;
+                    break;
                 default:
-                    argp_failure( state, 1, 0, 
-                            "FATAL       :  Unrecognized assay type: '%s'",
-                            arg );
+                    argp_failure( 
+                        state, 1, 0, 
+                        "FATAL       :  Unrecognized assay type: '%s'",
+                        arg );
             }
             break;
         case 'f':

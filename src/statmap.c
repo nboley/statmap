@@ -231,148 +231,6 @@ build_fl_dist( struct args_t* args, struct mapped_reads_db* mpd_rds_db )
     return;
 }
 
-void 
-update_trace(
-    struct mapped_reads_db* mpd_rdb, 
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct trace_t* trace )
-{
-    mapped_read_t* r;
-    int read_num = 0;
-    rewind_mapped_reads_db(mpd_rdb);
-    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &r ) )     
-    {
-        read_num++;
-        mapped_read_index* rd_index = build_mapped_read_index( r );
-        /* Update the trace from this mapping */        
-        MPD_RD_ID_T j;
-        for( j = 0; j < rd_index->num_mappings; j++ ) {
-            float cond_prob = get_cond_prb(
-                cond_prbs_db, rd_index->read_id, j );
-            MRL_CHR_TYPE chrm = 
-                get_chr_from_mapped_read_location(rd_index->mappings[j]);
-            MRL_START_POS_TYPE start = 
-                get_start_from_mapped_read_location(rd_index->mappings[j]);
-            MRL_STOP_POS_TYPE stop = 
-                get_stop_from_mapped_read_location(rd_index->mappings[j]);
-            
-            update_trace_segments_from_mapped_read_array(
-                trace->segments[0] + chrm, NULL, 
-                cond_prob, start, stop );
-        }
-            
-        free_mapped_read_index( rd_index );
-    }
-    
-    return;
-}
-
-double
-update_cond_prbs_for_mapped_read(
-    mapped_read_t* r, struct cond_prbs_db_t* cond_prbs_db, struct trace_t* trace)
-{
-    mapped_read_index* rd_index = build_mapped_read_index( r );
-    
-    /* store the log sequencing errors, and then maximum log sequencing
-       error. We need the errors to normalize, and then max log errors
-       to center the results so that we can avoid rounding errors */
-    double* log_seq_errors = alloca(sizeof(double)*rd_index->num_mappings);
-    double max_log_val = -ML_PRB_MAX;
-    
-    /* store the local read density for each mapping, to properly
-       re-weight the sum */
-    double* local_read_sum = alloca(sizeof(double)*rd_index->num_mappings);
-    
-    /* Update the trace from this mapping */        
-    MPD_RD_ID_T i;
-    for( i = 0; i < rd_index->num_mappings; i++ ) {
-        mapped_read_location* loc = rd_index->mappings[i];
-
-        ML_PRB_TYPE log_error =get_log_seq_error_from_mapped_read_location(loc);
-
-        log_seq_errors[i] = log_error;
-        max_log_val = MAX(log_error, max_log_val);
-
-        int start = get_start_from_mapped_read_location(rd_index->mappings[i]);
-        local_read_sum[i] = accumulate_from_trace(
-            trace,
-            0,
-            get_chr_from_mapped_read_location(rd_index->mappings[i]),
-            start,
-            get_stop_from_mapped_read_location(rd_index->mappings[i])
-        );
-    }
-
-    double shifted_prb_sum = 0;
-    for( i = 0; i < rd_index->num_mappings; i++ )
-    {
-        double unnormalized_prb = local_read_sum[i]*pow(
-            10, log_seq_errors[i]-max_log_val );
-        local_read_sum[i] = unnormalized_prb;
-        shifted_prb_sum += unnormalized_prb;
-    }
-    
-    double max_update_size = 0;
-    for( i = 0; i < rd_index->num_mappings; i++ )
-    {
-        ML_PRB_TYPE old_cond_prb = get_cond_prb( 
-            cond_prbs_db, rd_index->read_id, i);
-        ML_PRB_TYPE cond_prb = local_read_sum[i]/shifted_prb_sum;
-        max_update_size = MAX(max_update_size, fabs(old_cond_prb - cond_prb));
-        set_cond_prb( cond_prbs_db, rd_index->read_id, i, cond_prb);
-        assert( (cond_prb <= 1 + 1e-6) && (cond_prb) >= 0-1e-6 );
-    }
-            
-    free_mapped_read_index( rd_index );
-    return max_update_size;
-}
-
-double 
-update_cond_prbs(
-    struct mapped_reads_db* mpd_rdb, 
-    struct cond_prbs_db_t* cond_prbs_db,
-    struct trace_t* trace )
-{
-    mapped_read_t* r;
-    double max_update_size = 0;
-    int read_num = 0;
-    rewind_mapped_reads_db(mpd_rdb);
-    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &r ) )     
-    {
-        read_num++;
-        double update_size = update_cond_prbs_for_mapped_read(
-            r, cond_prbs_db, trace);
-        max_update_size = MAX(max_update_size, update_size);
-    }
-    
-    return max_update_size;
-}
-
-struct cond_prbs_db_t*
-build_posterior_db( struct genome_data* genome, 
-                    struct mapped_reads_db* mpd_rdb )
-{   
-    struct trace_t* trace = NULL;
-    char* track_name = "fwd";
-    init_full_trace( genome, &trace, 1, &track_name, 1 );
-
-    struct cond_prbs_db_t* cond_prbs_db;
-    init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
-    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
-
-    double max_update_size = 1.;
-    int i;
-    for(i = 0; max_update_size > 1e-5; i++) 
-    {
-        update_trace( mpd_rdb, cond_prbs_db, trace );
-        max_update_size = update_cond_prbs(mpd_rdb, cond_prbs_db, trace);
-        statmap_log(LOG_NOTICE, "%i - Update size: %e", i, max_update_size );
-    }
-    
-    close_traces(trace);
-    return cond_prbs_db;
-}
-
 int 
 main( int argc, char** argv )
 {
@@ -437,18 +295,21 @@ main( int argc, char** argv )
     genome->index = NULL;
     
     /* iterative mapping */
-    statmap_log( LOG_NOTICE, "Starting iterative mapping" );
-
-    struct cond_prbs_db_t* cond_prbs_db = build_posterior_db( 
-        genome, mpd_rds_db );
+    if( args.assay_type != UNKNOWN )
+    {
+        statmap_log( LOG_NOTICE, "Starting iterative mapping" );
+        struct cond_prbs_db_t* cond_prbs_db = build_posterior_db( 
+            genome, mpd_rds_db, args.assay_type );
     
-    // args.sam_output_fname
-    FILE* fp = fopen("test.sam", "w");
-    write_mapped_reads_to_sam( 
-        args.rdb, mpd_rds_db, cond_prbs_db, genome, false, fp );
-    fclose(fp);
+        // args.sam_output_fname
+        statmap_log( LOG_NOTICE, "Writing mapped reads to sam file" );
+        FILE* fp = fopen("test.sam", "w");
+        write_mapped_reads_to_sam( 
+            args.rdb, mpd_rds_db, cond_prbs_db, genome, false, fp );
+        fclose(fp);
 
-    free_cond_prbs_db(cond_prbs_db);
+        free_cond_prbs_db(cond_prbs_db);
+    }
     goto cleanup;
     
 cleanup:

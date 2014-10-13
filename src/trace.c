@@ -957,7 +957,8 @@ update_trace_segments_from_mapped_read_array(
     /* update_vals is from start->stop */
 
     /* Find the index of the first trace segment to update */
-    int st_index = find_start_of_trace_segments_to_update(trace_segments, start, stop);
+    int st_index = find_start_of_trace_segments_to_update(
+        trace_segments, start, stop);
 
     int bp = start; // need to maintain last bp updated over multiple segments
     //int update_vals_index = 0;
@@ -1015,8 +1016,8 @@ update_trace_segments_from_uniform_kernel(
     int stop
 )
 {
-    update_trace_segments_from_mapped_read_array(trace_segments, NULL,
-        scale_factor, start, stop);
+    update_trace_segments_from_mapped_read_array(
+        trace_segments, NULL, scale_factor, start, stop);
 }
 
 double
@@ -1277,60 +1278,6 @@ log_segments_list(
     return;
 }
 
-struct trace_t*
-build_segmented_trace(
-        struct genome_data* genome,
-        int num_tracks,
-        char** track_names,
-        struct mapped_reads_db* mpd_rdb,
-        struct cond_prbs_db_t* cond_prbs_db,
-        void (* const update_trace_expectation_from_location)(
-            const struct trace_t* const traces, 
-            const mapped_read_location* const loc,
-            const float cond_prob )    )
-{
-    /* Initialize a full trace that we will use to determine the segments */
-    struct trace_t* full_trace = NULL;
-    init_full_trace( genome, &full_trace, num_tracks, track_names, 1 );
-    reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
-    update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, full_trace,
-        update_trace_expectation_from_location );
-
-    /* build list of segments from the full trace */
-    struct segments_list *segments_list
-        = build_trace_segments_list( full_trace );
-
-    // DEBUG
-    log_segments_list( segments_list );
-
-    /* build the segmented trace graph and log it for debugging */
-    build_segmented_trace_graph( segments_list, mpd_rdb );
-
-    /* Initialize the segmented trace */
-    struct trace_t* segmented_trace = NULL;
-    init_trace( genome, &segmented_trace, num_tracks, track_names );
-
-    /* Add the segments as specified by the segment list
-       NOTE: this assumes segments in the segment list are sorted by start
-       (they are naturally sorted with out current segment finding algo). */
-    int i;
-    for( i = 0; i < segments_list->length; i++ )
-    {
-        struct segment *s = segments_list->segments + i;
-
-        /* get the list of segments to add to */
-        struct trace_segments_t* update_segments
-            = &(segmented_trace->segments[s->track_index][s->chr_index]);
-
-        add_trace_segment_to_trace_segments( update_segments,
-            s->track_index, s->chr_index, s->start, (s->stop - s->start) );
-    }
-
-    close_traces( full_trace );
-    free_segments_list( segments_list );    
-
-    return segmented_trace;
-}
 
 /******************************************************************************
  * Segmented Trace Graph
