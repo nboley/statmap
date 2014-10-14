@@ -232,6 +232,9 @@ update_mapped_reads_from_trace_worker( void* params )
         = ( (struct update_mapped_reads_param*)
             params)->update_mapped_read_prbs;
 
+    struct update_mapped_read_rv_t *rv = 
+        &(((struct update_mapped_reads_param*) params)->rv);
+    
     mapped_read_t* r;
 
     while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) ) 
@@ -239,13 +242,14 @@ update_mapped_reads_from_trace_worker( void* params )
         /* Update the read */
         struct update_mapped_read_rv_t tmp_rv 
             = update_mapped_read_prbs( cond_prbs_db, traces, r );
-
+        
         /* Hand reduce the max */
-        if( tmp_rv.max_change > ( (struct update_mapped_reads_param*) params)->rv.max_change )
-            ( (struct update_mapped_reads_param*) params)->rv.max_change = tmp_rv.max_change;
+        if( tmp_rv.max_change > rv->max_change )
+            rv->max_change = tmp_rv.max_change;
+
         
         /* Update the lhd */
-        ( (struct update_mapped_reads_param*) params)->rv.log_lhd += tmp_rv.log_lhd;
+        rv->log_lhd += tmp_rv.log_lhd;
     }
 
     return;
@@ -430,7 +434,7 @@ update_mapping(
             ( 
                 ( 
                   num_iterations == 1 
-                  || num_iterations%1 == 0 
+                  || num_iterations%100 == 0 
                   || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
                 )
                 || rv.max_change < max_prb_change_for_convergence
@@ -441,14 +445,17 @@ update_mapping(
                 )
             )
         {
-            statmap_log( LOG_INFO,
-                    "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec", 
-                    num_iterations, rv.max_change, rv.log_lhd,
-                    pow( 10, rv.log_lhd - prev_log_lhd ),
-                    (float)(nt_stop.tv_sec - nt_start.tv_sec) + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
-                    (float)(umr_stop.tv_sec - umr_start.tv_sec) + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
-                    (float)(ut_stop.tv_sec - ut_start.tv_sec) + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
-               );
+            statmap_log( LOG_NOTICE,
+            "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec", 
+            num_iterations, rv.max_change, rv.log_lhd,
+            pow( 10, rv.log_lhd - prev_log_lhd ),
+            (float)(nt_stop.tv_sec - nt_start.tv_sec) 
+                   + ((float)(nt_stop.tv_usec - nt_start.tv_usec))/1000000,
+            (float)(umr_stop.tv_sec - umr_start.tv_sec) 
+                   + ((float)(umr_stop.tv_usec - umr_start.tv_usec))/1000000,
+            (float)(ut_stop.tv_sec - ut_start.tv_sec) 
+                   + ((float)(ut_stop.tv_usec - ut_start.tv_usec))/1000000
+            );
             
             if( num_iterations > 1 
                 && ( rv.max_change < max_prb_change_for_convergence 
@@ -1007,7 +1014,8 @@ build_posterior_db( struct genome_data* genome,
     struct trace_t* traces = NULL;
     char* track_name = "fwd";
     init_full_trace( genome, &traces, 1, &track_name, 1 );
-
+    set_trace_to_uniform(traces, 1);
+    
     struct cond_prbs_db_t* cond_prbs_db;
     init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
     reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
