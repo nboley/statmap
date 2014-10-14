@@ -386,9 +386,9 @@ update_mapping(
         const float prb ),
 
     struct update_mapped_read_rv_t 
-        (* const update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
-                                           const struct trace_t* const traces, 
-                                           mapped_read_t* r  )
+        (*update_mapped_read_prbs)( struct cond_prbs_db_t* cond_prbs_db,
+                                    const struct trace_t* const traces, 
+                                    mapped_read_t* r  )
     )
 {
     /* make sure the mapped reads are open for reading */
@@ -1012,19 +1012,15 @@ build_posterior_db( struct genome_data* genome,
     init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
     reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
 
-    struct update_mapped_read_rv_t rv;
-    int i;
-    rv.max_change = 1;
-    for(i = 0; rv.max_change > 1e-5; i++) 
-    {
-        update_traces_from_mapped_reads( 
-            mpd_rdb, cond_prbs_db, traces, update_traces_from_mapped_location );
-        rv = update_mapped_reads_from_trace(
-            mpd_rdb, cond_prbs_db, traces, update_reads );
-        if(i%1000 == 0) {
-            statmap_log(LOG_NOTICE, "%i - Update size: %e", i, rv.max_change );
-        }
-    }
+
+    update_mapping(
+        mpd_rdb, cond_prbs_db, traces, 
+        1e5, // max num iterations
+        1e-4, // max_prb_change_for_convergence,
+        1, // lhd_ratio_stop_value,
+        update_traces_from_mapped_location,
+        update_reads
+        );
     
     //close_traces(traces);
     return cond_prbs_db;

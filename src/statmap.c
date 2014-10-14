@@ -295,7 +295,8 @@ main( int argc, char** argv )
     genome->index = NULL;
     
     /* iterative mapping */
-    if( args.assay_type != UNKNOWN )
+    if( args.error_model_type == ESTIMATED
+        && args.assay_type != UNKNOWN )
     {
         statmap_log( LOG_NOTICE, "Starting iterative mapping" );
         struct cond_prbs_db_t* cond_prbs_db = build_posterior_db( 
