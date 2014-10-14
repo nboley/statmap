@@ -331,11 +331,16 @@ fprintf_sam_line_from_sublocations_group(
 void
 fprintf_mapped_read_to_sam( 
     FILE* sam_fp,
-    mapped_read_index* mpd_rd_index,
+    mapped_read_t* mpd_rd,
     struct cond_prbs_db_t* cond_prbs_db,    
     struct genome_data* genome,
     struct read* r )
 {
+    mapped_read_index* mpd_rd_index;
+    alloc_and_init_mapped_read_index(mpd_rd_index, mpd_rd);
+    if(mpd_rd_index->num_mappings == 0)
+        goto cleanup;
+
     /* HACK - assumptions to get this to compile */
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
@@ -404,6 +409,9 @@ fprintf_mapped_read_to_sam(
         }
     }
 
+cleanup:
+    free_mapped_read_index( mpd_rd_index );
+
     return;
 }
 
@@ -463,34 +471,21 @@ write_mapped_reads_to_sam(
     while( rd != NULL
            && mapped_rd != NULL ) 
     {
-        mapped_read_index* rd_index 
-            = build_mapped_read_index( mapped_rd );
-
-        if( rd->read_id != rd_index->read_id )
-        {
-            statmap_log( LOG_DEBUG, "read_id: %d", rd->read_id );
-            statmap_log( LOG_DEBUG, "mapped_rd->read_id: %d", rd_index->read_id );
-        }
-        assert( rd->read_id == rd_index->read_id );
-        
         if( rd->read_id > 0 && rd->read_id%1000000 == 0 )
             statmap_log( LOG_NOTICE, "Written %u reads to sam\n",  rd->read_id  );
         
         /* We test for mapped read NULL in case the last read was unmappable */
-        if( mapped_rd != NULL 
-            && rd_index->num_mappings > 0 )
+        if( mapped_rd != NULL )
         {
             /* sometimes we want the marginal distribution */
             if( reset_cond_read_prbs )
                 reset_read_cond_probs( cond_prbs_db, mapped_rd, mappings_db );
             
             fprintf_mapped_read_to_sam( 
-                sam_ofp, rd_index,
+                sam_ofp, mapped_rd,
                 cond_prbs_db, genome, rd );
         }
-        
-        free_mapped_read_index( rd_index );
-        
+                
         /* Free the read */
         free_read( rd );
 
@@ -517,7 +512,6 @@ write_mapped_reads_to_sam(
     goto cleanup;
 
 cleanup:
-
     /* Free the read */
     if( rd != NULL )
         free_read( rd );

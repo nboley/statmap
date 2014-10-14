@@ -115,7 +115,8 @@ build_fl_dist_from_filename( struct fragment_length_dist_t** fl_dist, char* file
 int 
 get_frag_len( mapped_read_t* rd )
 {
-    mapped_read_index* rd_index = build_mapped_read_index( rd );
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index(rd_index, rd);
 
     /* If there are not mapped locations, ther is no frag len */
     if( rd_index->num_mappings == 0 )

@@ -76,7 +76,8 @@ print_mapped_read(
     /* Index the mapped read to make this easier (be careful, if there's a bug 
        in indexing mapped reads this will be messed up - then again, so will
        everything else) */
-    mapped_read_index* rd_index = build_mapped_read_index(rd);
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index(rd_index, rd);
 
     fprintf(stderr, "==== MAPPED READ ID %i (%i mappings) ====\n",
         rd_index->read_id, rd_index->num_mappings);
@@ -336,16 +337,12 @@ get_read_id_from_mapped_read( mapped_read_t* rd )
  */
 
 void
-index_mapped_read( mapped_read_t* rd,
-                   mapped_read_index* index )
+init_mapped_read_index( mapped_read_t* rd,
+                        mapped_read_index* index )
 {
     const int REALLOC_BLOCK_SIZE = 1000;
 
-    /* initialize array of pointers to mapped_read_location's */
-    int num_allocated_locations = REALLOC_BLOCK_SIZE;
-    index->mappings = malloc( num_allocated_locations *
-                              sizeof(mapped_read_location*) );
-
+    mapped_read_location** heap_locs = NULL;
     int num_mapped_locations = 0;
 
     /* Locate the start of the mapped read locations in this mapped read. */
@@ -357,12 +354,19 @@ index_mapped_read( mapped_read_t* rd,
         /* Assume there is at least one mapped_read_location in a mapped_read_t */
 
         /* resize index */
-        if( num_mapped_locations + 1 == num_allocated_locations )
+        if( num_mapped_locations + 1 == index->num_allocated_mappings )
         {
-            num_allocated_locations += REALLOC_BLOCK_SIZE;
-            index->mappings = realloc( index->mappings,
-                                       num_allocated_locations*
-                                       sizeof(mapped_read_location*));
+            if(heap_locs == NULL )
+            {
+                heap_locs = calloc(sizeof(mapped_read_location*), index->num_allocated_mappings + REALLOC_BLOCK_SIZE);
+                memcpy(heap_locs, index->mappings, sizeof(mapped_read_location*)*index->num_allocated_mappings);
+                index->is_heap_allocated = true;
+                index->mappings = heap_locs;
+            } else {
+                index->num_allocated_mappings += REALLOC_BLOCK_SIZE;
+                index->mappings = realloc( index->mappings,
+                                           index->num_allocated_mappings*sizeof(mapped_read_location*));
+            }
         }
 
         index->mappings[num_mapped_locations] = (mapped_read_location*) loc_ptr;
@@ -383,31 +387,14 @@ index_mapped_read( mapped_read_t* rd,
     }
 
     /* reclaim any unused memory */
-    index->mappings = realloc( index->mappings,
-                               num_mapped_locations*
-                               sizeof(mapped_read_location*) );
-
+    if( index->is_heap_allocated )
+    {
+        index->mappings = realloc( 
+            index->mappings, num_mapped_locations*sizeof(mapped_read_location*) );
+    }
     /* save number of mapped locations */
     index->num_mappings = num_mapped_locations;
-
     return;
-}
-
-mapped_read_index*
-build_mapped_read_index( mapped_read_t* rd )
-{
-    mapped_read_index* index = malloc( sizeof( mapped_read_index ) );
-    assert( index != NULL );
-
-    index->rd = rd;
-    index->read_id = get_read_id_from_mapped_read( rd );
-    index->num_mappings = 0;
-    index->mappings = NULL;
-
-    /* Index the locations in the mapped read */
-    index_mapped_read( rd, index );
-
-    return index;
 }
 
 void
@@ -415,12 +402,10 @@ free_mapped_read_index( mapped_read_index* index )
 {
     if( index == NULL ) return;
 
-    if( index->mappings != NULL ) {
+    if( index->mappings != NULL && index->is_heap_allocated ) {
         free( index->mappings );
     }
-
-    free( index );
-
+    
     return;
 }
 
@@ -1118,7 +1103,8 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     struct fragment_length_dist_t* fl_dist = mpd_rds_db->fl_dist;
     
     /* build an index for this mapped_read */
-    mapped_read_index* rd_index = build_mapped_read_index( rd );
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index(rd_index, rd);
 
     if( 0 == rd_index->num_mappings )
         return;
@@ -1398,7 +1384,8 @@ init_cond_prbs_db_from_mpd_rdb(
     rewind_mapped_reads_db( mpd_rdb );
     while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
     {
-        mapped_read_index* rd_index = build_mapped_read_index( mapped_rd );
+        mapped_read_index* rd_index;
+        alloc_and_init_mapped_read_index(rd_index, mapped_rd);
 
         (*cond_prbs_db)->cond_read_prbs[rd_index->read_id] 
             = calloc( rd_index->num_mappings, sizeof( ML_PRB_TYPE  )  );

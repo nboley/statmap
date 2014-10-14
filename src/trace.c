@@ -1519,7 +1519,8 @@ build_segmented_trace_graph(
     mapped_read_t* rd;
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {
-        mapped_read_index* rd_index = build_mapped_read_index( rd );
+        mapped_read_index* rd_index;
+        alloc_and_init_mapped_read_index(rd_index, rd);
 
         /* Store the segment index of each of this mapped read's mappings */
         int* segment_indexes = malloc( rd_index->num_mappings*sizeof(int) );

@@ -80,7 +80,8 @@ update_traces_from_mapped_reads_worker( void* params )
 
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-        mapped_read_index* rd_index = build_mapped_read_index( r );
+        mapped_read_index* rd_index;
+        alloc_and_init_mapped_read_index( rd_index, r );
 
         /* Update the trace from this mapping */        
         MPD_RD_ID_T j;
@@ -123,7 +124,8 @@ update_traces_from_mapped_reads(
         {
             read_num++;
             
-            mapped_read_index* rd_index = build_mapped_read_index( r );
+            mapped_read_index* rd_index;
+            alloc_and_init_mapped_read_index( rd_index, r );
 
             /* Update the trace from this mapping */        
             MPD_RD_ID_T j;
@@ -537,7 +539,8 @@ update_chipseq_mapped_read_prbs( struct cond_prbs_db_t* cond_prbs_db,
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
     /* FIXME cast away const? */
-    mapped_read_index* rd_index = build_mapped_read_index( (mapped_read_t*) r );
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index( rd_index, r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
@@ -710,7 +713,8 @@ update_CAGE_mapped_read_prbs(
     struct update_mapped_read_rv_t rv = { 0, 0 };
 
     /* FIXME cast away const? */
-    mapped_read_index* rd_index = build_mapped_read_index( (mapped_read_t*) r );
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index( rd_index, r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
@@ -843,7 +847,9 @@ update_ATACSeq_mapped_read_prbs(
     mapped_read_t* r )
 {
     struct update_mapped_read_rv_t rv = {0.0, 0.0};
-    mapped_read_index* rd_index = build_mapped_read_index( r );
+    
+    mapped_read_index* rd_index;
+    alloc_and_init_mapped_read_index(rd_index, r);
     
     /* store the log sequencing errors, and then maximum log sequencing
        error. We need the errors to normalize, and then max log errors
