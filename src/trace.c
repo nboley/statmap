@@ -231,7 +231,7 @@ init_trace(
 }
 
 void
-init_full_trace(
+init_binned_trace(
         struct genome_data* genome,
         struct trace_t** traces,
         int num_tracks,
@@ -258,6 +258,17 @@ init_full_trace(
             }
         }
     }
+}
+
+void
+init_full_trace(
+        struct genome_data* genome,
+        struct trace_t** traces,
+        int num_tracks,
+        char** track_names
+    )
+{
+    init_binned_trace( genome, traces, num_tracks, track_names, 1 );
 }
 
 void
@@ -1034,7 +1045,8 @@ accumulate_from_trace(
     struct trace_segments_t* trace_segments
         = &(traces->segments[track_index][chr_index]);
 
-    int ss_i = find_start_of_trace_segments_to_update(trace_segments, start, stop);
+    int ss_i = find_start_of_trace_segments_to_update(
+        trace_segments, start, stop);
 
     int bp = start; // need to maintain last bp updated over multiple segments
 
@@ -1042,9 +1054,6 @@ accumulate_from_trace(
     for( si = ss_i; si < trace_segments->num_segments; si++ )
     {
         struct trace_segment_t* trace_segment = trace_segments->segments + si;
-
-        /* lock while we update this trace segment */
-        pthread_mutex_lock(trace_segment->data_lock);
 
         for( ; bp < stop; bp++ )
         {
@@ -1058,13 +1067,11 @@ accumulate_from_trace(
             acc += trace_segment->data[bp - trace_segment->real_start];
         }
 
-        pthread_mutex_unlock(trace_segment->data_lock);
-
         /* check if we've covered the given trace */
         if(bp-1 == stop)
             break;
     }
-
+    
     return acc;
 }
 

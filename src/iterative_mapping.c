@@ -36,6 +36,9 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
+#define BIN_SIZE 100
+#define WINDOW_SIZE 100
+
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
  * designed to be called from a thread.
@@ -828,14 +831,21 @@ void update_ATACSeq_trace_expectation_from_location(
 {
     MRL_CHR_TYPE chrm = 
         get_chr_from_mapped_read_location(loc);
+
+    /* update the left open chromatin region */
     MRL_START_POS_TYPE start = get_start_from_mapped_read_location(loc) + 4;
+    update_trace_segments_from_uniform_kernel(
+        traces->segments[0] + chrm, 
+        cond_prob, 
+        start/BIN_SIZE, 
+        start/BIN_SIZE+1 );
+    
     MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location(loc) - 5;
-    
     update_trace_segments_from_uniform_kernel(
-        traces->segments[0] + chrm, cond_prob, start-100, start+100 );
-    
-    update_trace_segments_from_uniform_kernel(
-        traces->segments[0] + chrm, cond_prob, stop-100, stop+100 );
+        traces->segments[0] + chrm, 
+        cond_prob, 
+        stop/BIN_SIZE, 
+        stop/BIN_SIZE+1 );
     
     return;
 }
@@ -871,14 +881,24 @@ update_ATACSeq_mapped_read_prbs(
         log_seq_errors[i] = log_error;
         max_log_val = MAX(log_error, max_log_val);
 
-        int start = get_start_from_mapped_read_location(rd_index->mappings[i]);
+        MRL_START_POS_TYPE start = get_start_from_mapped_read_location(
+            rd_index->mappings[i]);
+        MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location(
+            rd_index->mappings[i]);
+
         local_read_sum[i] = accumulate_from_trace(
             trace,
             0,
             get_chr_from_mapped_read_location(rd_index->mappings[i]),
-            start,
-            get_stop_from_mapped_read_location(rd_index->mappings[i])
-        );
+            (start-WINDOW_SIZE)/BIN_SIZE, (start+WINDOW_SIZE)/BIN_SIZE + 1);
+
+        local_read_sum[i] += accumulate_from_trace(
+            trace,
+            0,
+            get_chr_from_mapped_read_location(rd_index->mappings[i]),
+            (stop-WINDOW_SIZE)/BIN_SIZE, (stop+WINDOW_SIZE)/BIN_SIZE + 1);
+        
+        assert(1 == isfinite(local_read_sum[i]));
     }
 
     double shifted_prb_sum = 0;
@@ -926,7 +946,7 @@ build_segmented_trace(
 {
     /* Initialize a full trace that we will use to determine the segments */
     struct trace_t* full_trace = NULL;
-    init_full_trace( genome, &full_trace, num_tracks, track_names, 1 );
+    init_full_trace( genome, &full_trace, num_tracks, track_names );
     reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
     update_traces_from_mapped_reads( mpd_rdb, cond_prbs_db, full_trace,
         update_trace_expectation_from_location );
@@ -1019,18 +1039,17 @@ build_posterior_db( struct genome_data* genome,
 
     struct trace_t* traces = NULL;
     char* track_name = "fwd";
-    init_full_trace( genome, &traces, 1, &track_name, 1 );
+    init_binned_trace( genome, &traces, 1, &track_name, 1 );
     set_trace_to_uniform(traces, 1);
     
     struct cond_prbs_db_t* cond_prbs_db;
     init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
     reset_all_read_cond_probs( mpd_rdb, cond_prbs_db );
-
-
+    
     update_mapping(
         mpd_rdb, cond_prbs_db, traces, 
         1e5, // max num iterations
-        1e-4, // max_prb_change_for_convergence,
+        1e-2, // max_prb_change_for_convergence,
         1, // lhd_ratio_stop_value,
         update_traces_from_mapped_location,
         update_reads
