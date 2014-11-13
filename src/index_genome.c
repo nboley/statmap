@@ -175,9 +175,10 @@ build_indexable_subtemplates_from_read_subtemplate(
     int indexable_length = rst->length - softclip_len;
     if( indexable_length < subseq_length )
     {
-        statmap_log( LOG_WARNING,
-                "Probe lengths must be at least %i basepairs short, to account for the specified --soft-clip-length (-S)",
-                softclip_len
+        statmap_log( 
+            LOG_DEBUG,
+            "Read is too short to map (%i bp - indexable length %i-%i=%i bp)",
+            subseq_length, rst->length, softclip_len, indexable_length
             );
         return NULL;
     }

@@ -251,7 +251,7 @@ static struct argp_option options[] =
     {"max-penalty-spread", 'm', "SPREAD", 0,
      "Upper bound of the difference of probabilities between the top matching sequence and the sequence of interest (in log10 probaiblity space)", 0},
     {"assay", 'a', "ASSAY", 0,
-     "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq or 'a' for CAGE. 'r' for stranded RNA-Seq is not implemented yet", 0},
+     "Optional: type of underlying assay. Valid options are 'i' for ChIP-Seq, 'g' for CAGE, 'r' for stranded RNA-Seq, 'a' for ATAC-Seq", 0},
     {"num-samples", 'n', "SAMPLES", 0,
      "In iterative mapping, number of samples to take from the mapping posterior", 0},
     {"threads", 't', "THREADS", 0,
