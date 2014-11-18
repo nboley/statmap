@@ -1566,7 +1566,7 @@ find_matches( void* node, NODE_TYPE node_type, int node_level,
     const int num_letters = calc_num_letters( seq_length );
 
     /* Unpack the search parameters */
-    float min_match_penalty = search_params->min_match_penalty;
+    float min_match_penalty = search_params->min_match_penalty - search_params->max_penalty_spread;
     float max_penalty_spread = search_params->max_penalty_spread;
 
     /* initialize the stack */

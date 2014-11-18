@@ -3,7 +3,7 @@
 #ifndef MAPPED_READ
 #define MAPPED_READ
 
-#define DONT_MALLOC_READS_DB
+#define MALLOC_READS_DB
 
 #include <stdio.h>
 #include <math.h>
@@ -450,6 +450,9 @@ typedef struct {
 
 void
 init_mapped_read_index( mapped_read_t* rd, mapped_read_index* index );
+
+void
+reset_mapped_read_index( mapped_read_t* rd, mapped_read_index* index );
 
 void
 free_mapped_read_index( mapped_read_index* index );

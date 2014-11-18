@@ -126,7 +126,7 @@ class StatmapOutput:
         # load default mapped reads db
         self.mpd_rdb = open_mapped_reads_db_for_reading(
                 MAPPED_READS_DB_FNAME )
-
+        
         # if the mapped reads db is empty, we can't do anything with it
         if self.mpd_rdb.contents.num_mapped_reads == 0:
             print >> sys.stderr, \

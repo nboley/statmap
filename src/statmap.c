@@ -288,7 +288,7 @@ main( int argc, char** argv )
     
     struct mapped_reads_db* mpd_rds_db;    
     map_marginal( &args, genome, args.rdb, &mpd_rds_db, false );
-    
+
     /* Free the genome index */
     /* we may need the memory later */
     free_ondisk_index( genome->index );

@@ -555,7 +555,9 @@ find_candidate_mappings_for_read(
     
     /* next pair them, making sure to keep track of the best match penalty */
     int r1_i, r2_i, num_joined_cms;
-    float max_penalty = 2*mapping_params->recheck_min_match_penalty ;
+    float max_penalty = mapping_params->recheck_min_match_penalty 
+                        - mapping_params->recheck_max_penalty_spread;
+    
     num_joined_cms = 0;
     struct joined_candidate_mappings joined_cms[MAX_NUM_CAND_MAPPINGS+1];
     for( r1_i = 0; r1_i < rst_mappings[0]->length; r1_i++ )
@@ -616,7 +618,10 @@ find_candidate_mappings_for_read(
     if( 0 == num_joined_cms ) 
         return NO_JOINED_CANDIDATE_MAPPINGS;
     
-    /* filter out matches that havea  penalty that is too small */
+    if( max_penalty < mapping_params->recheck_min_match_penalty )
+        return NO_UNFILTERED_CANDIDATE_MAPPINGS;
+    
+    /* filter out matches that have a penalty that is too small */
     int new_first_index = 0;
     for(i=0; i<num_joined_cms; i++)
     {
