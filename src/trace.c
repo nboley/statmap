@@ -1048,9 +1048,12 @@ accumulate_from_trace(
     int ss_i = find_start_of_trace_segments_to_update(
         trace_segments, start, stop);
 
-    int bp = start; // need to maintain last bp updated over multiple segments
+    // need to maintain last bp updated over multiple segments
+    // don't allow negative positions
+    int bp = MAX(0, start); 
 
     int si;
+    /* if stop is greater than the trace length, this will stop */
     for( si = ss_i; si < trace_segments->num_segments; si++ )
     {
         struct trace_segment_t* trace_segment = trace_segments->segments + si;

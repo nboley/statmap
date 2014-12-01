@@ -36,7 +36,7 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
-#define BIN_SIZE 100
+#define BIN_SIZE 1
 #define WINDOW_SIZE 100
 
 /* 
@@ -1062,6 +1062,7 @@ build_posterior_db( struct genome_data* genome,
         update_reads
         );
     
-    //close_traces(traces);
+    write_trace_to_file(traces, "MLE.trace");
+    close_traces(traces);
     return cond_prbs_db;
 }

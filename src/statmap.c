@@ -304,7 +304,7 @@ main( int argc, char** argv )
     
         // args.sam_output_fname
         statmap_log( LOG_NOTICE, "Writing mapped reads to sam file" );
-        FILE* fp = fopen("test.sam", "w");
+        FILE* fp = fopen("mapped_reads.sam", "w");
         write_mapped_reads_to_sam( 
             args.rdb, mpd_rds_db, cond_prbs_db, genome, false, fp );
         fclose(fp);
