@@ -85,7 +85,7 @@ update_traces_from_mapped_reads_worker( void* params )
     heap_allocate_mapped_read_index(rd_index);
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-        init_mapped_read_index( rd_index, r );
+        init_mapped_read_index( r, rd_index );
 
         /* Update the trace from this mapping */        
         MPD_RD_ID_T j;
@@ -130,7 +130,7 @@ update_traces_from_mapped_reads(
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
             read_num++;
-            init_mapped_read_index( rd_index, r );
+            init_mapped_read_index( r, rd_index );
 
             /* Update the trace from this mapping */        
             MPD_RD_ID_T j;
