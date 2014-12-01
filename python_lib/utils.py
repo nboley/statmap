@@ -138,9 +138,10 @@ class StatmapOutput:
         if self.config.contents.assay_type == CHIP_SEQ:
             build_fl_dist_from_filename( self.mpd_rdb, FL_DIST_FNAME )
             build_chipseq_bs_density( self.mpd_rdb.contents.fl_dist )
-        
+
         # load cond probs db
         self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
+
         reset_all_read_cond_probs( self.mpd_rdb, self.cond_prbs_db )
         
         if load_nc:

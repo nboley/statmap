@@ -440,12 +440,10 @@ typedef struct {
 
 #define alloc_and_init_mapped_read_index(rd_index, r)                 \
     rd_index = alloca(sizeof(mapped_read_index)); \
-    rd_index->rd = r; \
-    rd_index->read_id = get_read_id_from_mapped_read( r ); \
-    rd_index->num_allocated_mappings = 200; \
-    rd_index->num_mappings = 0; \
+    rd_index->num_allocated_mappings = 100; \
     rd_index->is_heap_allocated = false; \
-    rd_index->mappings = alloca(rd_index->num_allocated_mappings*sizeof(mapped_read_location*)); \
+    rd_index->mappings = alloca( \
+        rd_index->num_allocated_mappings*sizeof(mapped_read_location*));  \
     init_mapped_read_index( r, rd_index );
 
 void

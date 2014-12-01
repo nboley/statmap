@@ -33,12 +33,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    
     smo = StatmapOutput( sys.argv[1],
                          load_mapped_reads=True,
                          load_raw_reads=True,
                          load_nc=args.use_nc )
-
+    
     # if Chip-Seq, require the user to specify which reads to use
     if smo.config.contents.assay_type == CHIP_SEQ and not \
             (args.use_ip or args.use_nc):

@@ -949,7 +949,7 @@ def test_dirty_reads( read_len, n_threads=1, nreads=100, separate_fastas=False,
 
     map_with_statmap( genome_fnames, read_fnames, output_directory,
                       indexed_seq_len = read_len - 2,
-                      num_threads=n_threads, mapping_metaparameter=0.25,
+                      num_threads=n_threads, mapping_metaparameter=0.65,
                       assay=assay, num_samples=nreads )
     
     ###### Test the sam file to make sure that each of the reads appears ############
