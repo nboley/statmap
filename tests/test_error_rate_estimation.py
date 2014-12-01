@@ -24,7 +24,7 @@ def test_error_rate_estimation(paired=False):
     
     rl = read_len = 200
     indexed_seq_len = 20
-    nsamples = 1000
+    nsamples = 100000
     output_directory = "smo_test_error_rate_estimation"
     
     ###### Prepare the data for the test #######################################
@@ -119,7 +119,8 @@ def test_error_rate_estimation(paired=False):
     ## Map the data
     read_fnames = [ "tmp.1.fastq", "tmp.2.fastq" ] if paired else [ "tmp.fastq", ]
     map_with_statmap( genome_fnames, read_fnames, output_directory,
-                      indexed_seq_len, search_type='e', num_threads=-1 )
+                      indexed_seq_len, search_type='e', num_threads=-1,
+                      assay='a')
     
     ###### Make sure that the error data looks correct #########################
     records = load_error_data(os.path.join(output_directory, "error_stats.log"))

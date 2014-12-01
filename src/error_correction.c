@@ -746,7 +746,7 @@ init_mapping_params_for_read(
         double min_match_prb = -qgamma(DEFAULT_ESTIMATED_ERROR_METAPARAMETER, 
                                        shape, scale, 1, 0) - 2.1;
         p->recheck_min_match_penalty = min_match_prb;
-        p->recheck_max_penalty_spread = 5.0; //-min_match_prb;
+        p->recheck_max_penalty_spread = 2.0; //-min_match_prb;
             //    -log10(
             // 1 - DEFAULT_ESTIMATED_ERROR_METAPARAMETER);
         //printf("%e:%e:%e\n", min_match_prb, mean, variance);

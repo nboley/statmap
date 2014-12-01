@@ -409,6 +409,9 @@ update_mapping(
     
     struct update_mapped_read_rv_t rv;
     
+    struct timeval last_log_time;
+    gettimeofday( &last_log_time, NULL );
+    
     int num_iterations = 0;
     for( num_iterations = 0; 
          num_iterations < max_num_iterations; 
@@ -416,7 +419,7 @@ update_mapping(
     {
         /* Normalize the trace sum to 1 */
         /* This makes the trace the current marginal read density estimate */
-        struct timeval nt_start, nt_stop, umr_start, umr_stop, ut_start, ut_stop;;
+        struct timeval nt_start, nt_stop, umr_start, umr_stop, ut_start, ut_stop;
         
         gettimeofday( &nt_start, NULL );   
         normalize_traces( starting_trace );
@@ -442,7 +445,7 @@ update_mapping(
                 ( 
                   num_iterations == 1 
                   || num_iterations%100 == 0 
-                  || (ut_stop.tv_sec-nt_start.tv_sec) > 30 
+                  || (ut_stop.tv_sec-last_log_time.tv_sec) > 30
                 )
                 || rv.max_change < max_prb_change_for_convergence
                 || ( lhd_ratio_stop_value >= 1.0
@@ -452,6 +455,8 @@ update_mapping(
                 )
             )
         {
+            gettimeofday( &last_log_time, NULL );  
+            
             statmap_log( LOG_NOTICE,
             "Iter %i: \tError: %e \tLog Lhd: %e (ratio %e) \tNorm Trace:  %.5f sec\t Read UT:  %.5f sec\tTrace UT:  %.5f sec", 
             num_iterations, rv.max_change, rv.log_lhd,
