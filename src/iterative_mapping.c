@@ -81,10 +81,11 @@ update_traces_from_mapped_reads_worker( void* params )
     
     mapped_read_t* r;
 
+    mapped_read_index* rd_index;
+    heap_allocate_mapped_read_index(rd_index);
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )     
     {
-        mapped_read_index* rd_index;
-        alloc_and_init_mapped_read_index( rd_index, r );
+        init_mapped_read_index( rd_index, r );
 
         /* Update the trace from this mapping */        
         MPD_RD_ID_T j;
@@ -95,10 +96,10 @@ update_traces_from_mapped_reads_worker( void* params )
             update_trace_expectation_from_location( 
                 traces, rd_index->mappings[j], cond_prob );
         }
-        
-        free_mapped_read_index( rd_index );
     }
     
+    free_mapped_read_index( rd_index );
+    free( rd_index );
     pthread_exit( NULL );
 }
 
@@ -123,12 +124,13 @@ update_traces_from_mapped_reads(
     {
         mapped_read_t* r;
         int read_num = 0;
+        
+        mapped_read_index* rd_index;
+        heap_allocate_mapped_read_index(rd_index);
         while( EOF != get_next_read_from_mapped_reads_db( reads_db, &r ) )     
         {
             read_num++;
-            
-            mapped_read_index* rd_index;
-            alloc_and_init_mapped_read_index( rd_index, r );
+            init_mapped_read_index( rd_index, r );
 
             /* Update the trace from this mapping */        
             MPD_RD_ID_T j;
@@ -139,9 +141,9 @@ update_traces_from_mapped_reads(
                 update_trace_expectation_from_location( 
                     traces, rd_index->mappings[j], cond_prob );
             }
-            
-            free_mapped_read_index( rd_index );
         }
+        free_mapped_read_index( rd_index );
+        free(rd_index);
     } 
     /* otherwise, if we are expecting more than one thread */
     else {
@@ -543,7 +545,7 @@ update_chipseq_mapped_read_prbs( struct cond_prbs_db_t* cond_prbs_db,
 
     /* FIXME cast away const? */
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index( rd_index, r );
+    stack_allocate_and_init_mapped_read_index( rd_index, r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
@@ -717,7 +719,7 @@ update_CAGE_mapped_read_prbs(
 
     /* FIXME cast away const? */
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index( rd_index, r );
+    stack_allocate_and_init_mapped_read_index( rd_index, r );
     
     /* allocate space to store the temporary values */
     float* new_prbs = malloc( sizeof(float)*(rd_index->num_mappings) );
@@ -859,7 +861,7 @@ update_ATACSeq_mapped_read_prbs(
     struct update_mapped_read_rv_t rv = {0.0, 0.0};
     
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index(rd_index, r);
+    stack_allocate_and_init_mapped_read_index(rd_index, r);
     
     /* store the log sequencing errors, and then maximum log sequencing
        error. We need the errors to normalize, and then max log errors

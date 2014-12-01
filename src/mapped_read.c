@@ -77,7 +77,7 @@ print_mapped_read(
        in indexing mapped reads this will be messed up - then again, so will
        everything else) */
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index(rd_index, rd);
+    stack_allocate_and_init_mapped_read_index(rd_index, rd);
 
     fprintf(stderr, "==== MAPPED READ ID %i (%i mappings) ====\n",
         rd_index->read_id, rd_index->num_mappings);
@@ -368,7 +368,7 @@ init_mapped_read_index( mapped_read_t* rd,
                     sizeof(mapped_read_location*)); 
                 assert( heap_locs != NULL );
                 memcpy(heap_locs, index->mappings, 
-                       (index->num_allocated_mappings)
+                       (index->num_allocated_mappings-REALLOC_BLOCK_SIZE)
                        *sizeof(mapped_read_location*)
                     );
                 index->mappings = heap_locs;                
@@ -1116,7 +1116,7 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     
     /* build an index for this mapped_read */
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index(rd_index, rd);
+    stack_allocate_and_init_mapped_read_index(rd_index, rd);
 
     if( 0 == rd_index->num_mappings )
         return;
@@ -1391,19 +1391,18 @@ init_cond_prbs_db_from_mpd_rdb(
     /* allocate space for the prb start pointers */
     (*cond_prbs_db)->cond_read_prbs = calloc( max_rd_id+1, sizeof(ML_PRB_TYPE*) );
 
-    /* get the first read so that we can init the mapped read index */
-    rewind_mapped_reads_db( mpd_rdb );
-    if( EOF == get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ) )
-        return;
-
     mapped_read_index* rd_index;
-    alloc_and_init_mapped_read_index(rd_index, mapped_rd);
-    do {
+    heap_allocate_mapped_read_index(rd_index);
+
+    rewind_mapped_reads_db( mpd_rdb );
+    while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ))
+    {
         init_mapped_read_index(mapped_rd, rd_index);
         (*cond_prbs_db)->cond_read_prbs[rd_index->read_id] 
             = calloc( rd_index->num_mappings, sizeof( ML_PRB_TYPE  )  );
-    } while( EOF != get_next_read_from_mapped_reads_db( mpd_rdb, &mapped_rd ));
+    } 
     free_mapped_read_index( rd_index );
+    free(rd_index);
     
     return;
 }

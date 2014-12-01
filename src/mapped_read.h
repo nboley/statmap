@@ -438,12 +438,22 @@ typedef struct {
     mapped_read_location** mappings;
 } mapped_read_index;
 
-#define alloc_and_init_mapped_read_index(rd_index, r)                 \
+#define stack_allocate_mapped_read_index(rd_index)  \
     rd_index = alloca(sizeof(mapped_read_index)); \
     rd_index->num_allocated_mappings = 100; \
     rd_index->is_heap_allocated = false; \
     rd_index->mappings = alloca( \
-        rd_index->num_allocated_mappings*sizeof(mapped_read_location*));  \
+        100*sizeof(mapped_read_location*));
+
+#define heap_allocate_mapped_read_index(rd_index)  \
+    rd_index = malloc(sizeof(mapped_read_index)); \
+    rd_index->num_allocated_mappings = 100; \
+    rd_index->is_heap_allocated = true; \
+    rd_index->mappings = malloc( \
+        100*sizeof(mapped_read_location*));
+
+#define stack_allocate_and_init_mapped_read_index(rd_index, r) \
+    stack_allocate_mapped_read_index(rd_index); \
     init_mapped_read_index( r, rd_index );
 
 void

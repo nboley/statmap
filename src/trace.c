@@ -1523,11 +1523,13 @@ build_segmented_trace_graph(
     /* Add edges between segments for each mapped read */
     rewind_mapped_reads_db( rdb );
 
+    mapped_read_index* rd_index;
+    stack_allocate_mapped_read_index(rd_index);
+
     mapped_read_t* rd;
     while( EOF != get_next_read_from_mapped_reads_db( rdb, &rd ) )
     {
-        mapped_read_index* rd_index;
-        alloc_and_init_mapped_read_index(rd_index, rd);
+        init_mapped_read_index(rd, rd_index);
 
         /* Store the segment index of each of this mapped read's mappings */
         int* segment_indexes = malloc( rd_index->num_mappings*sizeof(int) );
@@ -1543,9 +1545,10 @@ build_segmented_trace_graph(
             rd_index->num_mappings );
 
         free( segment_indexes );
-        free_mapped_read_index( rd_index );
     }
-
+    
+    free_mapped_read_index( rd_index );
+    
     log_segmented_trace_graph( &graph );
 
     igraph_destroy( &graph );

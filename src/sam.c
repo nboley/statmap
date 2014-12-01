@@ -337,7 +337,7 @@ fprintf_mapped_read_to_sam(
     struct read* r )
 {
     mapped_read_index* mpd_rd_index;
-    alloc_and_init_mapped_read_index(mpd_rd_index, mpd_rd);
+    stack_allocate_and_init_mapped_read_index(mpd_rd_index, mpd_rd);
     if(mpd_rd_index->num_mappings == 0)
         goto cleanup;
 
