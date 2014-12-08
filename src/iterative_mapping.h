@@ -15,11 +15,6 @@
 // BUG
 // static const void* iterative_mapping_args; 
 
-#define WINDOW_SIZE 100
-
-#define CHIPSEQ_LHD_RATIO_STOP_VALUE 1.05
-#define CAGE_LHD_RATIO_STOP_VALUE -1
-
 struct update_mapped_read_rv_t {
     /* Store the probability of observing the 
        returned sequence, conditional on the trace */

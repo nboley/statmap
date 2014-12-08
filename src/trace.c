@@ -1040,6 +1040,7 @@ accumulate_from_trace(
     int stop
 )
 {
+    assert( stop >= start );
     double acc = 0;
 
     struct trace_segments_t* trace_segments
@@ -1074,7 +1075,7 @@ accumulate_from_trace(
         if(bp-1 == stop)
             break;
     }
-    
+    assert( acc > 0 );
     return acc;
 }
 

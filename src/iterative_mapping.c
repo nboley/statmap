@@ -36,8 +36,8 @@ struct fragment_length_dist_t* global_fl_dist;
 struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
-#define BIN_SIZE 1
-#define WINDOW_SIZE 100
+static int BIN_SIZE = 100;
+static int WINDOW_SIZE = 1000;
 
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
@@ -742,9 +742,9 @@ update_CAGE_mapped_read_prbs(
 
         MRL_CHR_TYPE chr_index =
             get_chr_from_mapped_read_location( current_loc );
-        MRL_START_POS_TYPE start = 
+        int start = 
             get_start_from_mapped_read_location( current_loc );
-        MRL_START_POS_TYPE stop = 
+        int stop = 
             get_stop_from_mapped_read_location( current_loc ) ;
         assert( stop > 0 );
         enum bool is_paired 
@@ -759,21 +759,23 @@ update_CAGE_mapped_read_prbs(
         /* If the read is *not* paired */
         else {
             int track_index;
-            unsigned int win_stop = 0;
-            unsigned int win_start = 0;
+            int win_stop = 0;
+            int win_start = 0;
             
             /* If this is in the rev stranded transcriptome */
             if( first_read_is_rev_comp )
             {
                 track_index = 1;
                 win_start = stop - MIN( stop, WINDOW_SIZE ) - 1;
-                win_stop = MIN( traces->chr_lengths[chr_index], stop + WINDOW_SIZE - 1 );
+                win_stop = MIN( (int) traces->chr_lengths[chr_index], 
+                                stop + WINDOW_SIZE - 1 );
             } 
             /* We are in the 5' ( positive ) transcriptome */
             else {
                 track_index = 0;
                 win_start = start - MIN( start, WINDOW_SIZE );
-                win_stop = MIN( traces->chr_lengths[chr_index], start + WINDOW_SIZE );
+                win_stop = MIN( (int) traces->chr_lengths[chr_index], 
+                                start + WINDOW_SIZE );
             }
 
             window_density += accumulate_from_trace(traces, track_index,
@@ -888,11 +890,12 @@ update_ATACSeq_mapped_read_prbs(
         log_seq_errors[i] = log_error;
         max_log_val = MAX(log_error, max_log_val);
 
-        MRL_START_POS_TYPE start = get_start_from_mapped_read_location(
+        int start = get_start_from_mapped_read_location(
             rd_index->mappings[i]);
-        MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location(
+        int stop = get_stop_from_mapped_read_location(
             rd_index->mappings[i]);
-
+        assert( stop >= start );
+        
         local_read_sum[i] = accumulate_from_trace(
             trace,
             0,
@@ -1017,24 +1020,37 @@ build_posterior_db( struct genome_data* genome,
                          mapped_read_t* r  )
         = NULL;
 
+    int num_tracks = -1;
+    char** track_names = NULL;
     switch( assay_type )
     {
     case ATACSeq:
         update_traces_from_mapped_location 
             = update_ATACSeq_trace_expectation_from_location;
         update_reads = update_ATACSeq_mapped_read_prbs;
+        num_tracks = 1;
+        track_names = alloca(sizeof(char*)*num_tracks);
+        track_names[0] = "open_chromatin_density";
         break;
 
     case CAGE:
         update_traces_from_mapped_location 
             = update_CAGE_trace_expectation_from_location;
         update_reads = update_CAGE_mapped_read_prbs;
+        num_tracks = 2;
+        track_names = alloca(sizeof(char*)*num_tracks);
+        track_names[0] = "fwd";
+        track_names[1] = "bkwd";
         break;
     
     case CHIP_SEQ:
         update_traces_from_mapped_location 
             = update_chipseq_trace_expectation_from_location;
         update_reads = update_chipseq_mapped_read_prbs;
+        num_tracks = 2;
+        track_names = alloca(sizeof(char*)*num_tracks);
+        track_names[0] = "fwd";
+        track_names[1] = "bkwd";
         break;    
 
     // case STRANDED_RNASEQ:
@@ -1044,10 +1060,10 @@ build_posterior_db( struct genome_data* genome,
         abort();
     }
 
+    /* update the posterior (joint) read probabilities */
     struct trace_t* traces = NULL;
-    char* track_name = "fwd";
-    init_binned_trace( genome, &traces, 1, &track_name, 1 );
-    set_trace_to_uniform(traces, 1);
+    init_binned_trace( genome, &traces, num_tracks, track_names, BIN_SIZE );
+    set_trace_to_uniform(traces, 1*BIN_SIZE);
     
     struct cond_prbs_db_t* cond_prbs_db;
     init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rdb);
@@ -1055,12 +1071,23 @@ build_posterior_db( struct genome_data* genome,
     
     update_mapping(
         mpd_rdb, cond_prbs_db, traces, 
-        1e5, // max num iterations
-        1e-2, // max_prb_change_for_convergence,
-        1, // lhd_ratio_stop_value,
+        MAX_NUM_EM_ITERATIONS, // max num iterations
+        MAX_PRB_CHANGE_FOR_CONVERGENCE, // max_prb_change_for_convergence,
+        LHD_RATIO_STOP_CONDITION, // lhd_ratio_stop_value,
         update_traces_from_mapped_location,
         update_reads
         );
+
+    close_traces(traces);
+    
+    /* initialize an unbinned trace, update it, and write it to disk.
+       (this is so we can create a proper wiggle */
+    init_full_trace( genome, &traces, num_tracks, track_names );
+    set_trace_to_uniform(traces, 1);
+    update_traces_from_mapped_reads( 
+        mpd_rdb, cond_prbs_db, traces, 
+        update_traces_from_mapped_location
+    );
     
     write_trace_to_file(traces, "MLE.trace");
     close_traces(traces);

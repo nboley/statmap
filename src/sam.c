@@ -345,13 +345,30 @@ fprintf_mapped_read_to_sam(
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
     MPD_RD_ID_T i = 0;
+
+    /* find the minimum posterior probability that we will
+       accept for a read mapping to be valid */
+    double cond_prob_threshold = 1e-12;
+    for( i = 0; i < mpd_rd_index->num_mappings; i++ )
+    {
+        cond_prob_threshold = MAX(
+            get_cond_prb( cond_prbs_db, mpd_rd_index->read_id, i ),
+            cond_prob_threshold );
+    }
+    cond_prob_threshold *= MAX_PRB_CHANGE_FOR_CONVERGENCE;
+
     for( i = 0; i < mpd_rd_index->num_mappings; i++ )
     {
         mapped_read_location* mapping = mpd_rd_index->mappings[i];
 
         float cond_prob =
             get_cond_prb( cond_prbs_db, mpd_rd_index->read_id, i );
-
+        
+        /* If the conditional probability is below the threhsold at which we
+           stop optimizing, then it is silly to report it */
+        if( cond_prob < cond_prob_threshold )
+            continue;
+        
         char* ptr = (char*) mapping;
 
         mapped_read_location_prologue* prologue

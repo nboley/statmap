@@ -42,6 +42,7 @@
 // Iterative Mapping
 #define MAX_NUM_EM_ITERATIONS 500
 #define MAX_PRB_CHANGE_FOR_CONVERGENCE 1e-2
+#define LHD_RATIO_STOP_CONDITION 1.0
 #define EXPLORATION_PRIOR 1e-10
 
 // Wiggle output
