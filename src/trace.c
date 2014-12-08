@@ -1075,7 +1075,7 @@ accumulate_from_trace(
         if(bp-1 == stop)
             break;
     }
-    assert( acc > 0 );
+
     return acc;
 }
 
