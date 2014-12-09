@@ -209,6 +209,7 @@ set_prior_read_information(
     /* Set the max lengths from config.h (for now) */
     r->prior.max_ref_insert_length = REFERENCE_INSERT_LENGTH_MAX;
     r->prior.max_fragment_length = FRAGMENT_LENGTH_MAX;
+    r->prior.paired_read_strand_info = READ_PAIRS_STRAND_UNKNOWN;
 
     /* Set the assay type on the read from the rawread db */
     r->prior.assay = assay;
@@ -218,6 +219,12 @@ set_prior_read_information(
     assert( r->num_subtemplates == 1 || r->num_subtemplates == 2 );
 
     switch(assay) {
+        case ATACSeq:
+            /* with atac seq, we always only care about the read ends */
+            r->prior.frag_type = FRAGMENT_END;
+            r->prior.max_fragment_length = 1200;
+            r->prior.paired_read_strand_info = READ_PAIRS_ARE_OPP_STRAND;
+            break;
         case CAGE:
             if( r->num_subtemplates == 1 ) {
                 r->prior.frag_type = FRAGMENT_END;

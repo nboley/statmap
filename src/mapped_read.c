@@ -38,7 +38,7 @@ print_mapped_read_location(
     mapped_read_location_prologue* prologue
         = (mapped_read_location_prologue*) loc;
 
-    fprintf( stderr,
+    fprintf( stdout,
         "chr:%i, strand:%i, are_more:%i, trimmed_length:%i, seq_error:%f\n",
         prologue->chr, prologue->strand, prologue->are_more,
         prologue->trimmed_length, prologue->log_seq_error );
@@ -55,7 +55,7 @@ print_mapped_read_location(
         mapped_read_sublocation* sub_loc
             = (mapped_read_sublocation*) rd_ptr;
 
-        fprintf( stderr, 
+        fprintf( stdout, 
 "start:%i, length:%i, rev_comp:%i, is_full_contig:%i, next_subread_is_gapped:%i, next_subread_is_ungapped:%i\n",
             sub_loc->start_pos, sub_loc->length, sub_loc->rev_comp,
             sub_loc->is_full_contig, sub_loc->next_subread_is_gapped,
@@ -79,7 +79,7 @@ print_mapped_read(
     mapped_read_index* rd_index;
     stack_allocate_and_init_mapped_read_index(rd_index, rd);
 
-    fprintf(stderr, "==== MAPPED READ ID %i (%i mappings) ====\n",
+    fprintf(stdout, "==== MAPPED READ ID %i (%i mappings) ====\n",
         rd_index->read_id, rd_index->num_mappings);
 
     /* print out each of the mappings */
@@ -310,7 +310,6 @@ write_mapped_read_to_file( mapped_read_t* read, FILE* of  )
 {
     size_t num_written = 0;
     size_t num_allocated = get_size_of_mapped_read( read );
-
     num_written = fwrite( read, sizeof(char), num_allocated, of );
     if( num_written != num_allocated )
         return -num_written;

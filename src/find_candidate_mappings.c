@@ -549,7 +549,6 @@ find_candidate_mappings_for_read(
                 genome,
                 mapping_params
             );
-                        
         if(rv != 0){ return rv; };
     }
     
@@ -588,12 +587,22 @@ find_candidate_mappings_for_read(
             if( pair_2_mapping->chr < pair_1_mapping->chr )
                 continue;
 
+           if( r->prior.paired_read_strand_info == READ_PAIRS_ARE_SAME_STRAND
+               && pair_1_mapping->rd_strnd != pair_2_mapping->rd_strnd )
+                continue;
+
+           if( r->prior.paired_read_strand_info == READ_PAIRS_ARE_OPP_STRAND
+               && pair_1_mapping->rd_strnd == pair_2_mapping->rd_strnd )
+                continue;
+ 
             assert( pair_1_mapping->chr == pair_2_mapping->chr );
             
             int frag_len = paired_cms_frag_len(pair_1_mapping, pair_2_mapping);
             if( frag_len > r->prior.max_fragment_length )
+            {
                 continue;
-
+            }
+            
             float fl_penalty = get_fl_log_prb( fl_dist, frag_len );
             
             float penalty = \

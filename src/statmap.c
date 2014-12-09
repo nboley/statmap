@@ -310,6 +310,16 @@ main( int argc, char** argv )
         fclose(fp);
 
         free_cond_prbs_db(cond_prbs_db);
+    } else {
+        statmap_log( LOG_NOTICE, "Writing mapped reads to sam file" );
+        struct cond_prbs_db_t* cond_prbs_db;
+        init_cond_prbs_db_from_mpd_rdb( &cond_prbs_db, mpd_rds_db);
+        FILE* fp = fopen("mapped_reads.sam", "w");
+        write_mapped_reads_to_sam( 
+            args.rdb, mpd_rds_db, cond_prbs_db, genome, true, fp );
+        free_cond_prbs_db(cond_prbs_db);
+        fclose(fp);
+
     }
     goto cleanup;
     

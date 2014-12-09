@@ -21,6 +21,13 @@ enum read_fragment_type
     FULL_TRANSCRIPTOME_FRAGMENT = 3
 };
 
+enum paired_reads_strand
+{
+    READ_PAIRS_ARE_SAME_STRAND = 1,
+    READ_PAIRS_ARE_OPP_STRAND = 2,
+    READ_PAIRS_STRAND_UNKNOWN = 3
+};
+
 struct pos_in_template {
     int pos;
     int number_of_reads_in_template;
@@ -43,6 +50,7 @@ struct prior_read_information {
     int max_ref_insert_length;
     int max_fragment_length;
     enum read_fragment_type frag_type;
+    enum paired_reads_strand paired_read_strand_info;
     enum assay_type_t assay;
 };
 

@@ -742,9 +742,9 @@ update_CAGE_mapped_read_prbs(
 
         MRL_CHR_TYPE chr_index =
             get_chr_from_mapped_read_location( current_loc );
-        int start = 
+        SIGNED_LOC start = 
             get_start_from_mapped_read_location( current_loc );
-        int stop = 
+        SIGNED_LOC stop = 
             get_stop_from_mapped_read_location( current_loc ) ;
         assert( stop > 0 );
         enum bool is_paired 
@@ -842,14 +842,16 @@ void update_ATACSeq_trace_expectation_from_location(
         get_chr_from_mapped_read_location(loc);
 
     /* update the left open chromatin region */
-    MRL_START_POS_TYPE start = get_start_from_mapped_read_location(loc) + 4;
+    SIGNED_LOC start = get_start_from_mapped_read_location(loc);
+    start += 4;
     update_trace_segments_from_uniform_kernel(
         traces->segments[0] + chrm, 
         cond_prob, 
         start/BIN_SIZE, 
         start/BIN_SIZE+1 );
     
-    MRL_STOP_POS_TYPE stop = get_stop_from_mapped_read_location(loc) - 5;
+    SIGNED_LOC stop = get_stop_from_mapped_read_location(loc);
+    stop -= 5;
     update_trace_segments_from_uniform_kernel(
         traces->segments[0] + chrm, 
         cond_prob, 
@@ -879,7 +881,6 @@ update_ATACSeq_mapped_read_prbs(
     /* store the local read density for each mapping, to properly
        re-weight the sum */
     double* local_read_sum = alloca(sizeof(double)*rd_index->num_mappings);
-    
     /* Update the trace from this mapping */        
     MPD_RD_ID_T i;
     for( i = 0; i < rd_index->num_mappings; i++ ) {
@@ -889,24 +890,26 @@ update_ATACSeq_mapped_read_prbs(
 
         log_seq_errors[i] = log_error;
         max_log_val = MAX(log_error, max_log_val);
-
-        int start = get_start_from_mapped_read_location(
+        MRL_CHR_TYPE contig = get_chr_from_mapped_read_location(rd_index->mappings[i]);
+        /* the fragment start might be after the fragment stop but, since we 
+           are jsut updating the accessability locally, it doesn't matter */
+        SIGNED_LOC pos1 = get_start_from_mapped_read_location(
             rd_index->mappings[i]);
-        int stop = get_stop_from_mapped_read_location(
-            rd_index->mappings[i]);
-        assert( stop >= start );
-        
         local_read_sum[i] = accumulate_from_trace(
             trace,
             0,
-            get_chr_from_mapped_read_location(rd_index->mappings[i]),
-            (start-WINDOW_SIZE)/BIN_SIZE, (start+WINDOW_SIZE)/BIN_SIZE + 1);
+            contig,
+            (pos1-WINDOW_SIZE)/BIN_SIZE, (pos1+WINDOW_SIZE)/BIN_SIZE + 1);
 
-        local_read_sum[i] += accumulate_from_trace(
+        SIGNED_LOC pos2 = get_stop_from_mapped_read_location(
+            rd_index->mappings[i]);
+        /* take the product because both need to be accessible - if one 
+           has zero accessibility this is a very uinlikelly fragment */
+        local_read_sum[i] *= accumulate_from_trace(
             trace,
             0,
-            get_chr_from_mapped_read_location(rd_index->mappings[i]),
-            (stop-WINDOW_SIZE)/BIN_SIZE, (stop+WINDOW_SIZE)/BIN_SIZE + 1);
+            contig,
+            (pos2-WINDOW_SIZE)/BIN_SIZE, (pos2+WINDOW_SIZE)/BIN_SIZE + 1);
         
         assert(1 == isfinite(local_read_sum[i]));
     }

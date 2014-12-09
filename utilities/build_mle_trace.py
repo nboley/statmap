@@ -43,15 +43,18 @@ def main():
                          load_raw_reads=True )
     
     # init the starting trace 
-    track_names = ["fwd_strnd_read_density", "rev_strnd_read_density"]
+    track_names = ["open_chromatin_density",]
     starting_trace = init_full_trace( smo.genome, track_names )
-    statmap_o.set_trace_to_uniform( starting_trace, c_double(1.0) )
+    #starting_trace = statmap_o.init_binned_trace( 
+    #    genome, &traces, num_tracks, track_names, c_int(100) );
+    statmap_o.set_trace_to_uniform(starting_trace, c_double(100));
+    #statmap_o.set_trace_to_uniform( starting_trace, c_double(1.0) )
     statmap_o.normalize_traces( starting_trace )
     
     # determine the update functions
     #assert smo.config.contents.assay_type == CAGE
-    update_trace_exp_from_loc = statmap_o.update_chipseq_trace_expectation_from_location
-    update_mapped_rd_prbs = statmap_o.update_chipseq_mapped_read_prbs
+    update_trace_exp_from_loc = statmap_o.update_ATACSeq_trace_expectation_from_location
+    update_mapped_rd_prbs = statmap_o.update_ATACSeq_mapped_read_prbs
     
     # update the mapping
     statmap_o.update_mapping(
