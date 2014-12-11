@@ -9,7 +9,6 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-
 #include <fcntl.h>
 #include <time.h>
 #include <assert.h>
@@ -37,7 +36,14 @@ struct genome_data* global_genome;
 struct trace_t* global_starting_trace;
 
 static int BIN_SIZE = 100;
-static int WINDOW_SIZE = 1000;
+static int WINDOW_SIZE = 500;
+
+void set_bin_and_window_size(int bin_size, int window_size)
+{
+    BIN_SIZE = bin_size;
+    WINDOW_SIZE = window_size;
+    return;
+}
 
 /* 
  * This is what update_traces_from_mapped_reads calls - it is a function
@@ -113,7 +119,7 @@ update_traces_from_mapped_reads(
         const mapped_read_location* const loc,
         const float cond_prob )
 )
-{        
+{       
     zero_traces( traces );
     
     /* Move the database ( this should be a cursor ) back to the first read */
@@ -1085,6 +1091,7 @@ build_posterior_db( struct genome_data* genome,
     
     /* initialize an unbinned trace, update it, and write it to disk.
        (this is so we can create a proper wiggle */
+    BIN_SIZE = 1;
     init_full_trace( genome, &traces, num_tracks, track_names );
     set_trace_to_uniform(traces, 1);
     update_traces_from_mapped_reads( 

@@ -142,7 +142,7 @@ class StatmapOutput:
         # load cond probs db
         self.cond_prbs_db = init_cond_prbs_db_from_mpd_rdb( self.mpd_rdb )
 
-        reset_all_read_cond_probs( self.mpd_rdb, self.cond_prbs_db )
+        #reset_all_read_cond_probs( self.mpd_rdb, self.cond_prbs_db )
         
         if load_nc:
             # load negative control reads

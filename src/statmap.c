@@ -239,7 +239,7 @@ main( int argc, char** argv )
 
     /* store clock times - useful for benchmarking */
     struct timeval start, stop;
-    
+
     /* Turn on attribute handling.
        Manual recommends "set at the beginning of main and never touch again":
        http://igraph.sourceforge.net/doc/html/ch12s02.html */
@@ -321,6 +321,7 @@ main( int argc, char** argv )
         fclose(fp);
 
     }
+
     goto cleanup;
     
 cleanup:

@@ -8,7 +8,7 @@ statmap_o = cdll.LoadLibrary( os.path.normpath( sys.path[0] +
 from enums import *
 
 def init_logging():
-    statmap_o.init_logging()
+    statmap_o.init_logging(c_int(2))
 
 # FIXME - figure out how to call this on close for StatmapOutput
 # For now, since we're just using stderr, it will be handled automatically by the OS

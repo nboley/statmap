@@ -1153,17 +1153,75 @@ reset_read_cond_probs( struct cond_prbs_db_t* cond_prbs_db,
     return;
 }
 
+struct reset_all_read_cond_probs_worker_data 
+{
+    struct mapped_reads_db* rdb;
+    struct cond_prbs_db_t* cond_prbs_db;
+};
+
+void*
+reset_all_read_cond_probs_worker( void* void_params )
+{
+    struct reset_all_read_cond_probs_worker_data *params = void_params;
+    rewind_mapped_reads_db( params->rdb );
+    
+    mapped_read_t* r;    
+    while( EOF != get_next_read_from_mapped_reads_db( params->rdb, &r ) )
+    {
+        reset_read_cond_probs( params->cond_prbs_db, r, params->rdb );
+    }
+    
+    return NULL;
+}
+
 void
 reset_all_read_cond_probs( struct mapped_reads_db* rdb,
                            struct cond_prbs_db_t* cond_prbs_db )
 {
     rewind_mapped_reads_db( rdb );
-    mapped_read_t* r;
+    struct reset_all_read_cond_probs_worker_data params;
+    params.rdb = rdb;
+    params.cond_prbs_db = cond_prbs_db;
     
-    while( EOF != get_next_read_from_mapped_reads_db( rdb, &r ) )
+    /* If the number of threads is one, then just do everything in serial */
+    if( num_threads == 1 )
     {
-        reset_read_cond_probs( cond_prbs_db, r, rdb );
+        reset_all_read_cond_probs_worker(&params);
+    } 
+    /* otherwise, if we are expecting more than one thread */
+    else {
+        /* initialize all of the threads */
+        int rc;
+        void* status;
+        pthread_t thread[num_threads];
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+        int t;
+        for( t = 0; t < num_threads; t++ )
+        {  
+            rc = pthread_create( &(thread[t]), 
+                                 &attr, 
+                                 reset_all_read_cond_probs_worker, 
+                                 &params
+                );
+            if (rc) {
+                statmap_log( LOG_FATAL, "Return code from pthread_create() is %d", rc );
+            }
+        }
+
+        /* wait for the other threads */    
+        for(t=0; t < num_threads; t++) {
+            rc = pthread_join(thread[t], &status);
+            if (rc) {
+                statmap_log( LOG_FATAL, "Return code from pthread_join() is %d", rc );
+            }
+        }
+        pthread_attr_destroy(&attr);
     }
+    
+    return;
 }
 
 void

@@ -42,21 +42,51 @@ def main():
                          load_mapped_reads=True,
                          load_raw_reads=True )
     
+    """
     # init the starting trace 
     track_names = ["open_chromatin_density",]
-    starting_trace = init_full_trace( smo.genome, track_names )
-    #starting_trace = statmap_o.init_binned_trace( 
-    #    genome, &traces, num_tracks, track_names, c_int(100) );
+    #starting_trace = load_c_trace_from_file( 
+    #    "/srv/scratch/nboley/CELEGANS_ATACSeq/TEST_win1000/MLE.trace" )
+    #starting_trace = init_full_trace( smo.genome, track_names )
+    starting_trace = statmap_o.init_binned_trace( 
+        genome, &traces, num_tracks, track_names, c_int(100) );
     statmap_o.set_trace_to_uniform(starting_trace, c_double(100));
     #statmap_o.set_trace_to_uniform( starting_trace, c_double(1.0) )
-    statmap_o.normalize_traces( starting_trace )
-    
+    #statmap_o.normalize_traces( starting_trace )
+    statmap_o.update_mapped_reads_from_trace(
+        smo.mpd_rdb,
+        smo.cond_prbs_db, 
+        starting_trace, 
+        statmap_o.update_ATACSeq_mapped_read_prbs
+    )
+
+    statmap_o.set_bin_and_window_size(c_int(1), c_int(500))
+    full_trace = init_full_trace( smo.genome, track_names )
+    statmap_o.set_trace_to_uniform( full_trace, c_double(1.0) )
+    update_traces_from_mapped_reads(
+        smo.mpd_rdb,
+        smo.cond_prbs_db, 
+        full_trace,
+        statmap_o.update_ATACSeq_trace_expectation_from_location
+    )
+    write_c_trace_to_file( full_trace, ofname )
+    return
+    """
     # determine the update functions
     #assert smo.config.contents.assay_type == CAGE
     update_trace_exp_from_loc = statmap_o.update_ATACSeq_trace_expectation_from_location
     update_mapped_rd_prbs = statmap_o.update_ATACSeq_mapped_read_prbs
+
+    print "Initializing trace"
+    track_names = ["open_chromatin_density",]
+    bin_size = 100
+    starting_trace = init_binned_trace( 
+        smo.genome, track_names, 100 );
+    print "Setting trace to uniform"
+    statmap_o.set_trace_to_uniform( starting_trace, c_double(float(bin_size)) )
     
     # update the mapping
+    print "Updating mapping"
     statmap_o.update_mapping(
         smo.mpd_rdb,
         smo.cond_prbs_db,
@@ -68,8 +98,19 @@ def main():
         update_trace_exp_from_loc,
         update_mapped_rd_prbs
     )
-    
-    write_c_trace_to_file( starting_trace, ofname )
+
+    close_c_traces( starting_trace )
+
+    statmap_o.set_bin_and_window_size(c_int(1), c_int(500))
+    full_trace = init_full_trace( smo.genome, track_names )
+    statmap_o.set_trace_to_uniform( full_trace, c_double(1.0) )
+    update_traces_from_mapped_reads(
+        smo.mpd_rdb,
+        smo.cond_prbs_db, 
+        full_trace,
+        statmap_o.update_ATACSeq_trace_expectation_from_location
+    )
+    write_c_trace_to_file( full_trace, ofname )
     
     # clsoe the trace
     close_c_traces( starting_trace )

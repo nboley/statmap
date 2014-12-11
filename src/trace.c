@@ -980,7 +980,7 @@ update_trace_segments_from_mapped_read_array(
         struct trace_segment_t* trace_segment = trace_segments->segments + i;
         
         /* lock while we update this trace segment */
-        pthread_mutex_lock(trace_segment->data_lock);
+        // pthread_mutex_lock(trace_segment->data_lock);
 
         for( ; bp < stop; bp++ )
         {
@@ -1004,11 +1004,20 @@ update_trace_segments_from_mapped_read_array(
             /* update the current trace value */
             /* bp - trace_segment->real_start gives index relative to the start
                of the trace segment */
-            trace_segment->data[bp - trace_segment->real_start]
-                += update_val*scale_factor;
+            /*
+            float old_val = trace_segment->data[bp - trace_segment->real_start];
+            float new_val = update_val*scale_factor;
+            while (!__sync_bool_compare_and_swap(
+                       &(trace_segment->data[bp-trace_segment->real_start]),
+                       old_val, 
+                       new_val));
+            */
+            #pragma omp atomic
+            trace_segment->data[bp - trace_segment->real_start] += update_val*scale_factor;
+                                        
         }
 
-        pthread_mutex_unlock(trace_segment->data_lock);
+        // pthread_mutex_unlock(trace_segment->data_lock);
 
         /* check if finished updating the given range */
         if(bp-1 == stop)
