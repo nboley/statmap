@@ -264,11 +264,16 @@ build_candidate_mapping_from_match(
     {
         return false;
     }
+
+    // make sure that the fragment fits within the chromosome
     cm->start_bp = read_location;
     
     build_candidate_mapping_cigar_string_from_match( cm, match, rst );
 
     cm->penalty = calc_candidate_mapping_penalty( cm, rst, genome );
+    // If we couldn't set the penalty because the fragment was too long, 
+    // return 0
+    if(-FLT_MAX == cm->penalty) return false;
 
     cm->pos_in_template = rst->pos_in_template.pos;
     

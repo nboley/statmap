@@ -1280,7 +1280,10 @@ update_error_data_from_index_search_results(
             
             char* genome_seq = find_seq_ptr( 
                 genome, curr_loc->chr, read_location, rst->length );
-            
+            /* It's possible for find_seq_ptr to return NULL if the read does
+               not fit on the contig */
+            if( genome_seq == NULL) continue;
+
             struct penalty_t* pa;
             if(curr_loc->strnd == FWD) {
                 pa = rst->fwd_penalty_array->array;

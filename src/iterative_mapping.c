@@ -744,8 +744,11 @@ void update_CAGE_trace_expectation_from_location(
             = &(traces->segments[track_index][chr_index]);
         float scale_factor = cond_prob;
         /* Just update the promoter start position (n, n+1) */
-        update_trace_segments_from_uniform_kernel(trace_segments, scale_factor,
-            promoter_pos, promoter_pos+1);
+        update_trace_segments_from_uniform_kernel(
+            trace_segments, 
+            BIN_SIZE*scale_factor, 
+            promoter_pos/BIN_SIZE, 
+            promoter_pos/BIN_SIZE+1);
     }
     
     return;
@@ -816,8 +819,9 @@ update_CAGE_mapped_read_prbs(
                                 start + WINDOW_SIZE );
             }
 
-            window_density += accumulate_from_trace(traces, track_index,
-                chr_index, win_start, win_stop);
+            window_density += accumulate_from_trace(
+                traces, track_index,
+                chr_index, win_start/BIN_SIZE, win_stop/BIN_SIZE+1);
         }
         
         new_prbs[i] = get_seq_error_from_mapped_read_location( current_loc )

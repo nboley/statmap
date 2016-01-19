@@ -438,7 +438,9 @@ calc_candidate_mapping_penalty(
     int full_fragment_length = get_length_from_cigar_string( mapping );
     char* genome_seq = find_seq_ptr( 
         genome, mapping->chr, mapping->start_bp, full_fragment_length );
-    
+    // If thise extends pass the contig end, return -FLT_MAX 
+    if( NULL == genome_seq) return -FLT_MAX;
+ 
     int i, cigar_index;
     int read_pos = 0;
     int genome_offset = 0; 
