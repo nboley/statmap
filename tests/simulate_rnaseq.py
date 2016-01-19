@@ -323,8 +323,9 @@ def check_statmap_output( output_directory, genome, transcriptome, introns,
 
         # each mapping for the readid
         for mapped_read in mapped_reads:
-            check_mapped_read_sequence( mapped_read, fragments, categorized_fragments,
-                    introns, genome, num_mutations )
+            check_mapped_read_sequence( 
+                mapped_read, fragments, categorized_fragments,
+                introns, genome, num_mutations )
             if cigar_match( mapped_read, fragments, introns ):
                 cigar_matched = True
 
@@ -408,8 +409,9 @@ def rnaseq_test(search_type, dirty=False, genome_len=1000, frag_len=100,
             max_intron_len=max_intron_len )
 
     # sample fragments from the transcriptome
-    fragments = sample_uniformly_from_genome(
-            transcriptome, nsamples=n_reads, frag_len=frag_len )
+    fragments = list(
+        sample_uniformly_from_genome(
+            transcriptome, nsamples=n_reads, frag_len=frag_len ))
     reads = build_reads_from_fragments(
             transcriptome, fragments,
             read_len=read_len,

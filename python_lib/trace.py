@@ -1,6 +1,8 @@
 import sys
 import os
 
+import readline
+
 from ctypes import *
 statmap_o = cdll.LoadLibrary( os.path.normpath( sys.path[0] +
                               "/../src/libstatmap.so" ) )
