@@ -19,7 +19,7 @@ Installing Statmap
 Statmap needs to be built from source, and has several dependencies. In ubuntu,
 run
 
-    sudo apt-get install clang r-base-dev python-matplotlib
+    sudo apt-get install clang r-base-dev python-matplotlib libgoogle-perftools-dev libigraph0-dev
 
 You will also need to install the igraph C library, which can be downloaded at
 http://igraph.sourceforge.net/download.html and installed via the standard
